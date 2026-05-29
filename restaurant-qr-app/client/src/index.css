@@ -1,0 +1,12 @@
+/* Simple CSS Reset to prevent any conflicts with our custom App.css stylesheet */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+*, *:before, *:after {
+  box-sizing: inherit;
+}
