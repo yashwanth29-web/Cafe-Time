@@ -221,7 +221,7 @@ const OwnerDashboard = () => {
 
   // Helper to copy table URL
   const handleCopyUrl = (table) => {
-    const url = `http://localhost:5173/?table=${table}`;
+    const url = `${window.location.origin}/?table=${table}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -590,7 +590,7 @@ const OwnerDashboard = () => {
                 </h4>
                 <div style={{ background: 'white', padding: '10px', borderRadius: '8px', marginBottom: '12px', display: 'inline-block' }}>
                   <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:5173/?table=${selectedQrTable}`} 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}`)}`} 
                     alt={`Table ${selectedQrTable} QR Code`}
                     style={{ width: '150px', height: '150px', display: 'block' }}
                   />
@@ -600,7 +600,7 @@ const OwnerDashboard = () => {
                 </p>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <a 
-                    href={`http://localhost:5173/?table=${selectedQrTable}`} 
+                    href={`/?table=${selectedQrTable}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="btn btn-primary"
