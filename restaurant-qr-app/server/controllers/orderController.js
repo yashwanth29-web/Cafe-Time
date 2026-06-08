@@ -5,7 +5,7 @@ const Order = require('../models/Order');
 // @access  Public
 const createOrder = async (req, res) => {
   try {
-    const { tableNumber, items, totalAmount } = req.body;
+    const { tableNumber, items, totalAmount, customerName, customerEmail, customerPhone } = req.body;
 
     // Simple validation
     if (!tableNumber) {
@@ -22,7 +22,11 @@ const createOrder = async (req, res) => {
       tableNumber,
       items,
       totalAmount,
-      status: 'Preparing'
+      status: 'Preparing',
+      customerName: customerName || '',
+      customerEmail: customerEmail || '',
+      customerPhone: customerPhone || '',
+      paymentStatus: 'Pending'
     });
 
     const savedOrder = await newOrder.save();

@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import CustomerMenu from './pages/CustomerMenu';
 import CartPage from './pages/CartPage';
 import OwnerDashboard from './pages/OwnerDashboard';
+import PaymentDemo from './pages/PaymentDemo';
 import './styles/App.css';
 
 function AppContent() {
@@ -112,6 +113,10 @@ function AppContent() {
           <Route 
             path="/admin" 
             element={<OwnerDashboard />} 
+          />
+          <Route 
+            path="/payment-demo" 
+            element={<PaymentDemo />} 
           />
           <Route 
             path="/dashboard" 

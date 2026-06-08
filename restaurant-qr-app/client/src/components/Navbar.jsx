@@ -10,6 +10,10 @@ const Navbar = ({ tableNumber, cartItemCount }) => {
       </Link>
       
       <div className="nav-right">
+        <Link to="/payment-demo" className="nav-demo-link" style={{ marginRight: '15px', textDecoration: 'none', color: '#d4af37', fontWeight: '800', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          💳 Demo
+        </Link>
+        
         {tableNumber && (
           <div className="table-badge">
             TABLE {tableNumber}

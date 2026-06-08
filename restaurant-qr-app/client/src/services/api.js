@@ -62,4 +62,20 @@ export const deleteMenuItem = async (id) => {
   return response.data;
 };
 
+// Payment API helpers
+export const createPaymentOrder = async (paymentData) => {
+  const response = await API.post('/payment/create-order', paymentData);
+  return response.data;
+};
+
+export const verifyPayment = async (verificationData) => {
+  const response = await API.post('/payment/verify', verificationData);
+  return response.data;
+};
+
+export const payExistingOrder = async (payload) => {
+  const response = await API.post('/payment/pay-existing-order', payload);
+  return response.data;
+};
+
 export default API;

@@ -37,6 +37,31 @@ const OrderSchema = new mongoose.Schema({
     enum: ['Preparing', 'Served'],
     default: 'Preparing'
   },
+  customerName: {
+    type: String,
+    default: ''
+  },
+  customerEmail: {
+    type: String,
+    default: ''
+  },
+  customerPhone: {
+    type: String,
+    default: ''
+  },
+  razorpayOrderId: {
+    type: String,
+    default: ''
+  },
+  razorpayPaymentId: {
+    type: String,
+    default: ''
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['Pending', 'Paid', 'Failed'],
+    default: 'Pending'
+  },
   createdAt: {
     type: Date,
     default: Date.now
