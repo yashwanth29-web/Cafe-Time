@@ -1,17 +1,28 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   getOrders, 
   updateOrderStatus, 
   getMenu, 
   createMenuItem, 
   updateMenuItem, 
-  deleteMenuItem 
+  deleteMenuItem,
+  getStaff,
+  createStaff,
+  getSetupData
 } from '../services/api';
 import OrderCard from '../components/OrderCard';
+import { useAuth } from '../context/AuthContext';
+import OwnerLayout from '../components/OwnerLayout';
 
 const OwnerDashboard = () => {
+  const { logout, user } = useAuth();
+  const location = useLocation();
+
   // Navigation Tabs
-  const [activeTab, setActiveTab] = useState('orders'); // 'orders' or 'menu'
+  const [activeTab, setActiveTab] = useState(() => {
+    return location.state?.activeTab || 'orders';
+  });
 
   // Order dashboard states
   const [orders, setOrders] = useState([]);
@@ -21,11 +32,23 @@ const OwnerDashboard = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [selectedQrTable, setSelectedQrTable] = useState(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [dynamicTables, setDynamicTables] = useState(['1', '2', '3', '4', '5']); // fallback
 
   // Menu management states
   const [menuItems, setMenuItems] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
   const [menuError, setMenuError] = useState('');
+
+  // Staff management states
+  const [staff, setStaff] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffError, setStaffError] = useState('');
+  const [newStaff, setNewStaff] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    staffRole: 'Waiter'
+  });
   
   // Modals / Form states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -82,10 +105,86 @@ const OwnerDashboard = () => {
     }
   };
 
+  // Fetch staff list from API
+  const fetchStaffList = async () => {
+    setStaffLoading(true);
+    try {
+      const response = await getStaff();
+      if (response.success) {
+        setStaff(response.staff);
+        setStaffError('');
+      } else {
+        setStaffError('Failed to load staff roster.');
+      }
+    } catch (error) {
+      console.error('Error fetching staff roster:', error);
+      setStaffError('Cannot connect to local server staff database.');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  // Register new staff
+  const handleAddStaff = async (e) => {
+    e.preventDefault();
+    if (!newStaff.name || !newStaff.email || !newStaff.phone || !newStaff.staffRole) {
+      alert('Please fill out all fields.');
+      return;
+    }
+    try {
+      setStaffLoading(true);
+      const response = await createStaff(newStaff);
+      if (response.success) {
+        alert(`Staff member "${newStaff.name}" registered successfully.`);
+        setNewStaff({ name: '', email: '', phone: '', staffRole: 'Waiter' });
+        fetchStaffList();
+      }
+    } catch (error) {
+      console.error('Error creating staff member:', error);
+      alert(error.response?.data?.message || 'Failed to create staff member.');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  // Format last seen/login dates
+  const formatLastSeen = (dateStr) => {
+    if (!dateStr) return 'Never';
+    const date = new Date(dateStr);
+    const now = new Date();
+    
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+    
+    const timeString = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    
+    if (isToday) {
+      return `Today ${timeString}`;
+    } else if (isYesterday) {
+      return `Yesterday ${timeString}`;
+    } else {
+      return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${timeString}`;
+    }
+  };
+
   // Initial load + Polling effect for orders
   useEffect(() => {
     fetchOrders();
     fetchMenu(); // Also pull menu once initially
+
+    // Fetch setup data to get dynamic tables list
+    getSetupData().then((res) => {
+      if (res.success && res.operationalConfig?.tables) {
+        const t = res.operationalConfig.tables.map(tbl => tbl.id.replace('T', ''));
+        if (t.length > 0) setDynamicTables(t);
+      }
+    }).catch(err => console.error("Could not fetch tables config", err));
+
+    if (activeTab === 'staff') {
+      fetchStaffList();
+    }
 
     const pollingInterval = setInterval(() => {
       if (activeTab === 'orders') {
@@ -234,302 +333,319 @@ const OwnerDashboard = () => {
   const tablesList = ['1', '2', '3', '4', '5'];
 
   return (
-    <div className="owner-dashboard" style={{ animation: 'fadeIn 0.4s ease-out' }}>
-      
-      {/* Dashboard Style Overrides (Scoped locally as a neat React styling block) */}
-      <style>{`
-        .owner-dashboard {
-          color: var(--color-text-primary);
-        }
-        .dashboard-tab-bar {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 24px;
-          border-bottom: 1px solid var(--color-border);
-          padding-bottom: 12px;
-        }
-        .dashboard-tab {
-          background: transparent;
-          border: none;
-          color: var(--color-text-secondary);
-          font-family: var(--font-family);
-          font-size: 16px;
-          font-weight: 700;
-          padding: 8px 16px;
-          cursor: pointer;
-          transition: var(--transition-smooth);
-          position: relative;
-        }
-        .dashboard-tab:hover {
-          color: var(--color-primary);
-        }
-        .dashboard-tab.active {
-          color: var(--color-primary);
-        }
-        .dashboard-tab.active::after {
-          content: '';
-          position: absolute;
-          bottom: -13px;
-          left: 0;
-          width: 100%;
-          height: 3px;
-          background-color: var(--color-primary);
-          border-radius: 2px;
-        }
-        .menu-grid-admin {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 20px;
-        }
-        @media (min-width: 768px) {
-          .menu-grid-admin {
-            grid-template-columns: repeat(2, 1fr);
+    <OwnerLayout>
+      <div className="owner-dashboard">
+        
+        {/* Dashboard Style Overrides (Scoped locally as a neat React styling block) */}
+        <style>{`
+          .owner-dashboard {
+            color: var(--color-text-primary);
           }
-        }
-        .admin-menu-card {
-          background: var(--bg-card);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-md);
-          padding: 16px;
-          display: flex;
-          gap: 16px;
-          transition: var(--transition-smooth);
-          position: relative;
-        }
-        .admin-menu-card:hover {
-          border-color: var(--color-primary);
-          box-shadow: var(--shadow-sm);
-        }
-        .admin-menu-card.unavailable {
-          opacity: 0.65;
-          border-style: dashed;
-        }
-        .admin-menu-img {
-          width: 80px;
-          height: 80px;
-          border-radius: var(--radius-sm);
-          object-fit: cover;
-          background-color: var(--bg-secondary);
-          flex-shrink: 0;
-        }
-        .admin-menu-info {
-          flex-grow: 1;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          min-width: 0;
-        }
-        .admin-menu-title {
-          font-size: 16px;
-          font-weight: 700;
-          margin-bottom: 4px;
-          color: #fff;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .admin-menu-desc {
-          font-size: 12.5px;
-          color: var(--color-text-secondary);
-          margin-bottom: 8px;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          line-height: 1.4;
-        }
-        .admin-menu-meta {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-top: auto;
-        }
-        .admin-menu-price {
-          font-weight: 800;
-          color: var(--color-secondary);
-          font-size: 15px;
-        }
-        .admin-menu-badge {
-          background: var(--bg-secondary);
-          color: var(--color-text-secondary);
-          font-size: 11px;
-          font-weight: 600;
-          padding: 3px 8px;
-          border-radius: 4px;
-          border: 1px solid var(--color-border);
-        }
-        .admin-menu-actions {
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          align-items: flex-end;
-          border-left: 1px solid var(--color-border);
-          padding-left: 12px;
-          flex-shrink: 0;
-        }
-        
-        /* Premium CSS Switch Toggle */
-        .switch-container {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .switch {
-          position: relative;
-          display: inline-block;
-          width: 38px;
-          height: 20px;
-        }
-        .switch input { 
-          opacity: 0;
-          width: 0;
-          height: 0;
-        }
-        .slider {
-          position: absolute;
-          cursor: pointer;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-color: #3f3f3f;
-          transition: .3s;
-          border-radius: 20px;
-        }
-        .slider:before {
-          position: absolute;
-          content: "";
-          height: 14px;
-          width: 14px;
-          left: 3px;
-          bottom: 3px;
-          background-color: white;
-          transition: .3s;
-          border-radius: 50%;
-        }
-        input:checked + .slider {
-          background-color: var(--color-success);
-        }
-        input:focus + .slider {
-          box-shadow: 0 0 1px var(--color-success);
-        }
-        input:checked + .slider:before {
-          transform: translateX(18px);
-        }
+          .dashboard-tab-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 12px;
+          }
+          .dashboard-tab {
+            background: transparent;
+            border: none;
+            color: var(--color-text-secondary);
+            font-family: var(--font-family);
+            font-size: 16px;
+            font-weight: 700;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            position: relative;
+          }
+          .dashboard-tab:hover {
+            color: var(--color-primary);
+          }
+          .dashboard-tab.active {
+            color: var(--color-primary);
+          }
+          .dashboard-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -13px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: var(--color-primary);
+          }
+          .dashboard-header-clean {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            background: rgba(43, 29, 21, 0.4);
+            border: 1px solid rgba(230, 213, 195, 0.1);
+            border-radius: 12px;
+            padding: 16px 20px;
+            backdrop-filter: blur(10px);
+          }
+          .dashboard-header-clean h2 {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: #FAF6F0;
+            margin: 0;
+          }
+          .dashboard-header-clean p {
+            font-size: 0.8rem;
+            color: #A0826C;
+            margin: 2px 0 0 0;
+            font-weight: 600;
+          }
+          .menu-card-admin {
+            background: var(--bg-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            display: flex;
+            gap: 16px;
+            transition: var(--transition-smooth);
+          }
+          .menu-card-admin:hover {
+            transform: translateY(-2px);
+            border-color: var(--color-primary);
+            box-shadow: var(--shadow-sm);
+          }
+          .admin-menu-img {
+            width: 100px;
+            height: 100px;
+            border-radius: var(--radius-sm);
+            object-fit: cover;
+            flex-shrink: 0;
+            background-color: var(--bg-card);
+          }
+          .admin-menu-info {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-width: 0;
+          }
+          .admin-menu-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .admin-menu-desc {
+            font-size: 12.5px;
+            color: var(--color-text-secondary);
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.4;
+          }
+          .admin-menu-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: auto;
+          }
+          .admin-menu-price {
+            font-weight: 800;
+            color: var(--color-secondary);
+            font-size: 15px;
+          }
+          .admin-menu-badge {
+            background: var(--bg-secondary);
+            color: var(--color-text-secondary);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--color-border);
+          }
+          .admin-menu-actions {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-left: 1px solid var(--color-border);
+            padding-left: 12px;
+            flex-shrink: 0;
+          }
+          
+          /* Premium CSS Switch Toggle */
+          .switch-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 700;
+          }
+          .switch {
+            position: relative;
+            display: inline-block;
+            width: 38px;
+            height: 20px;
+          }
+          .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+          }
+          .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #3f3f3f;
+            transition: .3s;
+            border-radius: 20px;
+          }
+          .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+          }
+          input:checked + .slider {
+            background-color: var(--color-success);
+          }
+          input:focus + .slider {
+            box-shadow: 0 0 1px var(--color-success);
+          }
+          input:checked + .slider:before {
+            transform: translateX(18px);
+          }
 
-        /* Glassmorphic Modal */
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: rgba(10, 10, 10, 0.7);
-          backdrop-filter: blur(8px);
-          z-index: 1000;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-          animation: fadeIn 0.25s ease-out;
-        }
-        .modal-container {
-          background: var(--bg-secondary);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-md);
-          width: 100%;
-          max-width: 520px;
-          box-shadow: var(--shadow-lg);
-          overflow: hidden;
-          animation: slideUp 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-        }
-        .modal-header {
-          padding: 20px;
-          border-bottom: 1px solid var(--color-border);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: rgba(255, 107, 8, 0.03);
-        }
-        .modal-title {
-          font-size: 18px;
-          font-weight: 800;
-          color: #fff;
-        }
-        .modal-close {
-          background: transparent;
-          border: none;
-          color: var(--color-text-secondary);
-          font-size: 22px;
-          cursor: pointer;
-          transition: var(--transition-smooth);
-        }
-        .modal-close:hover {
-          color: #fff;
-        }
-        .modal-body {
-          padding: 20px;
-          max-height: 70vh;
-          overflow-y: auto;
-        }
-        .modal-footer {
-          padding: 16px 20px;
-          border-top: 1px solid var(--color-border);
-          display: flex;
-          justify-content: flex-end;
-          gap: 12px;
-          background: rgba(0, 0, 0, 0.1);
-        }
-        .form-group {
-          margin-bottom: 16px;
-        }
-        .form-label {
-          display: block;
-          font-size: 13px;
-          font-weight: 600;
-          color: var(--color-text-secondary);
-          margin-bottom: 6px;
-        }
-        .form-input {
-          width: 100%;
-          background: var(--bg-card);
-          border: 1px solid var(--color-border);
-          color: var(--color-text-primary);
-          padding: 10px 14px;
-          border-radius: var(--radius-sm);
-          font-family: var(--font-family);
-          font-size: 14px;
-          transition: var(--transition-smooth);
-        }
-        .form-input:focus {
-          border-color: var(--color-primary);
-          outline: none;
-          box-shadow: 0 0 0 2px rgba(255, 107, 8, 0.15);
-        }
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-      `}</style>
+          /* Glassmorphic Modal */
+          .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 10, 0.7);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.25s ease-out;
+          }
+          .modal-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            width: 100%;
+            max-width: 520px;
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            animation: slideUp 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+          }
+          .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 107, 8, 0.03);
+          }
+          .modal-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #fff;
+          }
+          .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--color-text-secondary);
+            font-size: 22px;
+            cursor: pointer;
+            transition: var(--transition-smooth);
+          }
+          .modal-close:hover {
+            color: #fff;
+          }
+          .modal-body {
+            padding: 20px;
+            max-height: 70vh;
+            overflow-y: auto;
+          }
+          .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--color-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            background: rgba(0, 0, 0, 0.1);
+          }
+          .form-group {
+            margin-bottom: 16px;
+          }
+          .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            margin-bottom: 6px;
+          }
+          .form-input {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--color-border);
+            color: var(--color-text-primary);
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-family);
+            font-size: 14px;
+            transition: var(--transition-smooth);
+          }
+          .form-input:focus {
+            border-color: var(--color-primary);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(255, 107, 8, 0.15);
+          }
+          .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+          }
+        `}</style>
 
-      {/* Dashboard Header */}
-      <div className="dashboard-header">
-        <div className="dashboard-title-section">
-          <span className="dashboard-subtitle">Cafe Control Center</span>
-          <h2 className="dashboard-title">Admin Console</h2>
-        </div>
-        
-        {activeTab === 'orders' && (
-          <div className="refresh-indicator">
-            <div className="indicator-dot"></div>
-            <span>Refreshing in {refreshCountdown}s</span>
+        {/* Clean, Premium Dashboard Header */}
+        <div className="dashboard-header-clean">
+          <div>
+            <h2>
+              {activeTab === 'orders' && '🍳 Live Orders Queue'}
+              {activeTab === 'menu' && '📋 Manage Cafe Menu'}
+              {activeTab === 'staff' && '👥 Staff Roster'}
+            </h2>
+            <p>
+              {activeTab === 'orders' && 'Real-time customer order pipeline'}
+              {activeTab === 'menu' && 'Publish, update, and categorize cafe dishes'}
+              {activeTab === 'staff' && 'Manage employee accounts and operational privileges'}
+            </p>
           </div>
-        )}
-      </div>
+          
+          {activeTab === 'orders' && (
+            <div className="refresh-indicator" style={{ margin: 0 }}>
+              <div className="indicator-dot"></div>
+              <span>Refreshing in {refreshCountdown}s</span>
+            </div>
+          )}
+        </div>
 
       {/* Navigation Tabs */}
       <div className="dashboard-tab-bar">
@@ -545,6 +661,12 @@ const OwnerDashboard = () => {
         >
           📋 Manage Cafe Menu ({menuItems.length})
         </button>
+        <button 
+          onClick={() => setActiveTab('staff')} 
+          className={`dashboard-tab ${activeTab === 'staff' ? 'active' : ''}`}
+        >
+          👥 Manage Staff ({staff.length})
+        </button>
       </div>
 
       {/* TAB 1: LIVE ORDERS QUEUE */}
@@ -559,7 +681,7 @@ const OwnerDashboard = () => {
               Select a table to dynamically generate its scan QR code and simulate a real customer order.
             </p>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {tablesList.map((table) => (
+              {dynamicTables.map((table) => (
                 <button
                   key={table}
                   onClick={() => setSelectedQrTable(selectedQrTable === table ? null : table)}
@@ -1081,7 +1203,155 @@ const OwnerDashboard = () => {
         </div>
       )}
 
-    </div>
+      {/* TAB 3: STAFF MANAGEMENT */}
+      {activeTab === 'staff' && (
+        <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff' }}>
+                👥 Cafe Staff Roster
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                Register and review staff accounts. Registered staff can log in using their email and access the Kitchen Queue.
+              </p>
+            </div>
+          </div>
+
+          {staffError && (
+            <div className="success-details" style={{ backgroundColor: 'var(--color-danger-bg)', borderColor: 'var(--color-danger)', color: '#fff', padding: '12px', marginBottom: '20px' }}>
+              ⚠️ {staffError}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '30px' }}>
+            {/* Add Staff Form */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
+              <h4 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.2rem', fontWeight: 700 }}>
+                Register New Staff Member
+              </h4>
+              <form onSubmit={handleAddStaff} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="form-label" style={{ color: '#fff' }}>Full Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Staff name"
+                    value={newStaff.name}
+                    onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="form-label" style={{ color: '#fff' }}>Email Address *</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="staff@cafe.com"
+                    value={newStaff.email}
+                    onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="form-label" style={{ color: '#fff' }}>Phone Number *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Phone number"
+                    value={newStaff.phone}
+                    onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="form-label" style={{ color: '#fff' }}>Staff Role *</label>
+                  <select
+                    className="form-input"
+                    value={newStaff.staffRole}
+                    onChange={(e) => setNewStaff({ ...newStaff, staffRole: e.target.value })}
+                    required
+                  >
+                    <option value="Chef">Chef</option>
+                    <option value="Waiter">Waiter</option>
+                    <option value="Barista">Barista</option>
+                    <option value="Cashier">Cashier</option>
+                    <option value="Manager">Manager</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{ height: '42px', padding: '10px', fontSize: '14px', width: '100%', borderRadius: 'var(--radius-sm)' }}
+                    disabled={staffLoading}
+                  >
+                    {staffLoading ? 'Registering...' : 'Add Staff Member'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Staff List Table */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', overflowX: 'auto' }}>
+              <h4 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.2rem', fontWeight: 700 }}>
+                Staff Roster List
+              </h4>
+              {staffLoading && staff.length === 0 ? (
+                <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center' }}>Loading staff records...</p>
+              ) : staff.length === 0 ? (
+                <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic', textAlign: 'center' }}>No staff members registered for this Cafe.</p>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                      <th style={{ padding: '10px' }}>Name</th>
+                      <th style={{ padding: '10px' }}>Email</th>
+                      <th style={{ padding: '10px' }}>Phone</th>
+                      <th style={{ padding: '10px' }}>Role</th>
+                      <th style={{ padding: '10px' }}>Last Login</th>
+                      <th style={{ padding: '10px' }}>Last Seen</th>
+                      <th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staff.map((member) => (
+                      <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '12px 10px', color: '#fff', fontWeight: 600 }}>{member.name}</td>
+                        <td style={{ padding: '12px 10px' }}>{member.email}</td>
+                        <td style={{ padding: '12px 10px' }}>{member.phone}</td>
+                        <td style={{ padding: '12px 10px' }}>
+                          <span className="admin-menu-badge">{member.staffRole}</span>
+                        </td>
+                        <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-secondary)' }}>
+                          {formatLastSeen(member.lastLogin)}
+                        </td>
+                        <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                          {formatLastSeen(member.lastSeen)}
+                        </td>
+                        <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                          <span style={{
+                            backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+                            color: member.isActive ? '#2ecc71' : '#e74c3c',
+                            padding: '3px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: 'bold'
+                          }}>
+                            {member.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      </div>
+    </OwnerLayout>
   );
 };
 

@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 const Navbar = ({ tableNumber, cartItemCount }) => {
   return (
     <nav className="navbar">
-      <Link to="/" className="nav-brand">
-        <span className="nav-brand-logo">☕</span>
-        <span className="nav-brand-text">CoffeeDay Cafe</span>
+      <Link to="/" className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <img src="/logo.png" alt="Cypher's Café Logo" style={{ height: '40px', width: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #6F4E37' }} />
+        <span className="nav-brand-text">Cypher's Café</span>
       </Link>
       
       <div className="nav-right">

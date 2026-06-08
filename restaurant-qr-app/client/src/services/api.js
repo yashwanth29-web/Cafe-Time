@@ -16,6 +16,7 @@ const getBaseURL = () => {
 
 const API = axios.create({
   baseURL: getBaseURL(),
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -78,4 +79,112 @@ export const payExistingOrder = async (payload) => {
   return response.data;
 };
 
+// Auth API helpers
+export const sendOtp = async (email) => {
+  const response = await API.post('/auth/send-otp', { email });
+  return response.data;
+};
+
+export const verifyOtp = async (email, otp) => {
+  const response = await API.post('/auth/verify-otp', { email, otp });
+  return response.data;
+};
+
+export const resendOtp = async (email) => {
+  const response = await API.post('/auth/resend-otp', { email });
+  return response.data;
+};
+
+export const logoutUser = async () => {
+  const response = await API.post('/auth/logout');
+  return response.data;
+};
+
+export const getMe = async () => {
+  const response = await API.get('/auth/me');
+  return response.data;
+};
+
+// Super Admin API helpers
+export const createOwner = async (ownerData) => {
+  const response = await API.post('/superadmin/create-owner', ownerData);
+  return response.data;
+};
+
+export const getCafes = async () => {
+  const response = await API.get('/superadmin/cafes');
+  return response.data;
+};
+
+export const updateCafe = async (id, cafeData) => {
+  const response = await API.put(`/superadmin/cafe/${id}`, cafeData);
+  return response.data;
+};
+
+export const deleteCafe = async (id) => {
+  const response = await API.delete(`/superadmin/cafe/${id}`);
+  return response.data;
+};
+
+// Cafe Owner Admin API helpers
+export const createStaff = async (staffData) => {
+  const response = await API.post('/admin/create-staff', staffData);
+  return response.data;
+};
+
+export const getStaff = async () => {
+  const response = await API.get('/admin/staff');
+  return response.data;
+};
+
+export const getStaffSummary = async () => {
+  const response = await API.get('/admin/staff-summary');
+  return response.data;
+};
+
+// Branches Management APIs
+export const getBranches = async () => {
+  const response = await API.get('/admin/branches');
+  return response.data;
+};
+
+export const createBranch = async (branchData) => {
+  const response = await API.post('/admin/branches', branchData);
+  return response.data;
+};
+
+// Profile Update API
+export const updateOwnerProfile = async (userData) => {
+  const response = await API.put('/admin/profile/owner', userData);
+  return response.data;
+};
+
+// V2 Owner Setup Wizard APIs
+export const getSetupData = async () => {
+  const response = await API.get('/admin/setup');
+  return response.data;
+};
+
+export const saveSetupData = async (setupData) => {
+  const response = await API.post('/admin/setup', setupData);
+  return response.data;
+};
+
+export const verifyRazorpayKeys = async (keyId, secret) => {
+  const response = await API.post('/admin/verify-razorpay', { keyId, secret });
+  return response.data;
+};
+
+export const uploadLogo = async (file) => {
+  const formData = new FormData();
+  formData.append('logo', file);
+  const response = await API.post('/admin/upload-logo', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+  return response.data;
+};
+
 export default API;
+

@@ -1,0 +1,416 @@
+const User = require('../models/User');
+const Cafe = require('../models/Cafe');
+const PaymentConfig = require('../models/PaymentConfig');
+const OperationalConfig = require('../models/OperationalConfig');
+const Branch = require('../models/Branch');
+const emailService = require('../services/emailService');
+const { encrypt, decrypt } = require('../utils/encryption');
+const Razorpay = require('razorpay');
+
+/**
+ * Register a new Staff member bound to the Owner's cafe
+ */
+const createStaff = async (req, res) => {
+  const { name, email, phone, staffRole } = req.body;
+  const cafeId = req.user.cafeId;
+
+  if (!name || !email || !phone || !staffRole) {
+    return res.status(400).json({ success: false, message: 'All fields are required' });
+  }
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    const existingUser = await User.findOne({ email: cleanEmail });
+    if (existingUser) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `An account with email ${email} is already registered.` 
+      });
+    }
+
+    const cafe = await Cafe.findOne({ cafeId });
+    const cafeName = cafe ? cafe.name : 'Your Cafe';
+
+    // Staff accounts can have a role of 'staff', and custom roles like 'chef' or 'manager'
+    let targetRole = 'staff';
+    if (['manager', 'chef'].includes(staffRole.toLowerCase())) {
+      targetRole = staffRole.toLowerCase();
+    }
+
+    const newStaff = await User.create({
+      name: name.trim(),
+      email: cleanEmail,
+      phone: phone.trim(),
+      role: targetRole,
+      staffRole: staffRole.trim(),
+      cafeId,
+      isActive: true
+    });
+
+    emailService.sendWelcomeEmail(cleanEmail, name, targetRole, {
+      cafeName,
+      cafeId,
+      staffRole
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Staff member "${name}" registered successfully with role "${targetRole}".`,
+      staff: newStaff
+    });
+  } catch (error) {
+    console.error('createStaff error:', error);
+    return res.status(500).json({ success: false, message: 'Server error registering staff member' });
+  }
+};
+
+/**
+ * Get all staff members for the owner's cafe
+ */
+const getStaff = async (req, res) => {
+  const cafeId = req.user.cafeId;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    const staff = await User.find({ 
+      cafeId, 
+      role: { $in: ['staff', 'chef', 'manager'] } 
+    }).sort({ createdAt: -1 });
+    
+    return res.status(200).json({ success: true, staff });
+  } catch (error) {
+    console.error('getStaff error:', error);
+    return res.status(500).json({ success: false, message: 'Server error retrieving staff list' });
+  }
+};
+
+/**
+ * Test and verify Razorpay keys for a Cafe
+ */
+const verifyRazorpay = async (req, res) => {
+  const { keyId, secret } = req.body;
+
+  if (!keyId || !secret) {
+    return res.status(400).json({ success: false, message: 'Key ID and Secret Key are required.' });
+  }
+
+  try {
+    const rzp = new Razorpay({
+      key_id: keyId,
+      key_secret: secret
+    });
+
+    // Attempt to list orders (limit 1) to test if key/secret are valid
+    await rzp.orders.all({ count: 1 });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Razorpay keys verified successfully.'
+    });
+  } catch (error) {
+    console.error('verifyRazorpay error:', error);
+    return res.status(400).json({
+      success: false,
+      message: `Razorpay verification failed: ${error.message || 'Check key and secret credentials'}`
+    });
+  }
+};
+
+/**
+ * Retrieve Owner setup configuration data
+ */
+const getSetupData = async (req, res) => {
+  const cafeId = req.user.cafeId;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    const cafe = await Cafe.findOne({ cafeId });
+    if (!cafe) {
+      return res.status(404).json({ success: false, message: 'Cafe not found' });
+    }
+
+    const paymentConfig = await PaymentConfig.findOne({ cafeId });
+    const operationalConfig = await OperationalConfig.findOne({ cafeId });
+
+    // Decrypt Razorpay Secret for editing in wizard (if configured)
+    let decryptedSecret = '';
+    if (paymentConfig && paymentConfig.razorpaySecretEncrypted) {
+      decryptedSecret = decrypt(paymentConfig.razorpaySecretEncrypted);
+    }
+
+    return res.status(200).json({
+      success: true,
+      cafe,
+      paymentConfig: paymentConfig ? {
+        razorpayKeyId: paymentConfig.razorpayKeyId,
+        razorpaySecret: decryptedSecret,
+        upiId: paymentConfig.upiId,
+        bankHolderName: paymentConfig.bankHolderName,
+        accountNumber: paymentConfig.accountNumber,
+        ifscCode: paymentConfig.ifscCode,
+        isVerified: paymentConfig.isVerified
+      } : null,
+      operationalConfig
+    });
+  } catch (error) {
+    console.error('getSetupData error:', error);
+    return res.status(500).json({ success: false, message: 'Server error retrieving setup details' });
+  }
+};
+
+/**
+ * Save all Owner setup configuration data and complete setup
+ */
+const saveSetupData = async (req, res) => {
+  const cafeId = req.user.cafeId;
+  const {
+    name, businessType, branchCount, city, state, pincode,
+    logoUrl, address, mapsLocation, openingTime, closingTime, gstNumber, supportNumber,
+    paymentConfig,
+    operationalConfig,
+    staffList
+  } = req.body;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    // 1. Update Cafe profile details
+    const cafe = await Cafe.findOne({ cafeId });
+    if (!cafe) {
+      return res.status(404).json({ success: false, message: 'Cafe not found' });
+    }
+
+    if (name) cafe.name = name;
+    if (businessType) cafe.businessType = businessType;
+    if (branchCount !== undefined) cafe.branchCount = branchCount;
+    if (city) cafe.city = city;
+    if (state) cafe.state = state;
+    if (pincode) cafe.pincode = pincode;
+    if (logoUrl) cafe.logoUrl = logoUrl;
+    if (address) cafe.address = address;
+    if (mapsLocation) cafe.mapsLocation = mapsLocation;
+    if (openingTime) cafe.openingTime = openingTime;
+    if (closingTime) cafe.closingTime = closingTime;
+    if (gstNumber) cafe.gstNumber = gstNumber;
+    if (supportNumber) cafe.supportNumber = supportNumber;
+    cafe.setupCompleted = true; // Complete setup flag!
+    await cafe.save();
+
+    // 2. Save PaymentConfig (Encrypting the Razorpay Secret)
+    if (paymentConfig) {
+      const encryptedSecret = encrypt(paymentConfig.razorpaySecret);
+      await PaymentConfig.findOneAndUpdate(
+        { cafeId },
+        {
+          razorpayKeyId: paymentConfig.razorpayKeyId,
+          razorpaySecretEncrypted: encryptedSecret,
+          upiId: paymentConfig.upiId,
+          bankHolderName: paymentConfig.bankHolderName,
+          accountNumber: paymentConfig.accountNumber,
+          ifscCode: paymentConfig.ifscCode,
+          isVerified: paymentConfig.isVerified || false
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    // 3. Save OperationalConfig
+    if (operationalConfig) {
+      await OperationalConfig.findOneAndUpdate(
+        { cafeId },
+        {
+          tables: operationalConfig.tables || [],
+          printerEnabled: operationalConfig.printerEnabled || false,
+          kitchenDisplayEnabled: operationalConfig.kitchenDisplayEnabled || false,
+          inventoryEnabled: operationalConfig.inventoryEnabled || false
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    // 4. Create Staff list (if provided)
+    if (staffList && Array.isArray(staffList)) {
+      for (const staff of staffList) {
+        if (staff.email && staff.name && staff.phone) {
+          const cleanEmail = staff.email.trim().toLowerCase();
+          const existingUser = await User.findOne({ email: cleanEmail });
+          if (!existingUser) {
+            // Determine targeted role from staffRole
+            let targetRole = 'staff';
+            const sRole = (staff.staffRole || '').trim().toLowerCase();
+            if (['manager', 'chef'].includes(sRole)) {
+              targetRole = sRole;
+            }
+
+            await User.create({
+              name: staff.name.trim(),
+              email: cleanEmail,
+              phone: staff.phone.trim(),
+              role: targetRole,
+              staffRole: staff.staffRole || 'staff',
+              cafeId,
+              isActive: true
+            });
+
+            emailService.sendWelcomeEmail(cleanEmail, staff.name.trim(), targetRole, {
+              cafeName: cafe.name,
+              cafeId,
+              staffRole: staff.staffRole || 'staff'
+            });
+          }
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Onboarding setup completed successfully!'
+    });
+  } catch (error) {
+    console.error('saveSetupData error:', error);
+    return res.status(500).json({ success: false, message: 'Server error saving setup details' });
+  }
+};
+
+/**
+ * Update Owner profile details (Name & Phone)
+ */
+const updateOwnerProfile = async (req, res) => {
+  const { name, phone } = req.body;
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Owner user not found' });
+    }
+    if (name) user.name = name.trim();
+    if (phone) user.phone = phone.trim();
+    await user.save();
+    return res.status(200).json({ success: true, user });
+  } catch (error) {
+    console.error('updateOwnerProfile error:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating owner profile' });
+  }
+};
+
+/**
+ * Retrieve branch list for current cafe
+ */
+const getBranches = async (req, res) => {
+  const cafeId = req.user.cafeId;
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+  try {
+    const branches = await Branch.find({ cafeId }).sort({ createdAt: -1 });
+    return res.status(200).json({ success: true, branches });
+  } catch (error) {
+    console.error('getBranches error:', error);
+    return res.status(500).json({ success: false, message: 'Server error retrieving branches' });
+  }
+};
+
+/**
+ * Add a new branch to the current cafe
+ */
+const createBranch = async (req, res) => {
+  const cafeId = req.user.cafeId;
+  const { branchName, address, manager, isActive } = req.body;
+  if (!branchName || !address) {
+    return res.status(400).json({ success: false, message: 'Branch Name and Address are required' });
+  }
+  try {
+    const branchId = `${cafeId}_BR_${Date.now()}`;
+    const newBranch = await Branch.create({
+      branchId,
+      branchName: branchName.trim(),
+      cafeId,
+      address: address.trim(),
+      manager: (manager || '').trim(),
+      isActive: isActive !== undefined ? isActive : true
+    });
+    return res.status(201).json({ success: true, branch: newBranch });
+  } catch (error) {
+    console.error('createBranch error:', error);
+    return res.status(500).json({ success: false, message: 'Server error creating branch' });
+  }
+};
+
+/**
+ * Get staff count analytics for Section 7
+ */
+const getStaffSummary = async (req, res) => {
+  const cafeId = req.user.cafeId;
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+  try {
+    const staffMembers = await User.find({
+      cafeId,
+      role: { $in: ['staff', 'chef', 'manager'] }
+    });
+
+    const totalStaff = staffMembers.length;
+    const activeStaff = staffMembers.filter(s => s.isActive).length;
+    const managers = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'manager' || s.role === 'manager').length;
+    const chefs = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'chef' || s.role === 'chef').length;
+    const standardStaff = totalStaff - managers - chefs;
+
+    return res.status(200).json({
+      success: true,
+      summary: {
+        totalStaff,
+        activeStaff,
+        managers,
+        chefs,
+        staffMembers: standardStaff
+      }
+    });
+  } catch (error) {
+    console.error('getStaffSummary error:', error);
+    return res.status(500).json({ success: false, message: 'Server error retrieving staff analytics' });
+  }
+};
+
+/**
+ * Handle Cafe logo image upload
+ */
+const uploadLogo = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No logo file uploaded' });
+  }
+
+  const protocol = req.protocol;
+  const host = req.get('host');
+  const logoUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+
+  return res.status(200).json({
+    success: true,
+    logoUrl
+  });
+};
+
+module.exports = {
+  createStaff,
+  getStaff,
+  verifyRazorpay,
+  getSetupData,
+  saveSetupData,
+  updateOwnerProfile,
+  getBranches,
+  createBranch,
+  getStaffSummary,
+  uploadLogo
+};

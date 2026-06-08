@@ -1,30 +1,53 @@
 const express = require('express');
-const cors = require('cors');
 const dotenv = require('dotenv');
+
+// Load environment variables immediately before routing imports
+dotenv.config();
+
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
 const orderRoutes = require('./routes/orderRoutes');
 const menuRoutes = require('./routes/menuRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
-
-// Load environment variables
-dotenv.config();
+const authRoutes = require('./routes/authRoutes');
+const superAdminRoutes = require('./routes/superAdminRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 // Create Express instance
 const app = express();
 
 // Middlewares
-app.use(cors()); // Allow all cross-origins for MVP testing
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true
+}));
+app.use(cookieParser());
 app.use(express.json()); // Body parser
 
 // Connect to Database
 connectDB();
 
 const path = require('path');
+const fs = require('fs');
+
+// Ensure uploads folder exists on startup
+const uploadsDir = path.join(__dirname, 'public/uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Serve upload static assets
+app.use('/uploads', express.static(uploadsDir));
 
 // Mount Routes
 app.use('/api/orders', orderRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/superadmin', superAdminRoutes);
+app.use('/api/admin', adminRoutes);
+
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

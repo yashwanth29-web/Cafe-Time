@@ -1,15 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import CustomerMenu from './pages/CustomerMenu';
 import CartPage from './pages/CartPage';
 import OwnerDashboard from './pages/OwnerDashboard';
 import PaymentDemo from './pages/PaymentDemo';
+import Login from './pages/Login';
+import VerifyOtp from './pages/VerifyOtp';
+import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import StaffDashboard from './pages/StaffDashboard';
+import OwnerSetup from './pages/OwnerSetup';
+import OwnerProfilePage from './pages/OwnerProfilePage';
+import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider } from './context/AuthContext';
 import './styles/App.css';
 
 function AppContent() {
   const [cart, setCart] = useState([]);
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const tableParam = searchParams.get('table');
 
   // Synchronously initialize table number state from query param or session storage
@@ -76,12 +85,23 @@ function AppContent() {
 
   const totalItemCount = cart.reduce((acc, curr) => acc + curr.quantity, 0);
 
+  // Determine if we are on an administrative or auth portal page to hide customer elements
+  const isAdminOrAuthRoute = 
+    location.pathname.startsWith('/admin') ||
+    location.pathname.startsWith('/owner') ||
+    location.pathname.startsWith('/super-admin') ||
+    location.pathname.startsWith('/staff') ||
+    ['/login', '/verify-otp'].includes(location.pathname);
+
   return (
-    <div className="app-container">
-      <Navbar tableNumber={tableNumber} cartItemCount={totalItemCount} />
+    <div className={`app-container${isAdminOrAuthRoute ? ' admin-no-padding' : ''}`}>
+      {!isAdminOrAuthRoute && (
+        <Navbar tableNumber={tableNumber} cartItemCount={totalItemCount} />
+      )}
       
-      <main className="main-content">
+      <main className={`main-content${isAdminOrAuthRoute ? ' admin-full-width' : ''}`}>
         <Routes>
+          {/* Customer / Ordering Flow */}
           <Route 
             path="/" 
             element={
@@ -93,7 +113,7 @@ function AppContent() {
                   decreaseQuantity={decreaseQuantity}
                 />
               ) : (
-                <Navigate to="/admin" replace />
+                <Navigate to="/login" replace />
               )
             } 
           />
@@ -110,10 +130,54 @@ function AppContent() {
               />
             } 
           />
+
+          {/* Auth Flow */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/verify-otp" element={<VerifyOtp />} />
+
+          {/* Role Protected Admin Dashboards */}
+          <Route 
+            path="/super-admin" 
+            element={
+              <ProtectedRoute allowedRoles={['super_admin']}>
+                <SuperAdminDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/owner-setup" 
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <OwnerSetup />
+              </ProtectedRoute>
+            } 
+          />
           <Route 
             path="/admin" 
-            element={<OwnerDashboard />} 
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <OwnerDashboard />
+              </ProtectedRoute>
+            } 
           />
+          <Route 
+            path="/owner/profile" 
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <OwnerProfilePage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/staff" 
+            element={
+              <ProtectedRoute allowedRoles={['staff']}>
+                <StaffDashboard />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Legacy & Demo routes */}
           <Route 
             path="/payment-demo" 
             element={<PaymentDemo />} 
@@ -131,7 +195,9 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </Router>
   );
 }

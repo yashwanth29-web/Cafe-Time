@@ -1,4 +1,6 @@
 const MenuItem = require('../models/MenuItem');
+const User = require('../models/User');
+const Cafe = require('../models/Cafe');
 
 const defaultMenu = [
   {
@@ -45,6 +47,7 @@ const defaultMenu = [
 
 const seedMenu = async () => {
   try {
+    // 1. Seed Menu Items
     const count = await MenuItem.countDocuments();
     if (count === 0) {
       console.log('Menu collection is empty. Seeding initial menu items...');
@@ -53,8 +56,42 @@ const seedMenu = async () => {
     } else {
       console.log(`Database already contains ${count} menu items. Skipping seeding.`);
     }
+
+    // 2. Seed default Cafe Owner & Cafe record
+    const email = 'kamalabevara@gmail.com';
+    const existingUser = await User.findOne({ email });
+    
+    if (!existingUser) {
+      console.log(`Default owner account not found for ${email}. Seeding owner and cafe...`);
+      
+      // Create Cafe
+      const defaultCafe = new Cafe({
+        cafeId: 'CD001',
+        name: 'Coffee Day Cafe',
+        ownerName: 'Kamala Bevara',
+        ownerEmail: email,
+        ownerPhone: '9876543210',
+        isActive: true
+      });
+      await defaultCafe.save();
+      console.log('SUCCESS: Default Cafe CD001 seeded!');
+
+      // Create Admin/Owner User
+      const defaultOwner = new User({
+        name: 'Kamala Bevara',
+        email: email,
+        phone: '9876543210',
+        role: 'admin',
+        cafeId: 'CD001',
+        isActive: true
+      });
+      await defaultOwner.save();
+      console.log(`SUCCESS: Owner account seeded for ${email}!`);
+    } else {
+      console.log(`Database already contains user record for ${email}. Skipping owner seeding.`);
+    }
   } catch (error) {
-    console.error('ERROR seeding menu items:', error.message);
+    console.error('ERROR seeding database:', error.message);
   }
 };
 

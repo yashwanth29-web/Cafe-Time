@@ -1,0 +1,16 @@
+{
+  "short_name": "Cypher's Café",
+  "name": "Cypher's Café - Smart QR Ordering",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#FAF6F0",
+  "theme_color": "#6F4E37",
+  "display": "standalone",
+  "orientation": "portrait"
+}
