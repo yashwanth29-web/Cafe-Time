@@ -10,7 +10,7 @@ const CartItem = ({ item, increaseQuantity, decreaseQuantity, removeFromCart }) 
       
       <div className="cart-item-info">
         <h4 className="cart-item-name">{name}</h4>
-        <div className="cart-item-price">${price.toFixed(2)} each</div>
+        <div className="cart-item-price">₹{price.toFixed(2)} each</div>
       </div>
       
       <div className="cart-item-right">

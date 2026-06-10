@@ -20,6 +20,11 @@ const OrderItemSchema = new mongoose.Schema({
 });
 
 const OrderSchema = new mongoose.Schema({
+  cafeId: {
+    type: String,
+    required: true,
+    default: 'CD001'
+  },
   tableNumber: {
     type: String,
     required: true
@@ -34,8 +39,8 @@ const OrderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Preparing', 'Served'],
-    default: 'Preparing'
+    enum: ['Placed', 'Preparing', 'Ready', 'Delivered', 'Completed'],
+    default: 'Placed'
   },
   customerName: {
     type: String,
@@ -61,6 +66,10 @@ const OrderSchema = new mongoose.Schema({
     type: String,
     enum: ['Pending', 'Paid', 'Failed'],
     default: 'Pending'
+  },
+  inventoryDeducted: {
+    type: Boolean,
+    default: false
   },
   createdAt: {
     type: Date,

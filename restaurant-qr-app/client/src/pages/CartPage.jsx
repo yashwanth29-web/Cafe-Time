@@ -4,12 +4,12 @@ import CartItem from '../components/CartItem';
 import RazorpayPayment from '../components/RazorpayPayment';
 import { getOrderById, placeOrder } from '../services/api';
 
-const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber }) => {
+const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [placedOrder, setPlacedOrder] = useState(null);
-  const [orderStatus, setOrderStatus] = useState('Preparing');
+  const [orderStatus, setOrderStatus] = useState('Placed');
 
   // Customer Details Form States
   const [customerName, setCustomerName] = useState('');
@@ -47,7 +47,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         totalAmount: grandTotal,
         customerName,
         customerEmail,
-        customerPhone
+        customerPhone,
+        cafeId: cafeId || 'CD001'
       };
 
       const response = await placeOrder(orderPayload);
@@ -151,7 +152,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   // Dynamic Live Tracker Success view
   if (success && placedOrder) {
-    const isServed = orderStatus === 'Served';
+    const isServed = orderStatus === 'Ready' || orderStatus === 'Delivered' || orderStatus === 'Completed';
     const isPaid = placedOrder.paymentStatus === 'Paid';
 
     return (
@@ -162,9 +163,13 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
           {!isServed ? (
             <div style={{ textAlign: 'center' }}>
               <div className="spinner" style={{ width: '60px', height: '60px', borderWidth: '5px', margin: '0 auto 20px auto', borderTopColor: 'var(--color-primary)' }}></div>
-              <h2 className="success-title" style={{ fontSize: '22px', fontWeight: 900 }}>Chef is Preparing!</h2>
+              <h2 className="success-title" style={{ fontSize: '22px', fontWeight: 900 }}>
+                {orderStatus === 'Placed' ? 'Order Placed!' : 'Chef is Preparing!'}
+              </h2>
               <p className="success-message" style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-                Your order is currently active in the kitchen feed. Our chefs are crafting your fresh order!
+                {orderStatus === 'Placed'
+                  ? 'Your order has been sent to the kitchen. Waiting for chef acceptance.'
+                  : 'Your order is currently active in the kitchen feed. Our chefs are crafting your fresh order!'}
               </p>
             </div>
           ) : isPaid ? (
@@ -191,7 +196,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
           {/* Interactive Progress Track */}
           <div style={{ display: 'flex', alignItems: 'center', justifySelf: 'stretch', gap: '8px', marginBottom: '28px', padding: '0 8px' }}>
-            {/* Step 1: Received & Preparing */}
+            {/* Step 1: Placed */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
               <div style={{
                 width: '10px',
@@ -200,13 +205,29 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 background: 'var(--color-primary)',
                 boxShadow: '0 0 8px var(--color-primary)'
               }}></div>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--color-primary)' }}>🍳 Preparing</span>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--color-primary)' }}>⏳ Placed</span>
             </div>
 
-            {/* Connecting Bar */}
-            <div style={{ flex: 2, height: '4px', background: isServed ? 'var(--color-success)' : 'var(--color-border)', borderRadius: '2px', transition: 'background 0.5s ease' }}></div>
+            {/* Connecting Bar 1 */}
+            <div style={{ flex: 1, height: '4px', background: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: '2px', transition: 'background 0.5s ease' }}></div>
 
-            {/* Step 2: Served */}
+            {/* Step 2: Preparing */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+              <div style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-border)',
+                boxShadow: (orderStatus !== 'Placed') ? '0 0 8px var(--color-primary)' : 'none',
+                transition: 'background 0.5s ease'
+              }}></div>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>🍳 Preparing</span>
+            </div>
+
+            {/* Connecting Bar 2 */}
+            <div style={{ flex: 1, height: '4px', background: isServed ? 'var(--color-success)' : 'var(--color-border)', borderRadius: '2px', transition: 'background 0.5s ease' }}></div>
+
+            {/* Step 3: Ready */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
               <div style={{
                 width: '10px',
@@ -216,7 +237,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 boxShadow: isServed ? '0 0 8px var(--color-success)' : 'none',
                 transition: 'background 0.5s ease'
               }}></div>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>🍽️ Served</span>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>🍽️ Ready</span>
             </div>
           </div>
           
@@ -289,6 +310,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                         phone: customerPhone || placedOrder.customerPhone || '9999999999'
                       }}
                       existingOrderId={placedOrder._id}
+                      cafeId={cafeId || placedOrder.cafeId || 'CD001'}
                       buttonText="Pay Online (Razorpay)"
                       onPaymentSuccess={(updatedOrder) => {
                         setPlacedOrder(updatedOrder);

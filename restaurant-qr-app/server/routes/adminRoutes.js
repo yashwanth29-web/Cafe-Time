@@ -7,20 +7,23 @@ const fs = require('fs');
 const { 
   createStaff, 
   getStaff, 
+  updateStaff,
+  deleteStaff,
   verifyRazorpay, 
   getSetupData, 
   saveSetupData, 
   updateOwnerProfile,
   getBranches,
   createBranch,
+  updateBranch,
+  deleteBranch,
   getStaffSummary,
   uploadLogo 
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
-// Protect all routes under /api/admin to only cafe owner (admin) role
+// Protect all routes under /api/admin to authenticated users
 router.use(protect);
-router.use(restrictTo('admin'));
 
 // Configure Multer storage for logo uploads
 const storage = multer.diskStorage({
@@ -45,21 +48,25 @@ const upload = multer({
 });
 
 // Staff Management Routes
-router.post('/create-staff', createStaff);
-router.get('/staff', getStaff);
-router.get('/staff-summary', getStaffSummary);
+router.post('/create-staff', restrictTo('admin', 'owner'), createStaff);
+router.get('/staff', restrictTo('admin', 'owner', 'manager'), getStaff);
+router.put('/staff/:id', restrictTo('admin', 'owner'), updateStaff);
+router.delete('/staff/:id', restrictTo('admin', 'owner'), deleteStaff);
+router.get('/staff-summary', restrictTo('admin', 'owner', 'manager'), getStaffSummary);
 
 // Branches Management Routes
-router.get('/branches', getBranches);
-router.post('/branches', createBranch);
+router.get('/branches', restrictTo('admin', 'owner'), getBranches);
+router.post('/branches', restrictTo('admin', 'owner'), createBranch);
+router.put('/branches/:id', restrictTo('admin', 'owner'), updateBranch);
+router.delete('/branches/:id', restrictTo('admin', 'owner'), deleteBranch);
 
 // Profile Management Route
-router.put('/profile/owner', updateOwnerProfile);
+router.put('/profile/owner', restrictTo('admin', 'owner'), updateOwnerProfile);
 
 // Onboarding Setup routes
-router.get('/setup', getSetupData);
-router.post('/setup', saveSetupData);
-router.post('/verify-razorpay', verifyRazorpay);
-router.post('/upload-logo', upload.single('logo'), uploadLogo);
+router.get('/setup', restrictTo('admin', 'owner'), getSetupData);
+router.post('/setup', restrictTo('admin', 'owner'), saveSetupData);
+router.post('/verify-razorpay', restrictTo('admin', 'owner'), verifyRazorpay);
+router.post('/upload-logo', restrictTo('admin', 'owner'), upload.single('logo'), uploadLogo);
 
 module.exports = router;

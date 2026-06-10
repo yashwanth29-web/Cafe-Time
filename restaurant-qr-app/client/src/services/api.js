@@ -22,6 +22,21 @@ const API = axios.create({
   },
 });
 
+// Request interceptor to attach JWT token to all API requests if present
+API.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+
 export const getOrders = async () => {
   const response = await API.get('/orders');
   return response.data;
@@ -37,8 +52,9 @@ export const placeOrder = async (orderData) => {
   return response.data;
 };
 
-export const updateOrderStatus = async (id, status) => {
-  const response = await API.patch(`/orders/${id}`, { status });
+export const updateOrderStatus = async (id, payload) => {
+  const data = typeof payload === 'string' ? { status: payload } : payload;
+  const response = await API.patch(`/orders/${id}`, data);
   return response.data;
 };
 
@@ -60,6 +76,27 @@ export const updateMenuItem = async (id, menuItemData) => {
 
 export const deleteMenuItem = async (id) => {
   const response = await API.delete(`/menu/${id}`);
+  return response.data;
+};
+
+// Category API helpers
+export const getCategories = async () => {
+  const response = await API.get('/categories');
+  return response.data;
+};
+
+export const createCategory = async (categoryData) => {
+  const response = await API.post('/categories', categoryData);
+  return response.data;
+};
+
+export const updateCategory = async (id, categoryData) => {
+  const response = await API.patch(`/categories/${id}`, categoryData);
+  return response.data;
+};
+
+export const deleteCategory = async (id) => {
+  const response = await API.delete(`/categories/${id}`);
   return response.data;
 };
 
@@ -137,6 +174,16 @@ export const getStaff = async () => {
   return response.data;
 };
 
+export const updateStaff = async (id, staffData) => {
+  const response = await API.put(`/admin/staff/${id}`, staffData);
+  return response.data;
+};
+
+export const deleteStaff = async (id) => {
+  const response = await API.delete(`/admin/staff/${id}`);
+  return response.data;
+};
+
 export const getStaffSummary = async () => {
   const response = await API.get('/admin/staff-summary');
   return response.data;
@@ -150,6 +197,27 @@ export const getBranches = async () => {
 
 export const createBranch = async (branchData) => {
   const response = await API.post('/admin/branches', branchData);
+  return response.data;
+};
+
+export const updateBranch = async (id, branchData) => {
+  const response = await API.put(`/admin/branches/${id}`, branchData);
+  return response.data;
+};
+
+export const deleteBranch = async (id) => {
+  const response = await API.delete(`/admin/branches/${id}`);
+  return response.data;
+};
+
+// Support Tickets APIs
+export const getTickets = async () => {
+  const response = await API.get('/superadmin/tickets');
+  return response.data;
+};
+
+export const updateTicketStatus = async (id, status) => {
+  const response = await API.patch(`/superadmin/tickets/${id}`, { status });
   return response.data;
 };
 
@@ -186,5 +254,73 @@ export const uploadLogo = async (file) => {
   return response.data;
 };
 
+// Inventory APIs
+export const getInventory = async () => {
+  const response = await API.get('/inventory');
+  return response.data;
+};
+
+export const createInventoryItem = async (itemData) => {
+  const response = await API.post('/inventory', itemData);
+  return response.data;
+};
+
+export const updateInventoryItem = async (id, itemData) => {
+  const response = await API.patch(`/inventory/${id}`, itemData);
+  return response.data;
+};
+
+export const deleteInventoryItem = async (id) => {
+  const response = await API.delete(`/inventory/${id}`);
+  return response.data;
+};
+
+export const getInventoryLogs = async () => {
+  const response = await API.get('/inventory/logs');
+  return response.data;
+};
+
+export const recordPurchase = async (purchaseData) => {
+  const response = await API.post('/inventory/purchase', purchaseData);
+  return response.data;
+};
+
+export const recordWastage = async (wastageData) => {
+  const response = await API.post('/inventory/wastage', wastageData);
+  return response.data;
+};
+
+export const reportShortage = async (shortageData) => {
+  const response = await API.post('/inventory/shortage', shortageData);
+  return response.data;
+};
+
+export const getWastageReport = async () => {
+  const response = await API.get('/inventory/reports/wastage');
+  return response.data;
+};
+
+export const getConsumptionReport = async () => {
+  const response = await API.get('/inventory/reports/consumption');
+  return response.data;
+};
+
+// Inventory Category API helpers
+export const getInventoryCategories = async () => {
+  const response = await API.get('/inventory/categories');
+  return response.data;
+};
+
+export const createInventoryCategory = async (categoryData) => {
+  const response = await API.post('/inventory/categories', categoryData);
+  return response.data;
+};
+
+export const deleteInventoryCategory = async (id) => {
+  const response = await API.delete(`/inventory/categories/${id}`);
+  return response.data;
+};
+
 export default API;
+
 

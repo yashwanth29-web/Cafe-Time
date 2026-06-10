@@ -1,4 +1,5 @@
 const Order = require('../models/Order');
+const { deductInventoryForOrder } = require('./inventoryController');
 const Payment = require('../models/Payment');
 const MenuItem = require('../models/MenuItem');
 const razorpayService = require('../services/razorpayService');
@@ -10,7 +11,7 @@ const mongoose = require('mongoose');
  */
 const createOrder = async (req, res) => {
   try {
-    const { items, tableNumber, customerName, customerEmail, customerPhone } = req.body;
+    const { cafeId, items, tableNumber, customerName, customerEmail, customerPhone } = req.body;
 
     // Basic validation
     if (!items || items.length === 0) {
@@ -61,6 +62,7 @@ const createOrder = async (req, res) => {
 
     // Create a new Order in DB with 'Pending' payment status
     const newOrder = new Order({
+      cafeId: cafeId || 'CD001',
       tableNumber: tableNumber || 'Takeaway',
       items: validatedItems,
       totalAmount: calculatedTotal,
@@ -68,7 +70,7 @@ const createOrder = async (req, res) => {
       customerEmail,
       customerPhone,
       paymentStatus: 'Pending',
-      status: 'Preparing'
+      status: 'Placed'
     });
 
     const savedOrder = await newOrder.save();
@@ -142,8 +144,12 @@ const verifyPayment = async (req, res) => {
 
     // Complete Order state updates
     order.paymentStatus = 'Paid';
+    order.status = 'Completed';
     order.razorpayPaymentId = razorpayPaymentId;
     const updatedOrder = await order.save();
+
+    // Auto deduct inventory stock
+    await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
 
     // Create separate Payment record log for bookkeeping
     const paymentRecord = new Payment({

@@ -1,11 +1,12 @@
 const Order = require('../models/Order');
+const { deductInventoryForOrder } = require('./inventoryController');
 
 // @desc    Create a new order
 // @route   POST /api/orders
 // @access  Public
 const createOrder = async (req, res) => {
   try {
-    const { tableNumber, items, totalAmount, customerName, customerEmail, customerPhone } = req.body;
+    const { cafeId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone } = req.body;
 
     // Simple validation
     if (!tableNumber) {
@@ -19,10 +20,11 @@ const createOrder = async (req, res) => {
     }
 
     const newOrder = new Order({
+      cafeId: cafeId || 'CD001',
       tableNumber,
       items,
       totalAmount,
-      status: 'Preparing',
+      status: 'Placed',
       customerName: customerName || '',
       customerEmail: customerEmail || '',
       customerPhone: customerPhone || '',
@@ -30,6 +32,10 @@ const createOrder = async (req, res) => {
     });
 
     const savedOrder = await newOrder.save();
+    
+    // Auto deduct inventory stock
+    await deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items);
+
     return res.status(201).json({ success: true, data: savedOrder });
   } catch (error) {
     console.error('Error creating order:', error);
@@ -72,22 +78,43 @@ const getOrderById = async (req, res) => {
 // @access  Public (Owner Dashboard)
 const updateOrderStatus = async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, paymentStatus } = req.body;
     const { id } = req.params;
 
-    const allowedStatuses = ['Preparing', 'Served'];
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${allowedStatuses.join(', ')}` });
+    const updateFields = {};
+
+    if (status !== undefined) {
+      const allowedStatuses = ['Placed', 'Preparing', 'Ready', 'Delivered', 'Completed'];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${allowedStatuses.join(', ')}` });
+      }
+      updateFields.status = status;
+    }
+
+    if (paymentStatus !== undefined) {
+      const allowedPaymentStatuses = ['Pending', 'Paid', 'Failed'];
+      if (!allowedPaymentStatuses.includes(paymentStatus)) {
+        return res.status(400).json({ success: false, message: `Invalid paymentStatus. Must be one of: ${allowedPaymentStatuses.join(', ')}` });
+      }
+      updateFields.paymentStatus = paymentStatus;
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid fields provided for update. Must be status or paymentStatus.' });
     }
 
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
-      { status },
+      updateFields,
       { new: true, returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedOrder) {
       return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (updatedOrder.status === 'Completed' && !updatedOrder.inventoryDeducted) {
+      await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
     }
 
     return res.status(200).json({ success: true, data: updatedOrder });

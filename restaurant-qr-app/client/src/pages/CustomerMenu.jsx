@@ -116,7 +116,7 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
               <span className="sticky-cart-count">
                 {totalItems} {totalItems === 1 ? 'item' : 'items'} added
               </span>
-              <span className="sticky-cart-price">${totalPrice.toFixed(2)}</span>
+              <span className="sticky-cart-price">₹{totalPrice.toFixed(2)}</span>
             </div>
             <div className="sticky-cart-action">
               <span>View Cart</span>

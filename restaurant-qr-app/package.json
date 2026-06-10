@@ -1,0 +1,15 @@
+{
+  "name": "restaurant-qr-app-root",
+  "version": "1.0.0",
+  "description": "Root package runner for restaurant-qr-app",
+  "scripts": {
+    "install:all": "npm install --prefix client && npm install --prefix server",
+    "client": "npm run dev --prefix client",
+    "server": "nodemon server/server.js",
+    "dev": "concurrently \"npm run client\" \"nodemon server/server.js\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.14"
+  }
+}

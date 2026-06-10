@@ -8,12 +8,13 @@ const VerifyOtp = () => {
   const [searchParams] = useSearchParams();
   const email = searchParams.get('email') || '';
   const navigate = useNavigate();
-  const { confirmOtp } = useAuth();
+  const { confirmOtp, user } = useAuth();
 
   const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const isVerifyingRef = useRef(false);
   
   // Resend Timer State
   const [timer, setTimer] = useState(60);
@@ -29,12 +30,36 @@ const VerifyOtp = () => {
     useRef(null),
   ];
 
-  // Redirect to login if email is missing
+  // Redirect to login if email is missing on mount
   useEffect(() => {
     if (!email) {
       navigate('/login');
     }
   }, [email, navigate]);
+
+  // If already logged in, redirect to the appropriate dashboard
+  useEffect(() => {
+    if (user) {
+      if (isVerifyingRef.current) return;
+      const userRole = (user.role || '').toLowerCase();
+      console.log('User already logged in on OTP page. Redirecting role:', userRole);
+      if (userRole === 'super_admin') {
+        navigate('/super-admin/dashboard', { replace: true });
+      } else if (userRole === 'admin' || userRole === 'owner') {
+        navigate('/owner/dashboard', { replace: true });
+      } else if (userRole === 'manager') {
+        navigate('/manager/dashboard', { replace: true });
+      } else if (userRole === 'chef') {
+        navigate('/kitchen/dashboard', { replace: true });
+      } else if (userRole === 'waiter' || userRole === 'staff') {
+        navigate('/waiter/dashboard', { replace: true });
+      } else if (userRole === 'cashier') {
+        navigate('/cashier/dashboard', { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
+    }
+  }, [user, navigate]);
 
   // Countdown timer for resend safety
   useEffect(() => {
@@ -123,6 +148,7 @@ const VerifyOtp = () => {
 
     try {
       setLoading(true);
+      isVerifyingRef.current = true;
       const data = await confirmOtp(email, otp);
 
       if (data.success && data.user) {
@@ -130,18 +156,27 @@ const VerifyOtp = () => {
         
         // Dynamic dashboard routing based on authenticated user role
         setTimeout(() => {
-          if (data.user.role === 'super_admin') {
-            navigate('/super-admin');
-          } else if (data.user.role === 'admin') {
-            navigate('/admin');
-          } else if (data.user.role === 'staff') {
-            navigate('/staff');
+          const userRole = (data.user.role || '').toLowerCase();
+          console.log('Redirecting user with role:', userRole);
+          if (userRole === 'super_admin') {
+            navigate('/super-admin/dashboard');
+          } else if (userRole === 'admin' || userRole === 'owner') {
+            navigate('/owner/dashboard');
+          } else if (userRole === 'manager') {
+            navigate('/manager/dashboard');
+          } else if (userRole === 'chef') {
+            navigate('/kitchen/dashboard');
+          } else if (userRole === 'waiter' || userRole === 'staff') {
+            navigate('/waiter/dashboard');
+          } else if (userRole === 'cashier') {
+            navigate('/cashier/dashboard');
           } else {
             navigate('/');
           }
         }, 1200);
       }
     } catch (err) {
+      isVerifyingRef.current = false;
       setErrorMsg(err.message || 'OTP verification failed. Please try again.');
       // Focus first input on failure and clear boxes
       setOtpValues(['', '', '', '', '', '']);

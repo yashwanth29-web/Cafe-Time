@@ -13,17 +13,29 @@ import OwnerSetup from './pages/OwnerSetup';
 import OwnerProfilePage from './pages/OwnerProfilePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
+import KitchenDashboard from './pages/KitchenDashboard';
+import WaiterDashboard from './pages/WaiterDashboard';
+import CashierDashboard from './pages/CashierDashboard';
+import ManagerDashboard from './pages/ManagerDashboard';
 import './styles/App.css';
+import SaaSLayout from './components/SaaSLayout';
+import Unauthorized from './pages/Unauthorized';
 
 function AppContent() {
   const [cart, setCart] = useState([]);
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const tableParam = searchParams.get('table');
+  const cafeIdParam = searchParams.get('cafeId');
 
   // Synchronously initialize table number state from query param or session storage
   const [tableNumber, setTableNumber] = useState(() => {
     return tableParam || sessionStorage.getItem('tableNumber') || '';
+  });
+
+  // Synchronously initialize cafe ID state from query param or session storage
+  const [cafeId, setCafeId] = useState(() => {
+    return cafeIdParam || sessionStorage.getItem('cafeId') || '';
   });
 
   // Sync tableNumber state when search parameter changes reactively
@@ -34,6 +46,15 @@ function AppContent() {
       console.log(`Updated table number from URL: ${tableParam}`);
     }
   }, [tableParam]);
+
+  // Sync cafeId state when search parameter changes reactively
+  useEffect(() => {
+    if (cafeIdParam) {
+      setCafeId(cafeIdParam);
+      sessionStorage.setItem('cafeId', cafeIdParam);
+      console.log(`Updated cafe ID from URL: ${cafeIdParam}`);
+    }
+  }, [cafeIdParam]);
 
   // Cart operations
   const addToCart = (item) => {
@@ -91,6 +112,9 @@ function AppContent() {
     location.pathname.startsWith('/owner') ||
     location.pathname.startsWith('/super-admin') ||
     location.pathname.startsWith('/staff') ||
+    location.pathname.startsWith('/manager') ||
+    location.pathname.startsWith('/kitchen') ||
+    location.pathname.startsWith('/cashier') ||
     ['/login', '/verify-otp'].includes(location.pathname);
 
   return (
@@ -127,6 +151,7 @@ function AppContent() {
                 removeFromCart={removeFromCart}
                 clearCart={clearCart}
                 tableNumber={tableNumber}
+                cafeId={cafeId}
               />
             } 
           />
@@ -135,47 +160,95 @@ function AppContent() {
           <Route path="/login" element={<Login />} />
           <Route path="/verify-otp" element={<VerifyOtp />} />
 
-          {/* Role Protected Admin Dashboards */}
+           {/* Role Protected Admin Dashboards */}
           <Route 
-            path="/super-admin" 
+            path="/super-admin/dashboard" 
             element={
               <ProtectedRoute allowedRoles={['super_admin']}>
-                <SuperAdminDashboard />
+                <SaaSLayout>
+                  <SuperAdminDashboard />
+                </SaaSLayout>
               </ProtectedRoute>
             } 
           />
           <Route 
             path="/owner-setup" 
             element={
-              <ProtectedRoute allowedRoles={['admin']}>
+              <ProtectedRoute allowedRoles={['admin', 'owner']}>
                 <OwnerSetup />
               </ProtectedRoute>
             } 
           />
           <Route 
-            path="/admin" 
+            path="/owner/dashboard" 
             element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <OwnerDashboard />
+              <ProtectedRoute allowedRoles={['admin', 'owner']}>
+                <SaaSLayout>
+                  <OwnerDashboard />
+                </SaaSLayout>
               </ProtectedRoute>
             } 
           />
           <Route 
             path="/owner/profile" 
             element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <OwnerProfilePage />
+              <ProtectedRoute allowedRoles={['admin', 'owner']}>
+                <SaaSLayout>
+                  <OwnerProfilePage />
+                </SaaSLayout>
               </ProtectedRoute>
             } 
           />
           <Route 
-            path="/staff" 
+            path="/manager/dashboard" 
             element={
-              <ProtectedRoute allowedRoles={['staff']}>
-                <StaffDashboard />
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager']}>
+                <SaaSLayout>
+                  <ManagerDashboard />
+                </SaaSLayout>
               </ProtectedRoute>
             } 
           />
+          <Route 
+            path="/kitchen/dashboard" 
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'chef']}>
+                <SaaSLayout>
+                  <KitchenDashboard />
+                </SaaSLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/waiter/dashboard" 
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'staff']}>
+                <SaaSLayout>
+                  <WaiterDashboard />
+                </SaaSLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/cashier/dashboard" 
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'cashier']}>
+                <SaaSLayout>
+                  <CashierDashboard />
+                </SaaSLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/unauthorized" 
+            element={<Unauthorized />} 
+          />
+
+          {/* Shorthand / Compatibility Redirects */}
+          <Route path="/super-admin" element={<Navigate to="/super-admin/dashboard" replace />} />
+          <Route path="/admin" element={<Navigate to="/owner/dashboard" replace />} />
+          <Route path="/staff/dashboard" element={<Navigate to="/waiter/dashboard" replace />} />
+          <Route path="/staff" element={<Navigate to="/waiter/dashboard" replace />} />
 
           {/* Legacy & Demo routes */}
           <Route 

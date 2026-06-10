@@ -13,9 +13,23 @@ const Login = () => {
   // If already logged in, redirect to the appropriate dashboard
   useEffect(() => {
     if (user) {
-      if (user.role === 'super_admin') navigate('/super-admin', { replace: true });
-      else if (user.role === 'admin') navigate('/admin', { replace: true });
-      else if (user.role === 'staff') navigate('/staff', { replace: true });
+      const userRole = (user.role || '').toLowerCase();
+      console.log('User already logged in. Redirecting role:', userRole);
+      if (userRole === 'super_admin') {
+        navigate('/super-admin/dashboard', { replace: true });
+      } else if (userRole === 'admin' || userRole === 'owner') {
+        navigate('/owner/dashboard', { replace: true });
+      } else if (userRole === 'manager') {
+        navigate('/manager/dashboard', { replace: true });
+      } else if (userRole === 'chef') {
+        navigate('/kitchen/dashboard', { replace: true });
+      } else if (userRole === 'waiter' || userRole === 'staff') {
+        navigate('/waiter/dashboard', { replace: true });
+      } else if (userRole === 'cashier') {
+        navigate('/cashier/dashboard', { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
     }
   }, [user, navigate]);
 

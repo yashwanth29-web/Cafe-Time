@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { getMe, sendOtp, verifyOtp, logoutUser } from '../services/api';
+import API, { getMe, sendOtp, verifyOtp, logoutUser } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -16,10 +16,14 @@ export const AuthProvider = ({ children }) => {
       if (data.success && data.user) {
         setUser(data.user);
       } else {
+        localStorage.removeItem('token');
         setUser(null);
       }
     } catch (err) {
-      console.log('Session validation failed (not logged in):', err.message);
+      if (err.response?.status !== 401) {
+        console.log('Session validation failed:', err.message);
+      }
+      localStorage.removeItem('token');
       setUser(null);
     } finally {
       setLoading(false);
@@ -28,6 +32,29 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkSession();
+
+    // Axios response interceptor to handle auto-logout on token expiration (401 status)
+    const interceptor = API.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response && error.response.status === 401) {
+          const isPublicPath = ['/', '/login', '/verify-otp', '/payment-demo'].includes(window.location.pathname);
+          const isMeEndpoint = error.config?.url?.includes('/auth/me');
+
+          if (!isPublicPath && !isMeEndpoint) {
+            console.warn('Session expired or unauthorized. Logging out.');
+            localStorage.removeItem('token');
+            setUser(null);
+            window.location.href = '/login';
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      API.interceptors.response.eject(interceptor);
+    };
   }, []);
 
   /**
@@ -53,6 +80,9 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await verifyOtp(email, otp);
       if (response.success && response.user) {
+        if (response.token) {
+          localStorage.setItem('token', response.token);
+        }
         setUser(response.user);
       }
       return response;
@@ -72,6 +102,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.error('Logout request failed:', err);
     } finally {
+      localStorage.removeItem('token');
       setUser(null);
     }
   };

@@ -48,28 +48,22 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   // Onboarding Setup Safeguard Redirects
   // Allow /owner/profile even during setup so the owner can view/edit their profile anytime
   const setupBypassRoutes = ['/owner-setup', '/owner/profile'];
-  if (user.role === 'admin') {
+  const userRole = (user.role || '').toLowerCase();
+  
+  if (userRole === 'admin' || userRole === 'owner') {
     if (user.setupCompleted === false && !setupBypassRoutes.includes(location.pathname)) {
       return <Navigate to="/owner-setup" replace />;
     }
     if (user.setupCompleted === true && location.pathname === '/owner-setup') {
-      return <Navigate to="/admin" replace />;
+      return <Navigate to="/owner/dashboard" replace />;
     }
   }
 
-  // If role is not permitted, redirect to their default home dashboard
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  // If role is not permitted, redirect to the unauthorized warning page
+  const normalizedAllowedRoles = (allowedRoles || []).map(r => r.toLowerCase());
+  if (allowedRoles && !normalizedAllowedRoles.includes(userRole)) {
     console.warn(`User role ${user.role} unauthorized for this view.`);
-    
-    if (user.role === 'super_admin') {
-      return <Navigate to="/super-admin" replace />;
-    } else if (user.role === 'admin') {
-      return <Navigate to="/admin" replace />;
-    } else if (user.role === 'staff') {
-      return <Navigate to="/staff" replace />;
-    }
-    
-    return <Navigate to="/" replace />;
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return children;

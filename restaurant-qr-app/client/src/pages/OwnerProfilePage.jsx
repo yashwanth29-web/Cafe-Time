@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import OwnerLayout from '../components/OwnerLayout';
-import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, getStaff } from '../services/api';
+import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff } from '../services/api';
 
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
@@ -19,8 +19,34 @@ const OwnerProfilePage = () => {
   const [geoLoading, setGeoLoading] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
   const [form, setForm] = useState({});
+  const [editingBranchId, setEditingBranchId] = useState(null);
 
   const showToast = (msg, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); };
+
+  const openEditBranchModal = (branch) => {
+    setForm({
+      branchName: branch.branchName || '',
+      address: branch.address || '',
+      manager: branch.manager || '',
+      isActive: branch.isActive !== undefined ? branch.isActive : true
+    });
+    setEditingBranchId(branch._id);
+    setActiveModal('editBranch');
+  };
+
+  const handleDeleteBranch = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete branch "${name}"?`)) return;
+    setSaving(true);
+    try {
+      await deleteBranch(id);
+      showToast(`Branch "${name}" deleted.`);
+      await load();
+    } catch (err) {
+      showToast(err?.response?.data?.message || 'Delete failed.', false);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +89,7 @@ const OwnerProfilePage = () => {
         const tables = Array.from({ length: Number(form.tableCount) }, (_, i) => ({ id: `T${i+1}`, label: `Table-${i+1}` }));
         await saveSetupData({ operationalConfig: { tables, kitchenDisplayEnabled: form.kitchenDisplayEnabled, printerEnabled: form.printerEnabled, inventoryEnabled: form.inventoryEnabled } });
       } else if (activeModal === 'branch') { await createBranch(form); }
+      else if (activeModal === 'editBranch') { await updateBranch(editingBranchId, form); }
       await load(); showToast('Saved successfully!'); closeModal();
     } catch (err) { showToast(err?.response?.data?.message || 'Save failed.', false); }
     finally { setSaving(false); }
@@ -243,9 +270,23 @@ const OwnerProfilePage = () => {
         <input className="minput" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
       </>
     ),
+    editBranch: (
+      <>
+        <label className="mlabel">Branch Name *</label>
+        <input className="minput" value={form.branchName || ''} onChange={fld('branchName')} placeholder="e.g. Hyderabad Central" required />
+        <label className="mlabel">Address *</label>
+        <input className="minput" value={form.address || ''} onChange={fld('address')} placeholder="Full branch address" required />
+        <label className="mlabel">Manager Name</label>
+        <input className="minput" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
+        <div className="mtoggle-row">
+          <span className="mlabel" style={{margin:0}}>Is Active</span>
+          <input type="checkbox" className="mtoggle" checked={!!form.isActive} onChange={fld('isActive')} />
+        </div>
+      </>
+    ),
   };
 
-  const modalTitles = { owner:'Edit Owner Profile', cafe:'Edit Cafe Identity', location:'Edit Location', hours:'Edit Business Hours', payment:'Edit Payment Setup', ops:'Edit Operations', branch:'Add New Branch' };
+  const modalTitles = { owner:'Edit Owner Profile', cafe:'Edit Cafe Identity', location:'Edit Location', hours:'Edit Business Hours', payment:'Edit Payment Setup', ops:'Edit Operations', branch:'Add New Branch', editBranch:'Edit Branch Details' };
 
   return (
     <OwnerLayout>
@@ -435,12 +476,26 @@ const OwnerProfilePage = () => {
               </div>
               {branches.length === 0 && <p style={{ color:'#3D2820', fontStyle:'italic', fontSize:'.85rem', margin:'4px 0 10px' }}>No branches added yet.</p>}
               {branches.map(b => (
-                <div key={b._id} className="branch-item">
+                <div key={b._id} className="branch-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(230,213,195,.06)' }}>
                   <div>
-                    <div className="branch-name">{b.branchName}</div>
-                    <div className="branch-addr">{b.address}{b.manager ? ` · ${b.manager}` : ''}</div>
+                    <div className="branch-name" style={{ fontWeight: 700, color: '#E6D5C3', fontSize: '.875rem' }}>{b.branchName}</div>
+                    <div className="branch-addr" style={{ fontSize: '.75rem', color: '#7A6055', marginTop: '2px' }}>{b.address}{b.manager ? ` · ${b.manager}` : ''}</div>
+                    <span className={b.isActive ? 'badge-on' : 'badge-off'} style={{ display: 'inline-block', marginTop: '4px' }}>{b.isActive ? 'Active' : 'Inactive'}</span>
                   </div>
-                  <span className={b.isActive ? 'badge-on' : 'badge-off'}>{b.isActive ? 'Active' : 'Inactive'}</span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); openEditBranchModal(b); }}
+                      style={{ background: '#3E2723', color: '#FAF6F0', border: '1px solid rgba(230,213,195,.18)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDeleteBranch(b._id, b.branchName); }}
+                      style={{ background: '#E74C3C', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
                 </div>
               ))}
               <div className="add-branch-row">

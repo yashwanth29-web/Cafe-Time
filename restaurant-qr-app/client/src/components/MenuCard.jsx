@@ -19,7 +19,7 @@ const MenuCard = ({ item, cartItem, addToCart, increaseQuantity, decreaseQuantit
       <div className="menu-card-content">
         <div className="menu-card-header">
           <h3 className="menu-card-title">{name}</h3>
-          <span className="menu-card-price">${price.toFixed(2)}</span>
+          <span className="menu-card-price">₹{price.toFixed(2)}</span>
         </div>
         
         <p className="menu-card-description">{description}</p>

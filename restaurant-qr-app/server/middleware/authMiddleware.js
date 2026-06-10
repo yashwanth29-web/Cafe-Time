@@ -51,12 +51,13 @@ const protect = async (req, res, next) => {
 };
 
 /**
- * Restrict access to specific roles
- * @param {...string} roles - Permitted user roles ('super_admin', 'admin', 'staff')
+ * Restrict access to specific roles (case-insensitive)
+ * @param {...string} roles - Permitted user roles
  */
 const restrictTo = (...roles) => {
+  const normalizedRoles = roles.map(r => r.toLowerCase());
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user || !normalizedRoles.includes((req.user.role || '').toLowerCase())) {
       return res.status(403).json({ 
         success: false, 
         message: `Role unauthorized. Required: [${roles.join(', ')}]. Your role: ${req.user ? req.user.role : 'none'}` 

@@ -74,8 +74,8 @@ const StaffDashboard = () => {
     }
   };
 
-  const activeOrders = orders.filter((order) => order.status === 'Preparing');
-  const servedOrders = orders.filter((order) => order.status === 'Served');
+  const activeOrders = orders.filter((order) => order.status === 'Placed' || order.status === 'Preparing');
+  const servedOrders = orders.filter((order) => order.status === 'Ready');
 
   return (
     <div style={{ padding: '25px', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>

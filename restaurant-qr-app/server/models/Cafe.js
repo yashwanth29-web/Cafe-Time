@@ -77,6 +77,20 @@ const CafeSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  subscriptionPlan: {
+    type: String,
+    enum: ['Basic', 'Premium', 'Enterprise'],
+    default: 'Basic'
+  },
+  subscriptionStatus: {
+    type: String,
+    enum: ['Active', 'Suspended', 'Expired'],
+    default: 'Active'
+  },
+  subscriptionRenewal: {
+    type: Date,
+    default: () => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+  },
   createdAt: {
     type: Date,
     default: Date.now

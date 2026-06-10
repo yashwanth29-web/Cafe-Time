@@ -36,10 +36,11 @@ const createStaff = async (req, res) => {
     const cafe = await Cafe.findOne({ cafeId });
     const cafeName = cafe ? cafe.name : 'Your Cafe';
 
-    // Staff accounts can have a role of 'staff', and custom roles like 'chef' or 'manager'
+    // Staff accounts can have a role of 'staff', and custom roles like 'chef', 'manager', 'waiter', or 'cashier'
     let targetRole = 'staff';
-    if (['manager', 'chef'].includes(staffRole.toLowerCase())) {
-      targetRole = staffRole.toLowerCase();
+    const sRoleLower = staffRole.toLowerCase();
+    if (['manager', 'chef', 'waiter', 'cashier'].includes(sRoleLower)) {
+      targetRole = sRoleLower;
     }
 
     const newStaff = await User.create({
@@ -82,13 +83,95 @@ const getStaff = async (req, res) => {
   try {
     const staff = await User.find({ 
       cafeId, 
-      role: { $in: ['staff', 'chef', 'manager'] } 
+      role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] } 
     }).sort({ createdAt: -1 });
     
     return res.status(200).json({ success: true, staff });
   } catch (error) {
     console.error('getStaff error:', error);
     return res.status(500).json({ success: false, message: 'Server error retrieving staff list' });
+  }
+};
+
+/**
+ * Update an existing Staff member details
+ */
+const updateStaff = async (req, res) => {
+  const { id } = req.params;
+  const { name, email, phone, staffRole, isActive } = req.body;
+  const cafeId = req.user.cafeId;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    const staffMember = await User.findOne({ _id: id, cafeId });
+    if (!staffMember) {
+      return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
+    }
+
+    if (name) staffMember.name = name.trim();
+    if (email) {
+      const cleanEmail = email.trim().toLowerCase();
+      // Check if email is already taken by another user
+      const existingUser = await User.findOne({ email: cleanEmail, _id: { $ne: id } });
+      if (existingUser) {
+        return res.status(400).json({ success: false, message: `An account with email ${email} is already registered.` });
+      }
+      staffMember.email = cleanEmail;
+    }
+    if (phone) staffMember.phone = phone.trim();
+    if (staffRole) {
+      staffMember.staffRole = staffRole.trim();
+      let targetRole = 'staff';
+      const sRoleLower = staffRole.toLowerCase();
+      if (['manager', 'chef', 'waiter', 'cashier'].includes(sRoleLower)) {
+        targetRole = sRoleLower;
+      }
+      staffMember.role = targetRole;
+    }
+    if (isActive !== undefined) {
+      staffMember.isActive = isActive;
+    }
+
+    await staffMember.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Staff member updated successfully.',
+      staff: staffMember
+    });
+  } catch (error) {
+    console.error('updateStaff error:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating staff member' });
+  }
+};
+
+/**
+ * Delete a Staff member
+ */
+const deleteStaff = async (req, res) => {
+  const { id } = req.params;
+  const cafeId = req.user.cafeId;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    const staffMember = await User.findOneAndDelete({ _id: id, cafeId });
+    if (!staffMember) {
+      return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Staff member "${staffMember.name}" deleted successfully.`
+    });
+  } catch (error) {
+    console.error('deleteStaff error:', error);
+    return res.status(500).json({ success: false, message: 'Server error deleting staff member' });
   }
 };
 
@@ -223,7 +306,7 @@ const saveSetupData = async (req, res) => {
           ifscCode: paymentConfig.ifscCode,
           isVerified: paymentConfig.isVerified || false
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
     }
 
@@ -237,7 +320,7 @@ const saveSetupData = async (req, res) => {
           kitchenDisplayEnabled: operationalConfig.kitchenDisplayEnabled || false,
           inventoryEnabled: operationalConfig.inventoryEnabled || false
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
     }
 
@@ -251,7 +334,7 @@ const saveSetupData = async (req, res) => {
             // Determine targeted role from staffRole
             let targetRole = 'staff';
             const sRole = (staff.staffRole || '').trim().toLowerCase();
-            if (['manager', 'chef'].includes(sRole)) {
+            if (['manager', 'chef', 'waiter', 'cashier'].includes(sRole)) {
               targetRole = sRole;
             }
 
@@ -359,14 +442,16 @@ const getStaffSummary = async (req, res) => {
   try {
     const staffMembers = await User.find({
       cafeId,
-      role: { $in: ['staff', 'chef', 'manager'] }
+      role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] }
     });
 
     const totalStaff = staffMembers.length;
     const activeStaff = staffMembers.filter(s => s.isActive).length;
-    const managers = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'manager' || s.role === 'manager').length;
-    const chefs = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'chef' || s.role === 'chef').length;
-    const standardStaff = totalStaff - managers - chefs;
+    const managers = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'manager' || (s.role || '').toLowerCase() === 'manager').length;
+    const chefs = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'chef' || (s.role || '').toLowerCase() === 'chef').length;
+    const waiters = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'waiter' || (s.role || '').toLowerCase() === 'waiter').length;
+    const cashiers = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'cashier' || (s.role || '').toLowerCase() === 'cashier').length;
+    const standardStaff = totalStaff - managers - chefs - waiters - cashiers;
 
     return res.status(200).json({
       success: true,
@@ -375,6 +460,8 @@ const getStaffSummary = async (req, res) => {
         activeStaff,
         managers,
         chefs,
+        waiters,
+        cashiers,
         staffMembers: standardStaff
       }
     });
@@ -402,15 +489,82 @@ const uploadLogo = async (req, res) => {
   });
 };
 
+/**
+ * Update Branch details
+ */
+const updateBranch = async (req, res) => {
+  const { id } = req.params;
+  const cafeId = req.user.cafeId;
+  const { branchName, address, manager, isActive } = req.body;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    const branch = await Branch.findOne({ _id: id, cafeId });
+    if (!branch) {
+      return res.status(404).json({ success: false, message: 'Branch not found or does not belong to your cafe' });
+    }
+
+    if (branchName) branch.branchName = branchName.trim();
+    if (address) branch.address = address.trim();
+    if (manager !== undefined) branch.manager = manager.trim();
+    if (isActive !== undefined) branch.isActive = isActive;
+
+    await branch.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Branch "${branch.branchName}" updated successfully.`,
+      branch
+    });
+  } catch (error) {
+    console.error('updateBranch error:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating branch' });
+  }
+};
+
+/**
+ * Delete a Branch
+ */
+const deleteBranch = async (req, res) => {
+  const { id } = req.params;
+  const cafeId = req.user.cafeId;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    const branch = await Branch.findOneAndDelete({ _id: id, cafeId });
+    if (!branch) {
+      return res.status(404).json({ success: false, message: 'Branch not found or does not belong to your cafe' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Branch "${branch.branchName}" deleted successfully.`
+    });
+  } catch (error) {
+    console.error('deleteBranch error:', error);
+    return res.status(500).json({ success: false, message: 'Server error deleting branch' });
+  }
+};
+
 module.exports = {
   createStaff,
   getStaff,
+  updateStaff,
+  deleteStaff,
   verifyRazorpay,
   getSetupData,
   saveSetupData,
   updateOwnerProfile,
   getBranches,
   createBranch,
+  updateBranch,
+  deleteBranch,
   getStaffSummary,
   uploadLogo
 };

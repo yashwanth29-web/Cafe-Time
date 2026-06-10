@@ -27,7 +27,21 @@ const MenuItemSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true
-  }
+  },
+  preparationTime: {
+    type: Number,
+    default: 10
+  },
+  recipe: [{
+    name: {
+      type: String,
+      required: true
+    },
+    quantity: {
+      type: Number,
+      required: true
+    }
+  }]
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

@@ -3,6 +3,7 @@ const Cafe = require('../models/Cafe');
 const SystemHealth = require('../models/SystemHealth');
 const Branch = require('../models/Branch');
 const emailService = require('../services/emailService');
+const SupportTicket = require('../models/SupportTicket');
 
 /**
  * Create a new Cafe Owner and register the Cafe in the system (V2 Onboarding Registration)
@@ -106,7 +107,7 @@ const getCafes = async (req, res) => {
     
     // Fetch details for each cafe (Owner details, branch count, health log)
     const cafesWithDetails = await Promise.all(cafes.map(async (cafe) => {
-      const owner = await User.findOne({ email: cafe.ownerEmail, role: 'admin' });
+      const owner = await User.findOne({ email: cafe.ownerEmail, role: { $in: ['admin', 'owner', 'ADMIN', 'OWNER'] } });
       const health = await SystemHealth.findOne({ cafeId: cafe.cafeId });
       const branches = await Branch.find({ cafeId: cafe.cafeId });
 
@@ -147,7 +148,7 @@ const getCafes = async (req, res) => {
  */
 const updateCafe = async (req, res) => {
   const { id } = req.params;
-  const { name, city, state, businessType, branchCount, isActive } = req.body;
+  const { name, city, state, businessType, branchCount, isActive, subscriptionPlan, subscriptionStatus, subscriptionRenewal } = req.body;
 
   try {
     const cafe = await Cafe.findById(id);
@@ -160,6 +161,9 @@ const updateCafe = async (req, res) => {
     if (state) cafe.state = state.trim();
     if (businessType) cafe.businessType = businessType;
     if (typeof branchCount !== 'undefined') cafe.branchCount = Number(branchCount);
+    if (subscriptionPlan) cafe.subscriptionPlan = subscriptionPlan;
+    if (subscriptionStatus) cafe.subscriptionStatus = subscriptionStatus;
+    if (subscriptionRenewal) cafe.subscriptionRenewal = new Date(subscriptionRenewal);
     
     if (typeof isActive !== 'undefined') {
       cafe.isActive = isActive;
@@ -225,9 +229,94 @@ const deleteCafe = async (req, res) => {
   }
 };
 
+/**
+ * Get all support tickets. Auto-seeds defaults if the collection is empty.
+ */
+const getTickets = async (req, res) => {
+  try {
+    let tickets = await SupportTicket.find({}).sort({ createdAt: -1 });
+    
+    // Auto-seed some tickets if empty so the UI shows something nice
+    if (tickets.length === 0) {
+      const defaultTickets = [
+        {
+          ticketId: 'TKT-1001',
+          cafeId: 'CAFE001',
+          cafeName: 'Dr. Chai Cafe Main',
+          subject: 'Printer configuration error',
+          message: 'Thermal printer is not printing the QR receipt automatically when a new order is received.',
+          status: 'Open',
+          priority: 'High',
+          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+        },
+        {
+          ticketId: 'TKT-1002',
+          cafeId: 'CAFE002',
+          cafeName: 'Chai Point',
+          subject: 'Menu upload limit',
+          message: 'Can you please increase the menu upload limit for our basic plan?',
+          status: 'Pending',
+          priority: 'Medium',
+          createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)
+        },
+        {
+          ticketId: 'TKT-1003',
+          cafeId: 'CAFE001',
+          cafeName: 'Dr. Chai Cafe Main',
+          subject: 'Billing discrepancy',
+          message: 'Our dashboard shows double charge for this month subscription.',
+          status: 'Resolved',
+          priority: 'High',
+          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+        }
+      ];
+      await SupportTicket.insertMany(defaultTickets);
+      tickets = await SupportTicket.find({}).sort({ createdAt: -1 });
+    }
+
+    return res.status(200).json({ success: true, tickets });
+  } catch (error) {
+    console.error('getTickets error:', error);
+    return res.status(500).json({ success: false, message: 'Server error retrieving support tickets' });
+  }
+};
+
+/**
+ * Update Support Ticket Status
+ */
+const updateTicketStatus = async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  if (!status) {
+    return res.status(400).json({ success: false, message: 'Status is required' });
+  }
+
+  try {
+    const ticket = await SupportTicket.findById(id);
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Support ticket not found' });
+    }
+
+    ticket.status = status;
+    await ticket.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Ticket status updated to ${status} successfully.`,
+      ticket
+    });
+  } catch (error) {
+    console.error('updateTicketStatus error:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating ticket status' });
+  }
+};
+
 module.exports = {
   createOwner,
   getCafes,
   updateCafe,
-  deleteCafe
+  deleteCafe,
+  getTickets,
+  updateTicketStatus
 };

@@ -1,4 +1,5 @@
 const MenuItem = require('../models/MenuItem');
+const { updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
 
 // @desc    Get all menu items
 // @route   GET /api/menu
@@ -18,7 +19,7 @@ const getMenuItems = async (req, res) => {
 // @access  Public (Owner Dashboard)
 const createMenuItem = async (req, res) => {
   try {
-    const { name, price, category, description, available, image } = req.body;
+    const { name, price, category, description, available, image, recipe, preparationTime } = req.body;
 
     // Simple validation
     if (!name || price === undefined || !category || !description) {
@@ -31,11 +32,21 @@ const createMenuItem = async (req, res) => {
       category,
       description,
       available: available !== undefined ? available : true,
-      image: image || '/images/default-food.png'
+      image: image || '/images/default-food.png',
+      recipe: recipe || [],
+      preparationTime: preparationTime ? parseInt(preparationTime) : 10
     });
 
     const savedItem = await newMenuItem.save();
-    return res.status(201).json({ success: true, data: savedItem });
+
+    // Auto-update availability based on inventory
+    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+    await updateMenuItemAvailabilityFromInventory(cafeId);
+
+    // Fetch latest status
+    const latestItem = await MenuItem.findById(savedItem._id);
+
+    return res.status(201).json({ success: true, data: latestItem || savedItem });
   } catch (error) {
     console.error('Error creating menu item:', error);
     return res.status(500).json({ success: false, message: 'Server error while creating menu item', error: error.message });
@@ -54,6 +65,10 @@ const updateMenuItem = async (req, res) => {
       updateData.price = parseFloat(updateData.price);
     }
 
+    if (updateData.preparationTime !== undefined) {
+      updateData.preparationTime = parseInt(updateData.preparationTime);
+    }
+
     const updatedItem = await MenuItem.findByIdAndUpdate(
       id,
       updateData,
@@ -64,7 +79,14 @@ const updateMenuItem = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
 
-    return res.status(200).json({ success: true, data: updatedItem });
+    // Auto-update availability based on inventory
+    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+    await updateMenuItemAvailabilityFromInventory(cafeId);
+
+    // Fetch the updated item again to return the latest availability status
+    const latestItem = await MenuItem.findById(id);
+
+    return res.status(200).json({ success: true, data: latestItem || updatedItem });
   } catch (error) {
     console.error('Error updating menu item:', error);
     return res.status(500).json({ success: false, message: 'Server error while updating menu item', error: error.message });

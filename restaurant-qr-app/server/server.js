@@ -1,8 +1,9 @@
 const express = require('express');
 const dotenv = require('dotenv');
+const path = require('path');
 
 // Load environment variables immediately before routing imports
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
 
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -13,13 +14,19 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const authRoutes = require('./routes/authRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const inventoryRoutes = require('./routes/inventoryRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
 
 // Create Express instance
 const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Dynamically mirror the request origin to support credential sharing across local networks/IPs
+    if (!origin) return callback(null, true);
+    callback(null, true);
+  },
   credentials: true
 }));
 app.use(cookieParser());
@@ -28,7 +35,6 @@ app.use(express.json()); // Body parser
 // Connect to Database
 connectDB();
 
-const path = require('path');
 const fs = require('fs');
 
 // Ensure uploads folder exists on startup
@@ -47,6 +53,8 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/superadmin', superAdminRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/categories', categoryRoutes);
 
 
 // Health check endpoint

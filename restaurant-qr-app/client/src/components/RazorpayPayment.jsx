@@ -9,6 +9,7 @@ const RazorpayPayment = ({
   onPaymentError,
   isDisabled,
   existingOrderId,
+  cafeId,
   buttonText = 'Pay & Place Order'
 }) => {
   const [loading, setLoading] = useState(false);
@@ -71,7 +72,8 @@ const RazorpayPayment = ({
           tableNumber: tableNumber || 'Takeaway',
           customerName: name,
           customerEmail: email,
-          customerPhone: phone
+          customerPhone: phone,
+          cafeId: cafeId || 'CD001'
         };
 
         orderData = await createPaymentOrder(payload);

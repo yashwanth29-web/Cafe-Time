@@ -26,24 +26,32 @@ const OrderCard = ({ order, onStatusUpdate }) => {
             <span>
               {item.name} <span className="order-item-qty">x{item.quantity}</span>
             </span>
-            <span>${(item.price * item.quantity).toFixed(2)}</span>
+            <span>₹{(item.price * item.quantity).toFixed(2)}</span>
           </div>
         ))}
       </div>
       
       <div className="order-card-footer">
         <span className="order-total-label">Total Amount:</span>
-        <span className="order-total-amount">${totalAmount.toFixed(2)}</span>
+        <span className="order-total-amount">₹{totalAmount.toFixed(2)}</span>
       </div>
       
       <div className="order-actions">
-        {status === 'Preparing' ? (
+        {status === 'Placed' ? (
           <button 
-            onClick={() => onStatusUpdate(_id, 'Served')}
+            onClick={() => onStatusUpdate(_id, 'Preparing')}
+            className="btn btn-action"
+            style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#E67E22', color: '#fff', border: '1px solid #d35400' }}
+          >
+            🍳 Accept Order
+          </button>
+        ) : status === 'Preparing' ? (
+          <button 
+            onClick={() => onStatusUpdate(_id, 'Ready')}
             className="btn btn-action btn-action-ready"
             style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold' }}
           >
-            🍽️ Serve Order
+            🍽️ Mark Ready
           </button>
         ) : (
           <button 
@@ -51,7 +59,7 @@ const OrderCard = ({ order, onStatusUpdate }) => {
             disabled
             style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#1b4d3e', color: '#85e3b2', border: '1px solid #2e7d63' }}
           >
-            ✓ Served & Completed
+            ✓ {status}
           </button>
         )}
       </div>
