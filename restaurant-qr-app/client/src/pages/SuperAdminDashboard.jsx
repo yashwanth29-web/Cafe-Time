@@ -5,6 +5,7 @@ import { createOwner, getCafes, updateCafe, deleteCafe, getTickets, updateTicket
 
 const SuperAdminDashboard = () => {
   const navigate = useNavigate();
+  const defaultRenewalDate = React.useMemo(() => new Date(Date.now() + 365*24*60*60*1000), []);
   const { logout, user } = useAuth();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -1060,7 +1061,7 @@ const SuperAdminDashboard = () => {
                       </span>
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center', color: '#E6D5C3' }}>
-                      {formatDate(cafe.subscriptionRenewal || new Date(Date.now() + 365*24*60*60*1000))}
+                      {formatDate(cafe.subscriptionRenewal || defaultRenewalDate)}
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                       <button

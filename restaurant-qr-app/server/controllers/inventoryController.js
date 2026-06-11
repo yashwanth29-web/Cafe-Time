@@ -480,7 +480,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     const Order = require('../models/Order');
     const MenuItem = require('../models/MenuItem');
     const order = await Order.findById(orderId);
-    if (!order || order.inventoryDeducted || order.status !== 'Completed') {
+    if (!order || order.inventoryDeducted || !['Ready', 'Completed', 'Delivered'].includes(order.status)) {
       return;
     }
 

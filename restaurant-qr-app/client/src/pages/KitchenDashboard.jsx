@@ -209,6 +209,138 @@ const KitchenDashboard = () => {
   const activeOrders = orders.filter((order) => order.status === 'Placed' || order.status === 'Preparing');
   const readyOrders = orders.filter((order) => order.status === 'Ready'); // Ready corresponds to ready in this flow
 
+  const renderActiveCookingQueue = () => {
+    if (loading && activeOrders.length === 0) {
+      return (
+        <div style={{ textAlign: 'center', padding: '50px 0' }}>
+          <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
+          <p style={{ color: 'var(--color-text-secondary)' }}>Loading kitchen board...</p>
+        </div>
+      );
+    }
+
+    if (activeOrders.length === 0) {
+      return (
+        <div style={{
+          padding: '80px 20px',
+          textAlign: 'center',
+          background: 'var(--bg-card)',
+          borderRadius: '12px',
+          border: '1px dashed var(--color-border)',
+          color: 'var(--color-text-secondary)',
+          fontSize: '1.1rem'
+        }}>
+          🎉 All orders prepared! Kitchen is clean.
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+        {activeOrders.map((order) => (
+          <div key={order._id} style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '20px',
+            position: 'relative'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+              <div>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                  Table {order.tableNumber}
+                </span>
+                <h3 style={{ margin: '4px 0 0 0', color: '#fff', fontSize: '1.1rem', fontWeight: 700 }}>
+                  Order #{order._id.substring(order._id.length - 6).toUpperCase()}
+                </h3>
+              </div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                {new Date(order.createdAt).toLocaleTimeString()}
+              </span>
+            </div>
+
+            {/* KOT Itemized Listing */}
+            <div style={{ margin: '15px 0', borderTop: '1px dashed #5C4331', paddingTop: '10px' }}>
+              <div style={{ fontSize: '0.75rem', color: '#A0826C', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase' }}>
+                📋 KOT (Kitchen Order Ticket)
+              </div>
+              {order.items.map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', margin: '5px 0', color: '#E6D5C3' }}>
+                  <span>
+                    <strong>{item.quantity}x</strong> {item.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px', flexWrap: 'wrap' }}>
+              {order.status === 'Placed' ? (
+                <button
+                  onClick={() => handleStatusUpdate(order._id, 'Preparing')}
+                  className="btn btn-primary touch-btn"
+                  style={{ width: 'auto', padding: '10px 18px', fontSize: '13px', background: '#E67E22', borderColor: '#E67E22', minHeight: '44px' }}
+                >
+                  🍳 Accept Order
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleStatusUpdate(order._id, 'Ready')}
+                  className="btn btn-primary touch-btn"
+                  style={{ width: 'auto', padding: '10px 18px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px' }}
+                >
+                  ✓ Mark Ready
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  window.print();
+                }}
+                className="btn btn-secondary touch-btn"
+                style={{ width: 'auto', padding: '10px 18px', fontSize: '13px', minHeight: '44px' }}
+              >
+                🖨️ Print KOT
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderServedReadyQueue = () => {
+    if (readyOrders.length === 0) {
+      return (
+        <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic', fontSize: '0.9rem' }}>No orders served yet.</p>
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {readyOrders.slice(0, 10).map((order) => (
+          <div key={order._id} style={{
+            background: 'rgba(39, 174, 96, 0.05)',
+            border: '1px solid rgba(39, 174, 96, 0.2)',
+            borderRadius: '8px',
+            padding: '12px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+              <span style={{ color: '#27AE60', fontWeight: 'bold' }}>Table {order.tableNumber}</span>
+              <button
+                onClick={() => handleStatusUpdate(order._id, 'Preparing')}
+                style={{ background: 'transparent', border: 'none', color: '#ff9800', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
+              >
+                ↩ Reopen
+              </button>
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+              Order #{order._id.substring(order._id.length - 4).toUpperCase()}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="fade-in">
       {/* Title & Controls Bar */}
@@ -289,7 +421,9 @@ const KitchenDashboard = () => {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               {inventory.map(item => {
-                const isLow = item.stock < item.minStock;
+                const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
+                const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
+                const isLow = qtyVal < reorderVal;
                 return (
                   <div 
                     key={item._id}
@@ -306,7 +440,7 @@ const KitchenDashboard = () => {
                     <div>
                       <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{item.name}</strong>
                       <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '3px' }}>
-                        Current Stock: <span style={{ color: isLow ? '#E74C3C' : '#fff', fontWeight: 'bold' }}>{item.stock} {item.unit}</span> | Safety Min: {item.minStock} {item.unit}
+                        Current Stock: <span style={{ color: isLow ? '#E74C3C' : '#fff', fontWeight: 'bold' }}>{qtyVal} {item.unit}</span> | Safety Min: {reorderVal} {item.unit}
                       </div>
                     </div>
                     
@@ -415,136 +549,44 @@ const KitchenDashboard = () => {
           )}
         </div>
       ) : (
-        /* Main Grid split into preparing & ready */
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px' }}>
-          {/* Preparing Column */}
-          <div>
-            <h2 style={{ color: '#E6D5C3', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
-              🍳 Active cooking queue ({activeOrders.length})
-            </h2>
-
-            {loading && activeOrders.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '50px 0' }}>
-                <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
-                <p style={{ color: 'var(--color-text-secondary)' }}>Loading kitchen board...</p>
-              </div>
-            ) : activeOrders.length === 0 ? (
-              <div style={{
-                padding: '80px 20px',
-                textAlign: 'center',
-                background: 'var(--bg-card)',
-                borderRadius: '12px',
-                border: '1px dashed var(--color-border)',
-                color: 'var(--color-text-secondary)',
-                fontSize: '1.1rem'
-              }}>
-                🎉 All orders prepared! Kitchen is clean.
+        /* Main Cooking Grid */
+        <div>
+          {/* Mobile Layout: switch column based on activeTab */}
+          <div className="mobile-only-kitchen" style={{ display: 'none' }}>
+            {activeTab === 'cooking' ? (
+              <div>
+                <h2 style={{ color: '#E6D5C3', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+                  🍳 Active cooking queue ({activeOrders.length})
+                </h2>
+                {renderActiveCookingQueue()}
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
-                {activeOrders.map((order) => (
-                  <div key={order._id} style={{
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    position: 'relative'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-                      <div>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                          Table {order.tableNumber}
-                        </span>
-                        <h3 style={{ margin: '4px 0 0 0', color: '#fff', fontSize: '1.1rem', fontWeight: 700 }}>
-                          Order #{order._id.substring(order._id.length - 6).toUpperCase()}
-                        </h3>
-                      </div>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                        {new Date(order.createdAt).toLocaleTimeString()}
-                      </span>
-                    </div>
-
-                    {/* KOT Itemized Listing */}
-                    <div style={{ margin: '15px 0', borderTop: '1px dashed #5C4331', paddingTop: '10px' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#A0826C', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase' }}>
-                        📋 KOT (Kitchen Order Ticket)
-                      </div>
-                      {order.items.map((item, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', margin: '5px 0', color: '#E6D5C3' }}>
-                          <span>
-                            <strong>{item.quantity}x</strong> {item.name}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-                      {order.status === 'Placed' ? (
-                        <button
-                          onClick={() => handleStatusUpdate(order._id, 'Preparing')}
-                          className="btn btn-primary"
-                          style={{ width: 'auto', padding: '8px 16px', fontSize: '13px', background: '#E67E22', borderColor: '#E67E22' }}
-                        >
-                          🍳 Accept Order
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleStatusUpdate(order._id, 'Ready')}
-                          className="btn btn-primary"
-                          style={{ width: 'auto', padding: '8px 16px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60' }}
-                        >
-                          ✓ Mark Ready
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          window.print();
-                        }}
-                        className="btn btn-secondary"
-                        style={{ width: 'auto', padding: '8px 16px', fontSize: '13px' }}
-                      >
-                        🖨️ Print KOT
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div>
+                <h2 style={{ color: '#27AE60', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+                  Served / Ready ({readyOrders.length})
+                </h2>
+                {renderServedReadyQueue()}
               </div>
             )}
           </div>
 
-          {/* Ready / Served Column */}
-          <div style={{ borderLeft: '1px solid #5C4331', paddingLeft: '30px' }}>
-            <h2 style={{ color: '#27AE60', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
-              Served / Ready ({readyOrders.length})
-            </h2>
-            
-            {readyOrders.length === 0 ? (
-              <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic', fontSize: '0.9rem' }}>No orders served yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {readyOrders.slice(0, 10).map((order) => (
-                  <div key={order._id} style={{
-                    background: 'rgba(39, 174, 96, 0.05)',
-                    border: '1px solid rgba(39, 174, 96, 0.2)',
-                    borderRadius: '8px',
-                    padding: '12px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#27AE60', fontWeight: 'bold' }}>Table {order.tableNumber}</span>
-                      <button
-                        onClick={() => handleStatusUpdate(order._id, 'Preparing')}
-                        style={{ background: 'transparent', border: 'none', color: '#ff9800', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}
-                      >
-                        ↩ Reopen
-                      </button>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-                      Order #{order._id.substring(order._id.length - 4).toUpperCase()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* Desktop/Tablet Layout: Split Grid */}
+          <div className="desktop-tablet-kitchen" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px' }}>
+            {/* Preparing Column */}
+            <div>
+              <h2 style={{ color: '#E6D5C3', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+                🍳 Active cooking queue ({activeOrders.length})
+              </h2>
+              {renderActiveCookingQueue()}
+            </div>
+
+            {/* Ready / Served Column */}
+            <div style={{ borderLeft: '1px solid #5C4331', paddingLeft: '30px' }}>
+              <h2 style={{ color: '#27AE60', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+                Served / Ready ({readyOrders.length})
+              </h2>
+              {renderServedReadyQueue()}
+            </div>
           </div>
         </div>
       )}

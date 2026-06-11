@@ -67,6 +67,11 @@ const OrderSchema = new mongoose.Schema({
     enum: ['Pending', 'Paid', 'Failed'],
     default: 'Pending'
   },
+  paymentMethod: {
+    type: String,
+    enum: ['Online', 'Counter', 'Pending'],
+    default: 'Pending'
+  },
   inventoryDeducted: {
     type: Boolean,
     default: false

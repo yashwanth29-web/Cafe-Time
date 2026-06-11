@@ -2,22 +2,226 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import CartItem from '../components/CartItem';
 import RazorpayPayment from '../components/RazorpayPayment';
-import { getOrderById, placeOrder } from '../services/api';
+import { getOrderById, placeOrder, updateOrderPaymentMethod } from '../services/api';
 
 const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [placedOrder, setPlacedOrder] = useState(null);
-  const [orderStatus, setOrderStatus] = useState('Placed');
+  const [activeOrders, setActiveOrders] = useState([]);
 
   // Customer Details Form States
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState(() => localStorage.getItem('customerName') || '');
+  const [customerEmail, setCustomerEmail] = useState(() => localStorage.getItem('customerEmail') || '');
+  const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('customerPhone') || '');
 
-  // Counter payment state
-  const [selectedCounterPay, setSelectedCounterPay] = useState(false);
+  // Keep contact details in localStorage for convenience on future visits
+  useEffect(() => {
+    if (customerName) localStorage.setItem('customerName', customerName);
+  }, [customerName]);
+  useEffect(() => {
+    if (customerEmail) localStorage.setItem('customerEmail', customerEmail);
+  }, [customerEmail]);
+  useEffect(() => {
+    if (customerPhone) localStorage.setItem('customerPhone', customerPhone);
+  }, [customerPhone]);
+
+  // Voiced/audio feedback state to prevent duplicates
+  const [voicedOrderIds, setVoicedOrderIds] = useState([]);
+
+  // Helper to play a pleasant service alert chime using Web Audio API
+  const playChime = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+      gain1.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start();
+      osc1.stop(ctx.currentTime + 0.4);
+      
+      setTimeout(() => {
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(783.99, ctx.currentTime);
+        gain2.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start();
+        osc2.stop(ctx.currentTime + 0.6);
+      }, 150);
+    } catch (e) {
+      console.error('Web Audio API chime failed:', e);
+    }
+  };
+
+  // Helper to read voice greeting using Web Speech API
+  const speakThankYou = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const text = `Payment successful. Thank you for visiting CoffeeDay Cafe! Have a wonderful day.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const triggerPaidFeedback = (orderId) => {
+    setVoicedOrderIds(prev => {
+      if (prev.includes(orderId)) return prev;
+      playChime();
+      speakThankYou();
+      return [...prev, orderId];
+    });
+  };
+
+  // Fetch active orders on mount
+  useEffect(() => {
+    const fetchActiveOrders = async () => {
+      const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+      if (activeIds.length === 0) {
+        setSuccess(false);
+        return;
+      }
+
+      setLoadingOrders(true);
+      const fetched = [];
+      let updatedIds = [...activeIds];
+
+      for (const id of activeIds) {
+        try {
+          const res = await getOrderById(id);
+          if (res.success) {
+            if (res.data.paymentStatus !== 'Paid') {
+              fetched.push(res.data);
+            } else {
+              // Remove paid orders from active list
+              updatedIds = updatedIds.filter(x => x !== id);
+              if (!voicedOrderIds.includes(id)) {
+                triggerPaidFeedback(id);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching active order:', id, error);
+        }
+      }
+
+      sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
+
+      if (fetched.length > 0) {
+        setActiveOrders(fetched);
+        setSuccess(true);
+      } else {
+        setSuccess(false);
+      }
+      setLoadingOrders(false);
+    };
+
+    fetchActiveOrders();
+  }, []);
+
+  // Poll order status if order was successfully placed
+  useEffect(() => {
+    if (!success || activeOrders.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+      if (activeIds.length === 0) {
+        setSuccess(false);
+        return;
+      }
+
+      let changed = false;
+      const updatedList = [];
+      let updatedIds = [...activeIds];
+
+      for (const order of activeOrders) {
+        try {
+          const res = await getOrderById(order._id);
+          if (res.success) {
+            if (res.data.paymentStatus === 'Paid') {
+              updatedIds = updatedIds.filter(x => x !== order._id);
+              changed = true;
+              triggerPaidFeedback(order._id);
+            } else {
+              updatedList.push(res.data);
+              if (
+                res.data.status !== order.status ||
+                res.data.paymentStatus !== order.paymentStatus ||
+                res.data.paymentMethod !== order.paymentMethod
+              ) {
+                changed = true;
+              }
+            }
+          } else {
+            updatedList.push(order);
+          }
+        } catch (error) {
+          console.error('Error polling order:', order._id, error);
+          updatedList.push(order);
+        }
+      }
+
+      if (changed) {
+        sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
+        if (updatedList.length > 0) {
+          setActiveOrders(updatedList);
+        } else {
+          setActiveOrders([]);
+          setSuccess(false);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [success, activeOrders]);
+
+  const handleCounterPayRequest = async (orderId) => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const response = await updateOrderPaymentMethod(orderId, 'Counter');
+      if (response.success) {
+        setActiveOrders(prev => prev.map(o => o._id === orderId ? response.data : o));
+      } else {
+        setErrorMsg(response.message || 'Failed to request counter payment.');
+      }
+    } catch (error) {
+      console.error('Counter payment request failed:', error);
+      setErrorMsg('Server connection error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelCounterPayRequest = async (orderId) => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const response = await updateOrderPaymentMethod(orderId, 'Pending');
+      if (response.success) {
+        setActiveOrders(prev => prev.map(o => o._id === orderId ? response.data : o));
+      } else {
+        setErrorMsg(response.message || 'Failed to cancel counter payment.');
+      }
+    } catch (error) {
+      console.error('Cancel counter payment failed:', error);
+      setErrorMsg('Server connection error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Totals calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
@@ -54,10 +258,17 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
       const response = await placeOrder(orderPayload);
 
       if (response.success) {
-        setPlacedOrder(response.data);
-        setOrderStatus(response.data.status);
-        setSuccess(true);
         clearCart();
+        
+        // Add to activeOrderIds in sessionStorage
+        const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+        if (!activeIds.includes(response.data._id)) {
+          activeIds.push(response.data._id);
+          sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
+        }
+
+        setActiveOrders(prev => [...prev.filter(o => o._id !== response.data._id), response.data]);
+        setSuccess(true);
       } else {
         setErrorMsg(response.message || 'Failed to place order. Please try again.');
       }
@@ -69,294 +280,198 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
     }
   };
 
-  // Poll order status if order was successfully placed
-  useEffect(() => {
-    if (!success || !placedOrder) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await getOrderById(placedOrder._id);
-        if (response.success) {
-          setPlacedOrder(response.data);
-          setOrderStatus(response.data.status);
-        }
-      } catch (error) {
-        console.error('Failed to poll order status:', error);
-      }
-    }, 5000);
-
-    return () => clearInterval(pollInterval);
-  }, [success, placedOrder]);
-
-  const [voicePlayed, setVoicePlayed] = useState(false);
-
-  // Helper to play a pleasant service alert chime using Web Audio API
-  const playChime = () => {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
-      
-      // Node 1: C5
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
-      gain1.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start();
-      osc1.stop(ctx.currentTime + 0.4);
-      
-      // Node 2: G5
-      setTimeout(() => {
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(783.99, ctx.currentTime); // G5
-        gain2.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-        osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-        osc2.start();
-        osc2.stop(ctx.currentTime + 0.6);
-      }, 150);
-    } catch (e) {
-      console.error('Web Audio API chime failed:', e);
-    }
-  };
-
-  // Helper to read voice greeting using Web Speech API
-  const speakThankYou = () => {
-    if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech first
-      window.speechSynthesis.cancel();
-      
-      const text = `Payment successful. Thank you for visiting CoffeeDay Cafe! Have a wonderful day.`;
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1.05;
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-  // Trigger sound and speech synthesis once payment is successful
-  useEffect(() => {
-    if (placedOrder && placedOrder.paymentStatus === 'Paid' && !voicePlayed) {
-      playChime();
-      speakThankYou();
-      setVoicePlayed(true);
-    }
-  }, [placedOrder?.paymentStatus, voicePlayed, placedOrder]);
-
   // Dynamic Live Tracker Success view
-  if (success && placedOrder) {
-    const isServed = orderStatus === 'Ready' || orderStatus === 'Delivered' || orderStatus === 'Completed';
-    const isPaid = placedOrder.paymentStatus === 'Paid';
+  if (success && activeOrders.length > 0) {
 
     return (
       <div className="main-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '75vh', padding: '20px 10px' }}>
-        <div className="success-screen" style={{ width: '100%', maxWidth: '440px', padding: '32px 24px', animation: 'scaleUp 0.3s ease-out' }}>
+        <div className="success-screen" style={{ width: '100%', maxWidth: '440px', padding: '24px 16px', animation: 'scaleUp 0.3s ease-out' }}>
           
-          {/* Visual Status Header */}
-          {!isServed ? (
-            <div style={{ textAlign: 'center' }}>
-              <div className="spinner" style={{ width: '60px', height: '60px', borderWidth: '5px', margin: '0 auto 20px auto', borderTopColor: 'var(--color-primary)' }}></div>
-              <h2 className="success-title" style={{ fontSize: '22px', fontWeight: 900 }}>
-                {orderStatus === 'Placed' ? 'Order Placed!' : 'Chef is Preparing!'}
-              </h2>
-              <p className="success-message" style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-                {orderStatus === 'Placed'
-                  ? 'Your order has been sent to the kitchen. Waiting for chef acceptance.'
-                  : 'Your order is currently active in the kitchen feed. Our chefs are crafting your fresh order!'}
-              </p>
-            </div>
-          ) : isPaid ? (
-            <div style={{ textAlign: 'center' }}>
-              <div className="success-icon-container" style={{ backgroundColor: '#1b4d3e', color: '#85e3b2', width: '64px', height: '64px', fontSize: '32px', margin: '0 auto 20px auto', animation: 'bounce 1s infinite' }}>
-                ✔
-              </div>
-              <h2 className="success-title" style={{ color: 'var(--color-success)', fontSize: '24px', fontWeight: 900 }}>Paid & Completed!</h2>
-              <p className="success-message" style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-                Thank you for the payment! Your transaction is verified. We hope you enjoyed your meal at CoffeeDay Cafe!
-              </p>
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center' }}>
-              <div className="success-icon-container" style={{ backgroundColor: '#aa820a', color: '#fff', width: '64px', height: '64px', fontSize: '32px', margin: '0 auto 20px auto' }}>
-                🍽️
-              </div>
-              <h2 className="success-title" style={{ color: '#fff', fontSize: '22px', fontWeight: 900 }}>Served & Enjoy!</h2>
-              <p className="success-message" style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-                Your delicious food has been served! Please select your payment method below to complete the order.
-              </p>
-            </div>
-          )}
+          <h2 className="success-title" style={{ fontSize: '22px', fontWeight: 900, textAlign: 'center', marginBottom: '20px', color: 'var(--color-primary)' }}>
+            Active Orders Tracker
+          </h2>
 
-          {/* Interactive Progress Track */}
-          <div style={{ display: 'flex', alignItems: 'center', justifySelf: 'stretch', gap: '8px', marginBottom: '28px', padding: '0 8px' }}>
-            {/* Step 1: Placed */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-              <div style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                background: 'var(--color-primary)',
-                boxShadow: '0 0 8px var(--color-primary)'
-              }}></div>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--color-primary)' }}>⏳ Placed</span>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {activeOrders.map((order) => {
+              const isServed = order.status === 'Ready' || order.status === 'Delivered' || order.status === 'Completed';
+              const isPaid = order.paymentStatus === 'Paid';
+              const orderStatus = order.status;
 
-            {/* Connecting Bar 1 */}
-            <div style={{ flex: 1, height: '4px', background: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: '2px', transition: 'background 0.5s ease' }}></div>
-
-            {/* Step 2: Preparing */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-              <div style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                background: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-border)',
-                boxShadow: (orderStatus !== 'Placed') ? '0 0 8px var(--color-primary)' : 'none',
-                transition: 'background 0.5s ease'
-              }}></div>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>🍳 Preparing</span>
-            </div>
-
-            {/* Connecting Bar 2 */}
-            <div style={{ flex: 1, height: '4px', background: isServed ? 'var(--color-success)' : 'var(--color-border)', borderRadius: '2px', transition: 'background 0.5s ease' }}></div>
-
-            {/* Step 3: Ready */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-              <div style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                background: isServed ? 'var(--color-success)' : 'var(--color-border)',
-                boxShadow: isServed ? '0 0 8px var(--color-success)' : 'none',
-                transition: 'background 0.5s ease'
-              }}></div>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>🍽️ Ready</span>
-            </div>
-          </div>
-          
-          {/* Order Details Card */}
-          <div className="success-details" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--color-border)', padding: '16px', borderRadius: 'var(--radius-md)', marginBottom: '24px' }}>
-            <div className="success-details-row">
-              <span style={{ color: 'var(--color-text-secondary)' }}>Order ID</span>
-              <span style={{ fontWeight: 600, fontSize: '10px', color: 'var(--color-secondary)' }}>{placedOrder._id}</span>
-            </div>
-            <div className="success-details-row">
-              <span style={{ color: 'var(--color-text-secondary)' }}>Table</span>
-              <span style={{ fontWeight: 800, color: '#fff' }}>{placedOrder.tableNumber}</span>
-            </div>
-            <div className="success-details-row">
-              <span style={{ color: 'var(--color-text-secondary)' }}>Total Amount</span>
-              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>₹{placedOrder.totalAmount.toFixed(2)}</span>
-            </div>
-            <div className="success-details-row">
-              <span style={{ color: 'var(--color-text-secondary)' }}>Payment Status</span>
-              <span style={{ fontWeight: 800, color: isPaid ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                {placedOrder.paymentStatus}
-              </span>
-            </div>
-            <div className="success-details-row" style={{ borderTop: '1px solid var(--color-border)', marginTop: '8px', paddingTop: '8px' }}>
-              <span style={{ color: 'var(--color-text-secondary)' }}>Ordered Items</span>
-              <span style={{ fontWeight: 600, fontSize: '12px', textAlign: 'right', color: 'var(--color-text-primary)' }}>
-                {placedOrder.items.map(it => `${it.name} (x${it.quantity})`).join(', ')}
-              </span>
-            </div>
-          </div>
-
-          {/* Post-Served Payment Options Selector */}
-          {isServed && !isPaid && (
-            <div style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid var(--color-border)',
-              padding: '16px',
-              borderRadius: '12px',
-              marginBottom: '24px',
-              textAlign: 'left'
-            }}>
-              {selectedCounterPay ? (
-                <div>
-                  <h4 style={{ color: '#fff', fontSize: '14px', fontWeight: '800', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    🛎️ Counter Payment Requested
-                  </h4>
-                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: '1.5', marginBottom: '14px' }}>
-                    Please proceed to the cashier and share your <strong>Table Number ({placedOrder.tableNumber})</strong> or <strong>Order ID ({placedOrder._id.slice(-6).toUpperCase()})</strong> to complete payment.
-                  </p>
-                  <button
-                    onClick={() => setSelectedCounterPay(false)}
-                    className="btn btn-secondary"
-                    style={{ padding: '8px 12px', fontSize: '12px', width: '100%' }}
-                  >
-                    Change to Pay Online
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <h4 style={{ color: '#fff', fontSize: '14px', fontWeight: '800', marginBottom: '12px', textAlign: 'center' }}>
-                    💳 Select Payment Method
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <RazorpayPayment
-                      cart={placedOrder.items.map(it => ({ item: it, quantity: it.quantity }))}
-                      tableNumber={placedOrder.tableNumber}
-                      customerDetails={{
-                        name: customerName || placedOrder.customerName || 'Customer',
-                        email: customerEmail || placedOrder.customerEmail || 'customer@example.com',
-                        phone: customerPhone || placedOrder.customerPhone || '9999999999'
-                      }}
-                      existingOrderId={placedOrder._id}
-                      cafeId={cafeId || placedOrder.cafeId || 'CD001'}
-                      buttonText="Pay Online (Razorpay)"
-                      onPaymentSuccess={(updatedOrder) => {
-                        setPlacedOrder(updatedOrder);
-                        setOrderStatus(updatedOrder.status);
-                      }}
-                      onPaymentError={(err) => {
-                        setErrorMsg(err);
-                      }}
-                    />
-                    
-                    <button
-                      onClick={() => setSelectedCounterPay(true)}
-                      className="btn btn-secondary"
-                      style={{
-                        padding: '12px',
-                        fontSize: '14px',
-                        fontWeight: '700',
-                        width: '100%',
-                        borderRadius: '10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        cursor: 'pointer',
-                        border: '1px solid var(--color-border)',
-                        color: '#fff',
-                        background: 'rgba(255,255,255,0.05)'
-                      }}
-                    >
-                      <span>🛎️</span>
-                      <span>Pay at Counter</span>
-                    </button>
+              return (
+                <div key={order._id} style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '16px',
+                  padding: '16px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                }}>
+                  {/* Status Indicator */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--color-text-secondary)' }}>
+                      ID: #{order._id.slice(-6).toUpperCase()}
+                    </span>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      color: isServed ? 'var(--color-success)' : 'var(--color-primary)',
+                      background: isServed ? 'rgba(40,167,69,0.1)' : 'rgba(224,142,39,0.1)',
+                      padding: '4px 8px',
+                      borderRadius: '12px'
+                    }}>
+                      {orderStatus}
+                    </span>
                   </div>
-                </div>
-              )}
 
-              {errorMsg && (
-                <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)', color: '#fff', fontSize: '12px', padding: '10px', marginTop: '12px', borderRadius: '8px' }}>
-                  ⚠️ {errorMsg}
+                  {/* Visual Status Header */}
+                  {!isServed ? (
+                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                      <div className="spinner" style={{ width: '36px', height: '36px', borderWidth: '4px', margin: '0 auto 8px auto', borderTopColor: 'var(--color-primary)' }}></div>
+                      <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0 }}>
+                        {orderStatus === 'Placed'
+                          ? 'Waiting for kitchen acceptance...'
+                          : 'Our chefs are crafting your fresh order!'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                      <p style={{ fontSize: '12px', color: 'var(--color-success)', margin: 0, fontWeight: 700 }}>
+                        🍽️ Served & Enjoy!
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Interactive Progress Track */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '16px', padding: '0 4px' }}>
+                    {/* Step 1: Placed */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', boxShadow: '0 0 6px var(--color-primary)' }}></div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--color-primary)' }}>Placed</span>
+                    </div>
+                    {/* Bar 1 */}
+                    <div style={{ flex: 1, height: '3px', background: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: '1.5px' }}></div>
+                    {/* Step 2: Preparing */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-border)' }}></div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: (orderStatus !== 'Placed') ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Preparing</span>
+                    </div>
+                    {/* Bar 2 */}
+                    <div style={{ flex: 1, height: '3px', background: isServed ? 'var(--color-success)' : 'var(--color-border)', borderRadius: '1.5px' }}></div>
+                    {/* Step 3: Ready */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isServed ? 'var(--color-success)' : 'var(--color-border)' }}></div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>Ready</span>
+                    </div>
+                  </div>
+
+                  {/* Order Details Card */}
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px', marginBottom: '12px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Table</span>
+                      <span style={{ fontWeight: 800, color: '#fff' }}>{order.tableNumber}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Total Amount</span>
+                      <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>₹{order.totalAmount.toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>Payment Status</span>
+                      <span style={{ fontWeight: 800, color: 'var(--color-warning)' }}>{order.paymentStatus}</span>
+                    </div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: '6px', paddingTop: '6px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', display: 'block', marginBottom: '2px' }}>Items:</span>
+                      <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                        {order.items.map(it => `${it.name} (x${it.quantity})`).join(', ')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Payment Options */}
+                  {isServed && !isPaid && (
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px' }}>
+                      {order.paymentMethod === 'Counter' ? (
+                        <div>
+                          <h4 style={{ color: '#fff', fontSize: '12px', fontWeight: '800', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            🛎️ Counter Payment Requested
+                          </h4>
+                          <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', lineHeight: '1.4', margin: '0 0 8px 0' }}>
+                            Proceed to cashier and share <strong>Table {order.tableNumber}</strong> or order suffix.
+                          </p>
+                          <button
+                            onClick={() => handleCancelCounterPayRequest(order._id)}
+                            disabled={loading}
+                            className="btn btn-secondary"
+                            style={{ padding: '6px 8px', fontSize: '11px', width: '100%', cursor: loading ? 'not-allowed' : 'pointer' }}
+                          >
+                            Change to Pay Online
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <h4 style={{ color: '#fff', fontSize: '12px', fontWeight: '800', margin: '0 0 8px 0', textAlign: 'center' }}>
+                            Select Payment Method
+                          </h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <RazorpayPayment
+                              cart={order.items.map(it => ({ item: it, quantity: it.quantity }))}
+                              tableNumber={order.tableNumber}
+                              customerDetails={{
+                                name: customerName || order.customerName || 'Customer',
+                                email: customerEmail || order.customerEmail || 'customer@example.com',
+                                phone: customerPhone || order.customerPhone || '9999999999'
+                              }}
+                              existingOrderId={order._id}
+                              cafeId={cafeId || order.cafeId || 'CD001'}
+                              buttonText="Pay Online (Razorpay)"
+                              onPaymentSuccess={(updatedOrder) => {
+                                setActiveOrders(prev => prev.map(o => o._id === order._id ? updatedOrder : o));
+                                triggerPaidFeedback(order._id);
+                              }}
+                              onPaymentError={(err) => {
+                                setErrorMsg(err);
+                              }}
+                            />
+                            
+                            <button
+                              onClick={() => handleCounterPayRequest(order._id)}
+                              disabled={loading}
+                              className="btn btn-secondary"
+                              style={{
+                                padding: '8px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                width: '100%',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                border: '1px solid var(--color-border)',
+                                color: '#fff',
+                                background: 'rgba(255,255,255,0.03)'
+                              }}
+                            >
+                              <span>🛎️</span>
+                              <span>Pay at Counter</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
+              );
+            })}
+          </div>
+
+          {errorMsg && (
+            <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)', color: '#fff', fontSize: '12px', padding: '10px', marginTop: '16px', borderRadius: '8px', textAlign: 'center' }}>
+              ⚠️ {errorMsg}
             </div>
           )}
 
-          <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {isPaid ? 'Order More Delicacies' : 'Back to Menu'}
+          <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '20px' }}>
+            Order More Delicacies
           </Link>
         </div>
       </div>

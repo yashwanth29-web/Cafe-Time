@@ -11,10 +11,9 @@ const SaaSLayout = ({ children }) => {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
-  if (!user) return <>{children}</>;
-
-  const userRole = (user.role || '').toLowerCase();
+  const userRole = (user?.role || '').toLowerCase();
 
   useEffect(() => {
     if (user && ['admin', 'owner', 'manager'].includes(userRole)) {
@@ -39,6 +38,8 @@ const SaaSLayout = ({ children }) => {
       return () => clearInterval(interval);
     }
   }, [user, userRole]);
+
+  if (!user) return <>{children}</>;
 
   // Role based navigation configuration
   const getNavItems = () => {
@@ -98,6 +99,62 @@ const SaaSLayout = ({ children }) => {
     }
   };
 
+  const getBottomNavItems = () => {
+    switch (userRole) {
+      case 'waiter':
+      case 'staff':
+        return [
+          { label: 'Tables', icon: '🍽️', path: '/waiter/dashboard' },
+          { label: 'Orders', icon: '📋', path: '/waiter/dashboard?tab=orders' },
+          { label: 'Requests', icon: '🛎️', path: '/waiter/dashboard?tab=requests' },
+          { label: 'Stock', icon: '📦', path: '/waiter/dashboard?tab=inventory' },
+          { label: 'Profile', icon: '👤', action: 'profile' }
+        ];
+      case 'chef':
+        return [
+          { label: 'Active', icon: '👨‍🍳', path: '/kitchen/dashboard' },
+          { label: 'Queue', icon: '📋', path: '/kitchen/dashboard?tab=kot' },
+          { label: 'Stock', icon: '📦', path: '/kitchen/dashboard?tab=inventory' },
+          { label: 'Menu', icon: '🍽️', path: '/kitchen/dashboard?tab=menu' },
+          { label: 'Profile', icon: '👤', action: 'profile' }
+        ];
+      case 'cashier':
+        return [
+          { label: 'Billing', icon: '💳', path: '/cashier/dashboard' },
+          { label: 'Receipts', icon: '📝', path: '/cashier/dashboard?tab=receipts' },
+          { label: 'Stock', icon: '📦', path: '/cashier/dashboard?tab=inventory' },
+          { label: 'Profile', icon: '👤', action: 'profile' }
+        ];
+      case 'admin':
+      case 'owner':
+        return [
+          { label: 'Stats', icon: '📈', path: '/owner/dashboard' },
+          { label: 'Menu', icon: '🍽️', path: '/owner/dashboard?tab=menu' },
+          { label: 'Staff', icon: '👥', path: '/owner/dashboard?tab=staff' },
+          { label: 'Inventory', icon: '📦', path: '/owner/dashboard?tab=inventory' },
+          { label: 'Profile', icon: 'ℹ️', path: '/owner/profile' }
+        ];
+      case 'manager':
+        return [
+          { label: 'Stats', icon: '💼', path: '/manager/dashboard' },
+          { label: 'Orders', icon: '📋', path: '/manager/dashboard?tab=orders' },
+          { label: 'Staff', icon: '👥', path: '/manager/dashboard?tab=attendance' },
+          { label: 'Stock', icon: '📦', path: '/manager/dashboard?tab=inventory' },
+          { label: 'Profile', icon: '👤', action: 'profile' }
+        ];
+      case 'super_admin':
+        return [
+          { label: 'Stats', icon: '📊', path: '/super-admin/dashboard' },
+          { label: 'Cafes', icon: '🏪', path: '/super-admin/dashboard?tab=cafes' },
+          { label: 'Tickets', icon: '🎫', path: '/super-admin/dashboard?tab=tickets' },
+          { label: 'Health', icon: '❤️', path: '/super-admin/dashboard?tab=health' },
+          { label: 'Profile', icon: '👤', action: 'profile' }
+        ];
+      default:
+        return [];
+    }
+  };
+
   const navItems = getNavItems();
 
   const handleLogout = async () => {
@@ -111,6 +168,16 @@ const SaaSLayout = ({ children }) => {
     return r.charAt(0).toUpperCase() + r.slice(1);
   };
 
+  const isTabActive = (item) => {
+    if (item.action === 'profile') return profileDropdownOpen;
+    const currentPath = location.pathname + location.search;
+    if (item.path === currentPath) return true;
+    if (!location.search && item.path.split('?')[0] === location.pathname) {
+      if (!item.path.includes('?')) return true;
+    }
+    return false;
+  };
+
   return (
     <div style={{
       display: 'flex',
@@ -119,8 +186,178 @@ const SaaSLayout = ({ children }) => {
       color: '#E6D5C3',
       fontFamily: "'Outfit', sans-serif"
     }}>
-      {/* Sidebar Navigation */}
-      <aside style={{
+      {/* Drawer Overlay for tablet */}
+      <div className={`drawer-overlay ${mobileDrawerOpen ? 'open' : ''}`} onClick={() => setMobileDrawerOpen(false)} />
+
+      {/* Sidebar Drawer for tablet */}
+      <aside className={`sidebar-drawer ${mobileDrawerOpen ? 'open' : ''}`}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #2d2d2d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="mh-logo">☕</div>
+            <span style={{ fontSize: '18px', fontWeight: 900, color: '#fff' }}>Cypher's Café</span>
+          </div>
+          <button className="drawer-close-btn" onClick={() => setMobileDrawerOpen(false)}>×</button>
+        </div>
+        <nav style={{ padding: '20px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {navItems.map((item, index) => {
+            const isActive = location.pathname + location.search === item.path || 
+              (location.pathname === item.path.split('?')[0] && !location.search && !item.path.includes('?'));
+            return (
+              <button
+                key={index}
+                onClick={() => {
+                  navigate(item.path);
+                  setMobileDrawerOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: isActive ? 'rgba(255, 107, 8, 0.12)' : 'transparent',
+                  color: isActive ? 'var(--color-primary, #ff6b08)' : '#A0826C',
+                  fontSize: '14.5px',
+                  fontWeight: isActive ? 800 : 500,
+                  cursor: 'pointer',
+                  width: '100%',
+                  textAlign: 'left'
+                }}
+              >
+                <span style={{ fontSize: '18px' }}>{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Mobile Top Header */}
+      <header className="mobile-header">
+        <div className="mh-brand">
+          <button className="hamburger-btn" onClick={() => setMobileDrawerOpen(true)}>
+            ☰
+          </button>
+          <div className="mh-logo">☕</div>
+          <span className="mh-name">Cypher's Café</span>
+        </div>
+        <div className="mh-actions">
+          {/* Notification Bell */}
+          <div style={{ position: 'relative' }}>
+            <button className="mh-icon-btn" onClick={() => setNotificationsOpen(!notificationsOpen)}>
+              🔔
+              {lowStockAlerts.length > 0 && (
+                <span className="bnav-badge" style={{ top: '-4px', right: '-4px' }}>{lowStockAlerts.length}</span>
+              )}
+            </button>
+            {notificationsOpen && (
+              <div style={{
+                position: 'absolute',
+                top: '50px',
+                right: 0,
+                width: '280px',
+                backgroundColor: '#1E1E1E',
+                border: '1px solid #333',
+                borderRadius: '12px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                padding: '16px',
+                zIndex: 700
+              }}>
+                <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: '#fff' }}>
+                  Notifications & Alerts
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', maxHeight: '200px', overflowY: 'auto' }}>
+                  {lowStockAlerts.length === 0 ? (
+                    <>
+                      <div style={{ padding: '6px 0', borderBottom: '1px solid #2d2d2d', color: '#bbb' }}>
+                        🟢 System active and monitoring heartbeat.
+                      </div>
+                      <div style={{ padding: '6px 0', color: '#bbb' }}>
+                        📋 Chef Dashboard synced with Kitchen Queue.
+                      </div>
+                    </>
+                  ) : (
+                    lowStockAlerts.map((item, idx) => (
+                      <div key={idx} style={{ padding: '8px 0', borderBottom: idx < lowStockAlerts.length - 1 ? '1px solid #2d2d2d' : 'none', color: '#F39C12' }}>
+                        ⚠️ <strong>{item.name}</strong> inventory running low ({item.quantity !== undefined ? item.quantity : item.stock} {item.unit} left, min {item.reorderLevel !== undefined ? item.reorderLevel : item.minStock} {item.unit}).
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Avatar Dropdown */}
+          <div style={{ position: 'relative' }}>
+            <div className="mh-avatar" onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}>
+              {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+            </div>
+            {profileDropdownOpen && (
+              <div style={{
+                position: 'absolute',
+                top: '50px',
+                right: 0,
+                width: '180px',
+                backgroundColor: '#1E1E1E',
+                border: '1px solid #333',
+                borderRadius: '10px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                padding: '8px 0',
+                zIndex: 700
+              }}>
+                <div style={{
+                  padding: '8px 16px',
+                  fontSize: '12px',
+                  color: '#888',
+                  borderBottom: '1px solid #2d2d2d',
+                  marginBottom: '4px'
+                }}>
+                  {user.email}
+                </div>
+                {['admin', 'owner'].includes(userRole) && (
+                  <button
+                    onClick={() => { navigate('/owner/dashboard'); setProfileDropdownOpen(false); }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '8px 16px',
+                      textAlign: 'left',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#E6D5C3',
+                      fontSize: '13.5px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    👤 Cafe Panel
+                  </button>
+                )}
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 16px',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#e74c3c',
+                    fontSize: '13.5px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  🚪 Sign Out
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Desktop Sidebar (Hidden on Mobile/Tablet via CSS) */}
+      <aside className="desktop-sidebar" style={{
         width: sidebarCollapsed ? '70px' : '260px',
         backgroundColor: '#1C1613',
         borderRight: '1px solid #2d2d2d',
@@ -213,9 +450,9 @@ const SaaSLayout = ({ children }) => {
       </aside>
 
       {/* Main Content Pane */}
-      <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {/* Professional Header */}
-        <header style={{
+      <div className="saas-main-pane" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Desktop Top Header (Hidden on Mobile/Tablet via CSS) */}
+        <header className="desktop-top-header" style={{
           height: '70px',
           backgroundColor: '#1C1613',
           borderBottom: '1px solid #2d2d2d',
@@ -428,10 +665,62 @@ const SaaSLayout = ({ children }) => {
         </header>
 
         {/* Content Area Container */}
-        <main style={{ flexGrow: 1, padding: '24px', overflowY: 'auto' }}>
+        <main className="saas-content-inner" style={{ flexGrow: 1, padding: '24px', overflowY: 'auto' }}>
           {children}
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation (Shown only on Mobile via CSS) */}
+      <nav className="bottom-nav" style={{ backgroundColor: '#FF9F00' /* custom color like in image */ }}>
+        {getBottomNavItems().map((item, index) => {
+          const isActive = isTabActive(item);
+          return (
+            <button
+              key={index}
+              className={`bnav-item ${isActive ? 'active' : ''}`}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 1,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                color: isActive ? '#fff' : '#4E3629',
+                padding: '8px 0',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => {
+                if (item.action === 'profile') {
+                  setProfileDropdownOpen(!profileDropdownOpen);
+                } else if (item.path) {
+                  navigate(item.path);
+                  setProfileDropdownOpen(false);
+                }
+              }}
+            >
+              <div className="bnav-icon" style={{
+                fontSize: '22px',
+                marginBottom: '2px',
+                backgroundColor: isActive ? 'rgba(255, 255, 255, 0.25)' : 'transparent',
+                borderRadius: '16px',
+                padding: '4px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {item.icon}
+              </div>
+              <span className="bnav-label" style={{
+                fontSize: '11px',
+                fontWeight: isActive ? '800' : '600',
+                color: isActive ? '#fff' : '#4E3629'
+              }}>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 };

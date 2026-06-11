@@ -28,7 +28,8 @@ import {
   deleteCategory,
   getInventoryCategories,
   createInventoryCategory,
-  deleteInventoryCategory
+  deleteInventoryCategory,
+  uploadMenuItemImage
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import OwnerLayout from '../components/OwnerLayout';
@@ -214,6 +215,47 @@ const OwnerDashboard = () => {
     { id: 2, author: 'Kamala Bevara', rating: 4, text: 'Very convenient cashier-less flow. Loved the fast preparation time.', date: 'Yesterday' },
     { id: 3, author: 'Jai Kalki', rating: 5, text: 'Super clean interface. Razorpay online payment was smooth and instant.', date: '3 days ago' }
   ]);
+
+  // Search states
+  const [menuSearch, setMenuSearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
+
+  const filteredMenuItems = menuItems.filter(item =>
+    item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+    (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
+  );
+
+  const filteredInventoryList = inventoryList.filter(item =>
+    item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+    (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
+  );
+
+  const [imageUploading, setImageUploading] = useState(false);
+
+  const handleImageUpload = async (file, isEditing = false) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      setImageUploading(true);
+      const res = await uploadMenuItemImage(formData);
+      if (res.success) {
+        if (isEditing) {
+          setEditingItem(prev => ({ ...prev, image: res.imageUrl }));
+        } else {
+          setNewItem(prev => ({ ...prev, image: res.imageUrl }));
+        }
+      } else {
+        alert(res.message || 'Image upload failed.');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert(error.response?.data?.message || 'Error uploading image file.');
+    } finally {
+      setImageUploading(false);
+    }
+  };
 
   const presetCategories = [
     'Signature Chai',
@@ -451,6 +493,34 @@ const OwnerDashboard = () => {
       fetchCategories();
       fetchInventoryCategories();
     }
+
+    // Live background polling every 5 seconds for orders & inventory levels
+    const pollingInterval = setInterval(() => {
+      fetchOrders();
+      
+      if (activeTab === 'inventory' || activeTab === 'analytics' || activeTab === 'menu') {
+        const fetchInventorySilent = async () => {
+          try {
+            const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
+              getInventory(),
+              getInventoryLogs(),
+              getWastageReport(),
+              getConsumptionReport()
+            ]);
+            
+            if (invRes.success) setInventoryList(invRes.data);
+            if (logsRes.success) setInventoryLogs(logsRes.data);
+            if (wasteRes.success) setWastageReport(wasteRes);
+            if (consRes.success) setConsumptionReport(consRes);
+          } catch (err) {
+            console.error('Silent inventory refresh failed:', err);
+          }
+        };
+        fetchInventorySilent();
+      }
+    }, 5000);
+
+    return () => clearInterval(pollingInterval);
   }, [activeTab]);
 
   // Register new staff
@@ -605,7 +675,7 @@ const OwnerDashboard = () => {
   };
 
   // Fetch Inventory List
-  const fetchInventoryList = async () => {
+  async function fetchInventoryList() {
     setInventoryLoading(true);
     try {
       const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
@@ -987,20 +1057,49 @@ const OwnerDashboard = () => {
           }
           .card-deck {
             display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+          }
+          @media (min-width: 768px) {
+            .card-deck {
+              grid-template-columns: 2fr 1fr;
+              gap: 30px;
+              margin-bottom: 30px;
+            }
           }
           .chart-card {
             background: var(--bg-card);
             border: 1px solid var(--color-border);
             border-radius: 16px;
-            padding: 25px;
+            padding: 20px;
+          }
+          @media (min-width: 768px) {
+            .chart-card {
+              padding: 25px;
+            }
           }
           .menu-grid-admin {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+          }
+          @media (min-width: 768px) {
+            .menu-grid-admin {
+              grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+              gap: 20px;
+            }
+          }
+          .owner-double-deck {
+            display: grid;
+            grid-template-columns: 1fr;
             gap: 20px;
+          }
+          @media (min-width: 768px) {
+            .owner-double-deck {
+              grid-template-columns: 1fr 1fr;
+              gap: 30px;
+            }
           }
           .admin-menu-card {
             background: var(--bg-card);
@@ -1203,7 +1302,7 @@ const OwnerDashboard = () => {
             </div>
 
             {/* Best / Worst Selling items */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+            <div className="owner-double-deck">
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px' }}>
                 <h4 style={{ color: '#2ecc71', margin: '0 0 15px 0', fontSize: '1rem' }}>🔥 Top Selling Cafe Items</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1253,6 +1352,25 @@ const OwnerDashboard = () => {
               </div>
             </div>
 
+            <div style={{ marginBottom: '20px' }}>
+              <input
+                type="text"
+                placeholder="🔍 Search dishes by name or category..."
+                value={menuSearch}
+                onChange={(e) => setMenuSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--bg-secondary)',
+                  color: '#fff',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
             {menuLoading ? (
               <div style={{ textAlign: 'center', padding: '40px 0', width: '100%' }}>
                 <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
@@ -1260,7 +1378,7 @@ const OwnerDashboard = () => {
               </div>
             ) : (
               <div className="menu-grid-admin">
-                {menuItems.map(item => (
+                {filteredMenuItems.map(item => (
                   <div key={item.id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
                     <img src={item.image || '/images/default-food.png'} alt={item.name} className="admin-menu-img" onError={(e) => { e.target.src = '/images/default-food.png'; }} />
                     <div className="admin-menu-info">
@@ -1323,7 +1441,7 @@ const OwnerDashboard = () => {
               </div>
 
               {/* Staff table */}
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', overflowX: 'auto' }}>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
                 <h4 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.1rem', fontWeight: 700 }}>Staff Roster List</h4>
                 {staffLoading && staff.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px 0' }}>
@@ -1331,52 +1449,90 @@ const OwnerDashboard = () => {
                     <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading staff roster...</p>
                   </div>
                 ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
-                        <th style={{ padding: '10px' }}>Name</th>
-                        <th style={{ padding: '10px' }}>Email</th>
-                        <th style={{ padding: '10px' }}>Phone</th>
-                        <th style={{ padding: '10px' }}>Role</th>
-                        <th style={{ padding: '10px' }}>Last Seen</th>
-                        <th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
-                        <th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {staff.map(member => (
-                        <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                          <td style={{ padding: '12px 10px', color: '#fff', fontWeight: 600 }}>{member.name}</td>
-                          <td style={{ padding: '12px 10px' }}>{member.email}</td>
-                          <td style={{ padding: '12px 10px' }}>{member.phone}</td>
-                          <td style={{ padding: '12px 10px' }}>
-                            <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
-                          </td>
-                          <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                            {formatLastSeen(member.lastSeen)}
-                          </td>
-                          <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                            <span style={{
-                              backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
-                              color: member.isActive ? '#2ecc71' : '#e74c3c',
-                              padding: '3px 8px',
-                              borderRadius: '12px',
-                              fontSize: '11px',
-                              fontWeight: 'bold'
-                            }}>
-                              {member.isActive ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                              <button onClick={() => { setEditingStaff({ ...member }); setShowEditStaffModal(true); }} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}>✏️ Edit</button>
-                              <button onClick={() => handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️ Delete</button>
+                  <>
+                    <div className="desktop-tablet-staff" style={{ display: 'none', width: '100%', overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                            <th style={{ padding: '10px' }}>Name</th>
+                            <th style={{ padding: '10px' }}>Email</th>
+                            <th style={{ padding: '10px' }}>Phone</th>
+                            <th style={{ padding: '10px' }}>Role</th>
+                            <th style={{ padding: '10px' }}>Last Seen</th>
+                            <th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
+                            <th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {staff.map(member => (
+                            <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                              <td style={{ padding: '12px 10px', color: '#fff', fontWeight: 600 }}>{member.name}</td>
+                              <td style={{ padding: '12px 10px' }}>{member.email}</td>
+                              <td style={{ padding: '12px 10px' }}>{member.phone}</td>
+                              <td style={{ padding: '12px 10px' }}>
+                                <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
+                              </td>
+                              <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                                {formatLastSeen(member.lastSeen)}
+                              </td>
+                              <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                <span style={{
+                                  backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+                                  color: member.isActive ? '#2ecc71' : '#e74c3c',
+                                  padding: '3px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {member.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                  <button onClick={() => { setEditingStaff({ ...member }); setShowEditStaffModal(true); }} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}>✏️ Edit</button>
+                                  <button onClick={() => handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️ Delete</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="mobile-only-staff" style={{ display: 'none' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        {staff.map(member => (
+                          <div key={member._id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                              <span style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</span>
+                              <span className="admin-menu-badge" style={{ textTransform: 'capitalize', background: 'rgba(255, 107, 8, 0.15)', color: '#FF6B08', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>{member.staffRole}</span>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
+                              <div>📧 {member.email}</div>
+                              <div>📞 {member.phone}</div>
+                              <div style={{ marginTop: '4px' }}>Seen: {formatLastSeen(member.lastSeen)}</div>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
+                              <span style={{
+                                backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+                                color: member.isActive ? '#2ecc71' : '#e74c3c',
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                                fontWeight: 'bold'
+                              }}>
+                                {member.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                              <div style={{ display: 'flex', gap: '10px' }}>
+                                <button onClick={() => { setEditingStaff({ ...member }); setShowEditStaffModal(true); }} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px' }}>✏️ Edit</button>
+                                <button onClick={() => handleDeleteStaff(member._id)} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️ Delete</button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -1420,28 +1576,48 @@ const OwnerDashboard = () => {
                 <div>
                   {/* SUBTAB 1: Stock levels table */}
                   {inventorySubTab === 'levels' && (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '2px solid var(--color-border)', color: '#FAF6F0' }}>
-                            <th style={{ padding: '8px' }}>Ingredient Name</th>
-                            <th style={{ padding: '8px' }}>Category</th>
-                            <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
-                            <th style={{ padding: '8px', textAlign: 'center' }}>Status</th>
-                            <th style={{ padding: '8px', textAlign: 'right' }}>Cost Price</th>
-                            <th style={{ padding: '8px', textAlign: 'right' }}>Selling Price</th>
-                            <th style={{ padding: '8px' }}>Supplier</th>
-                            <th style={{ padding: '8px' }}>Branch</th>
-                            <th style={{ padding: '8px', textAlign: 'center' }}>Reorder Level</th>
-                            <th style={{ padding: '8px', textAlign: 'center' }}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {inventoryList.map(item => {
-                            const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
-                            const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
-                            const isLow = qtyVal <= reorderVal;
-                            const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
+                    <div>
+                      <div style={{ marginBottom: '20px' }}>
+                        <input
+                          type="text"
+                          placeholder="🔍 Search ingredients by name or category..."
+                          value={inventorySearch}
+                          onChange={(e) => setInventorySearch(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--color-border)',
+                            background: 'var(--bg-secondary)',
+                            color: '#fff',
+                            fontSize: '14px',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '2px solid var(--color-border)', color: '#FAF6F0' }}>
+                              <th style={{ padding: '8px' }}>Ingredient Name</th>
+                              <th style={{ padding: '8px' }}>Category</th>
+                              <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
+                              <th style={{ padding: '8px', textAlign: 'center' }}>Status</th>
+                              <th style={{ padding: '8px', textAlign: 'right' }}>Cost Price</th>
+                              <th style={{ padding: '8px', textAlign: 'right' }}>Selling Price</th>
+                              <th style={{ padding: '8px' }}>Supplier</th>
+                              <th style={{ padding: '8px' }}>Branch</th>
+                              <th style={{ padding: '8px', textAlign: 'center' }}>Reorder Level</th>
+                              <th style={{ padding: '8px', textAlign: 'center' }}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredInventoryList.map(item => {
+                              const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
+                              const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
+                              const isLow = qtyVal <= reorderVal;
+                              const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
                             
                             let statusColor = '#2ECC71';
                             if (qtyVal <= 0) statusColor = '#E74C3C';
@@ -1525,7 +1701,8 @@ const OwnerDashboard = () => {
                         </tbody>
                       </table>
                     </div>
-                  )}
+                  </div>
+                )}
 
                   {/* SUBTAB 2: Movement Logs */}
                   {inventorySubTab === 'movements' && (
@@ -1905,6 +2082,50 @@ const OwnerDashboard = () => {
                     <label className="form-label">Preparation Time (minutes) *</label>
                     <input type="number" required min="1" value={newItem.preparationTime || 10} onChange={(e) => setNewItem({ ...newItem, preparationTime: parseInt(e.target.value) })} className="form-input" />
                   </div>
+                  <div className="form-group">
+                    <label className="form-label">Dish Image</label>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        id="add-dish-image"
+                        onChange={(e) => handleImageUpload(e.target.files[0], false)} 
+                        style={{ display: 'none' }} 
+                      />
+                      <label 
+                        htmlFor="add-dish-image" 
+                        className="btn btn-secondary" 
+                        style={{ 
+                          width: 'auto', 
+                          padding: '10px 18px', 
+                          cursor: 'pointer', 
+                          margin: 0, 
+                          display: 'inline-flex', 
+                          alignItems: 'center', 
+                          gap: '6px',
+                          border: '1px solid var(--color-border)',
+                          background: 'rgba(255,255,255,0.05)',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                          color: '#fff',
+                          minHeight: '44px'
+                        }}
+                      >
+                        📷 Choose Image File
+                      </label>
+                      {imageUploading ? (
+                        <span style={{ fontSize: '13px', color: 'var(--color-primary)' }}>Uploading...</span>
+                      ) : newItem.image ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <img src={newItem.image} alt="Dish preview" style={{ width: '44px', height: '44px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--color-primary)' }} />
+                          <span style={{ fontSize: '12px', color: '#2ecc71', fontWeight: 'bold' }}>✓ Uploaded</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>No file selected (using default)</span>
+                      )}
+                    </div>
+                  </div>
                   <div className="form-group" style={{ borderTop: '1px solid #432E22', paddingTop: '15px', marginTop: '15px' }}>
                     <label className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>🍳 Recipe Mapping (Ingredients)</label>
                     {(!newItem.recipe || newItem.recipe.length === 0) ? (
@@ -1987,6 +2208,50 @@ const OwnerDashboard = () => {
                   <div className="form-group">
                     <label className="form-label">Preparation Time (minutes) *</label>
                     <input type="number" required min="1" value={editingItem.preparationTime || 10} onChange={(e) => setEditingItem({ ...editingItem, preparationTime: parseInt(e.target.value) })} className="form-input" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Dish Image</label>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        id="edit-dish-image"
+                        onChange={(e) => handleImageUpload(e.target.files[0], true)} 
+                        style={{ display: 'none' }} 
+                      />
+                      <label 
+                        htmlFor="edit-dish-image" 
+                        className="btn btn-secondary" 
+                        style={{ 
+                          width: 'auto', 
+                          padding: '10px 18px', 
+                          cursor: 'pointer', 
+                          margin: 0, 
+                          display: 'inline-flex', 
+                          alignItems: 'center', 
+                          gap: '6px',
+                          border: '1px solid var(--color-border)',
+                          background: 'rgba(255,255,255,0.05)',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                          color: '#fff',
+                          minHeight: '44px'
+                        }}
+                      >
+                        📷 Choose Image File
+                      </label>
+                      {imageUploading ? (
+                        <span style={{ fontSize: '13px', color: 'var(--color-primary)' }}>Uploading...</span>
+                      ) : editingItem.image ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <img src={editingItem.image} alt="Dish preview" style={{ width: '44px', height: '44px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--color-primary)' }} />
+                          <span style={{ fontSize: '12px', color: '#2ecc71', fontWeight: 'bold' }}>✓ Uploaded</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>No file selected (using default)</span>
+                      )}
+                    </div>
                   </div>
                   <div className="form-group" style={{ borderTop: '1px solid #432E22', paddingTop: '15px', marginTop: '15px' }}>
                     <label className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>🍳 Recipe Mapping (Ingredients)</label>

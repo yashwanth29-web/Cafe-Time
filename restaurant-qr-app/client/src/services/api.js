@@ -58,6 +58,11 @@ export const updateOrderStatus = async (id, payload) => {
   return response.data;
 };
 
+export const updateOrderPaymentMethod = async (id, paymentMethod) => {
+  const response = await API.patch(`/orders/${id}/payment-method`, { paymentMethod });
+  return response.data;
+};
+
 // Menu API helpers
 export const getMenu = async () => {
   const response = await API.get('/menu');
@@ -76,6 +81,15 @@ export const updateMenuItem = async (id, menuItemData) => {
 
 export const deleteMenuItem = async (id) => {
   const response = await API.delete(`/menu/${id}`);
+  return response.data;
+};
+
+export const uploadMenuItemImage = async (formData) => {
+  const response = await API.post('/menu/upload-image', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
   return response.data;
 };
 

@@ -76,8 +76,7 @@ const InventorySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Pre-save hook to synchronize backward compatibility fields (stock/minStock/cost)
-InventorySchema.pre('save', function(next) {
+InventorySchema.pre('save', function() {
   this.stock = this.quantity;
   this.minStock = this.reorderLevel;
   this.cost = this.costPrice;
@@ -89,7 +88,6 @@ InventorySchema.pre('save', function(next) {
   } else {
     this.status = 'IN_STOCK';
   }
-  next();
 });
 
 module.exports = mongoose.model('Inventory', InventorySchema);

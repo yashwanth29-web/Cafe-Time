@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { getOrders, updateOrderStatus, getInventory } from '../services/api';
+import { printPOSReceipt } from '../utils/printHelpers';
 import '../styles/App.css';
 
 const CashierDashboard = () => {
@@ -42,6 +43,7 @@ const CashierDashboard = () => {
       fetchInventory();
     }
   }, [activeTab]);
+
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -114,6 +116,236 @@ const CashierDashboard = () => {
 
   const pendingPayments = orders.filter(o => o.paymentStatus !== 'Paid');
   const paidPayments = orders.filter(o => o.paymentStatus === 'Paid');
+
+  const renderPendingBills = () => {
+    return (
+      <div>
+        <h2 style={{ color: '#E6D5C3', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+          💵 Pending Receipts ({pendingPayments.length})
+        </h2>
+
+        {loading && pendingPayments.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '50px 0' }}>
+            <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading billing records...</p>
+          </div>
+        ) : pendingPayments.length === 0 ? (
+          <div style={{
+            padding: '50px 20px',
+            textAlign: 'center',
+            background: 'var(--bg-card)',
+            borderRadius: '12px',
+            border: '1px dashed var(--color-border)',
+            color: 'var(--color-text-secondary)'
+          }}>
+            🎉 All customer tabs settled! No pending bills.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {pendingPayments.map(order => (
+              <div 
+                key={order._id}
+                onClick={() => setSelectedOrder(order)}
+                style={{
+                  background: selectedOrder?._id === order._id ? 'rgba(111, 78, 55, 0.15)' : 'var(--bg-card)',
+                  border: order.paymentMethod === 'Counter' 
+                    ? '2px solid #e67e22' 
+                    : `1px solid ${selectedOrder?._id === order._id ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  padding: '15px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  transition: 'border 0.2s',
+                  minHeight: '60px'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <strong style={{ color: '#fff', fontSize: '0.95rem' }}>Table {order.tableNumber}</strong>
+                    {order.paymentMethod === 'Counter' && (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 'bold',
+                        color: '#fff',
+                        background: '#e67e22',
+                        padding: '2px 6px',
+                        borderRadius: '4px'
+                      }}>
+                        🛎️ Cash Requested
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block', marginTop: '3px' }}>
+                    Order #{order._id.substring(order._id.length - 4).toUpperCase()} | {order.items.length} dishes
+                  </span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', fontSize: '1rem', display: 'block' }}>
+                    ₹{order.totalAmount.toFixed(2)}
+                  </span>
+                  <span style={{ fontSize: '0.7rem', color: '#ff9800', background: 'rgba(255,152,0,0.1)', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                    {order.paymentStatus}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderSettledPayments = () => {
+    return (
+      <div>
+        <h2 style={{ color: '#27AE60', margin: '30px 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+          📜 Settled Payments Today ({paidPayments.length})
+        </h2>
+        {paidPayments.length === 0 ? (
+          <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic', fontSize: '0.85rem' }}>No bills settled yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {paidPayments.slice(0, 10).map(order => (
+              <div key={order._id} style={{
+                background: 'rgba(39,174,96,0.02)',
+                border: '1px solid rgba(39,174,96,0.15)',
+                padding: '12px',
+                borderRadius: '8px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <span style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Table {order.tableNumber}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block' }}>
+                    Order ID: #{order._id.substring(order._id.length - 4).toUpperCase()}
+                  </span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <strong style={{ color: '#27AE60', fontSize: '0.9rem' }}>₹{order.totalAmount.toFixed(2)}</strong>
+                  <span style={{ fontSize: '0.7rem', color: '#27AE60', display: 'block' }}>Paid ✓</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderInvoiceGenerator = () => {
+    return (
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px' }}>
+        {selectedOrder ? (
+          <div>
+            <h3 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.3rem', fontWeight: 800 }}>
+              🧾 Receipt & Invoice Generator
+            </h3>
+
+            {/* Receipt Visual Mock */}
+            <div id="receipt-print-area" style={{
+              background: '#FAF6F0',
+              color: '#33271c',
+              padding: '25px',
+              borderRadius: '8px',
+              fontFamily: "'Courier New', Courier, monospace",
+              border: '1px solid #E6D5C3',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+            }}>
+              <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '15px', marginBottom: '15px' }}>
+                <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>COFFEE DAY CAFE</h2>
+                <p style={{ margin: '4px 0', fontSize: '0.8rem' }}>123 Cafe Street, Onboarding City</p>
+                <p style={{ margin: '2px 0', fontSize: '0.8rem' }}>Tel: {user?.phone || '+91 9876543210'}</p>
+              </div>
+
+              <div style={{ fontSize: '0.85rem', marginBottom: '15px' }}>
+                <div><strong>Invoice #:</strong> {selectedOrder._id.toUpperCase()}</div>
+                <div><strong>Date:</strong> {new Date(selectedOrder.createdAt).toLocaleString()}</div>
+                <div><strong>Table:</strong> Table {selectedOrder.tableNumber}</div>
+                {selectedOrder.customerName && <div><strong>Customer:</strong> {selectedOrder.customerName}</div>}
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '15px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #33271c', borderTop: '1px solid #33271c' }}>
+                    <th style={{ padding: '6px 0', textAlign: 'left' }}>Item</th>
+                    <th style={{ padding: '6px 0', textAlign: 'center' }}>Qty</th>
+                    <th style={{ padding: '6px 0', textAlign: 'right' }}>Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedOrder.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td style={{ padding: '4px 0' }}>{item.name}</td>
+                      <td style={{ padding: '4px 0', textAlign: 'center' }}>{item.quantity}</td>
+                      <td style={{ padding: '4px 0', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div style={{ borderTop: '1px dashed #33271c', paddingTop: '10px', textAlign: 'right', fontSize: '0.95rem' }}>
+                <div>Subtotal: ₹{selectedOrder.totalAmount.toFixed(2)}</div>
+                <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginTop: '6px' }}>
+                  TOTAL AMOUNT: ₹{selectedOrder.totalAmount.toFixed(2)}
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.8rem', borderTop: '1px solid #33271c', paddingTop: '10px' }}>
+                Thank you for dining with us!<br />
+                Scan QR code on your next visit.
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
+              {selectedOrder.paymentStatus !== 'Paid' ? (
+                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                  <button
+                    onClick={() => handleProcessPayment(selectedOrder._id, 'Cash')}
+                    className="btn btn-primary touch-btn"
+                    style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px' }}
+                  >
+                    💵 Settle with Cash
+                  </button>
+                  <button
+                    onClick={() => handleProcessPayment(selectedOrder._id, 'Online Confirm')}
+                    className="btn btn-primary touch-btn"
+                    style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9', minHeight: '44px' }}
+                  >
+                    💳 Confirm Online Pay
+                  </button>
+                </div>
+              ) : (
+                <div style={{ width: '100%', padding: '12px', background: 'rgba(39, 174, 96, 0.15)', color: '#27AE60', borderRadius: '6px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>
+                  ✓ Receipt Settled & Paid
+                </div>
+              )}
+              
+              <button
+                onClick={() => printPOSReceipt(selectedOrder, user)}
+                className="btn btn-secondary touch-btn"
+                style={{ width: '100%', padding: '12px', fontSize: '13px', minHeight: '44px' }}
+              >
+                🖨️ Print Receipt Invoice (Thermal)
+              </button>
+            </div>
+
+          </div>
+        ) : (
+          <div style={{
+            textAlign: 'center',
+            padding: '100px 20px',
+            color: 'var(--color-text-secondary)'
+          }}>
+            👈 Select a pending bill from the list to load the receipt and invoice panel.
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="fade-in">
@@ -220,211 +452,40 @@ const CashierDashboard = () => {
           )}
         </div>
       ) : (
-        /* Main Grid */
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '30px' }}>
-          
-          {/* Left: Unpaid Bill Queue */}
-          <div>
-            <h2 style={{ color: '#E6D5C3', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
-              💵 Pending Receipts ({pendingPayments.length})
-            </h2>
-
-            {loading && pendingPayments.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '50px 0' }}>
-                <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
-                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading billing records...</p>
-              </div>
-            ) : pendingPayments.length === 0 ? (
-              <div style={{
-                padding: '50px 20px',
-                textAlign: 'center',
-                background: 'var(--bg-card)',
-                borderRadius: '12px',
-                border: '1px dashed var(--color-border)',
-                color: 'var(--color-text-secondary)'
-              }}>
-                🎉 All customer tabs settled! No pending bills.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {pendingPayments.map(order => (
-                  <div 
-                    key={order._id}
-                    onClick={() => setSelectedOrder(order)}
-                    style={{
-                      background: selectedOrder?._id === order._id ? 'rgba(111, 78, 55, 0.15)' : 'var(--bg-card)',
-                      border: `1px solid ${selectedOrder?._id === order._id ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      padding: '15px',
-                      borderRadius: '10px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      transition: 'border 0.2s'
-                    }}
+        /* Main Billing View */
+        <div>
+          {/* Mobile Layout Switch */}
+          <div className="mobile-only-cashier" style={{ display: 'none' }}>
+            {activeTab === 'billing' ? (
+              selectedOrder ? (
+                <div>
+                  <button 
+                    onClick={() => setSelectedOrder(null)}
+                    className="btn btn-secondary touch-btn"
+                    style={{ marginBottom: '15px', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '5px', width: 'auto', minHeight: '44px' }}
                   >
-                    <div>
-                      <strong style={{ color: '#fff', fontSize: '0.95rem' }}>Table {order.tableNumber}</strong>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block', marginTop: '3px' }}>
-                        Order #{order._id.substring(order._id.length - 4).toUpperCase()} | {order.items.length} dishes
-                      </span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', fontSize: '1rem', display: 'block' }}>
-                        ₹{order.totalAmount.toFixed(2)}
-                      </span>
-                      <span style={{ fontSize: '0.7rem', color: '#ff9800', background: 'rgba(255,152,0,0.1)', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                        {order.paymentStatus}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Paid Billing History list */}
-            <h2 style={{ color: '#27AE60', margin: '30px 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
-              📜 Settled Payments Today ({paidPayments.length})
-            </h2>
-            {paidPayments.length === 0 ? (
-              <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic', fontSize: '0.85rem' }}>No bills settled yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {paidPayments.slice(0, 5).map(order => (
-                  <div key={order._id} style={{
-                    background: 'rgba(39,174,96,0.02)',
-                    border: '1px solid rgba(39,174,96,0.15)',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <span style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>Table {order.tableNumber}</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block' }}>
-                        Order ID: #{order._id.substring(order._id.length - 4).toUpperCase()}
-                      </span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <strong style={{ color: '#27AE60', fontSize: '0.9rem' }}>₹{order.totalAmount.toFixed(2)}</strong>
-                      <span style={{ fontSize: '0.7rem', color: '#27AE60', display: 'block' }}>Paid ✓</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Right: Bill Preview, Actions & Invoice Generator */}
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
-            {selectedOrder ? (
-              <div>
-                <h3 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.3rem', fontWeight: 800 }}>
-                  🧾 Receipt & Invoice Generator
-                </h3>
-
-                {/* Receipt Visual Mock */}
-                <div id="receipt-print-area" style={{
-                  background: '#FAF6F0',
-                  color: '#33271c',
-                  padding: '25px',
-                  borderRadius: '8px',
-                  fontFamily: "'Courier New', Courier, monospace",
-                  border: '1px solid #E6D5C3',
-                  boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
-                }}>
-                  <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '15px', marginBottom: '15px' }}>
-                    <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>CYPHER'S CAFÉ</h2>
-                    <p style={{ margin: '4px 0', fontSize: '0.8rem' }}>123 Cafe Street, Onboarding City</p>
-                    <p style={{ margin: '2px 0', fontSize: '0.8rem' }}>Tel: {user?.phone || '+91 9876543210'}</p>
-                  </div>
-
-                  <div style={{ fontSize: '0.85rem', marginBottom: '15px' }}>
-                    <div><strong>Invoice #:</strong> {selectedOrder._id.toUpperCase()}</div>
-                    <div><strong>Date:</strong> {new Date(selectedOrder.createdAt).toLocaleString()}</div>
-                    <div><strong>Table:</strong> Table {selectedOrder.tableNumber}</div>
-                    {selectedOrder.customerName && <div><strong>Customer:</strong> {selectedOrder.customerName}</div>}
-                  </div>
-
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '15px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid #33271c', borderTop: '1px solid #33271c' }}>
-                        <th style={{ padding: '6px 0', textAlign: 'left' }}>Item</th>
-                        <th style={{ padding: '6px 0', textAlign: 'center' }}>Qty</th>
-                        <th style={{ padding: '6px 0', textAlign: 'right' }}>Price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedOrder.items.map((item, idx) => (
-                        <tr key={idx}>
-                          <td style={{ padding: '4px 0' }}>{item.name}</td>
-                          <td style={{ padding: '4px 0', textAlign: 'center' }}>{item.quantity}</td>
-                          <td style={{ padding: '4px 0', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  <div style={{ borderTop: '1px dashed #33271c', paddingTop: '10px', textAlign: 'right', fontSize: '0.95rem' }}>
-                    <div>Subtotal: ₹{selectedOrder.totalAmount.toFixed(2)}</div>
-                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginTop: '6px' }}>
-                      TOTAL AMOUNT: ₹{selectedOrder.totalAmount.toFixed(2)}
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.8rem', borderTop: '1px solid #33271c', paddingTop: '10px' }}>
-                    Thank you for dining with us!<br />
-                    Scan QR code on your next visit.
-                  </div>
-                </div>
-
-                {/* Action buttons */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '20px' }}>
-                  {selectedOrder.paymentStatus !== 'Paid' ? (
-                    <>
-                      <button
-                        onClick={() => handleProcessPayment(selectedOrder._id, 'Cash')}
-                        className="btn btn-primary"
-                        style={{ flex: 1, minWidth: '130px', padding: '10px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60' }}
-                      >
-                        💵 Settle with Cash
-                      </button>
-                      <button
-                        onClick={() => handleProcessPayment(selectedOrder._id, 'Online Confirm')}
-                        className="btn btn-primary"
-                        style={{ flex: 1, minWidth: '150px', padding: '10px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9' }}
-                      >
-                        💳 Confirm Online Pay
-                      </button>
-                    </>
-                  ) : (
-                    <div style={{ width: '100%', padding: '10px', background: 'rgba(39, 174, 96, 0.15)', color: '#27AE60', borderRadius: '6px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '10px' }}>
-                      ✓ Receipt Settled & Paid
-                    </div>
-                  )}
-                  
-                  <button
-                    onClick={() => window.print()}
-                    className="btn btn-secondary"
-                    style={{ width: '100%', padding: '10px', fontSize: '13px' }}
-                  >
-                    🖨️ Print Receipt Invoice (Thermal)
+                    ← Back to Bills List
                   </button>
+                  {renderInvoiceGenerator()}
                 </div>
-
-              </div>
+              ) : (
+                renderPendingBills()
+              )
             ) : (
-              <div style={{
-                textAlign: 'center',
-                padding: '100px 20px',
-                color: 'var(--color-text-secondary)'
-              }}>
-                👈 Select a pending bill from the list to load the receipt and invoice panel.
-              </div>
+              renderSettledPayments()
             )}
           </div>
 
+          {/* Desktop/Tablet Layout */}
+          <div className="desktop-tablet-cashier" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: '30px' }}>
+            <div>
+              {renderPendingBills()}
+              {renderSettledPayments()}
+            </div>
+            <div>
+              {renderInvoiceGenerator()}
+            </div>
+          </div>
         </div>
       )}
     </div>

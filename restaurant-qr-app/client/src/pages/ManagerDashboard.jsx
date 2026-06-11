@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { getOrders, getStaff, getInventory, updateInventoryItem, recordPurchase, recordWastage, getMenu, updateMenuItem } from '../services/api';
+import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
 
 const ManagerDashboard = () => {
@@ -14,14 +15,14 @@ const ManagerDashboard = () => {
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(() => {
-    return tabParam || 'orders';
+    return tabParam || 'reports';
   });
 
   useEffect(() => {
     if (tabParam) {
       setActiveTab(tabParam);
     } else {
-      setActiveTab('orders');
+      setActiveTab('reports');
     }
   }, [tabParam]);
 
@@ -45,6 +46,20 @@ const ManagerDashboard = () => {
   const [updatingItem, setUpdatingItem] = useState(null);
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [newPrice, setNewPrice] = useState('');
+  
+  // Search states
+  const [menuSearch, setMenuSearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
+
+  const filteredInventory = inventory.filter(item => 
+    item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+    (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
+  );
+
+  const filteredMenuItems = menuItems.filter(item =>
+    item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+    (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
+  );
 
   const fetchMenu = async () => {
     setMenuLoading(true);
@@ -270,8 +285,8 @@ const ManagerDashboard = () => {
       </div>
 
       {/* Tabs Menu */}
-      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid #5C4331', paddingBottom: '12px', marginBottom: '25px' }}>
-        {['orders', 'attendance', 'inventory', 'reports', 'menu'].map(tab => (
+      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid #5C4331', paddingBottom: '12px', marginBottom: '25px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', whiteSpace: 'nowrap' }}>
+        {['reports', 'orders', 'attendance', 'inventory', 'menu'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -283,10 +298,11 @@ const ManagerDashboard = () => {
               borderRadius: '6px',
               cursor: 'pointer',
               fontWeight: 'bold',
-              textTransform: 'capitalize'
+              textTransform: 'capitalize',
+              flexShrink: 0
             }}
           >
-            {tab}
+            {tab === 'reports' ? 'Stats' : tab}
           </button>
         ))}
       </div>
@@ -301,48 +317,108 @@ const ManagerDashboard = () => {
         <div>
           {/* TAB 1: ALL ORDERS */}
           {activeTab === 'orders' && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px', overflowX: 'auto' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
               <h3 style={{ color: '#fff', margin: '0 0 15px 0', fontSize: '1.2rem' }}>📋 Live Order Records</h3>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
-                    <th style={{ padding: '8px' }}>Order ID</th>
-                    <th style={{ padding: '8px' }}>Table</th>
-                    <th style={{ padding: '8px' }}>Amount</th>
-                    <th style={{ padding: '8px' }}>Cooking Status</th>
-                    <th style={{ padding: '8px' }}>Payment</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map(order => (
-                    <tr key={order._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '10px 8px', color: '#fff' }}>#{order._id.substring(order._id.length - 8).toUpperCase()}</td>
-                      <td style={{ padding: '10px 8px' }}>Table {order.tableNumber}</td>
-                      <td style={{ padding: '10px 8px', fontWeight: 'bold' }}>₹{order.totalAmount.toFixed(2)}</td>
-                      <td style={{ padding: '10px 8px' }}>
-                        <span style={{
-                          color: order.status === 'Placed' ? '#3498db' : order.status === 'Preparing' ? '#ff9800' : order.status === 'Ready' ? '#2ecc71' : order.status === 'Delivered' ? '#9b59b6' : order.status === 'Completed' ? '#27AE60' : '#7f8c8d',
-                          background: order.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
-                          padding: '3px 8px',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: 'bold'
-                        }}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 8px' }}>
-                        <span style={{
-                          color: order.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
-                          fontWeight: 'bold'
-                        }}>
-                          {order.paymentStatus}
-                        </span>
-                      </td>
+                  {/* Desktop Table View */}
+              <div className="desktop-tablet-manager-orders" style={{ display: 'none', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
+                      <th style={{ padding: '8px' }}>Order ID</th>
+                      <th style={{ padding: '8px' }}>Table</th>
+                      <th style={{ padding: '8px' }}>Amount</th>
+                      <th style={{ padding: '8px' }}>Cooking Status</th>
+                      <th style={{ padding: '8px' }}>Payment</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Print Actions</th>
                     </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map(order => (
+                      <tr key={order._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '10px 8px', color: '#fff' }}>#{order._id.substring(order._id.length - 8).toUpperCase()}</td>
+                        <td style={{ padding: '10px 8px' }}>
+                          Table {order.tableNumber}
+                          {order.paymentMethod === 'Counter' && (
+                            <span style={{ marginLeft: '8px', color: '#fff', background: '#e67e22', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>🛎️ Cash</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 8px', fontWeight: 'bold' }}>₹{order.totalAmount.toFixed(2)}</td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span style={{
+                            color: order.status === 'Placed' ? '#3498db' : order.status === 'Preparing' ? '#ff9800' : order.status === 'Ready' ? '#2ecc71' : order.status === 'Delivered' ? '#9b59b6' : order.status === 'Completed' ? '#27AE60' : '#7f8c8d',
+                            background: order.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
+                            padding: '3px 8px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: 'bold'
+                          }}>
+                            {order.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span style={{
+                            color: order.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
+                            fontWeight: 'bold'
+                          }}>
+                            {order.paymentStatus}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                            <button onClick={() => printKOT(order)} style={{ background: '#34495E', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
+                            <button onClick={() => printPOSReceipt(order)} style={{ background: '#2980B9', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="mobile-only-manager-orders" style={{ display: 'none' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {orders.map(order => (
+                    <div key={order._id} style={{ background: 'rgba(255,255,255,0.02)', border: order.paymentMethod === 'Counter' ? '2px solid #e67e22' : '1px solid var(--color-border)', padding: '14px', borderRadius: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ color: '#fff', fontWeight: 'bold' }}>#{order._id.substring(order._id.length - 8).toUpperCase()}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>Table {order.tableNumber}</span>
+                          {order.paymentMethod === 'Counter' && (
+                            <span style={{ color: '#fff', background: '#e67e22', padding: '1px 5px', borderRadius: '4px', fontSize: '9px', fontWeight: 'bold' }}>🛎️ Cash</span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', marginBottom: '10px' }}>
+                        <span style={{ color: '#fff', fontWeight: 600 }}>₹{order.totalAmount.toFixed(2)}</span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <span style={{
+                            color: order.status === 'Placed' ? '#3498db' : order.status === 'Preparing' ? '#ff9800' : order.status === 'Ready' ? '#2ecc71' : order.status === 'Delivered' ? '#9b59b6' : order.status === 'Completed' ? '#27AE60' : '#7f8c8d',
+                            background: order.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
+                            padding: '2px 6px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: 'bold'
+                          }}>{order.status}</span>
+                          <span style={{
+                            color: order.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
+                            background: order.paymentStatus === 'Paid' ? 'rgba(39,174,96,0.1)' : 'rgba(231,76,60,0.1)',
+                            padding: '2px 6px',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: 'bold'
+                          }}>{order.paymentStatus}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', borderTop: '1px dashed var(--color-border)', paddingTop: '10px' }}>
+                        <button onClick={() => printKOT(order)} style={{ flex: 1, background: '#34495E', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}>🖨️ KOT</button>
+                        <button onClick={() => printPOSReceipt(order)} style={{ flex: 1, background: '#2980B9', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}>🖨️ POS Bill</button>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -353,23 +429,58 @@ const ManagerDashboard = () => {
               {staffList.length === 0 ? (
                 <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>No staff members registered.</p>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
-                        <th style={{ padding: '8px' }}>Staff Name</th>
-                        <th style={{ padding: '8px' }}>Designated Role</th>
-                        <th style={{ padding: '8px' }}>Contact</th>
-                        <th style={{ padding: '8px', textAlign: 'center' }}>Mark Attendance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                <>
+                  {/* Desktop Table View */}
+                  <div className="desktop-tablet-manager-attendance" style={{ display: 'none', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
+                          <th style={{ padding: '8px' }}>Staff Name</th>
+                          <th style={{ padding: '8px' }}>Designated Role</th>
+                          <th style={{ padding: '8px' }}>Contact</th>
+                          <th style={{ padding: '8px', textAlign: 'center' }}>Mark Attendance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {staffList.map(member => (
+                          <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                            <td style={{ padding: '12px 8px', color: '#fff', fontWeight: 600 }}>{member.name}</td>
+                            <td style={{ padding: '12px 8px', textTransform: 'capitalize' }}>{member.staffRole}</td>
+                            <td style={{ padding: '12px 8px' }}>{member.phone}</td>
+                            <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                              <select
+                                value={attendance[member._id] || 'Present'}
+                                onChange={(e) => handleAttendanceChange(member._id, e.target.value)}
+                                style={{
+                                  background: 'var(--bg-secondary)',
+                                  border: '1px solid var(--color-border)',
+                                  color: '#fff',
+                                  padding: '6px 12px',
+                                  borderRadius: '4px'
+                                }}
+                              >
+                                <option value="Present">Present ✓</option>
+                                <option value="Absent">Absent ✕</option>
+                                <option value="Late">Late (Delayed)</option>
+                                <option value="Off">Weekly Off</option>
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div className="mobile-only-manager-attendance" style={{ display: 'none' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {staffList.map(member => (
-                        <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                          <td style={{ padding: '12px 8px', color: '#fff', fontWeight: 600 }}>{member.name}</td>
-                          <td style={{ padding: '12px 8px', textTransform: 'capitalize' }}>{member.staffRole}</td>
-                          <td style={{ padding: '12px 8px' }}>{member.phone}</td>
-                          <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        <div key={member._id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)', padding: '14px', borderRadius: '10px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <div>
+                              <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '15px' }}>{member.name}</div>
+                              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'capitalize' }}>{member.staffRole}</span>
+                            </div>
                             <select
                               value={attendance[member._id] || 'Present'}
                               onChange={(e) => handleAttendanceChange(member._id, e.target.value)}
@@ -377,8 +488,10 @@ const ManagerDashboard = () => {
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--color-border)',
                                 color: '#fff',
-                                padding: '6px 12px',
-                                borderRadius: '4px'
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                fontSize: '13px',
+                                minHeight: '44px'
                               }}
                             >
                               <option value="Present">Present ✓</option>
@@ -386,12 +499,15 @@ const ManagerDashboard = () => {
                               <option value="Late">Late (Delayed)</option>
                               <option value="Off">Weekly Off</option>
                             </select>
-                          </td>
-                        </tr>
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                            📞 {member.phone}
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -404,7 +520,27 @@ const ManagerDashboard = () => {
                 Operational inventory management panel. View stock levels, record restock/purchases, and track wastage logs. Cost and Selling prices are read-only.
               </p>
               
-              <div style={{ overflowX: 'auto' }}>
+              <div style={{ marginBottom: '20px' }}>
+                <input
+                  type="text"
+                  placeholder="🔍 Search ingredients by name or category..."
+                  value={inventorySearch}
+                  onChange={(e) => setInventorySearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--bg-secondary)',
+                    color: '#fff',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="desktop-tablet-manager-inventory" style={{ display: 'none', overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid var(--color-border)', color: '#FAF6F0' }}>
@@ -421,7 +557,7 @@ const ManagerDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {inventory.map(item => {
+                    {filteredInventory.map(item => {
                       const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
                       const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
                       const isLow = qtyVal <= reorderVal;
@@ -505,6 +641,90 @@ const ManagerDashboard = () => {
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile Card View */}
+              <div className="mobile-only-manager-inventory" style={{ display: 'none' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {filteredInventory.map(item => {
+                    const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
+                    const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
+                    const isLow = qtyVal <= reorderVal;
+                    const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
+                    
+                    let statusColor = '#2ECC71';
+                    if (qtyVal <= 0) statusColor = '#E74C3C';
+                    else if (isLow) statusColor = '#F39C12';
+
+                    return (
+                      <div key={item._id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--color-border)', padding: '14px', borderRadius: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                          <div>
+                            <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '15px' }}>{item.name}</div>
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{item.category || 'Ingredients'}</span>
+                          </div>
+                          <span style={{
+                            backgroundColor: `${statusColor}1A`,
+                            border: `1px solid ${statusColor}`,
+                            color: statusColor,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 'bold'
+                          }}>
+                            {qtyVal <= 0 ? 'OUT_OF_STOCK' : isLow ? 'LOW_STOCK' : 'IN_STOCK'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
+                          <span>Stock: <strong style={{ color: isLow ? '#E74C3C' : '#fff' }}>{qtyVal} {item.unit}</strong> (Min: {reorderVal})</span>
+                          <span>Price: ₹{costPriceVal?.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                          <button 
+                            onClick={() => {
+                              setSelectedItem(item);
+                              setStockForm({ quantity: qtyVal });
+                              setShowUpdateStockModal(true);
+                            }}
+                            style={{ background: '#6F4E37', color: '#fff', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}
+                          >
+                            ✏️ Stock
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setSelectedItem(item);
+                              setPurchaseForm({
+                                quantityAdded: 0,
+                                costPrice: costPriceVal,
+                                supplier: item.supplier || '',
+                                notes: ''
+                              });
+                              setShowPurchaseModal(true);
+                            }}
+                            style={{ background: '#27AE60', color: '#fff', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}
+                          >
+                            ➕ Purchase
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setSelectedItem(item);
+                              setWastageForm({
+                                quantityWasted: 0,
+                                type: 'Wastage',
+                                reason: ''
+                              });
+                              setShowWastageModal(true);
+                            }}
+                            style={{ background: '#E74C3C', color: '#fff', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}
+                          >
+                            🥀 Wastage
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -564,16 +784,35 @@ const ManagerDashboard = () => {
                 </div>
               </div>
 
+              <div style={{ marginBottom: '20px' }}>
+                <input
+                  type="text"
+                  placeholder="🔍 Search dishes by name or category..."
+                  value={menuSearch}
+                  onChange={(e) => setMenuSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--bg-secondary)',
+                    color: '#fff',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
               {menuLoading ? (
                 <div style={{ textAlign: 'center', padding: '40px 0' }}>
                   <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
                   <p style={{ color: 'var(--color-text-secondary)' }}>Loading cafe dishes...</p>
                 </div>
-              ) : menuItems.length === 0 ? (
+              ) : filteredMenuItems.length === 0 ? (
                 <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>No menu items found.</p>
               ) : (
                 <div className="menu-grid-admin" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                  {menuItems.map(item => (
+                  {filteredMenuItems.map(item => (
                     <div key={item.id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`} style={{
                       background: '#1F140E',
                       border: '1px solid var(--color-border)',

@@ -78,7 +78,7 @@ const getOrderById = async (req, res) => {
 // @access  Public (Owner Dashboard)
 const updateOrderStatus = async (req, res) => {
   try {
-    const { status, paymentStatus } = req.body;
+    const { status, paymentStatus, paymentMethod } = req.body;
     const { id } = req.params;
 
     const updateFields = {};
@@ -99,8 +99,16 @@ const updateOrderStatus = async (req, res) => {
       updateFields.paymentStatus = paymentStatus;
     }
 
+    if (paymentMethod !== undefined) {
+      const allowedPaymentMethods = ['Online', 'Counter', 'Pending'];
+      if (!allowedPaymentMethods.includes(paymentMethod)) {
+        return res.status(400).json({ success: false, message: `Invalid paymentMethod. Must be one of: ${allowedPaymentMethods.join(', ')}` });
+      }
+      updateFields.paymentMethod = paymentMethod;
+    }
+
     if (Object.keys(updateFields).length === 0) {
-      return res.status(400).json({ success: false, message: 'No valid fields provided for update. Must be status or paymentStatus.' });
+      return res.status(400).json({ success: false, message: 'No valid fields provided for update. Must be status, paymentStatus, or paymentMethod.' });
     }
 
     const updatedOrder = await Order.findByIdAndUpdate(
@@ -113,8 +121,11 @@ const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    if (updatedOrder.status === 'Completed' && !updatedOrder.inventoryDeducted) {
+    if (['Ready', 'Completed', 'Delivered'].includes(updatedOrder.status) && !updatedOrder.inventoryDeducted) {
       await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
+      // Fetch latest document status
+      const latestOrder = await Order.findById(id);
+      return res.status(200).json({ success: true, data: latestOrder || updatedOrder });
     }
 
     return res.status(200).json({ success: true, data: updatedOrder });
@@ -124,9 +135,40 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
+// @desc    Update order payment method (Public for customers)
+// @route   PATCH /api/orders/:id/payment-method
+// @access  Public
+const updateOrderPaymentMethod = async (req, res) => {
+  try {
+    const { paymentMethod } = req.body;
+    const { id } = req.params;
+
+    const allowedPaymentMethods = ['Online', 'Counter', 'Pending'];
+    if (!paymentMethod || !allowedPaymentMethods.includes(paymentMethod)) {
+      return res.status(400).json({ success: false, message: `Invalid paymentMethod. Must be one of: ${allowedPaymentMethods.join(', ')}` });
+    }
+
+    const updatedOrder = await Order.findByIdAndUpdate(
+      id,
+      { paymentMethod },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedOrder) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    return res.status(200).json({ success: true, data: updatedOrder });
+  } catch (error) {
+    console.error('Error updating order payment method:', error);
+    return res.status(500).json({ success: false, message: 'Server error while updating payment method', error: error.message });
+  }
+};
+
 module.exports = {
   createOrder,
   getOrders,
   getOrderById,
-  updateOrderStatus
+  updateOrderStatus,
+  updateOrderPaymentMethod
 };

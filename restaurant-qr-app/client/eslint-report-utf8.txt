@@ -1,0 +1,501 @@
+﻿
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\App.jsx
+   1:8  error  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-unused-vars
+  11:8  error  'StaffDashboard' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 no-unused-vars
+  44:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  42 |   useEffect(() => {
+  43 |     if (tableParam) {
+> 44 |       setTableNumber(tableParam);
+     |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  45 |       sessionStorage.setItem('tableNumber', tableParam);
+  46 |       console.log(`Updated table number from URL: ${tableParam}`);
+  47 |     }  react-hooks/set-state-in-effect
+  53:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  51 |   useEffect(() => {
+  52 |     if (cafeIdParam) {
+> 53 |       setCafeId(cafeIdParam);
+     |       ^^^^^^^^^ Avoid calling setState() directly within an effect
+  54 |       sessionStorage.setItem('cafeId', cafeIdParam);
+  55 |       console.log(`Updated cafe ID from URL: ${cafeIdParam}`);
+  56 |     }                  react-hooks/set-state-in-effect
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\components\CartItem.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\components\MenuCard.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\components\Navbar.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\components\OrderCard.jsx
+   1:8   error  'React' is defined but never used  no-unused-vars
+  11:14  error  'e' is defined but never used      no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\components\OwnerLayout.jsx
+   1:8   error  'React' is defined but never used                       no-unused-vars
+   7:11  error  'user' is assigned a value but never used               no-unused-vars
+   8:9   error  'navigate' is assigned a value but never used           no-unused-vars
+  10:10  error  'cafeName' is assigned a value but never used           no-unused-vars
+  11:10  error  'logoUrl' is assigned a value but never used            no-unused-vars
+  12:10  error  'currentBranchName' is assigned a value but never used  no-unused-vars
+  31:16  error  'err' is defined but never used                         no-unused-vars
+  39:9   error  'getInitials' is assigned a value but never used        no-unused-vars
+  46:9   error  'isOnProfile' is assigned a value but never used        no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\components\ProtectedRoute.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\components\RazorpayPayment.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\components\SaaSLayout.jsx
+   1:8  error  'React' is defined but never used                                                                                                                                                            no-unused-vars
+  20:3  error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\context\AuthContext.jsx
+    1:8   error  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                no-unused-vars
+   34:5   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  32 |
+  33 |   useEffect(() => {
+> 34 |     checkSession();
+     |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  35 |
+  36 |     // Axios response interceptor to handle auto-logout on token expiration (401 status)
+  37 |     const interceptor = API.interceptors.response.use(  react-hooks/set-state-in-effect
+   71:7   error  There is no `cause` attached to the symptom error being thrown                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   preserve-caught-error
+   92:7   error  There is no `cause` attached to the symptom error being thrown                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   preserve-caught-error
+  128:14  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   react-refresh/only-export-components
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\CartPage.jsx
+    1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             no-unused-vars
+   12:10  error    'loadingOrders' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+   56:17  error    Error: Cannot access variable before it is declared
+
+`triggerPaidFeedback` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  54 |               updatedIds = updatedIds.filter(x => x !== id);
+  55 |               if (!voicedOrderIds.includes(id)) {
+> 56 |                 triggerPaidFeedback(id);
+     |                 ^^^^^^^^^^^^^^^^^^^ `triggerPaidFeedback` accessed before it is declared
+  57 |               }
+  58 |             }
+  59 |           }
+
+  273 |   };
+  274 |
+> 275 |   const triggerPaidFeedback = (orderId) => {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 276 |     setVoicedOrderIds(prev => {
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 277 |       if (prev.includes(orderId)) return prev;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 278 |       playChime();
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 279 |       speakThankYou();
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 280 |       return [...prev, orderId];
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 281 |     });
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 282 |   };
+      | ^^^^^ `triggerPaidFeedback` is declared here
+  283 |
+  284 |   // Dynamic Live Tracker Success view
+  285 |   if (success && activeOrders.length > 0) {  react-hooks/immutability
+   77:6   warning  React Hook useEffect has missing dependencies: 'triggerPaidFeedback' and 'voicedOrderIds'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react-hooks/exhaustive-deps
+  133:6   warning  React Hook useEffect has a missing dependency: 'triggerPaidFeedback'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        react-hooks/exhaustive-deps
+  286:11  error    'allPaid' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\CashierDashboard.jsx
+   1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+   9:11  error    'logout' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+  21:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  19 |   useEffect(() => {
+  20 |     if (tabParam) {
+> 21 |       setActiveTab(tabParam);
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  22 |     } else {
+  23 |       setActiveTab('billing');
+  24 |     }  react-hooks/set-state-in-effect
+  43:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  41 |   useEffect(() => {
+  42 |     if (activeTab === 'inventory') {
+> 43 |       fetchInventory();
+     |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  44 |     }
+  45 |   }, [activeTab]);
+  46 |              react-hooks/set-state-in-effect
+  74:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  72 |
+  73 |   useEffect(() => {
+> 74 |     fetchOrders();
+     |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  75 |
+  76 |     const pollingInterval = setInterval(() => {
+  77 |       fetchOrders();                 react-hooks/set-state-in-effect
+  89:6   warning  React Hook useEffect has a missing dependency: 'fetchOrders'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/exhaustive-deps
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\CustomerMenu.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\KitchenDashboard.jsx
+    1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+    5:8   error    'OrderCard' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              no-unused-vars
+    9:11  error    'logout' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+   58:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  56 |   useEffect(() => {
+  57 |     if (tabParam) {
+> 58 |       setActiveTab(tabParam);
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  59 |     } else {
+  60 |       setActiveTab('cooking');
+  61 |     }  react-hooks/set-state-in-effect
+  105:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  103 |     }
+  104 |     if (activeTab === 'menu') {
+> 105 |       fetchMenu();
+      |       ^^^^^^^^^ Avoid calling setState() directly within an effect
+  106 |     }
+  107 |   }, [activeTab]);
+  108 |                                    react-hooks/set-state-in-effect
+  174:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  172 |
+  173 |   useEffect(() => {
+> 174 |     fetchOrders();
+      |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  175 |
+  176 |     const pollingInterval = setInterval(() => {
+  177 |       fetchOrders();          react-hooks/set-state-in-effect
+  189:6   warning  React Hook useEffect has a missing dependency: 'fetchOrders'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/exhaustive-deps
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\Login.jsx
+  1:8   error  'React' is defined but never used     no-unused-vars
+  2:23  error  'Navigate' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\ManagerDashboard.jsx
+    1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+    9:11  error    'logout' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+   23:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  21 |   useEffect(() => {
+  22 |     if (tabParam) {
+> 23 |       setActiveTab(tabParam);
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  24 |     } else {
+  25 |       setActiveTab('reports');
+  26 |     }  react-hooks/set-state-in-effect
+  205:6   warning  React Hook useEffect has a missing dependency: 'fetchInitialData'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-hooks/exhaustive-deps
+  211:9   error    'handleRestock' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\OwnerDashboard.jsx
+    1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       no-unused-vars
+   38:11  error    'logout' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             no-unused-vars
+   51:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  49 |   useEffect(() => {
+  50 |     if (tabParam) {
+> 51 |       setActiveTab(tabParam === 'settings' ? 'config' : tabParam);
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  52 |     } else {
+  53 |       setActiveTab('analytics');
+  54 |     }                                                                react-hooks/set-state-in-effect
+   59:10  error    'ordersLoading' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+   60:10  error    'ordersError' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+   63:10  error    'menuError' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-unused-vars
+   66:10  error    'staffError' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         no-unused-vars
+   87:10  error    'categoryError' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+   95:10  error    'invCategoryLoading' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 no-unused-vars
+   96:10  error    'invCategoryError' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   no-unused-vars
+  426:9   error    'handleCreateInventoryCategory' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+  444:9   error    'handleDeleteInventoryCategory' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+  484:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  482 |
+  483 |   useEffect(() => {
+> 484 |     fetchOrders();
+      |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  485 |     fetchMenu();
+  486 |     loadSetupConfig();
+  487 |                                                                                                                                            react-hooks/set-state-in-effect
+  492:7   error    Error: Cannot access variable before it is declared
+
+`fetchInventoryList` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  490 |     }
+  491 |     if (activeTab === 'inventory' || activeTab === 'analytics' || activeTab === 'menu') {
+> 492 |       fetchInventoryList();
+      |       ^^^^^^^^^^^^^^^^^^ `fetchInventoryList` accessed before it is declared
+  493 |       fetchCategories();
+  494 |       fetchInventoryCategories();
+  495 |     }
+
+  676 |
+  677 |   // Fetch Inventory List
+> 678 |   const fetchInventoryList = async () => {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 679 |     setInventoryLoading(true);
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 680 |     try {
+      ΓÇª
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 709 |     }
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 710 |   };
+      | ^^^^^ `fetchInventoryList` is declared here
+  711 |
+  712 |   // Restock inventory item
+  713 |   const handleRestockItem = async (id, currentStock) => {  react-hooks/immutability
+  524:6   warning  React Hook useEffect has a missing dependency: 'fetchOrders'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+  600:9   error    'handleToggleAvailability' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           no-unused-vars
+  713:9   error    'handleRestockItem' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+  863:14  error    'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         no-unused-vars
+  942:9   error    'getTopConsumedIngredients' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\OwnerProfilePage.jsx
+   1:8   error    'React' is defined but never used                                                                        no-unused-vars
+  62:32  warning  React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\OwnerSetup.jsx
+    1:8   error  'React' is defined but never used              no-unused-vars
+   18:10  error  'logoFile' is assigned a value but never used  no-unused-vars
+  150:14  error  'err' is defined but never used                no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\PaymentDemo.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\StaffDashboard.jsx
+   1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 no-unused-vars
+  20:15  error    'cafeOrders' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   no-unused-vars
+  42:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  40 |   // Poll for orders every 5s
+  41 |   useEffect(() => {
+> 42 |     fetchOrders();
+     |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  43 |
+  44 |     const pollingInterval = setInterval(() => {
+  45 |       fetchOrders();  react-hooks/set-state-in-effect
+  57:6   warning  React Hook useEffect has a missing dependency: 'fetchOrders'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    react-hooks/exhaustive-deps
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\SuperAdminDashboard.jsx
+     1:8   error  'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    no-unused-vars
+     7:9   error  'navigate' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+     8:11  error  'logout' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-unused-vars
+     8:19  error  'user' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+    20:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  18 |   useEffect(() => {
+  19 |     if (tabParam) {
+> 20 |       setActiveTab(tabParam);
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  21 |     } else {
+  22 |       setActiveTab('analytics');
+  23 |     }  react-hooks/set-state-in-effect
+    69:14  error  'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+    85:14  error  'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+   111:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  109 |   useEffect(() => {
+  110 |     if (activeTab === 'tickets') {
+> 111 |       loadTickets();
+      |       ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  112 |     }
+  113 |   }, [activeTab]);
+  114 |                 react-hooks/set-state-in-effect
+   122:14  error  'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+   158:64  error  'branchCount' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     no-unused-vars
+   204:14  error  'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+   228:14  error  'err' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+  1063:72  error  Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  1061 |                     </td>
+  1062 |                     <td style={{ padding: '12px 8px', textAlign: 'center', color: '#E6D5C3' }}>
+> 1063 |                       {formatDate(cafe.subscriptionRenewal || new Date(Date.now() + 365*24*60*60*1000))}
+       |                                                                        ^^^^^^^^^^ Cannot call impure function
+  1064 |                     </td>
+  1065 |                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+  1066 |                       <button                                                                                 react-hooks/purity
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\Unauthorized.jsx
+  1:8  error  'React' is defined but never used  no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\VerifyOtp.jsx
+    1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                no-unused-vars
+   72:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  70 |       }, 1000);
+  71 |     } else {
+> 72 |       setCanResend(true);
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  73 |       clearInterval(interval);
+  74 |     }
+  75 |     return () => clearInterval(interval);  react-hooks/set-state-in-effect
+   83:6   warning  React Hook useEffect has a missing dependency: 'inputRefs'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/exhaustive-deps
+  199:13  error    'res' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         no-unused-vars
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\pages\WaiterDashboard.jsx
+    1:8   error    'React' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  no-unused-vars
+    9:11  error    'logout' is assigned a value but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+   21:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  19 |   useEffect(() => {
+  20 |     if (tabParam) {
+> 21 |       setActiveTab(tabParam);
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  22 |     } else {
+  23 |       setActiveTab('tables');
+  24 |     }                                   react-hooks/set-state-in-effect
+   43:7   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  41 |   useEffect(() => {
+  42 |     if (activeTab === 'inventory') {
+> 43 |       fetchInventory();
+     |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  44 |     }
+  45 |   }, [activeTab]);
+  46 |   const [orders, setOrders] = useState([]);  react-hooks/set-state-in-effect
+   85:5   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  83 |
+  84 |   useEffect(() => {
+> 85 |     fetchOrders();
+     |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  86 |
+  87 |     const pollingInterval = setInterval(() => {
+  88 |       fetchOrders();                                                 react-hooks/set-state-in-effect
+  100:6   warning  React Hook useEffect has a missing dependency: 'fetchOrders'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/exhaustive-deps
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\test_patch.js
+  1:15  error  'require' is not defined  no-undef
+
+C:\CoffeeDayCafe\restaurant-qr-app\client\src\utils\printHelpers.js
+  1:40  error  'user' is assigned a value but never used  no-unused-vars
+
+Γ£û 109 problems (99 errors, 10 warnings)
+
