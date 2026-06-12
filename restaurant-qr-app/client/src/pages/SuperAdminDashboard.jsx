@@ -1500,7 +1500,7 @@ const SuperAdminDashboard = () => {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div className="form-row" style={{ gap: '10px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>CITY</label>
                   <input

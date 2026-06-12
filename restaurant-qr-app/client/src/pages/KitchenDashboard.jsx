@@ -175,6 +175,12 @@ const KitchenDashboard = () => {
 
     const pollingInterval = setInterval(() => {
       fetchOrders();
+      if (activeTab === 'inventory') {
+        fetchInventory();
+      }
+      if (activeTab === 'menu') {
+        fetchMenu();
+      }
       setRefreshCountdown(5);
     }, 5000);
 

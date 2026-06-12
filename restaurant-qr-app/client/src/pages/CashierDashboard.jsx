@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
-import { getOrders, updateOrderStatus, getInventory } from '../services/api';
+import { getOrders, updateOrderStatus, getInventory, getCafeInfo } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 import '../styles/App.css';
 
@@ -15,6 +15,23 @@ const CashierDashboard = () => {
 
   const [inventory, setInventory] = useState([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [cafeInfo, setCafeInfo] = useState(null);
+
+  useEffect(() => {
+    const fetchCafe = async () => {
+      if (user?.cafeId) {
+        try {
+          const res = await getCafeInfo(user.cafeId);
+          if (res.success) {
+            setCafeInfo(res.data);
+          }
+        } catch (e) {
+          console.error('Error fetching cafe info:', e);
+        }
+      }
+    };
+    fetchCafe();
+  }, [user]);
 
   useEffect(() => {
     if (tabParam) {
@@ -255,9 +272,10 @@ const CashierDashboard = () => {
               boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
             }}>
               <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '15px', marginBottom: '15px' }}>
-                <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>COFFEE DAY CAFE</h2>
-                <p style={{ margin: '4px 0', fontSize: '0.8rem' }}>123 Cafe Street, Onboarding City</p>
-                <p style={{ margin: '2px 0', fontSize: '0.8rem' }}>Tel: {user?.phone || '+91 9876543210'}</p>
+                <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>{cafeInfo?.name || 'Dr. Chai Cafe'}</h2>
+                <p style={{ margin: '4px 0', fontSize: '0.8rem' }}>{cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
+                {cafeInfo?.gstNumber && <p style={{ margin: '2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
+                <p style={{ margin: '2px 0', fontSize: '0.8rem' }}>Tel: {cafeInfo?.supportNumber || user?.phone || '+91 9876543210'}</p>
               </div>
 
               <div style={{ fontSize: '0.85rem', marginBottom: '15px' }}>
@@ -286,10 +304,15 @@ const CashierDashboard = () => {
                 </tbody>
               </table>
 
-              <div style={{ borderTop: '1px dashed #33271c', paddingTop: '10px', textAlign: 'right', fontSize: '0.95rem' }}>
-                <div>Subtotal: ₹{selectedOrder.totalAmount.toFixed(2)}</div>
+              <div style={{ borderTop: '1px dashed #33271c', paddingTop: '10px', textAlign: 'right', fontSize: '0.85rem' }}>
+                <div>Subtotal (Tax Excl.): ₹{(selectedOrder.totalAmount / 1.05).toFixed(2)}</div>
+                <div>CGST (2.5%): ₹{((selectedOrder.totalAmount - (selectedOrder.totalAmount / 1.05)) / 2).toFixed(2)}</div>
+                <div>SGST (2.5%): ₹{((selectedOrder.totalAmount - (selectedOrder.totalAmount / 1.05)) / 2).toFixed(2)}</div>
                 <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginTop: '6px' }}>
                   TOTAL AMOUNT: ₹{selectedOrder.totalAmount.toFixed(2)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#555', marginTop: '4px' }}>
+                  Method: <strong>{selectedOrder.paymentMethod || 'Counter'}</strong>
                 </div>
               </div>
 
@@ -325,7 +348,7 @@ const CashierDashboard = () => {
               )}
               
               <button
-                onClick={() => printPOSReceipt(selectedOrder, user)}
+                onClick={() => printPOSReceipt(selectedOrder, user, cafeInfo)}
                 className="btn btn-secondary touch-btn"
                 style={{ width: '100%', padding: '12px', fontSize: '13px', minHeight: '44px' }}
               >

@@ -158,24 +158,24 @@ const OwnerProfilePage = () => {
   const modalFields = {
     owner: (
       <>
-        <label className="mlabel">Owner Name</label>
-        <input className="minput" value={form.name || ''} onChange={fld('name')} placeholder="Full name" />
-        <label className="mlabel">Phone Number</label>
-        <input className="minput" value={form.phone || ''} onChange={fld('phone')} placeholder="+91 XXXXXXXXXX" type="tel" />
+        <label className="mlabel" htmlFor="profile-owner-name">Owner Name</label>
+        <input className="minput" id="profile-owner-name" name="profile-owner-name" value={form.name || ''} onChange={fld('name')} placeholder="Full name" />
+        <label className="mlabel" htmlFor="profile-owner-phone">Phone Number</label>
+        <input className="minput" id="profile-owner-phone" name="profile-owner-phone" value={form.phone || ''} onChange={fld('phone')} placeholder="+91 XXXXXXXXXX" type="tel" />
       </>
     ),
     cafe: (
       <>
-        <label className="mlabel">Cafe Name</label>
-        <input className="minput" value={form.name || ''} onChange={fld('name')} />
-        <label className="mlabel">Business Type</label>
-        <select className="minput" value={form.businessType || 'Cafe'} onChange={fld('businessType')}>
+        <label className="mlabel" htmlFor="profile-cafe-name">Cafe Name</label>
+        <input className="minput" id="profile-cafe-name" name="profile-cafe-name" value={form.name || ''} onChange={fld('name')} />
+        <label className="mlabel" htmlFor="profile-business-type">Business Type</label>
+        <select className="minput" id="profile-business-type" name="profile-business-type" value={form.businessType || 'Cafe'} onChange={fld('businessType')}>
           {['Cafe','Restaurant','Bakery','Cloud Kitchen'].map(t => <option key={t}>{t}</option>)}
         </select>
-        <label className="mlabel">Branch Count</label>
-        <input className="minput" type="number" min={1} value={form.branchCount || 1} onChange={fld('branchCount')} />
-        <label className="mlabel">GST Number</label>
-        <input className="minput" value={form.gstNumber || ''} onChange={fld('gstNumber')} placeholder="22AAAAA0000A1Z5" />
+        <label className="mlabel" htmlFor="profile-branch-count">Branch Count</label>
+        <input className="minput" id="profile-branch-count" name="profile-branch-count" type="number" min={1} value={form.branchCount || 1} onChange={fld('branchCount')} />
+        <label className="mlabel" htmlFor="profile-gst-number">GST Number</label>
+        <input className="minput" id="profile-gst-number" name="profile-gst-number" value={form.gstNumber || ''} onChange={fld('gstNumber')} placeholder="22AAAAA0000A1Z5" />
       </>
     ),
     location: (
@@ -204,83 +204,83 @@ const OwnerProfilePage = () => {
           )}
         </button>
 
-        <label className="mlabel">Full Address</label>
-        <input className="minput" value={form.address || ''} onChange={fld('address')} placeholder="Street, Area" />
-        <label className="mlabel">City</label>
-        <input className="minput" value={form.city || ''} onChange={fld('city')} />
-        <label className="mlabel">State</label>
-        <input className="minput" value={form.state || ''} onChange={fld('state')} />
-        <label className="mlabel">Pincode</label>
-        <input className="minput" value={form.pincode || ''} onChange={fld('pincode')} />
-        <label className="mlabel">Google Maps URL</label>
-        <input className="minput" value={form.mapsLocation || ''} onChange={fld('mapsLocation')} placeholder="https://maps.google.com/..." />
+        <label className="mlabel" htmlFor="profile-address">Full Address</label>
+        <input className="minput" id="profile-address" name="profile-address" value={form.address || ''} onChange={fld('address')} placeholder="Street, Area" />
+        <label className="mlabel" htmlFor="profile-city">City</label>
+        <input className="minput" id="profile-city" name="profile-city" value={form.city || ''} onChange={fld('city')} />
+        <label className="mlabel" htmlFor="profile-state">State</label>
+        <input className="minput" id="profile-state" name="profile-state" value={form.state || ''} onChange={fld('state')} />
+        <label className="mlabel" htmlFor="profile-pincode">Pincode</label>
+        <input className="minput" id="profile-pincode" name="profile-pincode" value={form.pincode || ''} onChange={fld('pincode')} />
+        <label className="mlabel" htmlFor="profile-maps-location">Google Maps URL</label>
+        <input className="minput" id="profile-maps-location" name="profile-maps-location" value={form.mapsLocation || ''} onChange={fld('mapsLocation')} placeholder="https://maps.google.com/..." />
       </>
     ),
     hours: (
       <>
-        <label className="mlabel">Opening Time</label>
-        <input className="minput" type="time" value={form.openingTime || ''} onChange={fld('openingTime')} />
-        <label className="mlabel">Closing Time</label>
-        <input className="minput" type="time" value={form.closingTime || ''} onChange={fld('closingTime')} />
-        <label className="mlabel">Support Phone Number</label>
-        <input className="minput" type="tel" value={form.supportNumber || ''} onChange={fld('supportNumber')} placeholder="+91 XXXXXXXXXX" />
+        <label className="mlabel" htmlFor="profile-opening-time">Opening Time</label>
+        <input className="minput" id="profile-opening-time" name="profile-opening-time" type="time" value={form.openingTime || ''} onChange={fld('openingTime')} />
+        <label className="mlabel" htmlFor="profile-closing-time">Closing Time</label>
+        <input className="minput" id="profile-closing-time" name="profile-closing-time" type="time" value={form.closingTime || ''} onChange={fld('closingTime')} />
+        <label className="mlabel" htmlFor="profile-support-phone">Support Phone Number</label>
+        <input className="minput" id="profile-support-phone" name="profile-support-phone" type="tel" value={form.supportNumber || ''} onChange={fld('supportNumber')} placeholder="+91 XXXXXXXXXX" />
       </>
     ),
     payment: (
       <>
-        <label className="mlabel">Razorpay Key ID</label>
-        <input className="minput" value={form.razorpayKeyId || ''} onChange={fld('razorpayKeyId')} placeholder="rzp_live_..." />
-        <label className="mlabel">Razorpay Secret</label>
-        <input className="minput" type="password" value={form.razorpaySecret || ''} onChange={fld('razorpaySecret')} placeholder="Enter new secret to update" />
-        <label className="mlabel">UPI ID</label>
-        <input className="minput" value={form.upiId || ''} onChange={fld('upiId')} placeholder="name@upi" />
-        <label className="mlabel">Bank Holder Name</label>
-        <input className="minput" value={form.bankHolderName || ''} onChange={fld('bankHolderName')} />
-        <label className="mlabel">Account Number</label>
-        <input className="minput" value={form.accountNumber || ''} onChange={fld('accountNumber')} />
-        <label className="mlabel">IFSC Code</label>
-        <input className="minput" value={form.ifscCode || ''} onChange={fld('ifscCode')} placeholder="SBIN0001234" />
+        <label className="mlabel" htmlFor="profile-razorpay-key">Razorpay Key ID</label>
+        <input className="minput" id="profile-razorpay-key" name="profile-razorpay-key" value={form.razorpayKeyId || ''} onChange={fld('razorpayKeyId')} placeholder="rzp_live_..." />
+        <label className="mlabel" htmlFor="profile-razorpay-secret">Razorpay Secret</label>
+        <input className="minput" id="profile-razorpay-secret" name="profile-razorpay-secret" type="password" value={form.razorpaySecret || ''} onChange={fld('razorpaySecret')} placeholder="Enter new secret to update" />
+        <label className="mlabel" htmlFor="profile-upi-id">UPI ID</label>
+        <input className="minput" id="profile-upi-id" name="profile-upi-id" value={form.upiId || ''} onChange={fld('upiId')} placeholder="name@upi" />
+        <label className="mlabel" htmlFor="profile-bank-holder">Bank Holder Name</label>
+        <input className="minput" id="profile-bank-holder" name="profile-bank-holder" value={form.bankHolderName || ''} onChange={fld('bankHolderName')} />
+        <label className="mlabel" htmlFor="profile-account-number">Account Number</label>
+        <input className="minput" id="profile-account-number" name="profile-account-number" value={form.accountNumber || ''} onChange={fld('accountNumber')} />
+        <label className="mlabel" htmlFor="profile-ifsc-code">IFSC Code</label>
+        <input className="minput" id="profile-ifsc-code" name="profile-ifsc-code" value={form.ifscCode || ''} onChange={fld('ifscCode')} placeholder="SBIN0001234" />
       </>
     ),
     ops: (
       <>
-        <label className="mlabel">Number of Tables</label>
-        <input className="minput" type="number" min={0} value={form.tableCount || 0} onChange={fld('tableCount')} />
+        <label className="mlabel" htmlFor="profile-table-count">Number of Tables</label>
+        <input className="minput" id="profile-table-count" name="profile-table-count" type="number" min={0} value={form.tableCount || 0} onChange={fld('tableCount')} />
         <div className="mtoggle-row">
-          <span className="mlabel" style={{margin:0}}>Kitchen Display System</span>
-          <input type="checkbox" className="mtoggle" checked={!!form.kitchenDisplayEnabled} onChange={fld('kitchenDisplayEnabled')} />
+          <label className="mlabel" htmlFor="profile-kds-enabled" style={{margin:0}}>Kitchen Display System</label>
+          <input type="checkbox" id="profile-kds-enabled" name="profile-kds-enabled" className="mtoggle" checked={!!form.kitchenDisplayEnabled} onChange={fld('kitchenDisplayEnabled')} />
         </div>
         <div className="mtoggle-row">
-          <span className="mlabel" style={{margin:0}}>Invoice Printer</span>
-          <input type="checkbox" className="mtoggle" checked={!!form.printerEnabled} onChange={fld('printerEnabled')} />
+          <label className="mlabel" htmlFor="profile-printer-enabled" style={{margin:0}}>Invoice Printer</label>
+          <input type="checkbox" id="profile-printer-enabled" name="profile-printer-enabled" className="mtoggle" checked={!!form.printerEnabled} onChange={fld('printerEnabled')} />
         </div>
         <div className="mtoggle-row">
-          <span className="mlabel" style={{margin:0}}>Inventory Tracking</span>
-          <input type="checkbox" className="mtoggle" checked={!!form.inventoryEnabled} onChange={fld('inventoryEnabled')} />
+          <label className="mlabel" htmlFor="profile-inventory-enabled" style={{margin:0}}>Inventory Tracking</label>
+          <input type="checkbox" id="profile-inventory-enabled" name="profile-inventory-enabled" className="mtoggle" checked={!!form.inventoryEnabled} onChange={fld('inventoryEnabled')} />
         </div>
       </>
     ),
     branch: (
       <>
-        <label className="mlabel">Branch Name *</label>
-        <input className="minput" value={form.branchName || ''} onChange={fld('branchName')} placeholder="e.g. Hyderabad Central" required />
-        <label className="mlabel">Address *</label>
-        <input className="minput" value={form.address || ''} onChange={fld('address')} placeholder="Full branch address" required />
-        <label className="mlabel">Manager Name</label>
-        <input className="minput" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
+        <label className="mlabel" htmlFor="branch-new-name">Branch Name *</label>
+        <input className="minput" id="branch-new-name" name="branch-new-name" value={form.branchName || ''} onChange={fld('branchName')} placeholder="e.g. Hyderabad Central" required />
+        <label className="mlabel" htmlFor="branch-new-address">Address *</label>
+        <input className="minput" id="branch-new-address" name="branch-new-address" value={form.address || ''} onChange={fld('address')} placeholder="Full branch address" required />
+        <label className="mlabel" htmlFor="branch-new-manager">Manager Name</label>
+        <input className="minput" id="branch-new-manager" name="branch-new-manager" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
       </>
     ),
     editBranch: (
       <>
-        <label className="mlabel">Branch Name *</label>
-        <input className="minput" value={form.branchName || ''} onChange={fld('branchName')} placeholder="e.g. Hyderabad Central" required />
-        <label className="mlabel">Address *</label>
-        <input className="minput" value={form.address || ''} onChange={fld('address')} placeholder="Full branch address" required />
-        <label className="mlabel">Manager Name</label>
-        <input className="minput" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
+        <label className="mlabel" htmlFor="branch-edit-name">Branch Name *</label>
+        <input className="minput" id="branch-edit-name" name="branch-edit-name" value={form.branchName || ''} onChange={fld('branchName')} placeholder="e.g. Hyderabad Central" required />
+        <label className="mlabel" htmlFor="branch-edit-address">Address *</label>
+        <input className="minput" id="branch-edit-address" name="branch-edit-address" value={form.address || ''} onChange={fld('address')} placeholder="Full branch address" required />
+        <label className="mlabel" htmlFor="branch-edit-manager">Manager Name</label>
+        <input className="minput" id="branch-edit-manager" name="branch-edit-manager" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
         <div className="mtoggle-row">
-          <span className="mlabel" style={{margin:0}}>Is Active</span>
-          <input type="checkbox" className="mtoggle" checked={!!form.isActive} onChange={fld('isActive')} />
+          <label className="mlabel" htmlFor="branch-edit-active" style={{margin:0}}>Is Active</label>
+          <input type="checkbox" id="branch-edit-active" name="branch-edit-active" className="mtoggle" checked={!!form.isActive} onChange={fld('isActive')} />
         </div>
       </>
     ),
@@ -423,6 +423,21 @@ const OwnerProfilePage = () => {
 
         .spinner { width:36px; height:36px; border:3px solid rgba(111,78,55,.2); border-top-color:#6F4E37; border-radius:50%; animation:spin 1s linear infinite; margin:80px auto; }
         @keyframes spin { to{transform:rotate(360deg)} }
+
+        @media(max-width:767px) {
+          .moverlay { align-items:flex-end; padding:0; }
+          .mcard {
+            width:100% !important; max-width:100% !important;
+            height:100vh !important; max-height:100vh !important;
+            border-radius:0 !important; border:none !important;
+            margin:0 !important; padding:16px !important;
+            display:flex !important; flex-direction:column !important;
+          }
+          .mfooter {
+            position:sticky; bottom:0; background:#1F140E;
+            padding:16px 0 8px 0; z-index:10;
+          }
+        }
       `}</style>
 
       {toast && <div className={`toast ${toast.ok ? 'tok' : 'terr'}`}>{toast.ok ? '✓' : '⚠'} {toast.msg}</div>}

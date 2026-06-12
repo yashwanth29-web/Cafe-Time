@@ -1,36 +1,76 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getMenu } from '../services/api';
+import { getMenu, getCategories } from '../services/api';
 import MenuCard from '../components/MenuCard';
 
 const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) => {
   const [menuItems, setMenuItems] = useState([]);
+  const [categories, setCategories] = useState(['All']);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    const fetchMenu = async () => {
+    let isMounted = true;
+    const fetchMenuAndCategories = async (isFirst = false) => {
+      if (isFirst) setLoading(true);
       try {
-        const response = await getMenu();
-        if (response.success) {
-          setMenuItems(response.data);
+        const [menuRes, catsRes] = await Promise.all([
+          getMenu(),
+          getCategories().catch(err => {
+            console.error('Failed to fetch categories:', err);
+            return null;
+          })
+        ]);
+
+        if (!isMounted) return;
+
+        let menuData = [];
+        if (menuRes && menuRes.success) {
+          setMenuItems(menuRes.data);
+          menuData = menuRes.data;
           setErrorMsg('');
-        } else {
+        } else if (isFirst) {
           setErrorMsg('Failed to load menu items.');
         }
+
+        if (catsRes && catsRes.success) {
+          const dbCategories = catsRes.data.map(c => c.name);
+          // Only show categories that have at least one active item
+          const activeCats = dbCategories.filter(cat => 
+            menuData.some(item => item.category === cat && item.available)
+          );
+          // Add any remaining uncategorized items if they exist
+          const hasUncategorized = menuData.some(item => 
+            (!item.category || !dbCategories.includes(item.category)) && item.available
+          );
+          if (hasUncategorized && !activeCats.includes('Uncategorized')) {
+            activeCats.push('Uncategorized');
+          }
+          setCategories(['All', ...activeCats]);
+        } else {
+          // Fallback to extract unique categories from menu items
+          const uniqueCats = ['All', ...new Set(menuData.filter(item => item.available).map(item => item.category))];
+          setCategories(uniqueCats);
+        }
       } catch (err) {
-        console.error('Error fetching menu:', err);
-        setErrorMsg('Could not connect to database.');
+        console.error('Error fetching menu/categories:', err);
+        if (isFirst && isMounted) {
+          setErrorMsg('Could not connect to database.');
+        }
       } finally {
-        setLoading(false);
+        if (isFirst && isMounted) setLoading(false);
       }
     };
-    fetchMenu();
-  }, []);
 
-  // Dynamically extract unique categories from DB items
-  const categories = ['All', ...new Set(menuItems.map(item => item.category))];
+    fetchMenuAndCategories(true);
+    const interval = setInterval(() => fetchMenuAndCategories(false), 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Filter menu items by category and availability
   const filteredMenu = menuItems.filter((item) => {

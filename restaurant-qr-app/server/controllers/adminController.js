@@ -11,26 +11,28 @@ const Razorpay = require('razorpay');
  * Register a new Staff member bound to the Owner's cafe
  */
 const createStaff = async (req, res) => {
-  const { name, email, phone, staffRole } = req.body;
+  const { name, email, phone, staffRole, assignedBranch, isActive } = req.body;
   const cafeId = req.user.cafeId;
 
-  if (!name || !email || !phone || !staffRole) {
-    return res.status(400).json({ success: false, message: 'All fields are required' });
+  if (!name || !phone || !staffRole) {
+    return res.status(400).json({ success: false, message: 'Name, Phone, and Role are required' });
   }
 
   if (!cafeId) {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
-
   try {
-    const existingUser = await User.findOne({ email: cleanEmail });
-    if (existingUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `An account with email ${email} is already registered.` 
-      });
+    let cleanEmail = undefined;
+    if (email && email.trim() !== '') {
+      cleanEmail = email.trim().toLowerCase();
+      const existingUser = await User.findOne({ email: cleanEmail });
+      if (existingUser) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `An account with email ${email} is already registered.` 
+        });
+      }
     }
 
     const cafe = await Cafe.findOne({ cafeId });
@@ -43,25 +45,38 @@ const createStaff = async (req, res) => {
       targetRole = sRoleLower;
     }
 
+    // Auto-generate unique Employee ID
+    let employeeId;
+    let exists = true;
+    while (exists) {
+      employeeId = `EMP-${Math.floor(100000 + Math.random() * 900000)}`;
+      const existingEmp = await User.findOne({ employeeId });
+      if (!existingEmp) exists = false;
+    }
+
     const newStaff = await User.create({
       name: name.trim(),
-      email: cleanEmail,
+      email: cleanEmail || undefined,
       phone: phone.trim(),
       role: targetRole,
       staffRole: staffRole.trim(),
+      employeeId,
+      assignedBranch: assignedBranch || '',
       cafeId,
-      isActive: true
+      isActive: isActive !== undefined ? isActive : true
     });
 
-    emailService.sendWelcomeEmail(cleanEmail, name, targetRole, {
-      cafeName,
-      cafeId,
-      staffRole
-    });
+    if (cleanEmail) {
+      emailService.sendWelcomeEmail(cleanEmail, name, targetRole, {
+        cafeName,
+        cafeId,
+        staffRole
+      });
+    }
 
     return res.status(201).json({
       success: true,
-      message: `Staff member "${name}" registered successfully with role "${targetRole}".`,
+      message: `Staff member "${name}" registered successfully with Employee ID "${employeeId}".`,
       staff: newStaff
     });
   } catch (error) {
@@ -81,10 +96,19 @@ const getStaff = async (req, res) => {
   }
 
   try {
-    const staff = await User.find({ 
+    const query = { 
       cafeId, 
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] } 
-    }).sort({ createdAt: -1 });
+    };
+
+    if (req.user.role === 'manager') {
+      if (req.user.assignedBranch) {
+        query.assignedBranch = req.user.assignedBranch;
+      }
+      query._id = { $ne: req.user._id };
+    }
+
+    const staff = await User.find(query).sort({ createdAt: -1 });
     
     return res.status(200).json({ success: true, staff });
   } catch (error) {
@@ -98,7 +122,7 @@ const getStaff = async (req, res) => {
  */
 const updateStaff = async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, staffRole, isActive } = req.body;
+  const { name, email, phone, staffRole, assignedBranch, isActive } = req.body;
   const cafeId = req.user.cafeId;
 
   if (!cafeId) {
@@ -112,14 +136,18 @@ const updateStaff = async (req, res) => {
     }
 
     if (name) staffMember.name = name.trim();
-    if (email) {
-      const cleanEmail = email.trim().toLowerCase();
-      // Check if email is already taken by another user
-      const existingUser = await User.findOne({ email: cleanEmail, _id: { $ne: id } });
-      if (existingUser) {
-        return res.status(400).json({ success: false, message: `An account with email ${email} is already registered.` });
+    if (email !== undefined) {
+      if (email && email.trim() !== '') {
+        const cleanEmail = email.trim().toLowerCase();
+        // Check if email is already taken by another user
+        const existingUser = await User.findOne({ email: cleanEmail, _id: { $ne: id } });
+        if (existingUser) {
+          return res.status(400).json({ success: false, message: `An account with email ${email} is already registered.` });
+        }
+        staffMember.email = cleanEmail;
+      } else {
+        staffMember.email = undefined;
       }
-      staffMember.email = cleanEmail;
     }
     if (phone) staffMember.phone = phone.trim();
     if (staffRole) {
@@ -130,6 +158,9 @@ const updateStaff = async (req, res) => {
         targetRole = sRoleLower;
       }
       staffMember.role = targetRole;
+    }
+    if (assignedBranch !== undefined) {
+      staffMember.assignedBranch = assignedBranch;
     }
     if (isActive !== undefined) {
       staffMember.isActive = isActive;
@@ -338,12 +369,23 @@ const saveSetupData = async (req, res) => {
               targetRole = sRole;
             }
 
+            // Auto-generate unique Employee ID
+            let employeeId;
+            let exists = true;
+            while (exists) {
+              employeeId = `EMP-${Math.floor(100000 + Math.random() * 900000)}`;
+              const existingEmp = await User.findOne({ employeeId });
+              if (!existingEmp) exists = false;
+            }
+
             await User.create({
               name: staff.name.trim(),
               email: cleanEmail,
               phone: staff.phone.trim(),
               role: targetRole,
               staffRole: staff.staffRole || 'staff',
+              employeeId,
+              assignedBranch: staff.assignedBranch || '',
               cafeId,
               isActive: true
             });
@@ -410,7 +452,7 @@ const getBranches = async (req, res) => {
  */
 const createBranch = async (req, res) => {
   const cafeId = req.user.cafeId;
-  const { branchName, address, manager, isActive } = req.body;
+  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius } = req.body;
   if (!branchName || !address) {
     return res.status(400).json({ success: false, message: 'Branch Name and Address are required' });
   }
@@ -422,6 +464,9 @@ const createBranch = async (req, res) => {
       cafeId,
       address: address.trim(),
       manager: (manager || '').trim(),
+      latitude: latitude !== undefined ? Number(latitude) : 0,
+      longitude: longitude !== undefined ? Number(longitude) : 0,
+      allowedRadius: allowedRadius !== undefined ? Number(allowedRadius) : 30,
       isActive: isActive !== undefined ? isActive : true
     });
     return res.status(201).json({ success: true, branch: newBranch });
@@ -495,7 +540,7 @@ const uploadLogo = async (req, res) => {
 const updateBranch = async (req, res) => {
   const { id } = req.params;
   const cafeId = req.user.cafeId;
-  const { branchName, address, manager, isActive } = req.body;
+  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius } = req.body;
 
   if (!cafeId) {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
@@ -510,6 +555,9 @@ const updateBranch = async (req, res) => {
     if (branchName) branch.branchName = branchName.trim();
     if (address) branch.address = address.trim();
     if (manager !== undefined) branch.manager = manager.trim();
+    if (latitude !== undefined) branch.latitude = Number(latitude);
+    if (longitude !== undefined) branch.longitude = Number(longitude);
+    if (allowedRadius !== undefined) branch.allowedRadius = Number(allowedRadius);
     if (isActive !== undefined) branch.isActive = isActive;
 
     await branch.save();

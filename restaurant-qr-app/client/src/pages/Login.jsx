@@ -83,6 +83,7 @@ const Login = () => {
             <input
               type="email"
               id="email"
+              name="email"
               className="auth-input"
               placeholder="name@cafe.com"
               value={email}

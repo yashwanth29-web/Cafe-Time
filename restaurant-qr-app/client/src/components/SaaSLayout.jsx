@@ -9,7 +9,9 @@ const SaaSLayout = ({ children }) => {
   const location = useLocation();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    return window.innerWidth >= 768 && window.innerWidth < 1024;
+  });
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
@@ -62,6 +64,7 @@ const SaaSLayout = ({ children }) => {
           { label: 'Cafe Menu', icon: '🍽️', path: '/owner/dashboard?tab=menu' },
           { label: 'Staff Roster', icon: '👥', path: '/owner/dashboard?tab=staff' },
           { label: 'Inventory', icon: '📦', path: '/owner/dashboard?tab=inventory' },
+          { label: 'Daily Work Reports', icon: '📝', path: '/owner/dashboard?tab=reports' },
           { label: 'Monitor Orders', icon: '👁️', path: '/owner/dashboard?tab=orders' },
           { label: 'Cafe Profile & Branches', icon: 'ℹ️', path: '/owner/profile' },
           { label: 'Settings & QR', icon: '⚙️', path: '/owner/dashboard?tab=settings' }
@@ -79,20 +82,26 @@ const SaaSLayout = ({ children }) => {
           { label: 'Active Cooking', icon: '👨‍🍳', path: '/kitchen/dashboard' },
           { label: 'Kitchen Tickets', icon: '📋', path: '/kitchen/dashboard?tab=kot' },
           { label: 'Ingredient Stock', icon: '📦', path: '/kitchen/dashboard?tab=inventory' },
-          { label: 'Cafe Menu & Recipes', icon: '📋', path: '/kitchen/dashboard?tab=menu' }
+          { label: 'Cafe Menu & Recipes', icon: '📋', path: '/kitchen/dashboard?tab=menu' },
+          { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
+          { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }
         ];
       case 'waiter':
       case 'staff':
         return [
           { label: 'Live Tables', icon: '🍽️', path: '/waiter/dashboard' },
           { label: 'Customer Requests', icon: '🛎️', path: '/waiter/dashboard?tab=requests' },
-          { label: 'Item Availability', icon: '📦', path: '/waiter/dashboard?tab=inventory' }
+          { label: 'Item Availability', icon: '📦', path: '/waiter/dashboard?tab=inventory' },
+          { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
+          { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }
         ];
       case 'cashier':
         return [
           { label: 'Counter Billing', icon: '💳', path: '/cashier/dashboard' },
           { label: 'Receipt Logs', icon: '📝', path: '/cashier/dashboard?tab=receipts' },
-          { label: 'Item Availability', icon: '📦', path: '/cashier/dashboard?tab=inventory' }
+          { label: 'Item Availability', icon: '📦', path: '/cashier/dashboard?tab=inventory' },
+          { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
+          { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }
         ];
       default:
         return [];
@@ -231,6 +240,58 @@ const SaaSLayout = ({ children }) => {
             );
           })}
         </nav>
+        
+        {/* Mobile Drawer Profile Footer */}
+        <div style={{
+          marginTop: 'auto',
+          padding: '20px',
+          borderTop: '1px solid #2d2d2d',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              backgroundColor: '#3f3f3f',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              fontSize: '14px',
+              border: '2px solid #5C4331'
+            }}>
+              {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>{user.name}</span>
+              <span style={{ fontSize: '11px', color: '#A0826C' }}>{formatRoleLabel(userRole)}</span>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              width: '100%',
+              padding: '10px',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'rgba(231, 76, 60, 0.12)',
+              color: '#e74c3c',
+              fontSize: '13.5px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
+          >
+            🚪 Sign Out
+          </button>
+        </div>
       </aside>
 
       {/* Mobile Top Header */}
@@ -363,42 +424,93 @@ const SaaSLayout = ({ children }) => {
         borderRight: '1px solid #2d2d2d',
         display: 'flex',
         flexDirection: 'column',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        zIndex: 100,
-        position: 'relative'
+        height: '100vh',
+        position: 'sticky',
+        top: 0,
+        transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        zIndex: 100
       }}>
-        {/* Brand/Logo */}
+        {/* Brand/Logo Header (Fixed) */}
         <div style={{
-          padding: '24px 20px',
+          padding: sidebarCollapsed ? '20px 8px' : '20px 16px',
           borderBottom: '1px solid #2d2d2d',
           display: 'flex',
+          flexDirection: sidebarCollapsed ? 'column' : 'row',
           alignItems: 'center',
-          gap: '12px',
-          justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+          justifyContent: sidebarCollapsed ? 'center' : 'space-between',
+          gap: sidebarCollapsed ? '12px' : '0',
+          flexShrink: 0,
+          minHeight: '70px',
           overflow: 'hidden'
         }}>
+          {/* Logo and Name */}
           <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--color-primary, #ff6b08) 0%, #aa820a 100%)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '18px',
-            flexShrink: 0
+            gap: '12px',
+            justifyContent: sidebarCollapsed ? 'center' : 'flex-start'
           }}>
-            ☕
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--color-primary, #ff6b08) 0%, #aa820a 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+              flexShrink: 0
+            }}>
+              ☕
+            </div>
+            {!sidebarCollapsed && (
+              <span style={{ fontSize: '18px', fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
+                Cypher's Café
+              </span>
+            )}
           </div>
-          {!sidebarCollapsed && (
-            <span style={{ fontSize: '18px', fontWeight: 900, color: '#fff', letterSpacing: '-0.5px' }}>
-              Cypher's Café
-            </span>
-          )}
+
+          {/* Toggle Control */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            title={sidebarCollapsed ? "Expand Menu" : "Hide Menu"}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: sidebarCollapsed ? '32px' : '28px',
+              height: sidebarCollapsed ? '32px' : '28px',
+              borderRadius: '6px',
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.04)',
+              color: '#A0826C',
+              cursor: 'pointer',
+              fontSize: '12px',
+              transition: 'all 0.2s ease',
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.color = '#fff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+              e.currentTarget.style.color = '#A0826C';
+            }}
+          >
+            {sidebarCollapsed ? '▶' : '◀'}
+          </button>
         </div>
 
-        {/* Navigation Items */}
-        <nav style={{ padding: '20px 10px', flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {/* Navigation Items (Scrollable) */}
+        <nav style={{
+          padding: '20px 10px',
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          overflowY: 'auto'
+        }}>
           {navItems.map((item, index) => {
             const isActive = location.pathname + location.search === item.path || 
               (location.pathname === item.path.split('?')[0] && !location.search && !item.path.includes('?'));
@@ -407,14 +519,16 @@ const SaaSLayout = ({ children }) => {
               <button
                 key={index}
                 onClick={() => navigate(item.path)}
+                title={sidebarCollapsed ? item.label : ''}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: sidebarCollapsed ? '0' : '12px',
                   justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
                   padding: '12px 14px',
-                  borderRadius: '10px',
+                  borderRadius: sidebarCollapsed ? '8px' : '10px',
                   border: 'none',
+                  borderLeft: isActive ? '4px solid var(--color-primary, #ff6b08)' : '4px solid transparent',
                   background: isActive ? 'rgba(255, 107, 8, 0.12)' : 'transparent',
                   color: isActive ? 'var(--color-primary, #ff6b08)' : '#A0826C',
                   fontSize: '14.5px',
@@ -425,28 +539,14 @@ const SaaSLayout = ({ children }) => {
                   textAlign: 'left'
                 }}
               >
-                <span style={{ fontSize: '18px' }}>{item.icon}</span>
+                <span style={{ fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {item.icon}
+                </span>
                 {!sidebarCollapsed && <span>{item.label}</span>}
               </button>
             );
           })}
         </nav>
-
-        {/* Sidebar Collapse Toggle */}
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          style={{
-            border: 'none',
-            background: 'rgba(255, 255, 255, 0.03)',
-            padding: '10px',
-            color: '#A0826C',
-            cursor: 'pointer',
-            fontSize: '14px',
-            borderTop: '1px solid #2d2d2d'
-          }}
-        >
-          {sidebarCollapsed ? '➡️' : '⬅️ Collapse Sidebar'}
-        </button>
       </aside>
 
       {/* Main Content Pane */}
@@ -460,7 +560,10 @@ const SaaSLayout = ({ children }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          zIndex: 90
+          zIndex: 90,
+          position: 'sticky',
+          top: 0,
+          flexShrink: 0
         }}>
           {/* Left: Branch Indicator */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -669,58 +772,6 @@ const SaaSLayout = ({ children }) => {
           {children}
         </main>
       </div>
-
-      {/* Mobile Bottom Navigation (Shown only on Mobile via CSS) */}
-      <nav className="bottom-nav" style={{ backgroundColor: '#FF9F00' /* custom color like in image */ }}>
-        {getBottomNavItems().map((item, index) => {
-          const isActive = isTabActive(item);
-          return (
-            <button
-              key={index}
-              className={`bnav-item ${isActive ? 'active' : ''}`}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flex: 1,
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                color: isActive ? '#fff' : '#4E3629',
-                padding: '8px 0',
-                transition: 'all 0.2s ease'
-              }}
-              onClick={() => {
-                if (item.action === 'profile') {
-                  setProfileDropdownOpen(!profileDropdownOpen);
-                } else if (item.path) {
-                  navigate(item.path);
-                  setProfileDropdownOpen(false);
-                }
-              }}
-            >
-              <div className="bnav-icon" style={{
-                fontSize: '22px',
-                marginBottom: '2px',
-                backgroundColor: isActive ? 'rgba(255, 255, 255, 0.25)' : 'transparent',
-                borderRadius: '16px',
-                padding: '4px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                {item.icon}
-              </div>
-              <span className="bnav-label" style={{
-                fontSize: '11px',
-                fontWeight: isActive ? '800' : '600',
-                color: isActive ? '#fff' : '#4E3629'
-              }}>{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
     </div>
   );
 };

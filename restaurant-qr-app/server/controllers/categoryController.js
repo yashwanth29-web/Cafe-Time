@@ -25,7 +25,7 @@ const seedDefaultCategories = async (cafeId) => {
 const getCategories = async (req, res) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
-    let categories = await Category.find({ cafeId }).sort({ name: 1 });
+    let categories = await Category.find({ cafeId }).sort({ displayOrder: 1, name: 1 });
 
     if (categories.length === 0) {
       categories = await seedDefaultCategories(cafeId);
@@ -136,7 +136,6 @@ const deleteCategory = async (req, res) => {
       { category: categoryName },
       { category: 'Uncategorized' }
     );
-
     return res.status(200).json({ success: true, message: 'Category deleted successfully, items moved to Uncategorized' });
   } catch (error) {
     console.error('Error deleting category:', error);
@@ -144,9 +143,38 @@ const deleteCategory = async (req, res) => {
   }
 };
 
+// @desc    Reorder categories display order
+// @route   PUT /api/categories/reorder
+// @access  Protected (Owner/Admin)
+const reorderCategories = async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    const cafeId = req.user.cafeId || 'CD001';
+
+    if (!orderedIds || !Array.isArray(orderedIds)) {
+      return res.status(400).json({ success: false, message: 'Please provide an array of category IDs' });
+    }
+
+    const bulkOps = orderedIds.map((id, index) => ({
+      updateOne: {
+        filter: { _id: id, cafeId },
+        update: { $set: { displayOrder: index } }
+      }
+    }));
+
+    await Category.bulkWrite(bulkOps);
+
+    return res.status(200).json({ success: true, message: 'Categories reordered successfully' });
+  } catch (error) {
+    console.error('Error reordering categories:', error);
+    return res.status(500).json({ success: false, message: 'Server error while reordering categories', error: error.message });
+  }
+};
+
 module.exports = {
   getCategories,
   createCategory,
   updateCategory,
-  deleteCategory
+  deleteCategory,
+  reorderCategories
 };

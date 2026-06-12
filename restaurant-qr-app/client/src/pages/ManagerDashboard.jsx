@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
-import { getOrders, getStaff, getInventory, updateInventoryItem, recordPurchase, recordWastage, getMenu, updateMenuItem } from '../services/api';
+import { getOrders, getStaff, getInventory, updateInventoryItem, recordPurchase, recordWastage, getMenu, updateMenuItem, getCafeInfo } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
 
@@ -11,6 +11,23 @@ const ManagerDashboard = () => {
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [cafeInfo, setCafeInfo] = useState(null);
+
+  useEffect(() => {
+    const fetchCafe = async () => {
+      if (user?.cafeId) {
+        try {
+          const res = await getCafeInfo(user.cafeId);
+          if (res.success) {
+            setCafeInfo(res.data);
+          }
+        } catch (e) {
+          console.error('Error fetching cafe info:', e);
+        }
+      }
+    };
+    fetchCafe();
+  }, [user]);
   
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
@@ -202,6 +219,13 @@ const ManagerDashboard = () => {
 
   useEffect(() => {
     fetchInitialData();
+
+    // Polling every 5 seconds for real-time updates
+    const pollingInterval = setInterval(() => {
+      fetchInitialData();
+    }, 5000);
+
+    return () => clearInterval(pollingInterval);
   }, []);
 
   const handleAttendanceChange = (staffId, status) => {
@@ -267,16 +291,16 @@ const ManagerDashboard = () => {
       )}
 
       {/* Manager Summary Analytics widgets */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '10px' }}>
+      <div className="stat-card-grid" style={{ marginBottom: '30px' }}>
+        <div className="stat-card">
           <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Today's Settle Revenue</span>
           <h3 style={{ fontSize: '1.6rem', margin: '5px 0 0 0', color: '#27AE60' }}>₹{todaySales.toFixed(2)}</h3>
         </div>
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '10px' }}>
+        <div className="stat-card">
           <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Orders in Kitchen Queue</span>
           <h3 style={{ fontSize: '1.6rem', margin: '5px 0 0 0', color: '#ff9800' }}>{activeCount} active</h3>
         </div>
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '10px' }}>
+        <div className="stat-card">
           <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Low Stock Ingredients</span>
           <h3 style={{ fontSize: '1.6rem', margin: '5px 0 0 0', color: lowStockItems.length > 0 ? '#E74C3C' : '#27AE60' }}>
             {lowStockItems.length} alerts
@@ -284,28 +308,7 @@ const ManagerDashboard = () => {
         </div>
       </div>
 
-      {/* Tabs Menu */}
-      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid #5C4331', paddingBottom: '12px', marginBottom: '25px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', whiteSpace: 'nowrap' }}>
-        {['reports', 'orders', 'attendance', 'inventory', 'menu'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              background: activeTab === tab ? '#6F4E37' : 'transparent',
-              border: activeTab === tab ? '1px solid #6F4E37' : '1px solid #5C4331',
-              color: activeTab === tab ? '#fff' : '#A0826C',
-              padding: '8px 16px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              textTransform: 'capitalize',
-              flexShrink: 0
-            }}
-          >
-            {tab === 'reports' ? 'Stats' : tab}
-          </button>
-        ))}
-      </div>
+      {/* Tabs Menu removed to prevent duplicate navigation */}
 
       {/* Tab Contents */}
       {loading ? (
@@ -365,8 +368,8 @@ const ManagerDashboard = () => {
                         </td>
                         <td style={{ padding: '10px 8px' }}>
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                            <button onClick={() => printKOT(order)} style={{ background: '#34495E', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
-                            <button onClick={() => printPOSReceipt(order)} style={{ background: '#2980B9', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
+                            <button onClick={() => printKOT(order, user, cafeInfo)} style={{ background: '#34495E', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
+                            <button onClick={() => printPOSReceipt(order, user, cafeInfo)} style={{ background: '#2980B9', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
                           </div>
                         </td>
                       </tr>
@@ -411,8 +414,8 @@ const ManagerDashboard = () => {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', borderTop: '1px dashed var(--color-border)', paddingTop: '10px' }}>
-                        <button onClick={() => printKOT(order)} style={{ flex: 1, background: '#34495E', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}>🖨️ KOT</button>
-                        <button onClick={() => printPOSReceipt(order)} style={{ flex: 1, background: '#2980B9', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}>🖨️ POS Bill</button>
+                        <button onClick={() => printKOT(order, user, cafeInfo)} style={{ flex: 1, background: '#34495E', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}>🖨️ KOT</button>
+                        <button onClick={() => printPOSReceipt(order, user, cafeInfo)} style={{ flex: 1, background: '#2980B9', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}>🖨️ POS Bill</button>
                       </div>
                     </div>
                   ))}
@@ -732,7 +735,7 @@ const ManagerDashboard = () => {
           {activeTab === 'reports' && (
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
               <h3 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.2rem' }}>📊 End-of-Day Daily Statement</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+              <div className="form-row" style={{ gap: '30px' }}>
                 <div style={{ borderRight: '1px solid #5C4331', paddingRight: '30px' }}>
                   <h4 style={{ color: 'var(--color-primary)', margin: '0 0 15px 0' }}>Sales Highlights</h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -887,11 +890,11 @@ const ManagerDashboard = () => {
             <form onSubmit={handleUpdateStock}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Ingredient: <strong>{selectedItem.name}</strong></label>
+                  <span className="form-label">Ingredient: <strong>{selectedItem.name}</strong></span>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Quantity ({selectedItem.unit}) *</label>
-                  <input type="number" required value={stockForm.quantity} onChange={(e) => setStockForm({ quantity: Number(e.target.value) })} className="form-input" />
+                  <label htmlFor="stock-qty-input" className="form-label">Quantity ({selectedItem.unit}) *</label>
+                  <input type="number" id="stock-qty-input" name="stock-qty-input" required value={stockForm.quantity} onChange={(e) => setStockForm({ quantity: Number(e.target.value) })} className="form-input" />
                 </div>
               </div>
               <div className="modal-footer">
@@ -914,25 +917,25 @@ const ManagerDashboard = () => {
             <form onSubmit={handleRecordPurchase}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Ingredient: <strong>{selectedItem.name}</strong></label>
+                  <span className="form-label">Ingredient: <strong>{selectedItem.name}</strong></span>
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Quantity Purchased *</label>
-                    <input type="number" required min="1" value={purchaseForm.quantityAdded} onChange={(e) => setPurchaseForm({ ...purchaseForm, quantityAdded: Number(e.target.value) })} className="form-input" />
+                    <label htmlFor="purchase-qty-input" className="form-label">Quantity Purchased *</label>
+                    <input type="number" id="purchase-qty-input" name="purchase-qty-input" required min="1" value={purchaseForm.quantityAdded} onChange={(e) => setPurchaseForm({ ...purchaseForm, quantityAdded: Number(e.target.value) })} className="form-input" />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Cost Price per Unit (₹) *</label>
-                    <input type="number" step="0.001" required min="0.001" value={purchaseForm.costPrice} onChange={(e) => setPurchaseForm({ ...purchaseForm, costPrice: Number(e.target.value) })} className="form-input" />
+                    <label htmlFor="purchase-cost-input" className="form-label">Cost Price per Unit (₹) *</label>
+                    <input type="number" step="0.001" id="purchase-cost-input" name="purchase-cost-input" required min="0.001" value={purchaseForm.costPrice} onChange={(e) => setPurchaseForm({ ...purchaseForm, costPrice: Number(e.target.value) })} className="form-input" />
                   </div>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Supplier *</label>
-                  <input type="text" required value={purchaseForm.supplier} onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" />
+                  <label htmlFor="purchase-supplier-input" className="form-label">Supplier *</label>
+                  <input type="text" id="purchase-supplier-input" name="purchase-supplier-input" required value={purchaseForm.supplier} onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Notes</label>
-                  <textarea value={purchaseForm.notes} onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })} className="form-input" rows="2" placeholder="e.g. Regular restocking"></textarea>
+                  <label htmlFor="purchase-notes-input" className="form-label">Notes</label>
+                  <textarea id="purchase-notes-input" name="purchase-notes-input" value={purchaseForm.notes} onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })} className="form-input" rows="2" placeholder="e.g. Regular restocking"></textarea>
                 </div>
               </div>
               <div className="modal-footer">
@@ -955,24 +958,24 @@ const ManagerDashboard = () => {
             <form onSubmit={handleRecordWastage}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Ingredient: <strong>{selectedItem.name}</strong></label>
+                  <span className="form-label">Ingredient: <strong>{selectedItem.name}</strong></span>
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label className="form-label">Quantity Wasted *</label>
-                    <input type="number" required min="1" value={wastageForm.quantityWasted} onChange={(e) => setWastageForm({ ...wastageForm, quantityWasted: Number(e.target.value) })} className="form-input" />
+                    <label htmlFor="wastage-qty-input" className="form-label">Quantity Wasted *</label>
+                    <input type="number" id="wastage-qty-input" name="wastage-qty-input" required min="1" value={wastageForm.quantityWasted} onChange={(e) => setWastageForm({ ...wastageForm, quantityWasted: Number(e.target.value) })} className="form-input" />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Wastage Type *</label>
-                    <select value={wastageForm.type} onChange={(e) => setWastageForm({ ...wastageForm, type: e.target.value })} className="form-input">
+                    <label htmlFor="wastage-type-select" className="form-label">Wastage Type *</label>
+                    <select id="wastage-type-select" name="wastage-type-select" value={wastageForm.type} onChange={(e) => setWastageForm({ ...wastageForm, type: e.target.value })} className="form-input">
                       <option value="Wastage">Spoiled / Expired (Wastage)</option>
                       <option value="Damaged">Damaged / Dropped (Damaged)</option>
                     </select>
                   </div>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Reason / Notes *</label>
-                  <input type="text" required value={wastageForm.reason} onChange={(e) => setWastageForm({ ...wastageForm, reason: e.target.value })} className="form-input" placeholder="e.g. Expired, dropped tray" />
+                  <label htmlFor="wastage-reason-input" className="form-label">Reason / Notes *</label>
+                  <input type="text" id="wastage-reason-input" name="wastage-reason-input" required value={wastageForm.reason} onChange={(e) => setWastageForm({ ...wastageForm, reason: e.target.value })} className="form-input" placeholder="e.g. Expired, dropped tray" />
                 </div>
               </div>
               <div className="modal-footer">
@@ -995,11 +998,11 @@ const ManagerDashboard = () => {
             <form onSubmit={handleUpdatePrice}>
               <div className="modal-body">
                 <div className="form-group" style={{ marginBottom: '15px' }}>
-                  <label className="form-label">Dish Name: <strong style={{ color: '#fff' }}>{updatingItem.name}</strong></label>
+                  <span className="form-label">Dish Name: <strong style={{ color: '#fff' }}>{updatingItem.name}</strong></span>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Price (₹) *</label>
-                  <input type="number" step="0.01" min="0.01" required value={newPrice} onChange={(e) => setNewPrice(e.target.value)} className="form-input" />
+                  <label htmlFor="dish-price-input" className="form-label">Price (₹) *</label>
+                  <input type="number" step="0.01" min="0.01" id="dish-price-input" name="dish-price-input" required value={newPrice} onChange={(e) => setNewPrice(e.target.value)} className="form-input" />
                 </div>
               </div>
               <div className="modal-footer">

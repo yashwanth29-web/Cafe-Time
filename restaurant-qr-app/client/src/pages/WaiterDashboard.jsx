@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
-import { getOrders, updateOrderStatus, getInventory } from '../services/api';
+import { getOrders, updateOrderStatus, getInventory, getCafeInfo } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
 
@@ -15,6 +15,23 @@ const WaiterDashboard = () => {
   
   const [inventory, setInventory] = useState([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [cafeInfo, setCafeInfo] = useState(null);
+
+  useEffect(() => {
+    const fetchCafe = async () => {
+      if (user?.cafeId) {
+        try {
+          const res = await getCafeInfo(user.cafeId);
+          if (res.success) {
+            setCafeInfo(res.data);
+          }
+        } catch (e) {
+          console.error('Error fetching cafe info:', e);
+        }
+      }
+    };
+    fetchCafe();
+  }, [user]);
 
   useEffect(() => {
     if (tabParam) {
@@ -200,7 +217,7 @@ const WaiterDashboard = () => {
                   </div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <button
-                      onClick={() => printPOSReceipt(order)}
+                      onClick={() => printPOSReceipt(order, user, cafeInfo)}
                       className="touch-btn"
                       style={{
                         background: '#2980B9',
@@ -285,7 +302,7 @@ const WaiterDashboard = () => {
                   </div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <button
-                      onClick={() => printKOT(order)}
+                      onClick={() => printKOT(order, user, cafeInfo)}
                       className="touch-btn"
                       style={{
                         background: '#34495E',
@@ -302,7 +319,7 @@ const WaiterDashboard = () => {
                       🖨️ KOT
                     </button>
                     <button
-                      onClick={() => printPOSReceipt(order)}
+                      onClick={() => printPOSReceipt(order, user, cafeInfo)}
                       className="touch-btn"
                       style={{
                         background: '#2980B9',
@@ -386,7 +403,7 @@ const WaiterDashboard = () => {
                   </div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <button
-                      onClick={() => printKOT(order)}
+                      onClick={() => printKOT(order, user, cafeInfo)}
                       className="touch-btn"
                       style={{
                         background: '#34495E',

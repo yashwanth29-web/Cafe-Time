@@ -114,6 +114,11 @@ export const deleteCategory = async (id) => {
   return response.data;
 };
 
+export const reorderCategories = async (orderedIds) => {
+  const response = await API.put('/categories/reorder', { orderedIds });
+  return response.data;
+};
+
 // Payment API helpers
 export const createPaymentOrder = async (paymentData) => {
   const response = await API.post('/payment/create-order', paymentData);
@@ -335,6 +340,70 @@ export const deleteInventoryCategory = async (id) => {
   return response.data;
 };
 
+// Attendance APIs
+export const checkIn = async (attendanceData) => {
+  const response = await API.post('/attendance/check-in', attendanceData);
+  return response.data;
+};
+
+export const checkOut = async () => {
+  const response = await API.post('/attendance/check-out');
+  return response.data;
+};
+
+export const getTodayAttendanceStatus = async () => {
+  const response = await API.get('/attendance/today');
+  return response.data;
+};
+
+export const getStaffAttendanceHistory = async () => {
+  const response = await API.get('/attendance/history');
+  return response.data;
+};
+
+export const getOwnerTodayAttendance = async () => {
+  const response = await API.get('/attendance/owner/today');
+  return response.data;
+};
+
+export const getOwnerAttendanceReports = async (params) => {
+  const response = await API.get('/attendance/owner/reports', { params });
+  return response.data;
+};
+
+// Work Reports APIs
+export const submitWorkReport = async (formData) => {
+  const response = await API.post('/work-reports/submit', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+  return response.data;
+};
+
+export const getWorkReports = async (params) => {
+  const response = await API.get('/work-reports/owner', { params });
+  return response.data;
+};
+
+// Cafe Public API
+export const getCafeInfo = async (cafeId) => {
+  const response = await API.get(`/cafe/${cafeId}`);
+  return response.data;
+};
+
+// Customer Reviews APIs
+export const submitReview = async (reviewPayload) => {
+  const response = await API.post('/reviews', reviewPayload);
+  return response.data;
+};
+
+export const getReviews = async (params) => {
+  const response = await API.get('/reviews', { params });
+  return response.data;
+};
+
 export default API;
+
 
 

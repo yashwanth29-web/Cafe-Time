@@ -1,7 +1,35 @@
-import React from 'react';
+import { useState } from 'react';
 
 const MenuCard = ({ item, cartItem, addToCart, increaseQuantity, decreaseQuantity }) => {
   const { id, name, image, price, category, description, available } = item;
+
+  const isValidUrl = (url) => {
+    if (!url || typeof url !== 'string' || url.trim() === '') return false;
+    return url.startsWith('/') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/');
+  };
+
+  const getCategoryIcon = (categoryName) => {
+    const cat = (categoryName || '').toLowerCase();
+    if (cat.includes('chai') || cat.includes('tea')) return '☕';
+    if (cat.includes('coffee')) return '☕';
+    if (cat.includes('juice') || cat.includes('cooler') || cat.includes('drink') || cat.includes('beverage')) return '🥤';
+    if (cat.includes('milkshake') || cat.includes('shake')) return '🥤';
+    if (cat.includes('starter') || cat.includes('bite') || cat.includes('snack')) return '🍢';
+    if (cat.includes('fry') || cat.includes('fries') || cat.includes('potato')) return '🍟';
+    if (cat.includes('burger')) return '🍔';
+    if (cat.includes('sandwich')) return '🥪';
+    if (cat.includes('pizza')) return '🍕';
+    if (cat.includes('dessert') || cat.includes('sweet') || cat.includes('cake')) return '🍰';
+    return '🍽️';
+  };
+
+  const [imgFailed, setImgFailed] = useState(!isValidUrl(image));
+  const [prevImage, setPrevImage] = useState(image);
+
+  if (image !== prevImage) {
+    setPrevImage(image);
+    setImgFailed(!isValidUrl(image));
+  }
 
   return (
     <div className="menu-card">
@@ -12,7 +40,18 @@ const MenuCard = ({ item, cartItem, addToCart, increaseQuantity, decreaseQuantit
       )}
       
       <div className="menu-card-img-container">
-        <img src={image} alt={name} className="menu-card-img" />
+        {imgFailed ? (
+          <div className="menu-card-img-fallback">
+            <span className="menu-card-fallback-icon">{getCategoryIcon(category)}</span>
+          </div>
+        ) : (
+          <img 
+            src={image} 
+            alt={name} 
+            className="menu-card-img" 
+            onError={() => setImgFailed(true)} 
+          />
+        )}
         <span className="menu-card-badge">{category}</span>
       </div>
       

@@ -16,6 +16,10 @@ const superAdminRoutes = require('./routes/superAdminRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
+const workReportRoutes = require('./routes/workReportRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
+const cafeRoutes = require('./routes/cafeRoutes');
 
 // Create Express instance
 const app = express();
@@ -55,6 +59,10 @@ app.use('/api/superadmin', superAdminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/work-reports', workReportRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/cafe', cafeRoutes);
 
 
 // Health check endpoint
@@ -75,6 +83,13 @@ if (process.env.NODE_ENV === 'production') {
 
 // Configure Port
 const PORT = process.env.PORT || 5000;
+
+// Start background interval for purging expired daily reports (runs every 1 hour)
+const { runAutoCleanup } = require('./controllers/workReportController');
+setInterval(() => {
+  console.log('[CRON-JOB] Triggering expired work reports cleanup...');
+  runAutoCleanup();
+}, 3600000);
 
 // Start Listening
 app.listen(PORT, () => {

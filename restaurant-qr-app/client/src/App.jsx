@@ -240,6 +240,16 @@ function AppContent() {
             } 
           />
           <Route 
+            path="/staff/attendance" 
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'chef', 'cashier', 'staff']}>
+                <SaaSLayout>
+                  <StaffDashboard />
+                </SaaSLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
             path="/unauthorized" 
             element={<Unauthorized />} 
           />

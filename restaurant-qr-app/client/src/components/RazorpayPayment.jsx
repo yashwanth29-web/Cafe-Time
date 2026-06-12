@@ -5,6 +5,7 @@ const RazorpayPayment = ({
   cart,
   tableNumber,
   customerDetails,
+  specialInstructions = '',
   onPaymentSuccess,
   onPaymentError,
   isDisabled,
@@ -73,7 +74,8 @@ const RazorpayPayment = ({
           customerName: name,
           customerEmail: email,
           customerPhone: phone,
-          cafeId: cafeId || 'CD001'
+          cafeId: cafeId || 'CD001',
+          specialInstructions: specialInstructions
         };
 
         orderData = await createPaymentOrder(payload);

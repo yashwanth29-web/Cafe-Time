@@ -1,258 +1,944 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getOrders, updateOrderStatus } from '../services/api';
-import OrderCard from '../components/OrderCard';
+import { 
+  checkIn, 
+  checkOut, 
+  getTodayAttendanceStatus, 
+  getStaffAttendanceHistory,
+  submitWorkReport 
+} from '../services/api';
 import '../styles/App.css';
 
 const StaffDashboard = () => {
   const { logout, user } = useAuth();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [showHistory, setShowHistory] = useState(false);
-  const [refreshCountdown, setRefreshCountdown] = useState(5);
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  
+  // Tab control
+  const [activeTab, setActiveTab] = useState(() => tabParam || 'attendance');
 
-  const fetchOrders = async () => {
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    } else {
+      setActiveTab('attendance');
+    }
+  }, [tabParam]);
+
+  // Attendance states
+  const [todayStatus, setTodayStatus] = useState(null);
+  const [historyData, setHistoryData] = useState([]);
+  const [summary, setSummary] = useState({
+    totalWorkingHours: 0,
+    attendancePercentage: 0,
+    lateDays: 0,
+    presentDays: 0
+  });
+  
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [coords, setCoords] = useState(null);
+  const [elapsedTime, setElapsedTime] = useState('00h 00m 00s');
+
+  // Work Report states
+  const [reportNotes, setReportNotes] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filePreviews, setFilePreviews] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
+  const [reportSuccess, setReportSuccess] = useState('');
+
+  const timerRef = useRef(null);
+
+  // Fetch initial data
+  const fetchData = async () => {
     try {
-      const response = await getOrders();
-      if (response.success) {
-        // Filter orders by Staff's cafeId (if staff user has cafeId)
-        const cafeOrders = user?.cafeId 
-          ? response.data.filter(order => order.tableNumber && order.cafeId === user.cafeId) // wait, does order schema store cafeId? 
-          : response.data; // fallback in case cafeId isn't stored in order yet, let's fall back to all.
-          
-        // Let's check: order schema has tableNumber. Since tableNumber is bound to the cafe, let's show orders. 
-        // We'll show all orders if there is no cafeId match, but let's filter by table number prefix or assume orders are cafe-scoped.
-        // Wait! In the existing app, tableNumber is stored. If orders are for the cafe, we can filter or show them.
-        setOrders(response.data);
-        setErrorMsg('');
-      } else {
-        setErrorMsg('Failed to refresh orders.');
+      setLoading(true);
+      setErrorMsg('');
+      
+      const todayRes = await getTodayAttendanceStatus();
+      if (todayRes.success) {
+        setTodayStatus(todayRes);
+      }
+
+      const historyRes = await getStaffAttendanceHistory();
+      if (historyRes.success) {
+        setHistoryData(historyRes.history || []);
+        setSummary(historyRes.summary || {
+          totalWorkingHours: 0,
+          attendancePercentage: 0,
+          lateDays: 0,
+          presentDays: 0
+        });
       }
     } catch (error) {
-      console.error('Error fetching staff orders:', error);
-      setErrorMsg('Cannot connect to server orders feed.');
+      console.error('Error fetching staff attendance data:', error);
+      setErrorMsg('Failed to sync attendance details with server.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Poll for orders every 5s
   useEffect(() => {
-    fetchOrders();
-
-    const pollingInterval = setInterval(() => {
-      fetchOrders();
-      setRefreshCountdown(5);
-    }, 5000);
-
-    const countdownInterval = setInterval(() => {
-      setRefreshCountdown((prev) => (prev > 1 ? prev - 1 : 5));
-    }, 1000);
-
+    fetchData();
     return () => {
-      clearInterval(pollingInterval);
-      clearInterval(countdownInterval);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
-  const handleStatusUpdate = async (id, newStatus) => {
-    try {
-      const response = await updateOrderStatus(id, newStatus);
-      if (response.success) {
-        setOrders((prevOrders) =>
-          prevOrders.map((order) =>
-            order._id === id ? { ...order, status: newStatus } : order
-          )
-        );
-      } else {
-        alert('Failed to update order status');
+  // Update live shift duration timer
+  useEffect(() => {
+    if (todayStatus?.checkedIn && !todayStatus?.checkedOut && todayStatus?.attendance?.checkInTime) {
+      const startTime = new Date(todayStatus.attendance.checkInTime).getTime();
+      
+      if (timerRef.current) clearInterval(timerRef.current);
+      
+      const updateTimer = () => {
+        const diffMs = Date.now() - startTime;
+        if (diffMs < 0) {
+          setElapsedTime('00h 00m 00s');
+          return;
+        }
+        const totalSecs = Math.floor(diffMs / 1000);
+        const hours = Math.floor(totalSecs / 3600);
+        const minutes = Math.floor((totalSecs % 3600) / 60);
+        const seconds = totalSecs % 60;
+        
+        const pad = (num) => String(num).padStart(2, '0');
+        setElapsedTime(`${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`);
+      };
+
+      updateTimer();
+      timerRef.current = setInterval(updateTimer, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
       }
-    } catch (error) {
-      console.error('Failed updating status:', error);
-      alert('Error updating status on server.');
+      setElapsedTime('00h 00m 00s');
+    }
+  }, [todayStatus]);
+
+  // Request location and perform Check-In
+  const handleCheckIn = () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setActionLoading(true);
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoords({ latitude, longitude });
+        
+        try {
+          const userAgent = navigator.userAgent;
+          let deviceInfo = 'Web Browser';
+          if (/mobile/i.test(userAgent)) deviceInfo = 'Mobile Web Browser';
+          if (/chrome/i.test(userAgent)) deviceInfo = 'Chrome Browser';
+          if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) deviceInfo = 'Safari Browser';
+          if (/firefox/i.test(userAgent)) deviceInfo = 'Firefox Browser';
+
+          const res = await checkIn({
+            latitude,
+            longitude,
+            deviceInfo
+          });
+
+          if (res.success) {
+            setSuccessMsg(res.message || 'Check-in registered successfully!');
+            fetchData();
+          } else {
+            setErrorMsg(res.message || 'Check-in validation failed.');
+          }
+        } catch (err) {
+          console.error('Check-in error:', err);
+          setErrorMsg(err.response?.data?.message || 'Check-in request failed. Are you within the cafe geofence?');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setActionLoading(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setErrorMsg('GPS location access denied. Please grant location permissions in your browser to check in.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setErrorMsg('GPS location information is unavailable. Try turning on device location services.');
+            break;
+          case error.TIMEOUT:
+            setErrorMsg('GPS request timed out. Please try again.');
+            break;
+          default:
+            setErrorMsg('An unknown location error occurred.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  // Perform Check-Out
+  const handleCheckOut = async () => {
+    if (!window.confirm('Are you sure you want to check out from your shift?')) {
+      return;
+    }
+
+    setActionLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    
+    try {
+      const res = await checkOut();
+      if (res.success) {
+        setSuccessMsg(res.message || 'Check-out registered successfully!');
+        fetchData();
+      } else {
+        setErrorMsg(res.message || 'Check-out request failed.');
+      }
+    } catch (err) {
+      console.error('Check-out error:', err);
+      setErrorMsg(err.response?.data?.message || 'Server error processing check-out.');
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const activeOrders = orders.filter((order) => order.status === 'Placed' || order.status === 'Preparing');
-  const servedOrders = orders.filter((order) => order.status === 'Ready');
+  // File Upload Handlers for Daily Work Report
+  const handleFileChange = (e) => {
+    setReportError('');
+    setReportSuccess('');
+    
+    const files = Array.from(e.target.files);
+    
+    if (selectedFiles.length + files.length > 10) {
+      setReportError('You can upload a maximum of 10 photos per report.');
+      return;
+    }
+
+    const validFiles = [];
+    const validPreviews = [];
+
+    for (const file of files) {
+      // Validate file extension
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        setReportError(`Unsupported file format: ${file.name}. Only JPG, JPEG, PNG, and WEBP formats are supported.`);
+        return;
+      }
+
+      // Validate size (5MB = 5 * 1024 * 1024)
+      if (file.size > 5 * 1024 * 1024) {
+        setReportError(`File is too large: ${file.name}. Maximum size per image is 5MB.`);
+        return;
+      }
+
+      validFiles.push(file);
+      validPreviews.push(URL.createObjectURL(file));
+    }
+
+    setSelectedFiles((prev) => [...prev, ...validFiles]);
+    setFilePreviews((prev) => [...prev, ...validPreviews]);
+  };
+
+  const handleRemoveFile = (index) => {
+    // Revoke object URL to avoid memory leak
+    URL.revokeObjectURL(filePreviews[index]);
+
+    setSelectedFiles((prev) => prev.filter((_, idx) => idx !== index));
+    setFilePreviews((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleSubmitReport = async (e) => {
+    e.preventDefault();
+    setReportError('');
+    setReportSuccess('');
+
+    if (selectedFiles.length === 0) {
+      setReportError('Please upload at least one photo showing proof of completed work.');
+      return;
+    }
+
+    setReportLoading(true);
+
+    try {
+      const formData = new FormData();
+      selectedFiles.forEach((file) => {
+        formData.append('photos', file);
+      });
+      formData.append('notes', reportNotes);
+
+      const res = await submitWorkReport(formData);
+
+      if (res.success) {
+        setReportSuccess('Daily work report submitted successfully! Temporary records will auto-purge in 24 hours.');
+        setReportNotes('');
+        setSelectedFiles([]);
+        filePreviews.forEach(url => URL.revokeObjectURL(url));
+        setFilePreviews([]);
+      } else {
+        setReportError(res.message || 'Failed to submit work report.');
+      }
+    } catch (err) {
+      console.error('Work report submit error:', err);
+      setReportError(err.response?.data?.message || 'Server error submitting your work report.');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '--:--';
+    const d = new Date(timeStr);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
+  };
 
   return (
-    <div style={{ padding: '25px', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
-      {/* Header */}
+    <div style={{ padding: '10px 0', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
+      {/* Title Header */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        borderBottom: '2px solid #E6D5C3',
-        paddingBottom: '15px',
-        marginBottom: '30px'
+        borderBottom: '1px solid var(--color-border)',
+        paddingBottom: '16px',
+        marginBottom: '24px',
+        flexWrap: 'wrap',
+        gap: '12px'
       }}>
         <div>
-          <h1 style={{ color: '#5C4331', margin: 0, fontSize: '2rem', fontWeight: 800 }}>
-            Staff Service Board
-          </h1>
-          <p style={{ margin: '5px 0 0 0', color: '#A0826C', fontWeight: 500 }}>
-            Active Cafe: {user?.cafeId || 'Main branch'} | Staff member: {user?.name}
+          <h2 style={{ color: '#fff', margin: 0, fontSize: '1.6rem', fontWeight: 800 }}>
+            🏃‍♂️ Staff Daily Activity Station
+          </h2>
+          <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+            Record attendance and submit daily operational work proof.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <div className="refresh-indicator" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', color: '#A0826C' }}>
-            <span>Auto refresh: {refreshCountdown}s</span>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+            Assigned Branch: <strong style={{ color: '#fff' }}>{user?.assignedBranch || 'Primary Location'}</strong>
           </div>
-          <button
-            onClick={logout}
-            style={{
-              backgroundColor: '#8B4F39',
-              color: '#fff',
-              border: 'none',
-              padding: '10px 20px',
+        </div>
+      </div>
+
+      {/* Tabs Menu removed to prevent duplicate navigation */}
+
+      {/* TAB 1: ATTENDANCE & SHIFTS */}
+      {activeTab === 'attendance' && (
+        <>
+          {/* Message alerts */}
+          {errorMsg && (
+            <div style={{
+              backgroundColor: '#FDF2F2',
+              borderLeft: '4px solid #EC5B5B',
+              color: '#8A2525',
+              padding: '14px 16px',
               borderRadius: '8px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'background 0.2s'
-            }}
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
+              marginBottom: '20px',
+              fontSize: '0.9rem',
+              fontWeight: 500
+            }}>
+              ⚠️ {errorMsg}
+            </div>
+          )}
 
-      {errorMsg && (
-        <div style={{
-          backgroundColor: '#FDF2F2',
-          borderLeft: '4px solid #EC5B5B',
-          color: '#D83A3A',
-          padding: '15px',
-          borderRadius: '6px',
-          marginBottom: '20px'
-        }}>
-          ⚠️ {errorMsg}
-        </div>
-      )}
+          {successMsg && (
+            <div style={{
+              backgroundColor: '#F3FAF7',
+              borderLeft: '4px solid #0EA5E9',
+              color: '#0369A1',
+              padding: '14px 16px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              fontSize: '0.9rem',
+              fontWeight: 500
+            }}>
+              ✅ {successMsg}
+            </div>
+          )}
 
-      {/* Tab select for queue or history */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ color: '#5C4331', margin: 0, fontSize: '1.4rem', fontWeight: 700 }}>
-          {showHistory ? 'Served Orders Log' : 'Live Kitchen Queue'}
-        </h2>
-        <button
-          onClick={() => setShowHistory(!showHistory)}
-          style={{
-            backgroundColor: showHistory ? '#6F4E37' : 'transparent',
-            border: '1px solid #6F4E37',
-            color: showHistory ? '#fff' : '#6F4E37',
-            padding: '8px 16px',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '600'
-          }}
-        >
-          {showHistory ? '👁️ View Active Queue' : `📜 Served History (${servedOrders.length})`}
-        </button>
-      </div>
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '100px 0' }}>
-          <div style={{
-            border: '4px solid #F3F3F3',
-            borderTop: '4px solid #6F4E37',
-            borderRadius: '50%',
-            width: '40px',
-            height: '40px',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 15px auto'
-          }} />
-          <p style={{ color: '#A0826C' }}>Updating order status feed...</p>
-        </div>
-      ) : (
-        <div>
-          {!showHistory ? (
-            <div>
-              {activeOrders.length === 0 ? (
-                <div style={{
-                  padding: '60px 20px',
-                  textAlign: 'center',
-                  background: '#FAF6F0',
-                  borderRadius: '12px',
-                  border: '1px dashed #E6D5C3',
-                  color: '#A0826C'
-                }}>
-                  🎉 All orders fulfilled! No active orders.
-                </div>
-              ) : (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                  gap: '20px'
-                }}>
-                  {activeOrders.map((order) => (
-                    <OrderCard
-                      key={order._id}
-                      order={order}
-                      onStatusUpdate={handleStatusUpdate}
-                    />
-                  ))}
-                </div>
-              )}
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '80px 0' }}>
+              <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary, #ff6b08)' }} />
+              <p style={{ color: 'var(--color-text-secondary)' }}>Syncing attendance panel status...</p>
             </div>
           ) : (
-            <div>
-              {servedOrders.length === 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+              
+              {/* Main Action Block and Stats Block */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+                
+                {/* Today's Shift Status Card */}
                 <div style={{
-                  padding: '60px 20px',
-                  textAlign: 'center',
-                  background: '#FAF6F0',
-                  borderRadius: '12px',
-                  border: '1px dashed #E6D5C3',
-                  color: '#A0826C'
+                  background: 'var(--bg-card, #1A1A1A)',
+                  border: '1px solid var(--color-border)',
+                  padding: '24px',
+                  borderRadius: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
                 }}>
-                  No served orders logged yet today.
+                  <div>
+                    <h3 style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
+                      📅 Today's Attendance Session
+                    </h3>
+                    
+                    {/* Visual Status Indicator */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                      <div style={{
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: todayStatus?.checkedIn 
+                          ? (todayStatus?.checkedOut ? '#9E8E8E' : '#2ecc71')
+                          : '#e74c3c',
+                        boxShadow: todayStatus?.checkedIn && !todayStatus?.checkedOut 
+                          ? '0 0 10px #2ecc71' 
+                          : 'none'
+                      }} />
+                      <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#E6D5C3' }}>
+                        Status: {
+                          todayStatus?.checkedIn 
+                            ? (todayStatus?.checkedOut 
+                              ? 'Shift Completed' 
+                              : todayStatus?.attendance?.status === 'Late' 
+                                ? 'Working (Late Arrival)' 
+                                : 'Currently Working / Present'
+                              )
+                            : 'Absent / Not Checked In'
+                        }
+                      </span>
+                    </div>
+
+                    {/* Session Timestamps */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>Check In Time</span>
+                        <span style={{ color: '#fff', fontWeight: 'bold' }}>
+                          {todayStatus?.checkedIn ? formatTime(todayStatus.attendance.checkInTime) : '--:--'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>Check Out Time</span>
+                        <span style={{ color: '#fff', fontWeight: 'bold' }}>
+                          {todayStatus?.checkedOut ? formatTime(todayStatus.attendance.checkOutTime) : '--:--'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', paddingBottom: '6px' }}>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>GPS Distance</span>
+                        <span style={{ color: '#fff', fontWeight: 'bold' }}>
+                          {todayStatus?.checkedIn ? `${todayStatus.attendance.distanceFromCafe} meters from Cafe` : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Action Button or Counter */}
+                  <div>
+                    {todayStatus?.checkedIn && !todayStatus?.checkedOut && (
+                      <div style={{
+                        textAlign: 'center',
+                        background: 'rgba(255, 107, 8, 0.05)',
+                        border: '1px solid rgba(255, 107, 8, 0.2)',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        marginBottom: '16px'
+                      }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
+                          Active Shift Duration
+                        </span>
+                        <strong style={{ fontSize: '1.4rem', color: 'var(--color-primary, #ff6b08)', fontFamily: 'monospace' }}>
+                          {elapsedTime}
+                        </strong>
+                      </div>
+                    )}
+
+                    {/* Primary Button */}
+                    {!todayStatus?.checkedIn ? (
+                      <button
+                        onClick={handleCheckIn}
+                        disabled={actionLoading}
+                        style={{
+                          width: '100%',
+                          background: 'linear-gradient(135deg, var(--color-primary, #ff6b08) 0%, #d45900 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '15px',
+                          borderRadius: '12px',
+                          fontSize: '1rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 15px rgba(255, 107, 8, 0.3)',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                      >
+                        {actionLoading ? (
+                          <>
+                            <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderColor: '#fff' }} />
+                            <span>Verifying Location & Device...</span>
+                          </>
+                        ) : (
+                          <span>📍 Check In Now</span>
+                        )}
+                      </button>
+                    ) : !todayStatus?.checkedOut ? (
+                      <button
+                        onClick={handleCheckOut}
+                        disabled={actionLoading}
+                        style={{
+                          width: '100%',
+                          background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '15px',
+                          borderRadius: '12px',
+                          fontSize: '1rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px'
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                      >
+                        {actionLoading ? (
+                          <>
+                            <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderColor: '#fff' }} />
+                            <span>Checking Out...</span>
+                          </>
+                        ) : (
+                          <span>🚪 Check Out Shift</span>
+                        )}
+                      </button>
+                    ) : (
+                      <div style={{
+                        textAlign: 'center',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px dashed var(--color-border)',
+                        padding: '14px',
+                        borderRadius: '12px',
+                        color: 'var(--color-text-secondary)',
+                        fontSize: '0.9rem',
+                        fontWeight: 500
+                      }}>
+                        ✓ Shift complete. You are logged out for the day.
+                      </div>
+                    )}
+                    
+                    {coords && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textAlign: 'center', marginTop: '10px' }}>
+                        GPS: {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : (
+
+                {/* Attendance Analytics Card */}
+                <div style={{
+                  background: 'var(--bg-card, #1A1A1A)',
+                  border: '1px solid var(--color-border)',
+                  padding: '24px',
+                  borderRadius: '16px',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between'
+                }}>
+                  <div>
+                    <h3 style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
+                      📊 Monthly Performance (Last 30 Days)
+                    </h3>
+
+                    {/* Progress Wheel / Metric */}
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '15px 0' }}>
+                      <div style={{
+                        width: '130px',
+                        height: '130px',
+                        borderRadius: '50%',
+                        background: `conic-gradient(var(--color-primary, #ff6b08) ${summary.attendancePercentage || 0}%, rgba(255,255,255,0.05) ${summary.attendancePercentage || 0}% 100%)`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)'
+                      }}>
+                        <div style={{
+                          width: '106px',
+                          height: '106px',
+                          borderRadius: '50%',
+                          backgroundColor: '#1E1E1E',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 2
+                        }}>
+                          <span style={{ fontSize: '1.8rem', fontWeight: 900, color: '#fff' }}>
+                            {summary.attendancePercentage}%
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                            Attendance
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Analytics Breakdown Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '10px' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 8px', borderRadius: '8px', border: '1px solid var(--color-border)', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Hours</span>
+                      <strong style={{ fontSize: '1.1rem', color: '#fff' }}>{summary.totalWorkingHours}h</strong>
+                    </div>
+                    
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 8px', borderRadius: '8px', border: '1px solid var(--color-border)', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Presents</span>
+                      <strong style={{ fontSize: '1.1rem', color: '#2ecc71' }}>{summary.presentDays}d</strong>
+                    </div>
+
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px 8px', borderRadius: '8px', border: '1px solid var(--color-border)', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Late days</span>
+                      <strong style={{ fontSize: '1.1rem', color: '#f1c40f' }}>{summary.lateDays}d</strong>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* 30-Day Attendance Logs */}
+              <div style={{
+                background: 'var(--bg-card, #1A1A1A)',
+                border: '1px solid var(--color-border)',
+                padding: '24px',
+                borderRadius: '16px',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
+              }}>
+                <h3 style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
+                  📜 Last 30 Days Shift Log
+                </h3>
+
+                {historyData.length === 0 ? (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+                    No attendance logs found for the last 30 days.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                          <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Date</th>
+                          <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Branch</th>
+                          <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Check In</th>
+                          <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Check Out</th>
+                          <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Hours</th>
+                          <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>GPS Distance</th>
+                          <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historyData.map((record) => {
+                          const hours = record.totalDuration ? Math.floor(record.totalDuration / 60) : 0;
+                          const mins = record.totalDuration ? record.totalDuration % 60 : 0;
+                          const durationStr = record.totalDuration ? `${hours}h ${mins}m` : '--';
+                          
+                          const statusColor = record.status === 'Late' ? '#f1c40f' : '#2ecc71';
+
+                          return (
+                            <tr key={record._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background-color 0.15s' }}>
+                              <td style={{ padding: '12px 8px', fontWeight: 600, color: '#fff' }}>
+                                {formatDate(record.date)}
+                              </td>
+                              <td style={{ padding: '12px 8px', color: '#E6D5C3' }}>
+                                {record.branchName || 'Main Branch'}
+                              </td>
+                              <td style={{ padding: '12px 8px', color: '#E6D5C3' }}>
+                                {formatTime(record.checkInTime)}
+                              </td>
+                              <td style={{ padding: '12px 8px', color: '#E6D5C3' }}>
+                                {record.checkOutTime ? formatTime(record.checkOutTime) : 'N/A'}
+                              </td>
+                              <td style={{ padding: '12px 8px', color: '#fff', fontWeight: 'bold' }}>
+                                {durationStr}
+                              </td>
+                              <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
+                                {record.distanceFromCafe !== undefined ? `${record.distanceFromCafe}m` : 'N/A'}
+                              </td>
+                              <td style={{ padding: '12px 8px' }}>
+                                <span style={{
+                                  backgroundColor: `${statusColor}1A`,
+                                  border: `1px solid ${statusColor}`,
+                                  color: statusColor,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                  display: 'inline-block'
+                                }}>
+                                  {record.status || 'Present'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+        </>
+      )}
+
+      {/* TAB 2: DAILY WORK REPORT SUBMISSION */}
+      {activeTab === 'report' && (
+        <div style={{
+          background: 'var(--bg-card, #1A1A1A)',
+          border: '1px solid var(--color-border)',
+          padding: '28px',
+          borderRadius: '16px',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+          maxWidth: '800px',
+          margin: '0 auto'
+        }}>
+          <h3 style={{ color: '#fff', fontSize: '1.3rem', fontWeight: 800, margin: '0 0 10px 0' }}>
+            📝 Submit Daily Work Report
+          </h3>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', marginBottom: '24px', lineHeight: '1.5' }}>
+            Owners require proof that work has been successfully completed (e.g., tables cleaned, kitchen sanitized, counter wiped, opening/closing prep done). Upload multiple photos (up to 10) to a single report. Note that images are temporary records and are auto-deleted after 24 hours.
+          </p>
+
+          {reportError && (
+            <div style={{
+              backgroundColor: '#FDF2F2',
+              borderLeft: '4px solid #EC5B5B',
+              color: '#8A2525',
+              padding: '14px 16px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              fontSize: '0.9rem',
+              fontWeight: 500
+            }}>
+              ⚠️ {reportError}
+            </div>
+          )}
+
+          {reportSuccess && (
+            <div style={{
+              backgroundColor: '#F3FAF7',
+              borderLeft: '4px solid #0EA5E9',
+              color: '#0369A1',
+              padding: '14px 16px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              fontSize: '0.9rem',
+              fontWeight: 500
+            }}>
+              ✅ {reportSuccess}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmitReport} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* File Upload Zone */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label htmlFor="work-photos" style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>
+                Upload Work Photos <span style={{ color: 'var(--color-primary, #ff6b08)' }}>*</span>
+              </label>
+              
+              <div style={{
+                border: '2px dashed var(--color-border)',
+                borderRadius: '12px',
+                padding: '24px',
+                textAlign: 'center',
+                backgroundColor: 'rgba(255,255,255,0.01)',
+                cursor: 'pointer',
+                position: 'relative',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary, #ff6b08)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+              >
+                <input
+                  type="file"
+                  id="work-photos"
+                  name="work-photos"
+                  multiple
+                  accept="image/png, image/jpeg, image/jpg, image/webp"
+                  onChange={handleFileChange}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    opacity: 0,
+                    cursor: 'pointer'
+                  }}
+                  disabled={reportLoading}
+                />
+                <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📸</div>
+                <strong style={{ color: '#fff', display: 'block', fontSize: '0.9rem' }}>
+                  Tap to upload photos
+                </strong>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
+                  JPG, JPEG, PNG, WEBP formats allowed (Max 5MB each, Limit 10 photos total)
+                </span>
+              </div>
+            </div>
+
+            {/* Thumbnail Preview Area */}
+            {filePreviews.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+                  Selected Photos ({filePreviews.length} of 10)
+                </span>
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                  gap: '20px'
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+                  gap: '12px',
+                  background: 'rgba(0,0,0,0.2)',
+                  padding: '12px',
+                  borderRadius: '10px'
                 }}>
-                  {servedOrders.map((order) => (
-                    <div key={order._id} style={{ position: 'relative' }}>
-                      <OrderCard
-                        order={order}
-                        onStatusUpdate={handleStatusUpdate}
+                  {filePreviews.map((url, idx) => (
+                    <div key={idx} style={{
+                      position: 'relative',
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      border: '1px solid var(--color-border)'
+                    }}>
+                      <img
+                        src={url}
+                        alt="Preview"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                       <button
-                        onClick={() => handleStatusUpdate(order._id, 'Preparing')}
+                        type="button"
+                        onClick={() => handleRemoveFile(idx)}
                         style={{
                           position: 'absolute',
-                          top: '12px',
-                          right: '12px',
-                          padding: '4px 8px',
+                          top: '2px',
+                          right: '2px',
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '50%',
+                          backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                          color: '#fff',
+                          border: 'none',
                           fontSize: '11px',
-                          background: '#FAF6F0',
-                          border: '1px solid #ff9800',
-                          color: '#ff9800',
-                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                           cursor: 'pointer',
-                          fontWeight: '700'
+                          fontWeight: 'bold'
                         }}
                       >
-                        ↩ Reopen Order
+                        ×
                       </button>
                     </div>
                   ))}
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* Notes Section */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label htmlFor="report-notes" style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>
+                Optional Description / Notes
+              </label>
+              <textarea
+                id="report-notes"
+                name="report-notes"
+                value={reportNotes}
+                onChange={(e) => setReportNotes(e.target.value)}
+                placeholder="List cleanings or preparations completed (e.g., Tables cleaned, kitchen surfaces sanitized, trash emptied...)"
+                rows={4}
+                style={{
+                  width: '100%',
+                  backgroundColor: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  resize: 'vertical',
+                  fontFamily: 'inherit'
+                }}
+                disabled={reportLoading}
+              />
             </div>
-          )}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={reportLoading || selectedFiles.length === 0}
+              style={{
+                width: '100%',
+                background: selectedFiles.length === 0
+                  ? 'rgba(255,255,255,0.05)'
+                  : 'linear-gradient(135deg, var(--color-primary, #ff6b08) 0%, #d45900 100%)',
+                color: selectedFiles.length === 0 ? 'var(--color-text-secondary)' : '#fff',
+                border: 'none',
+                padding: '15px',
+                borderRadius: '12px',
+                fontSize: '1rem',
+                fontWeight: 800,
+                cursor: selectedFiles.length === 0 ? 'not-allowed' : 'pointer',
+                boxShadow: selectedFiles.length === 0 ? 'none' : '0 4px 15px rgba(255, 107, 8, 0.3)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                marginTop: '10px'
+              }}
+            >
+              {reportLoading ? (
+                <>
+                  <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderColor: '#fff' }} />
+                  <span>Submitting Work Report Proof...</span>
+                </>
+              ) : (
+                <span>📤 Submit Work Report</span>
+              )}
+            </button>
+          </form>
         </div>
       )}
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };

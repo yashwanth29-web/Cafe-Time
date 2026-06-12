@@ -654,9 +654,11 @@ const OwnerSetup = () => {
                 <img src={logoPreview} alt="Logo Preview" />
               </div>
               <div className="form-group" style={{ flex: 1 }}>
-                <label>Upload Cafe Logo</label>
+                <label htmlFor="cafe-logo">Upload Cafe Logo</label>
                 <input 
                   type="file" 
+                  id="cafe-logo"
+                  name="cafe-logo"
                   accept="image/*" 
                   onChange={handleLogoUpload} 
                   disabled={loading} 
@@ -667,9 +669,11 @@ const OwnerSetup = () => {
 
             <div className="form-grid">
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label>Cafe Name (Registered)</label>
+                <label htmlFor="registered-cafe-name">Cafe Name (Registered)</label>
                 <input 
                   type="text" 
+                  id="registered-cafe-name"
+                  name="registered-cafe-name"
                   value={cafeName} 
                   disabled 
                   style={{ background: 'rgba(255,255,255,0.05)', color: '#A0826C' }}
@@ -677,9 +681,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label>Cafe Street Address</label>
+                <label htmlFor="cafe-address">Cafe Street Address</label>
                 <textarea 
                   rows={2} 
+                  id="cafe-address"
+                  name="cafe-address"
                   value={address} 
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="123 Main St, Near Central Square..." 
@@ -688,9 +694,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>Opening Time</label>
+                <label htmlFor="opening-time">Opening Time</label>
                 <input 
                   type="time" 
+                  id="opening-time"
+                  name="opening-time"
                   value={openingTime} 
                   onChange={(e) => setOpeningTime(e.target.value)} 
                   disabled={loading}
@@ -698,9 +706,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>Closing Time</label>
+                <label htmlFor="closing-time">Closing Time</label>
                 <input 
                   type="time" 
+                  id="closing-time"
+                  name="closing-time"
                   value={closingTime} 
                   onChange={(e) => setClosingTime(e.target.value)} 
                   disabled={loading}
@@ -708,9 +718,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>Support Contact Number</label>
+                <label htmlFor="support-number">Support Contact Number</label>
                 <input 
                   type="text" 
+                  id="support-number"
+                  name="support-number"
                   value={supportNumber} 
                   onChange={(e) => setSupportNumber(e.target.value)} 
                   placeholder="+91 9999988888"
@@ -719,9 +731,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>GST Registration Number (Optional)</label>
+                <label htmlFor="gst-number">GST Registration Number (Optional)</label>
                 <input 
                   type="text" 
+                  id="gst-number"
+                  name="gst-number"
                   value={gstNumber} 
                   onChange={(e) => setGstNumber(e.target.value)} 
                   placeholder="22AAAAA0000A1Z5"
@@ -731,10 +745,12 @@ const OwnerSetup = () => {
 
               {/* Simulated Google Maps Location Picker */}
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label>Google Maps Location Coordinates</label>
+                <label htmlFor="maps-location">Google Maps Location Coordinates</label>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <input 
                     type="text" 
+                    id="maps-location"
+                    name="maps-location"
                     value={mapsLocation} 
                     onChange={(e) => setMapsLocation(e.target.value)} 
                     placeholder="Latitude, Longitude"
@@ -808,9 +824,11 @@ const OwnerSetup = () => {
 
             <div className="form-grid">
               <div className="form-group">
-                <label>Razorpay Key ID</label>
+                <label htmlFor="razorpay-key-id">Razorpay Key ID</label>
                 <input 
                   type="text" 
+                  id="razorpay-key-id"
+                  name="razorpay-key-id"
                   value={razorpayKeyId} 
                   onChange={(e) => setRazorpayKeyId(e.target.value)} 
                   placeholder="rzp_test_..."
@@ -819,9 +837,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>Razorpay Secret Key</label>
+                <label htmlFor="razorpay-secret-key">Razorpay Secret Key</label>
                 <input 
                   type="password" 
+                  id="razorpay-secret-key"
+                  name="razorpay-secret-key"
                   value={razorpaySecret} 
                   onChange={(e) => setRazorpaySecret(e.target.value)} 
                   placeholder="••••••••••••••••••••"
@@ -850,9 +870,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>UPI ID (Optional)</label>
+                <label htmlFor="upi-id">UPI ID (Optional)</label>
                 <input 
                   type="text" 
+                  id="upi-id"
+                  name="upi-id"
                   value={upiId} 
                   onChange={(e) => setUpiId(e.target.value)} 
                   placeholder="owner@okaxis"
@@ -861,9 +883,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>Bank Account Holder Name</label>
+                <label htmlFor="bank-holder-name">Bank Account Holder Name</label>
                 <input 
                   type="text" 
+                  id="bank-holder-name"
+                  name="bank-holder-name"
                   value={bankHolderName} 
                   onChange={(e) => setBankHolderName(e.target.value)} 
                   placeholder="John Doe Enterprise"
@@ -872,9 +896,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>Bank Account Number</label>
+                <label htmlFor="bank-account-number">Bank Account Number</label>
                 <input 
                   type="text" 
+                  id="bank-account-number"
+                  name="bank-account-number"
                   value={accountNumber} 
                   onChange={(e) => setAccountNumber(e.target.value)} 
                   placeholder="1002998877665"
@@ -883,9 +909,11 @@ const OwnerSetup = () => {
               </div>
 
               <div className="form-group">
-                <label>IFSC Code</label>
+                <label htmlFor="ifsc-code">IFSC Code</label>
                 <input 
                   type="text" 
+                  id="ifsc-code"
+                  name="ifsc-code"
                   value={ifscCode} 
                   onChange={(e) => setIfscCode(e.target.value)} 
                   placeholder="HDFC0000123"
@@ -905,7 +933,7 @@ const OwnerSetup = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '30px' }}>
               <div className="form-group" style={{ maxWidth: '300px' }}>
-                <label>Total Dining Tables</label>
+                <label htmlFor="total-dining-tables">Total Dining Tables</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <button 
                     type="button" 
@@ -917,6 +945,8 @@ const OwnerSetup = () => {
                   </button>
                   <input 
                     type="number" 
+                    id="total-dining-tables"
+                    name="total-dining-tables"
                     value={tableCount} 
                     onChange={(e) => handleTableCountChange(e.target.value)}
                     style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}
@@ -933,9 +963,9 @@ const OwnerSetup = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#D4C3B3', textTransform: 'uppercase' }}>
+                <span id="custom-tables-heading" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#D4C3B3', textTransform: 'uppercase' }}>
                   Custom Table QR Labels (Click labels to rename)
-                </label>
+                </span>
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
@@ -946,12 +976,14 @@ const OwnerSetup = () => {
                   padding: '15px',
                   borderRadius: '10px',
                   border: '1px solid #5C4331'
-                }}>
+                }} aria-labelledby="custom-tables-heading">
                   {tablesList.map((tbl, idx) => (
                     <div key={idx} className="table-card">
-                      <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>#{idx+1}</span>
+                      <label htmlFor={`table-label-${idx}`} style={{ fontSize: '0.75rem', color: '#A0826C' }}>#{idx+1}</label>
                       <input 
                         type="text" 
+                        id={`table-label-${idx}`}
+                        name={`table-label-${idx}`}
                         value={tbl.label} 
                         onChange={(e) => handleTableLabelChange(idx, e.target.value)} 
                         placeholder={`Table-${idx+1}`}
@@ -963,12 +995,14 @@ const OwnerSetup = () => {
 
               <div className="form-grid" style={{ marginTop: '10px' }}>
                 <div className="toggle-card">
-                  <div>
+                  <label htmlFor="kitchen-display-enabled" style={{ cursor: 'pointer', display: 'flex', flex: 1, flexDirection: 'column' }}>
                     <strong style={{ display: 'block', fontSize: '0.9rem' }}>Kitchen Screen Console</strong>
                     <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Staff order tracking board</span>
-                  </div>
+                  </label>
                   <input 
                     type="checkbox" 
+                    id="kitchen-display-enabled"
+                    name="kitchen-display-enabled"
                     checked={kitchenDisplayEnabled} 
                     onChange={(e) => setKitchenDisplayEnabled(e.target.checked)}
                     style={{ width: '20px', height: '20px', cursor: 'pointer' }}
@@ -976,12 +1010,14 @@ const OwnerSetup = () => {
                 </div>
 
                 <div className="toggle-card">
-                  <div>
+                  <label htmlFor="printer-enabled" style={{ cursor: 'pointer', display: 'flex', flex: 1, flexDirection: 'column' }}>
                     <strong style={{ display: 'block', fontSize: '0.9rem' }}>Thermal Printer Settings</strong>
                     <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Auto-print receipt on order</span>
-                  </div>
+                  </label>
                   <input 
                     type="checkbox" 
+                    id="printer-enabled"
+                    name="printer-enabled"
                     checked={printerEnabled} 
                     onChange={(e) => setPrinterEnabled(e.target.checked)}
                     style={{ width: '20px', height: '20px', cursor: 'pointer' }}
@@ -989,12 +1025,14 @@ const OwnerSetup = () => {
                 </div>
 
                 <div className="toggle-card">
-                  <div>
+                  <label htmlFor="inventory-enabled" style={{ cursor: 'pointer', display: 'flex', flex: 1, flexDirection: 'column' }}>
                     <strong style={{ display: 'block', fontSize: '0.9rem' }}>Inventory Tracking</strong>
                     <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Track ingredient consumption</span>
-                  </div>
+                  </label>
                   <input 
                     type="checkbox" 
+                    id="inventory-enabled"
+                    name="inventory-enabled"
                     checked={inventoryEnabled} 
                     onChange={(e) => setInventoryEnabled(e.target.checked)}
                     style={{ width: '20px', height: '20px', cursor: 'pointer' }}
@@ -1025,35 +1063,46 @@ const OwnerSetup = () => {
               <h4 style={{ margin: '0 0 15px 0', color: '#E6D5C3' }}>Add Staff Member</h4>
               <div className="form-grid" style={{ marginBottom: '15px' }}>
                 <div className="form-group">
-                  <label>Staff Name</label>
+                  <label htmlFor="staff-name">Staff Name</label>
                   <input 
                     type="text" 
+                    id="staff-name"
+                    name="staff-name"
                     value={staffName} 
                     onChange={(e) => setStaffName(e.target.value)} 
                     placeholder="Chef Ram"
                   />
                 </div>
                 <div className="form-group">
-                  <label>Email Address</label>
+                  <label htmlFor="staff-email">Email Address</label>
                   <input 
                     type="email" 
+                    id="staff-email"
+                    name="staff-email"
                     value={staffEmail} 
                     onChange={(e) => setStaffEmail(e.target.value)} 
                     placeholder="ram@cafe.com"
                   />
                 </div>
                 <div className="form-group">
-                  <label>Phone Number</label>
+                  <label htmlFor="staff-phone">Phone Number</label>
                   <input 
                     type="text" 
+                    id="staff-phone"
+                    name="staff-phone"
                     value={staffPhone} 
                     onChange={(e) => setStaffPhone(e.target.value)} 
                     placeholder="+91 9090909090"
                   />
                 </div>
                 <div className="form-group">
-                  <label>Staff Role</label>
-                  <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)}>
+                  <label htmlFor="staff-role">Staff Role</label>
+                  <select 
+                    id="staff-role"
+                    name="staff-role"
+                    value={staffRole} 
+                    onChange={(e) => setStaffRole(e.target.value)}
+                  >
                     <option value="chef">Chef (Kitchen Staff)</option>
                     <option value="manager">Manager (Operations)</option>
                     <option value="staff">Server (Table Staff)</option>

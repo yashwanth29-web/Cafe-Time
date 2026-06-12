@@ -231,11 +231,13 @@ const VerifyOtp = () => {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-input-group">
-            <label>6-Digit Verification Code</label>
+            <label htmlFor="otp-0">6-Digit Verification Code</label>
             <div className="otp-container" onPaste={handlePaste}>
               {otpValues.map((value, index) => (
                 <input
                   key={index}
+                  id={`otp-${index}`}
+                  name={`otp-${index}`}
                   type="text"
                   maxLength={1}
                   className="otp-box"

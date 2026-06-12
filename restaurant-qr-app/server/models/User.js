@@ -8,10 +8,10 @@ const UserSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: true,
-    unique: true,
     lowercase: true,
-    trim: true
+    trim: true,
+    unique: true,
+    sparse: true
   },
   phone: {
     type: String,
@@ -24,6 +24,15 @@ const UserSchema = new mongoose.Schema({
     default: 'staff'
   },
   staffRole: {
+    type: String,
+    default: ''
+  },
+  employeeId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  assignedBranch: {
     type: String,
     default: ''
   },

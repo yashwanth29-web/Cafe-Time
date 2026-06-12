@@ -26,13 +26,81 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  reorderCategories,
   getInventoryCategories,
   createInventoryCategory,
   deleteInventoryCategory,
-  uploadMenuItemImage
+  uploadMenuItemImage,
+  getBranches,
+  createBranch,
+  updateBranch,
+  deleteBranch,
+  getOwnerTodayAttendance,
+  getOwnerAttendanceReports,
+  getWorkReports,
+  getReviews
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import OwnerLayout from '../components/OwnerLayout';
+
+const AdminMenuImage = ({ item }) => {
+  const isValidUrl = (url) => {
+    if (!url || typeof url !== 'string' || url.trim() === '') return false;
+    return url.startsWith('/') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/');
+  };
+
+  const getCategoryIcon = (categoryName) => {
+    const cat = (categoryName || '').toLowerCase();
+    if (cat.includes('chai') || cat.includes('tea')) return '☕';
+    if (cat.includes('coffee')) return '☕';
+    if (cat.includes('juice') || cat.includes('cooler') || cat.includes('drink') || cat.includes('beverage')) return '🥤';
+    if (cat.includes('milkshake') || cat.includes('shake')) return '🥤';
+    if (cat.includes('starter') || cat.includes('bite') || cat.includes('snack')) return '🍢';
+    if (cat.includes('fry') || cat.includes('fries') || cat.includes('potato')) return '🍟';
+    if (cat.includes('burger')) return '🍔';
+    if (cat.includes('sandwich')) return '🥪';
+    if (cat.includes('pizza')) return '🍕';
+    if (cat.includes('dessert') || cat.includes('sweet') || cat.includes('cake')) return '🍰';
+    return '🍽️';
+  };
+
+  const [imgFailed, setImgFailed] = useState(!isValidUrl(item.image));
+  const [prevImage, setPrevImage] = useState(item.image);
+
+  if (item.image !== prevImage) {
+    setPrevImage(item.image);
+    setImgFailed(!isValidUrl(item.image));
+  }
+
+  if (imgFailed) {
+    return (
+      <div 
+        className="admin-menu-img"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #2a1b12 0%, #150f0b 100%)',
+          color: 'var(--color-primary)',
+          fontSize: '28px',
+          border: '1px solid var(--color-border)',
+          userSelect: 'none'
+        }}
+      >
+        {getCategoryIcon(item.category)}
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={item.image} 
+      alt={item.name} 
+      className="admin-menu-img" 
+      onError={() => setImgFailed(true)} 
+    />
+  );
+};
 
 const OwnerDashboard = () => {
   const { logout, user } = useAuth();
@@ -65,6 +133,44 @@ const OwnerDashboard = () => {
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffError, setStaffError] = useState('');
 
+  // Branch & Attendance States
+  const [branches, setBranches] = useState([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchesError, setBranchesError] = useState('');
+  const [showAddBranchModal, setShowAddBranchModal] = useState(false);
+  const [showEditBranchModal, setShowEditBranchModal] = useState(false);
+  const [editingBranch, setEditingBranch] = useState(null);
+  const [newBranch, setNewBranch] = useState({
+    branchName: '',
+    address: '',
+    manager: '',
+    latitude: '',
+    longitude: '',
+    allowedRadius: 30
+  });
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [attendanceSummary, setAttendanceSummary] = useState({
+    totalStaff: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    checkedOut: 0,
+    currentlyWorking: 0
+  });
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [reportRange, setReportRange] = useState('daily');
+  const [reportBranch, setReportBranch] = useState('');
+  const [attendanceReports, setAttendanceReports] = useState(null);
+
+  // Work Report states
+  const [workReports, setWorkReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState('');
+  const [reportsFilterRange, setReportsFilterRange] = useState('today'); // 'today', 'this_week', 'all'
+  const [reportsFilterStaff, setReportsFilterStaff] = useState('');
+  const [reportsFilterBranch, setReportsFilterBranch] = useState('');
+  const [selectedReport, setSelectedReport] = useState(null);
+
   // Form / Dialog States
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -77,7 +183,8 @@ const OwnerDashboard = () => {
     name: '',
     email: '',
     phone: '',
-    staffRole: 'waiter'
+    staffRole: 'waiter',
+    assignedBranch: ''
   });
 
   // New menu item input state
@@ -209,12 +316,16 @@ const OwnerDashboard = () => {
     reason: ''
   });
 
-  // Mock Customer Reviews State
-  const [reviewsList] = useState([
-    { id: 1, author: 'Sai Prasad', rating: 5, text: 'Awesome QR ordering experience! The Gourmet Cheeseburger was cooked to perfection.', date: 'Today' },
-    { id: 2, author: 'Kamala Bevara', rating: 4, text: 'Very convenient cashier-less flow. Loved the fast preparation time.', date: 'Yesterday' },
-    { id: 3, author: 'Jai Kalki', rating: 5, text: 'Super clean interface. Razorpay online payment was smooth and instant.', date: '3 days ago' }
-  ]);
+  // Customer Reviews States
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState('');
+  const [reviewsSummary, setReviewsSummary] = useState({
+    totalReviews: 0,
+    averageRating: 0,
+    distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+  });
+  const [reviewsFilterRating, setReviewsFilterRating] = useState('');
 
   // Search states
   const [menuSearch, setMenuSearch] = useState('');
@@ -404,6 +515,64 @@ const OwnerDashboard = () => {
     }
   };
 
+  const handleCategoryDragStart = (e, index) => {
+    e.dataTransfer.setData('text/plain', index);
+  };
+
+  const handleCategoryDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleCategoryDrop = async (e, targetIndex) => {
+    e.preventDefault();
+    const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+    if (sourceIndex === targetIndex) return;
+
+    const updated = [...categories];
+    const [dragged] = updated.splice(sourceIndex, 1);
+    updated.splice(targetIndex, 0, dragged);
+
+    // Optimistic UI update
+    setCategories(updated);
+
+    try {
+      const orderedIds = updated.map(c => c._id);
+      await reorderCategories(orderedIds);
+    } catch (err) {
+      console.error('Error reordering categories:', err);
+      alert('Failed to save category order.');
+      fetchCategories();
+    }
+  };
+
+  const moveCategory = async (index, direction) => {
+    const updated = [...categories];
+    if (direction === 'up' && index > 0) {
+      const temp = updated[index];
+      updated[index] = updated[index - 1];
+      updated[index - 1] = temp;
+    } else if (direction === 'down' && index < updated.length - 1) {
+      const temp = updated[index];
+      updated[index] = updated[index + 1];
+      updated[index + 1] = temp;
+    } else {
+      return;
+    }
+
+    // Optimistic UI update
+    setCategories(updated);
+
+    try {
+      const orderedIds = updated.map(c => c._id);
+      await reorderCategories(orderedIds);
+    } catch (err) {
+      console.error('Error reordering categories:', err);
+      alert('Failed to save category order.');
+      fetchCategories();
+    }
+  };
+
+
   // Fetch Inventory Categories
   const fetchInventoryCategories = async () => {
     setInvCategoryLoading(true);
@@ -480,6 +649,124 @@ const OwnerDashboard = () => {
     }
   };
 
+  // Fetch Branches
+  const fetchBranches = async () => {
+    setBranchesLoading(true);
+    try {
+      const res = await getBranches();
+      if (res.success) {
+        setBranches(res.branches);
+        setBranchesError('');
+      } else {
+        setBranchesError('Failed to load branches.');
+      }
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+      setBranchesError('Cannot connect to branch database.');
+    } finally {
+      setBranchesLoading(false);
+    }
+  };
+
+  // Fetch Attendance Today Dashboard
+  const fetchAttendanceToday = async () => {
+    setAttendanceLoading(true);
+    try {
+      const res = await getOwnerTodayAttendance();
+      if (res.success) {
+        setAttendanceSummary(res.summary);
+        setAttendanceRecords(res.records);
+      }
+    } catch (error) {
+      console.error('Error fetching today attendance:', error);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  // Fetch Attendance Reports
+  const fetchAttendanceReportsData = async () => {
+    setAttendanceLoading(true);
+    try {
+      const res = await getOwnerAttendanceReports({ range: reportRange, branchId: reportBranch });
+      if (res.success) {
+        setAttendanceReports(res);
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  const fetchWorkReports = async () => {
+    setReportsLoading(true);
+    setReportsError('');
+    try {
+      const params = {};
+      if (reportsFilterRange) params.range = reportsFilterRange;
+      if (reportsFilterStaff) params.staffId = reportsFilterStaff;
+      if (reportsFilterBranch) params.branchId = reportsFilterBranch;
+      
+      const res = await getWorkReports(params);
+      if (res.success) {
+        setWorkReports(res.reports || []);
+      } else {
+        setReportsError(res.message || 'Failed to fetch work reports.');
+      }
+    } catch (err) {
+      console.error('Error fetching work reports:', err);
+      setReportsError('Server error fetching work reports.');
+    } finally {
+      setReportsLoading(false);
+    }
+  };
+
+  const fetchReviewsData = async () => {
+    setReviewsLoading(true);
+    setReviewsError('');
+    try {
+      const params = {};
+      if (reviewsFilterRating) {
+        params.rating = reviewsFilterRating;
+      }
+      const response = await getReviews(params);
+      if (response && response.success) {
+        setReviews(response.data || []);
+        if (response.summary) {
+          setReviewsSummary(response.summary);
+        }
+      } else {
+        setReviewsError('Failed to retrieve customer reviews.');
+      }
+    } catch (err) {
+      console.error('Error fetching reviews:', err);
+      setReviewsError(err.response?.data?.message || 'Server error while fetching customer reviews.');
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'reviews') {
+      fetchReviewsData();
+    }
+  }, [activeTab, reviewsFilterRating]);
+
+  useEffect(() => {
+    if (activeTab === 'attendance') {
+      fetchAttendanceReportsData();
+    }
+  }, [reportRange, reportBranch, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'reports') {
+      fetchWorkReports();
+      fetchStaffList();
+      fetchBranches();
+    }
+  }, [reportsFilterRange, reportsFilterStaff, reportsFilterBranch, activeTab]);
+
   useEffect(() => {
     fetchOrders();
     fetchMenu();
@@ -487,6 +774,14 @@ const OwnerDashboard = () => {
 
     if (activeTab === 'staff') {
       fetchStaffList();
+      fetchBranches();
+    }
+    if (activeTab === 'config') {
+      fetchBranches();
+    }
+    if (activeTab === 'attendance') {
+      fetchAttendanceToday();
+      fetchBranches();
     }
     if (activeTab === 'inventory' || activeTab === 'analytics' || activeTab === 'menu') {
       fetchInventoryList();
@@ -494,9 +789,11 @@ const OwnerDashboard = () => {
       fetchInventoryCategories();
     }
 
-    // Live background polling every 5 seconds for orders & inventory levels
+    // Live background polling every 5 seconds for menu, categories, orders & inventory levels
     const pollingInterval = setInterval(() => {
       fetchOrders();
+      fetchMenu();
+      fetchCategories();
       
       if (activeTab === 'inventory' || activeTab === 'analytics' || activeTab === 'menu') {
         const fetchInventorySilent = async () => {
@@ -518,24 +815,40 @@ const OwnerDashboard = () => {
         };
         fetchInventorySilent();
       }
+      if (activeTab === 'reviews') {
+        const fetchReviewsSilent = async () => {
+          try {
+            const params = {};
+            if (reviewsFilterRating) params.rating = reviewsFilterRating;
+            const response = await getReviews(params);
+            if (response && response.success) {
+              setReviews(response.data || []);
+              if (response.summary) setReviewsSummary(response.summary);
+            }
+          } catch (err) {
+            console.error('Silent reviews refresh failed:', err);
+          }
+        };
+        fetchReviewsSilent();
+      }
     }, 5000);
 
     return () => clearInterval(pollingInterval);
-  }, [activeTab]);
+  }, [activeTab, reviewsFilterRating]);
 
   // Register new staff
   const handleAddStaff = async (e) => {
     e.preventDefault();
-    if (!newStaff.name || !newStaff.email || !newStaff.phone || !newStaff.staffRole) {
-      alert('Please fill out all fields.');
+    if (!newStaff.name || !newStaff.phone || !newStaff.staffRole) {
+      alert('Name, Phone Number, and Role are required.');
       return;
     }
     try {
       setStaffLoading(true);
       const response = await createStaff(newStaff);
       if (response.success) {
-        alert(`Staff member "${newStaff.name}" registered successfully.`);
-        setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter' });
+        alert(response.message || `Staff member "${newStaff.name}" registered successfully.`);
+        setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '' });
         fetchStaffList();
       }
     } catch (error) {
@@ -549,8 +862,8 @@ const OwnerDashboard = () => {
   // Edit staff
   const handleEditStaff = async (e) => {
     e.preventDefault();
-    if (!editingStaff.name || !editingStaff.email || !editingStaff.phone || !editingStaff.staffRole) {
-      alert('Please fill out all required fields.');
+    if (!editingStaff.name || !editingStaff.phone || !editingStaff.staffRole) {
+      alert('Name, Phone Number, and Role are required.');
       return;
     }
     try {
@@ -560,6 +873,7 @@ const OwnerDashboard = () => {
         email: editingStaff.email,
         phone: editingStaff.phone,
         staffRole: editingStaff.staffRole,
+        assignedBranch: editingStaff.assignedBranch,
         isActive: editingStaff.isActive
       });
       if (response.success) {
@@ -593,6 +907,86 @@ const OwnerDashboard = () => {
       alert(error.response?.data?.message || 'Failed to delete staff member.');
     } finally {
       setStaffLoading(false);
+    }
+  };
+
+  // Branch Handlers
+  const handleAddBranch = async (e) => {
+    e.preventDefault();
+    if (!newBranch.branchName || !newBranch.address) {
+      alert('Branch Name and Address are required.');
+      return;
+    }
+    try {
+      setBranchesLoading(true);
+      const res = await createBranch({
+        branchName: newBranch.branchName,
+        address: newBranch.address,
+        manager: newBranch.manager,
+        latitude: newBranch.latitude ? Number(newBranch.latitude) : 0,
+        longitude: newBranch.longitude ? Number(newBranch.longitude) : 0,
+        allowedRadius: newBranch.allowedRadius ? Number(newBranch.allowedRadius) : 30,
+        isActive: true
+      });
+      if (res.success) {
+        alert(`Branch "${newBranch.branchName}" created successfully.`);
+        setNewBranch({ branchName: '', address: '', manager: '', latitude: '', longitude: '', allowedRadius: 30 });
+        setShowAddBranchModal(false);
+        fetchBranches();
+      }
+    } catch (error) {
+      console.error('Error creating branch:', error);
+      alert(error.response?.data?.message || 'Failed to create branch.');
+    } finally {
+      setBranchesLoading(false);
+    }
+  };
+
+  const handleEditBranch = async (e) => {
+    e.preventDefault();
+    if (!editingBranch.branchName || !editingBranch.address) {
+      alert('Branch Name and Address are required.');
+      return;
+    }
+    try {
+      setBranchesLoading(true);
+      const res = await updateBranch(editingBranch._id, {
+        branchName: editingBranch.branchName,
+        address: editingBranch.address,
+        manager: editingBranch.manager,
+        latitude: editingBranch.latitude ? Number(editingBranch.latitude) : 0,
+        longitude: editingBranch.longitude ? Number(editingBranch.longitude) : 0,
+        allowedRadius: editingBranch.allowedRadius ? Number(editingBranch.allowedRadius) : 30,
+        isActive: editingBranch.isActive
+      });
+      if (res.success) {
+        alert(`Branch updated successfully.`);
+        setShowEditBranchModal(false);
+        setEditingBranch(null);
+        fetchBranches();
+      }
+    } catch (error) {
+      console.error('Error updating branch:', error);
+      alert(error.response?.data?.message || 'Failed to update branch.');
+    } finally {
+      setBranchesLoading(false);
+    }
+  };
+
+  const handleDeleteBranch = async (id) => {
+    if (!window.confirm('Are you sure you want to remove this branch?')) return;
+    try {
+      setBranchesLoading(true);
+      const res = await deleteBranch(id);
+      if (res.success) {
+        alert(res.message || 'Branch deleted successfully.');
+        fetchBranches();
+      }
+    } catch (error) {
+      console.error('Error deleting branch:', error);
+      alert(error.response?.data?.message || 'Failed to delete branch.');
+    } finally {
+      setBranchesLoading(false);
     }
   };
 
@@ -1156,6 +1550,8 @@ const OwnerDashboard = () => {
               {activeTab === 'analytics' && '📊 Business Analytics & Financials'}
               {activeTab === 'menu' && '📋 Manage Cafe Dishes'}
               {activeTab === 'staff' && '👥 Employee Accounts'}
+              {activeTab === 'attendance' && '📅 Staff Attendance & geofences'}
+              {activeTab === 'reports' && '📝 Staff Daily Work Reports'}
               {activeTab === 'inventory' && '📦 Ingredient Stock & Valuations'}
               {activeTab === 'orders' && '👁️ Live Orders Monitor (Read-Only)'}
               {activeTab === 'reviews' && '⭐ Customer Reviews & Complaints'}
@@ -1165,30 +1561,7 @@ const OwnerDashboard = () => {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="dashboard-tab-bar">
-          <button onClick={() => setActiveTab('analytics')} className={`dashboard-tab ${activeTab === 'analytics' ? 'active' : ''}`}>
-            📊 Analytics
-          </button>
-          <button onClick={() => setActiveTab('menu')} className={`dashboard-tab ${activeTab === 'menu' ? 'active' : ''}`}>
-            📋 Menu Items ({menuItems.length})
-          </button>
-          <button onClick={() => setActiveTab('staff')} className={`dashboard-tab ${activeTab === 'staff' ? 'active' : ''}`}>
-            👥 Staff Roster ({staff.length})
-          </button>
-          <button onClick={() => setActiveTab('inventory')} className={`dashboard-tab ${activeTab === 'inventory' ? 'active' : ''}`}>
-            📦 Inventory Reports
-          </button>
-          <button onClick={() => setActiveTab('orders')} className={`dashboard-tab ${activeTab === 'orders' ? 'active' : ''}`}>
-            👁️ Monitor Orders ({orders.length})
-          </button>
-          <button onClick={() => setActiveTab('reviews')} className={`dashboard-tab ${activeTab === 'reviews' ? 'active' : ''}`}>
-            ⭐ Reviews
-          </button>
-          <button onClick={() => setActiveTab('config')} className={`dashboard-tab ${activeTab === 'config' ? 'active' : ''}`}>
-            ⚙️ Settings & QRs
-          </button>
-        </div>
+        {/* Navigation Tabs removed to prevent duplicate navigation */}
 
         {/* TAB 1: BUSINESS ANALYTICS */}
         {activeTab === 'analytics' && (
@@ -1234,7 +1607,7 @@ const OwnerDashboard = () => {
                 <span className="val" style={{ color: '#e74c3c' }}>₹{totalWastageCost.toFixed(2)}</span>
                 <span className="sub">Spoiled & damaged items</span>
               </div>
-              <div className="analytics-card" onClick={() => setActiveTab('inventory')} style={{ cursor: 'pointer' }}>
+              <div className="analytics-card">
                 <h4>Low Stock Alerts</h4>
                 <span className="val" style={{ color: lowStockAlertsCount > 0 ? '#e74c3c' : '#2ecc71' }}>
                   {lowStockAlertsCount} items
@@ -1380,7 +1753,7 @@ const OwnerDashboard = () => {
               <div className="menu-grid-admin">
                 {filteredMenuItems.map(item => (
                   <div key={item.id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
-                    <img src={item.image || '/images/default-food.png'} alt={item.name} className="admin-menu-img" onError={(e) => { e.target.src = '/images/default-food.png'; }} />
+                    <AdminMenuImage item={item} />
                     <div className="admin-menu-info">
                       <div>
                         <div className="admin-menu-title">{item.name}</div>
@@ -1408,28 +1781,37 @@ const OwnerDashboard = () => {
               {/* Register staff */}
               <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
                 <h4 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.1rem', fontWeight: 700 }}>Register New Staff Member</h4>
-                <form onSubmit={handleAddStaff} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                <form onSubmit={handleAddStaff} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" style={{ color: '#fff' }}>Full Name *</label>
-                    <input type="text" className="form-input" placeholder="Staff name" value={newStaff.name} onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })} required />
+                    <label htmlFor="roster-full-name" className="form-label" style={{ color: '#fff' }}>Full Name *</label>
+                    <input type="text" id="roster-full-name" name="roster-full-name" className="form-input" placeholder="Staff name" value={newStaff.name} onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })} required />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" style={{ color: '#fff' }}>Email Address *</label>
-                    <input type="email" className="form-input" placeholder="staff@cafe.com" value={newStaff.email} onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })} required />
+                    <label htmlFor="roster-email-address" className="form-label" style={{ color: '#fff' }}>Email Address (Optional)</label>
+                    <input type="email" id="roster-email-address" name="roster-email-address" className="form-input" placeholder="staff@cafe.com" value={newStaff.email} onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" style={{ color: '#fff' }}>Phone Number *</label>
-                    <input type="text" className="form-input" placeholder="Phone number" value={newStaff.phone} onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })} required />
+                    <label htmlFor="roster-phone-number" className="form-label" style={{ color: '#fff' }}>Phone Number *</label>
+                    <input type="text" id="roster-phone-number" name="roster-phone-number" className="form-input" placeholder="Phone number" value={newStaff.phone} onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })} required />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" style={{ color: '#fff' }}>Staff Role *</label>
-                    <select className="form-input" value={newStaff.staffRole ? newStaff.staffRole.toLowerCase() : 'waiter'} onChange={(e) => setNewStaff({ ...newStaff, staffRole: e.target.value })} required>
+                    <label htmlFor="roster-staff-role" className="form-label" style={{ color: '#fff' }}>Staff Role *</label>
+                    <select id="roster-staff-role" name="roster-staff-role" className="form-input" value={newStaff.staffRole ? newStaff.staffRole.toLowerCase() : 'waiter'} onChange={(e) => setNewStaff({ ...newStaff, staffRole: e.target.value })} required>
                       <option value="chef">Chef</option>
                       <option value="waiter">Waiter</option>
                       <option value="barista">Barista</option>
                       <option value="cashier">Cashier</option>
                       <option value="manager">Manager</option>
                       <option value="staff">Staff / Server</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label htmlFor="roster-assigned-branch" className="form-label" style={{ color: '#fff' }}>Assigned Branch *</label>
+                    <select id="roster-assigned-branch" name="roster-assigned-branch" className="form-input" value={newStaff.assignedBranch} onChange={(e) => setNewStaff({ ...newStaff, assignedBranch: e.target.value })} required>
+                      <option value="">-- Choose Branch --</option>
+                      {branches.map(b => (
+                        <option key={b.branchId} value={b.branchId}>{b.branchName}</option>
+                      ))}
                     </select>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -1454,10 +1836,12 @@ const OwnerDashboard = () => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
                           <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                            <th style={{ padding: '10px' }}>Emp ID</th>
                             <th style={{ padding: '10px' }}>Name</th>
                             <th style={{ padding: '10px' }}>Email</th>
                             <th style={{ padding: '10px' }}>Phone</th>
                             <th style={{ padding: '10px' }}>Role</th>
+                            <th style={{ padding: '10px' }}>Branch</th>
                             <th style={{ padding: '10px' }}>Last Seen</th>
                             <th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
                             <th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
@@ -1466,11 +1850,15 @@ const OwnerDashboard = () => {
                         <tbody>
                           {staff.map(member => (
                             <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                              <td style={{ padding: '12px 10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</td>
                               <td style={{ padding: '12px 10px', color: '#fff', fontWeight: 600 }}>{member.name}</td>
-                              <td style={{ padding: '12px 10px' }}>{member.email}</td>
+                              <td style={{ padding: '12px 10px' }}>{member.email || 'N/A'}</td>
                               <td style={{ padding: '12px 10px' }}>{member.phone}</td>
                               <td style={{ padding: '12px 10px' }}>
                                 <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
+                              </td>
+                              <td style={{ padding: '12px 10px' }}>
+                                {branches.find(b => b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}
                               </td>
                               <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                                 {formatLastSeen(member.lastSeen)}
@@ -1508,8 +1896,10 @@ const OwnerDashboard = () => {
                               <span className="admin-menu-badge" style={{ textTransform: 'capitalize', background: 'rgba(255, 107, 8, 0.15)', color: '#FF6B08', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>{member.staffRole}</span>
                             </div>
                             <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
-                              <div>📧 {member.email}</div>
+                              <div>🆔 ID: <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</span></div>
+                              <div>📧 {member.email || 'No Email'}</div>
                               <div>📞 {member.phone}</div>
+                              <div>🏢 Branch: <span style={{ color: '#fff', fontWeight: 500 }}>{branches.find(b => b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}</span></div>
                               <div style={{ marginTop: '4px' }}>Seen: {formatLastSeen(member.lastSeen)}</div>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
@@ -1535,6 +1925,459 @@ const OwnerDashboard = () => {
                   </>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: ATTENDANCE DASHBOARD & REPORTS */}
+        {activeTab === 'attendance' && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+            {/* Overview cards */}
+            <div className="analytics-grid">
+              <div className="analytics-card" style={{ background: '#1a130f' }}>
+                <h4>👥 Total Active Staff</h4>
+                <span className="val">{attendanceSummary.totalStaff || 0}</span>
+                <span className="sub">Configured in roster</span>
+              </div>
+              <div className="analytics-card" style={{ background: '#0e1a12' }}>
+                <h4>✅ Present Today</h4>
+                <span className="val" style={{ color: '#2ecc71' }}>{attendanceSummary.present || 0}</span>
+                <span className="sub">Includes late entries</span>
+              </div>
+              <div className="analytics-card" style={{ background: '#1c100e' }}>
+                <h4>❌ Absent Today</h4>
+                <span className="val" style={{ color: '#e74c3c' }}>{attendanceSummary.absent || 0}</span>
+                <span className="sub">No check-in record</span>
+              </div>
+              <div className="analytics-card" style={{ background: '#1c1c0e' }}>
+                <h4>⏰ Late Arrivals</h4>
+                <span className="val" style={{ color: '#f1c40f' }}>{attendanceSummary.late || 0}</span>
+                <span className="sub">Checked in after grace period</span>
+              </div>
+              <div className="analytics-card" style={{ background: '#160e1a' }}>
+                <h4>💼 Currently Working</h4>
+                <span className="val" style={{ color: '#3498db' }}>{attendanceSummary.currentlyWorking || 0}</span>
+                <span className="sub">Active check-in sessions</span>
+              </div>
+              <div className="analytics-card" style={{ background: '#13191f' }}>
+                <h4>🚪 Checked Out</h4>
+                <span className="val" style={{ color: '#9b59b6' }}>{attendanceSummary.checkedOut || 0}</span>
+                <span className="sub">Completed today's shift</span>
+              </div>
+            </div>
+
+            {/* Today's Live Records Table */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
+              <h3 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.20rem', fontWeight: 700 }}>⏱️ Today's Attendance Log</h3>
+              {attendanceLoading ? (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
+                  <p style={{ color: 'var(--color-text-secondary)' }}>Loading today's logs...</p>
+                </div>
+              ) : attendanceRecords.length === 0 ? (
+                <div style={{ padding: '30px 20px', textAlign: 'center', background: 'var(--bg-secondary)', border: '1px dashed var(--color-border)', borderRadius: '8px', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
+                  📅 No check-in logs recorded today yet.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                        <th style={{ padding: '10px' }}>Staff Name</th>
+                        <th style={{ padding: '10px' }}>Branch</th>
+                        <th style={{ padding: '10px' }}>Check In</th>
+                        <th style={{ padding: '10px' }}>Check Out</th>
+                        <th style={{ padding: '10px' }}>Duration</th>
+                        <th style={{ padding: '10px' }}>Status</th>
+                        <th style={{ padding: '10px' }}>Verification Distance</th>
+                        <th style={{ padding: '10px' }}>Device</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attendanceRecords.map(rec => {
+                        const durationHrs = rec.totalDuration ? `${Math.floor(rec.totalDuration / 60)}h ${rec.totalDuration % 60}m` : 'Active';
+                        const statusColor = rec.status === 'Late' ? '#f1c40f' : '#2ecc71';
+                        return (
+                          <tr key={rec._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                            <td style={{ padding: '12px 10px', color: '#fff', fontWeight: 600 }}>{rec.staffName}</td>
+                            <td style={{ padding: '12px 10px' }}>{rec.branchName}</td>
+                            <td style={{ padding: '12px 10px' }}>{rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                            <td style={{ padding: '12px 10px' }}>{rec.checkOutTime ? new Date(rec.checkOutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                            <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{durationHrs}</td>
+                            <td style={{ padding: '12px 10px' }}>
+                              <span style={{
+                                backgroundColor: `${statusColor}22`,
+                                border: `1px solid ${statusColor}`,
+                                color: statusColor,
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 'bold'
+                              }}>
+                                {rec.status}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 10px' }}>
+                              <span style={{ color: rec.distanceFromCafe <= 30 ? '#2ecc71' : '#e67e22' }}>
+                                {rec.distanceFromCafe} meters
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 10px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{rec.deviceInfo}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Attendance Analytics & Reports */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
+                <div>
+                  <h3 style={{ color: '#fff', margin: 0, fontSize: '1.20rem', fontWeight: 700 }}>📊 Historical Attendance Reports</h3>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>Filter attendance records by date range and branch location.</p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <select className="form-input" style={{ width: '130px', margin: 0 }} value={reportRange} onChange={(e) => setReportRange(e.target.value)}>
+                    <option value="daily">Past 24 Hours</option>
+                    <option value="weekly">Past 7 Days</option>
+                    <option value="monthly">Past 30 Days</option>
+                  </select>
+                  <select className="form-input" style={{ width: '180px', margin: 0 }} value={reportBranch} onChange={(e) => setReportBranch(e.target.value)}>
+                    <option value="">All Branches</option>
+                    {branches.map(b => (
+                      <option key={b.branchId} value={b.branchId}>{b.branchName}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {attendanceReports && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div className="analytics-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: 0 }}>
+                    <div className="analytics-card" style={{ background: 'rgba(255,255,255,0.01)' }}>
+                      <h4>Attendance Percentage (%)</h4>
+                      <span className="val" style={{ color: 'var(--color-primary)' }}>{attendanceReports.summary.attendancePercentage}%</span>
+                      <span className="sub">Out of active roster</span>
+                    </div>
+                    <div className="analytics-card" style={{ background: 'rgba(255,255,255,0.01)' }}>
+                      <h4>Cumulative Working Hours</h4>
+                      <span className="val" style={{ color: '#2ecc71' }}>{attendanceReports.summary.totalHours} hrs</span>
+                      <span className="sub">Total working duration</span>
+                    </div>
+                    <div className="analytics-card" style={{ background: 'rgba(255,255,255,0.01)' }}>
+                      <h4>Late Arrival Incidents</h4>
+                      <span className="val" style={{ color: '#f1c40f' }}>{attendanceReports.summary.lateArrivals} times</span>
+                      <span className="sub">Require attention</span>
+                    </div>
+                  </div>
+
+                  {/* Branch wise performance */}
+                  {attendanceReports.branchReports && attendanceReports.branchReports.length > 0 && (
+                    <div style={{ marginTop: '10px' }}>
+                      <h4 style={{ color: '#fff', fontSize: '14px', marginBottom: '10px' }}>🏢 Branch Attendance Performance Breakdown</h4>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                            <th style={{ padding: '8px' }}>Branch Name</th>
+                            <th style={{ padding: '8px', textAlign: 'center' }}>Total Check-ins</th>
+                            <th style={{ padding: '8px', textAlign: 'right' }}>Total Hours Logged</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attendanceReports.branchReports.map((br, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                              <td style={{ padding: '10px 8px', color: '#fff', fontWeight: 600 }}>{br.branchName || 'Main Branch'}</td>
+                              <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold' }}>{br.presentCount}</td>
+                              <td style={{ padding: '10px 8px', textAlign: 'right', color: '#2ecc71', fontWeight: 'bold' }}>{br.workingHours} hrs</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Filtered records detail log */}
+                  <div style={{ marginTop: '10px' }}>
+                    <h4 style={{ color: '#fff', fontSize: '14px', marginBottom: '10px' }}>📋 Detailed History Records ({attendanceReports.records.length})</h4>
+                    <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                        <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
+                          <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                            <th style={{ padding: '10px' }}>Date</th>
+                            <th style={{ padding: '10px' }}>Staff Name</th>
+                            <th style={{ padding: '10px' }}>Branch</th>
+                            <th style={{ padding: '10px' }}>Check In</th>
+                            <th style={{ padding: '10px' }}>Check Out</th>
+                            <th style={{ padding: '10px' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {attendanceReports.records.map(r => (
+                            <tr key={r._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                              <td style={{ padding: '10px', color: '#FAF6F0' }}>{new Date(r.checkInTime).toLocaleDateString()}</td>
+                              <td style={{ padding: '10px', color: '#fff', fontWeight: 600 }}>{r.staffName}</td>
+                              <td style={{ padding: '10px' }}>{r.branchName}</td>
+                              <td style={{ padding: '10px' }}>{r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                              <td style={{ padding: '10px' }}>{r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Active'}</td>
+                              <td style={{ padding: '10px' }}>
+                                <span style={{
+                                  color: r.status === 'Late' ? '#f1c40f' : '#2ecc71',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {r.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'reports' && (
+          <div className="fade-in">
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+                <div>
+                  <h3 style={{ color: '#fff', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>📝 Staff Daily Work Reports</h3>
+                  <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+                    Inspect uploaded photos and proof of work completed by staff members. Records automatically auto-purge in 24 hours.
+                  </p>
+                </div>
+              </div>
+
+              {/* Filters Panel */}
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '15px',
+                background: 'rgba(255,255,255,0.02)',
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid var(--color-border)',
+                marginBottom: '24px'
+              }}>
+                {/* Filter 1: Range */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '150px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Time Range</label>
+                  <select
+                    value={reportsFilterRange}
+                    onChange={(e) => setReportsFilterRange(e.target.value)}
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.2)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="today">Today</option>
+                    <option value="this_week">This Week (Last 7 Days)</option>
+                    <option value="all">All Available</option>
+                  </select>
+                </div>
+
+                {/* Filter 2: Staff */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Staff Member</label>
+                  <select
+                    value={reportsFilterStaff}
+                    onChange={(e) => setReportsFilterStaff(e.target.value)}
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.2)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="">All Staff</option>
+                    {staff.map((member) => (
+                      <option key={member._id} value={member._id}>
+                        {member.name} ({member.staffRole || member.role})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Filter 3: Branch */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Branch</label>
+                  <select
+                    value={reportsFilterBranch}
+                    onChange={(e) => setReportsFilterBranch(e.target.value)}
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.2)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      color: '#fff',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map((b) => (
+                      <option key={b._id} value={b.branchId}>
+                        {b.branchName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Clear button if active filters */}
+                {(reportsFilterStaff || reportsFilterBranch || reportsFilterRange !== 'today') && (
+                  <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                    <button
+                      onClick={() => {
+                        setReportsFilterRange('today');
+                        setReportsFilterStaff('');
+                        setReportsFilterBranch('');
+                      }}
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid #ff4d4d',
+                        borderRadius: '8px',
+                        padding: '8px 16px',
+                        color: '#ff4d4d',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Clear Filters
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Reports List/Grid */}
+              {reportsLoading ? (
+                <div style={{ textAlign: 'center', padding: '50px 0' }}>
+                  <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
+                  <p style={{ color: 'var(--color-text-secondary)' }}>Loading daily work reports...</p>
+                </div>
+              ) : reportsError ? (
+                <div style={{ color: '#ff4d4d', padding: '10px 0', fontSize: '0.9rem' }}>⚠️ {reportsError}</div>
+              ) : workReports.length === 0 ? (
+                <div style={{
+                  padding: '50px 20px',
+                  textAlign: 'center',
+                  background: 'rgba(255,255,255,0.01)',
+                  borderRadius: '12px',
+                  border: '1px dashed var(--color-border)',
+                  color: 'var(--color-text-secondary)',
+                  fontStyle: 'italic'
+                }}>
+                  No work reports found matching the selected filters.
+                </div>
+              ) : (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: '20px'
+                }}>
+                  {workReports.map((report) => (
+                    <div
+                      key={report._id}
+                      onClick={() => setSelectedReport(report)}
+                      style={{
+                        background: 'rgba(255,255,255,0.01)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        cursor: 'pointer',
+                        transition: 'transform 0.15s, border-color 0.15s',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        minHeight: '220px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--color-primary)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--color-border)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <div>
+                        {/* Header details */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                          <div>
+                            <strong style={{ color: '#fff', fontSize: '0.95rem', display: 'block' }}>{report.staffName}</strong>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Branch: {report.branchName}</span>
+                          </div>
+                          <span style={{
+                            backgroundColor: 'rgba(255, 107, 8, 0.1)',
+                            border: '1px solid var(--color-primary)',
+                            color: 'var(--color-primary)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold'
+                          }}>
+                            {report.photos.length} {report.photos.length === 1 ? 'photo' : 'photos'}
+                          </span>
+                        </div>
+
+                        {/* Thumbnail of first photo */}
+                        <div style={{
+                          width: '100%',
+                          height: '110px',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          marginBottom: '10px',
+                          border: '1px solid rgba(255,255,255,0.05)',
+                          background: '#000'
+                        }}>
+                          <img
+                            src={report.photos[0]}
+                            alt="Work Proof"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            loading="lazy"
+                          />
+                        </div>
+
+                        {/* Note excerpt */}
+                        {report.notes && (
+                          <p style={{
+                            margin: 0,
+                            fontSize: '0.8rem',
+                            color: '#E6D5C3',
+                            lineHeight: '1.4',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            💬 {report.notes}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Footer time */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '0.75rem', color: 'var(--color-text-secondary)', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '8px' }}>
+                        <span>📅 {new Date(report.createdAt).toLocaleDateString([], { day: '2-digit', month: 'short' })}</span>
+                        <span>⏰ {new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1910,24 +2753,199 @@ const OwnerDashboard = () => {
         {activeTab === 'reviews' && (
           <div className="fade-in">
             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
-              <h3 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.2rem', fontWeight: 700 }}>⭐ Customer Feedback & Comments</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                {reviewsList.map(r => (
-                  <div key={r.id} style={{
-                    background: 'rgba(255,255,255,0.01)',
-                    border: '1px solid var(--color-border)',
-                    padding: '16px',
-                    borderRadius: '8px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <strong style={{ color: '#fff' }}>{r.author}</strong>
-                      <span style={{ color: '#ff9800' }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
-                    </div>
-                    <p style={{ margin: '0 0 8px 0', color: '#E6D5C3', fontSize: '0.85rem', lineHeight: '1.4' }}>{r.text}</p>
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{r.date}</span>
+              <h3 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: 800 }}>⭐ Customer Feedback & Comments</h3>
+              
+              {/* Ratings Summary Cards */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '20px',
+                marginBottom: '25px'
+              }}>
+                {/* Summary Box */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center'
+                }}>
+                  <h4 style={{ color: 'var(--color-text-secondary)', margin: '0 0 10px 0', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Average Rating</h4>
+                  <div style={{ fontSize: '3rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>{reviewsSummary.averageRating}</div>
+                  <div style={{ margin: '10px 0', fontSize: '1.2rem', color: '#ff9800' }}>
+                    {'★'.repeat(Math.round(reviewsSummary.averageRating))}{'☆'.repeat(5 - Math.round(reviewsSummary.averageRating))}
                   </div>
-                ))}
+                  <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>Based on {reviewsSummary.totalReviews} customer ratings</span>
+                </div>
+
+                {/* Distribution Box */}
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <h4 style={{ color: 'var(--color-text-secondary)', margin: '0 0 10px 0', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rating Breakdown</h4>
+                  {[5, 4, 3, 2, 1].map(stars => {
+                    const count = reviewsSummary.distribution?.[stars] || 0;
+                    const pct = reviewsSummary.totalReviews > 0 ? (count / reviewsSummary.totalReviews) * 100 : 0;
+                    return (
+                      <div key={stars} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem' }}>
+                        <span style={{ width: '45px', color: '#fff', textAlign: 'right' }}>{stars} Star</span>
+                        <div style={{ flex: 1, height: '8px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', backgroundColor: '#ff9800', borderRadius: '4px' }}></div>
+                        </div>
+                        <span style={{ width: '35px', color: 'var(--color-text-secondary)' }}>{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* Filter Panel */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                padding: '12px 18px',
+                borderRadius: '10px',
+                border: '1px solid var(--color-border)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>Filter by Rating:</label>
+                  <select
+                    value={reviewsFilterRating}
+                    onChange={(e) => setReviewsFilterRating(e.target.value)}
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.2)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      color: '#fff',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="">All Ratings</option>
+                    <option value="5">5 Stars</option>
+                    <option value="4">4 Stars</option>
+                    <option value="3">3 Stars</option>
+                    <option value="2">2 Stars</option>
+                    <option value="1">1 Star</option>
+                  </select>
+                </div>
+                <button 
+                  onClick={fetchReviewsData} 
+                  className="btn btn-secondary" 
+                  style={{ width: 'auto', padding: '6px 12px', fontSize: '12px' }}
+                >
+                  🔄 Refresh Reviews
+                </button>
+              </div>
+
+              {reviewsLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}>
+                  <div className="spinner-rzp" style={{
+                    width: '28px',
+                    height: '28px',
+                    border: '3px solid rgba(255,255,255,0.1)',
+                    borderTop: '3px solid var(--color-primary)',
+                    borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite',
+                    display: 'inline-block',
+                    marginBottom: '10px'
+                  }}></div>
+                  <div>Retrieving live customer feedback...</div>
+                </div>
+              ) : reviewsError ? (
+                <div style={{ padding: '20px', background: 'rgba(231, 76, 60, 0.1)', borderLeft: '4px solid #E74C3C', borderRadius: '4px', color: '#E74C3C' }}>
+                  {reviewsError}
+                </div>
+              ) : reviews.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--color-border)', borderRadius: '12px', color: 'var(--color-text-secondary)' }}>
+                  No reviews found matching the selected filters.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  {reviews.map(r => (
+                    <div key={r._id} style={{
+                      background: 'rgba(255,255,255,0.01)',
+                      border: '1px solid var(--color-border)',
+                      padding: '20px',
+                      borderRadius: '12px',
+                      transition: 'transform 0.2s',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #d4af37 0%, #8b6e15 100%)',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 'bold',
+                            fontSize: '0.85rem'
+                          }}>
+                            {(r.customerName || 'A')[0].toUpperCase()}
+                          </span>
+                          <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{r.customerName}</strong>
+                        </div>
+                        <span style={{ color: '#ff9800', fontSize: '1rem' }}>
+                          {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                        </span>
+                      </div>
+                      
+                      {r.reviewText ? (
+                        <p style={{ margin: '4px 0', color: '#E6D5C3', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                          "{r.reviewText}"
+                        </p>
+                      ) : (
+                        <p style={{ margin: '4px 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                          No comment provided.
+                        </p>
+                      )}
+
+                      {r.orderedItems && r.orderedItems.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontWeight: 'bold', textTransform: 'uppercase' }}>Items:</span>
+                          {r.orderedItems.map((item, idx) => (
+                            <span key={idx} style={{
+                              background: 'rgba(212, 175, 55, 0.1)',
+                              border: '1px solid rgba(212, 175, 55, 0.2)',
+                              color: '#d4af37',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '0.75rem'
+                            }}>
+                              {item.quantity}x {item.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                        <span>Order ID: <code style={{ color: '#aaa', fontSize: '0.75rem' }}>{r.orderId}</code></span>
+                        <span>{new Date(r.createdAt).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1944,14 +2962,14 @@ const OwnerDashboard = () => {
                 </div>
               )}
               <form onSubmit={handleSaveSettings}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div className="form-row" style={{ marginBottom: '20px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" style={{ color: '#fff' }}>Razorpay Key ID</label>
-                    <input type="text" className="form-input" value={razorpayKeyId} onChange={(e) => setRazorpayKeyId(e.target.value)} placeholder="rzp_test_..." />
+                    <label htmlFor="settings-razorpay-key-id" className="form-label" style={{ color: '#fff' }}>Razorpay Key ID</label>
+                    <input type="text" id="settings-razorpay-key-id" name="settings-razorpay-key-id" className="form-input" value={razorpayKeyId} onChange={(e) => setRazorpayKeyId(e.target.value)} placeholder="rzp_test_..." />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" style={{ color: '#fff' }}>Razorpay Secret Key</label>
-                    <input type="password" className="form-input" value={razorpaySecret} onChange={(e) => setRazorpaySecret(e.target.value)} placeholder="••••••••••••••••••••" />
+                    <label htmlFor="settings-razorpay-secret" className="form-label" style={{ color: '#fff' }}>Razorpay Secret Key</label>
+                    <input type="password" id="settings-razorpay-secret" name="settings-razorpay-secret" className="form-input" value={razorpaySecret} onChange={(e) => setRazorpaySecret(e.target.value)} placeholder="••••••••••••••••••••" />
                   </div>
                 </div>
 
@@ -1966,14 +2984,14 @@ const OwnerDashboard = () => {
                   </button>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                <div className="form-row" style={{ marginBottom: '20px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" style={{ color: '#fff' }}>GST Tax Rate (%)</label>
-                    <input type="number" className="form-input" value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value))} />
+                    <label htmlFor="settings-tax-rate" className="form-label" style={{ color: '#fff' }}>GST Tax Rate (%)</label>
+                    <input type="number" id="settings-tax-rate" name="settings-tax-rate" className="form-input" value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value))} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" style={{ color: '#fff' }}>Service Charge (%)</label>
-                    <input type="number" className="form-input" value={serviceCharge} onChange={(e) => setServiceCharge(parseFloat(e.target.value))} />
+                    <label htmlFor="settings-service-charge" className="form-label" style={{ color: '#fff' }}>Service Charge (%)</label>
+                    <input type="number" id="settings-service-charge" name="settings-service-charge" className="form-input" value={serviceCharge} onChange={(e) => setServiceCharge(parseFloat(e.target.value))} />
                   </div>
                 </div>
 
@@ -2043,6 +3061,67 @@ const OwnerDashboard = () => {
                 </div>
               )}
             </div>
+
+            {/* Branch Management Section */}
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', marginTop: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <div>
+                  <h3 style={{ color: '#fff', margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>🏢 Cafe Branch & Location Management</h3>
+                  <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+                    Configure physical branch geofences for attendance tracking validation.
+                  </p>
+                </div>
+                <button onClick={() => setShowAddBranchModal(true)} className="btn btn-primary" style={{ width: 'auto', padding: '10px 20px' }}>
+                  ➕ Add New Branch
+                </button>
+              </div>
+
+              {branchesLoading && branches.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
+                  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>Loading branches...</p>
+                </div>
+              ) : branches.length === 0 ? (
+                <div style={{ padding: '30px 20px', textAlign: 'center', background: 'var(--bg-secondary)', border: '1px dashed var(--color-border)', borderRadius: '8px', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
+                  📍 No branches configured yet. Add one to start tracking location-based attendance.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                  {branches.map(b => (
+                    <div key={b._id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <h4 style={{ color: '#fff', margin: 0, fontSize: '15px', fontWeight: 'bold' }}>📍 {b.branchName}</h4>
+                        <span style={{
+                          backgroundColor: b.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+                          color: b.isActive ? '#2ecc71' : '#e74c3c',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          fontSize: '11px',
+                          fontWeight: 'bold'
+                        }}>
+                          {b.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div><strong>Manager:</strong> {b.manager || 'Unassigned'}</div>
+                        <div><strong>Address:</strong> {b.address}</div>
+                        <div><strong>Coordinates:</strong> {b.latitude}, {b.longitude}</div>
+                        <div><strong>Geo-Fence:</strong> {b.allowedRadius} meters radius</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '10px', borderTop: '1px solid var(--color-border)', paddingTop: '10px' }}>
+                        <button onClick={() => { setEditingBranch({ ...b }); setShowEditBranchModal(true); }} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', flex: 1, minHeight: '34px' }}>
+                          ✏️ Edit
+                        </button>
+                        <button onClick={() => handleDeleteBranch(b._id)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', flex: 1, minHeight: '34px' }}>
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
           </div>
         )}
 
@@ -2057,17 +3136,17 @@ const OwnerDashboard = () => {
               <form onSubmit={handleAddMenuItem}>
                 <div className="modal-body">
                   <div className="form-group">
-                    <label className="form-label">Dish Name *</label>
-                    <input type="text" required placeholder="Gourmet double cheeseburger" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} className="form-input" />
+                    <label htmlFor="add-item-name" className="form-label">Dish Name *</label>
+                    <input type="text" id="add-item-name" name="add-item-name" required placeholder="Gourmet double cheeseburger" value={newItem.name} onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} className="form-input" />
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Price (₹) *</label>
-                      <input type="number" required step="0.01" min="0.01" value={newItem.price} onChange={(e) => setNewItem({ ...newItem, price: e.target.value })} className="form-input" />
+                      <label htmlFor="add-item-price" className="form-label">Price (₹) *</label>
+                      <input type="number" id="add-item-price" name="add-item-price" required step="0.01" min="0.01" value={newItem.price} onChange={(e) => setNewItem({ ...newItem, price: e.target.value })} className="form-input" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Category *</label>
-                      <select value={newItem.category} onChange={(e) => setNewItem({ ...newItem, category: e.target.value })} className="form-input">
+                      <label htmlFor="add-item-category" className="form-label">Category *</label>
+                      <select id="add-item-category" name="add-item-category" value={newItem.category} onChange={(e) => setNewItem({ ...newItem, category: e.target.value })} className="form-input">
                         {(categories.length > 0 ? categories.map(c => c.name) : presetCategories).map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
@@ -2075,16 +3154,16 @@ const OwnerDashboard = () => {
                     </div>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Description *</label>
-                    <textarea required rows="3" value={newItem.description} onChange={(e) => setNewItem({ ...newItem, description: e.target.value })} className="form-input"></textarea>
+                    <label htmlFor="add-item-description" className="form-label">Description *</label>
+                    <textarea id="add-item-description" name="add-item-description" required rows="3" value={newItem.description} onChange={(e) => setNewItem({ ...newItem, description: e.target.value })} className="form-input"></textarea>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Preparation Time (minutes) *</label>
-                    <input type="number" required min="1" value={newItem.preparationTime || 10} onChange={(e) => setNewItem({ ...newItem, preparationTime: parseInt(e.target.value) })} className="form-input" />
+                    <label htmlFor="add-item-prep-time" className="form-label">Preparation Time (minutes) *</label>
+                    <input type="number" id="add-item-prep-time" name="add-item-prep-time" required min="1" value={newItem.preparationTime || 10} onChange={(e) => setNewItem({ ...newItem, preparationTime: parseInt(e.target.value) })} className="form-input" />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Dish Image</label>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <span id="add-item-image-label" className="form-label" style={{ display: 'block', marginBottom: '6px' }}>Dish Image</span>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }} aria-labelledby="add-item-image-label">
                       <input 
                         type="file" 
                         accept="image/*" 
@@ -2127,7 +3206,7 @@ const OwnerDashboard = () => {
                     </div>
                   </div>
                   <div className="form-group" style={{ borderTop: '1px solid #432E22', paddingTop: '15px', marginTop: '15px' }}>
-                    <label className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>🍳 Recipe Mapping (Ingredients)</label>
+                    <span id="add-item-recipe-label" className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>🍳 Recipe Mapping (Ingredients)</span>
                     {(!newItem.recipe || newItem.recipe.length === 0) ? (
                       <p style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '5px 0' }}>No ingredients mapped yet. This item will not deduct stock.</p>
                     ) : (
@@ -2146,10 +3225,10 @@ const OwnerDashboard = () => {
                         })}
                       </div>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '10px', alignItems: 'end' }}>
+                    <div className="recipe-map-grid" aria-labelledby="add-item-recipe-label">
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Select Ingredient</label>
-                        <select value={selectedIngredient} onChange={(e) => setSelectedIngredient(e.target.value)} className="form-input" style={{ padding: '8px' }}>
+                        <label htmlFor="add-item-ingredient-select" className="form-label" style={{ fontSize: '11px' }}>Select Ingredient</label>
+                        <select id="add-item-ingredient-select" name="add-item-ingredient-select" value={selectedIngredient} onChange={(e) => setSelectedIngredient(e.target.value)} className="form-input" style={{ padding: '8px' }}>
                           <option value="">-- Choose Ingredient --</option>
                           {inventoryList.map(inv => (
                             <option key={inv._id} value={inv.name}>{inv.name} ({inv.unit})</option>
@@ -2157,8 +3236,8 @@ const OwnerDashboard = () => {
                         </select>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Quantity</label>
-                        <input type="number" step="0.001" min="0.001" placeholder="e.g. 10" value={ingredientQuantity} onChange={(e) => setIngredientQuantity(e.target.value)} className="form-input" style={{ padding: '8px' }} />
+                        <label htmlFor="add-item-ingredient-qty" className="form-label" style={{ fontSize: '11px' }}>Quantity</label>
+                        <input type="number" id="add-item-ingredient-qty" name="add-item-ingredient-qty" step="0.001" min="0.001" placeholder="e.g. 10" value={ingredientQuantity} onChange={(e) => setIngredientQuantity(e.target.value)} className="form-input" style={{ padding: '8px' }} />
                       </div>
                       <button type="button" onClick={handleAddIngredientToNewItem} className="btn btn-secondary" style={{ width: 'auto', padding: '9px 12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)' }}>➕ Map</button>
                     </div>
@@ -2184,17 +3263,17 @@ const OwnerDashboard = () => {
               <form onSubmit={handleEditMenuItem}>
                 <div className="modal-body">
                   <div className="form-group">
-                    <label className="form-label">Dish Name *</label>
-                    <input type="text" required value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="form-input" />
+                    <label htmlFor="edit-item-name" className="form-label">Dish Name *</label>
+                    <input type="text" id="edit-item-name" name="edit-item-name" required value={editingItem.name} onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })} className="form-input" />
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Price (₹) *</label>
-                      <input type="number" required step="0.01" min="0.01" value={editingItem.price} onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })} className="form-input" />
+                      <label htmlFor="edit-item-price" className="form-label">Price (₹) *</label>
+                      <input type="number" id="edit-item-price" name="edit-item-price" required step="0.01" min="0.01" value={editingItem.price} onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })} className="form-input" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Category *</label>
-                      <select value={editingItem.category} onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })} className="form-input">
+                      <label htmlFor="edit-item-category" className="form-label">Category *</label>
+                      <select id="edit-item-category" name="edit-item-category" value={editingItem.category} onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })} className="form-input">
                         {(categories.length > 0 ? categories.map(c => c.name) : presetCategories).map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
@@ -2202,16 +3281,16 @@ const OwnerDashboard = () => {
                     </div>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Description *</label>
-                    <textarea required rows="3" value={editingItem.description} onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })} className="form-input"></textarea>
+                    <label htmlFor="edit-item-description" className="form-label">Description *</label>
+                    <textarea id="edit-item-description" name="edit-item-description" required rows="3" value={editingItem.description} onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })} className="form-input"></textarea>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Preparation Time (minutes) *</label>
-                    <input type="number" required min="1" value={editingItem.preparationTime || 10} onChange={(e) => setEditingItem({ ...editingItem, preparationTime: parseInt(e.target.value) })} className="form-input" />
+                    <label htmlFor="edit-item-prep-time" className="form-label">Preparation Time (minutes) *</label>
+                    <input type="number" id="edit-item-prep-time" name="edit-item-prep-time" required min="1" value={editingItem.preparationTime || 10} onChange={(e) => setEditingItem({ ...editingItem, preparationTime: parseInt(e.target.value) })} className="form-input" />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Dish Image</label>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <span id="edit-item-image-label" className="form-label" style={{ display: 'block', marginBottom: '6px' }}>Dish Image</span>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }} aria-labelledby="edit-item-image-label">
                       <input 
                         type="file" 
                         accept="image/*" 
@@ -2254,7 +3333,7 @@ const OwnerDashboard = () => {
                     </div>
                   </div>
                   <div className="form-group" style={{ borderTop: '1px solid #432E22', paddingTop: '15px', marginTop: '15px' }}>
-                    <label className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>🍳 Recipe Mapping (Ingredients)</label>
+                    <span id="edit-item-recipe-label" className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>🍳 Recipe Mapping (Ingredients)</span>
                     {(!editingItem.recipe || editingItem.recipe.length === 0) ? (
                       <p style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '5px 0' }}>No ingredients mapped yet. This item will not deduct stock.</p>
                     ) : (
@@ -2273,10 +3352,10 @@ const OwnerDashboard = () => {
                         })}
                       </div>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '10px', alignItems: 'end' }}>
+                    <div className="recipe-map-grid" aria-labelledby="edit-item-recipe-label">
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Select Ingredient</label>
-                        <select value={selectedIngredient} onChange={(e) => setSelectedIngredient(e.target.value)} className="form-input" style={{ padding: '8px' }}>
+                        <label htmlFor="edit-item-ingredient-select" className="form-label" style={{ fontSize: '11px' }}>Select Ingredient</label>
+                        <select id="edit-item-ingredient-select" name="edit-item-ingredient-select" value={selectedIngredient} onChange={(e) => setSelectedIngredient(e.target.value)} className="form-input" style={{ padding: '8px' }}>
                           <option value="">-- Choose Ingredient --</option>
                           {inventoryList.map(inv => (
                             <option key={inv._id} value={inv.name}>{inv.name} ({inv.unit})</option>
@@ -2284,8 +3363,8 @@ const OwnerDashboard = () => {
                         </select>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '11px' }}>Quantity</label>
-                        <input type="number" step="0.001" min="0.001" placeholder="e.g. 10" value={ingredientQuantity} onChange={(e) => setIngredientQuantity(e.target.value)} className="form-input" style={{ padding: '8px' }} />
+                        <label htmlFor="edit-item-ingredient-qty" className="form-label" style={{ fontSize: '11px' }}>Quantity</label>
+                        <input type="number" id="edit-item-ingredient-qty" name="edit-item-ingredient-qty" step="0.001" min="0.001" placeholder="e.g. 10" value={ingredientQuantity} onChange={(e) => setIngredientQuantity(e.target.value)} className="form-input" style={{ padding: '8px' }} />
                       </div>
                       <button type="button" onClick={handleAddIngredientToEditingItem} className="btn btn-secondary" style={{ width: 'auto', padding: '9px 12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)' }}>➕ Map</button>
                     </div>
@@ -2293,7 +3372,7 @@ const OwnerDashboard = () => {
                 </div>
                 <div className="modal-footer">
                   <button type="button" onClick={() => { setShowEditModal(false); setEditingItem(null); }} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-                  <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Changes</button>
+                  <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Update & Save</button>
                 </div>
               </form>
             </div>
@@ -2313,6 +3392,9 @@ const OwnerDashboard = () => {
                 <form onSubmit={handleCreateCategory} style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
                   <input
                     type="text"
+                    id="new-category-name"
+                    name="new-category-name"
+                    aria-label="New Category Name"
                     required
                     placeholder="New category name..."
                     value={newCategoryName}
@@ -2330,6 +3412,9 @@ const OwnerDashboard = () => {
                   <form onSubmit={handleUpdateCategory} style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'rgba(255, 107, 8, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-primary)' }}>
                     <input
                       type="text"
+                      id="rename-category-name"
+                      name="rename-category-name"
+                      aria-label="Rename Category Name"
                       required
                       placeholder="Rename category..."
                       value={categoryNameInput}
@@ -2348,46 +3433,104 @@ const OwnerDashboard = () => {
 
                 {/* List Categories */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <h4 style={{ color: '#fff', fontSize: '14px', margin: '0 0 5px 0' }}>Existing Categories:</h4>
+                  <h4 style={{ color: '#fff', fontSize: '14px', margin: '0 0 5px 0' }}>Existing Categories (Drag or use arrows to reorder):</h4>
                   {categoryLoading && categories.length === 0 ? (
                     <div className="spinner" style={{ margin: '10px auto', borderColor: 'var(--color-primary)', width: '20px', height: '20px', borderWidth: '2px' }} />
-                  ) : (categories.length > 0 ? categories : presetCategories.map((name, idx) => ({ _id: idx, name }))).map((cat) => (
-                    <div
-                      key={cat._id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        background: 'rgba(255,255,255,0.01)',
-                        border: '1px solid var(--color-border)',
-                        padding: '8px 12px',
-                        borderRadius: '8px'
-                      }}
-                    >
-                      <span style={{ color: '#fff', fontSize: '14px', fontWeight: 600 }}>{cat.name}</span>
-                      {/* Only show edit/delete if it's a real db category */}
-                      {cat._id && typeof cat._id === 'string' ? (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => { setEditingCategory(cat); setCategoryNameInput(cat.name); }}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '13px' }}
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCategory(cat._id)}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '13px' }}
-                          >
-                            🗑️
-                          </button>
+                  ) : (
+                    (categories.length > 0 ? categories : presetCategories.map((name, idx) => ({ _id: idx, name }))).map((cat, idx) => (
+                      <div
+                        key={cat._id}
+                        draggable={cat._id && typeof cat._id === 'string'}
+                        onDragStart={(e) => handleCategoryDragStart(e, idx)}
+                        onDragOver={handleCategoryDragOver}
+                        onDrop={(e) => handleCategoryDrop(e, idx)}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px solid var(--color-border)',
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          cursor: cat._id && typeof cat._id === 'string' ? 'grab' : 'default',
+                          transition: 'all 0.2s ease',
+                          userSelect: 'none'
+                        }}
+                        onDragEnd={(e) => { e.currentTarget.style.opacity = '1'; }}
+                        onDragLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                        onDragEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 107, 8, 0.08)'; }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {cat._id && typeof cat._id === 'string' && (
+                            <span style={{ color: 'var(--color-text-secondary)', cursor: 'grab', fontSize: '14px' }}>☰</span>
+                          )}
+                          <span style={{ color: '#fff', fontSize: '14.5px', fontWeight: 700 }}>{cat.name}</span>
                         </div>
-                      ) : (
-                        <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>Default Preset</span>
-                      )}
-                    </div>
-                  ))}
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          {/* Reordering arrows */}
+                          {cat._id && typeof cat._id === 'string' && (
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => moveCategory(idx, 'up')}
+                                style={{
+                                  background: 'rgba(255,255,255,0.04)',
+                                  border: 'none',
+                                  color: idx === 0 ? 'rgba(255,255,255,0.1)' : '#fff',
+                                  borderRadius: '4px',
+                                  padding: '4px 8px',
+                                  cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                  fontSize: '11px'
+                                }}
+                              >
+                                ▲
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === categories.length - 1}
+                                onClick={() => moveCategory(idx, 'down')}
+                                style={{
+                                  background: 'rgba(255,255,255,0.04)',
+                                  border: 'none',
+                                  color: idx === categories.length - 1 ? 'rgba(255,255,255,0.1)' : '#fff',
+                                  borderRadius: '4px',
+                                  padding: '4px 8px',
+                                  cursor: idx === categories.length - 1 ? 'not-allowed' : 'pointer',
+                                  fontSize: '11px'
+                                }}
+                              >
+                                ▼
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Edit/Delete */}
+                          {cat._id && typeof cat._id === 'string' ? (
+                            <div style={{ display: 'flex', gap: '10px', borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '12px' }}>
+                              <button
+                                type="button"
+                                onClick={() => { setEditingCategory(cat); setCategoryNameInput(cat.name); }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '13px' }}
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCategory(cat._id)}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '13px' }}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>Preset</span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
               <div className="modal-footer">
@@ -2408,47 +3551,47 @@ const OwnerDashboard = () => {
               <form onSubmit={handleAddInventoryItem}>
                 <div className="modal-body">
                   <div className="form-group">
-                    <label className="form-label">Ingredient Name *</label>
-                    <input type="text" required value={newInventoryItem.name} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, name: e.target.value })} className="form-input" placeholder="e.g. Tomato Sauce" />
+                    <label htmlFor="add-inv-name" className="form-label">Ingredient Name *</label>
+                    <input type="text" id="add-inv-name" name="add-inv-name" required value={newInventoryItem.name} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, name: e.target.value })} className="form-input" placeholder="e.g. Tomato Sauce" />
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Initial Stock *</label>
-                      <input type="number" required value={newInventoryItem.stock} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, stock: Number(e.target.value), quantity: Number(e.target.value) })} className="form-input" />
+                      <label htmlFor="add-inv-stock" className="form-label">Initial Stock *</label>
+                      <input type="number" id="add-inv-stock" name="add-inv-stock" required value={newInventoryItem.stock} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, stock: Number(e.target.value), quantity: Number(e.target.value) })} className="form-input" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Safety Minimum *</label>
-                      <input type="number" required value={newInventoryItem.minStock} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, minStock: Number(e.target.value), reorderLevel: Number(e.target.value) })} className="form-input" />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">Unit of Measurement *</label>
-                      <input type="text" required value={newInventoryItem.unit} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })} className="form-input" placeholder="e.g. kg, pcs, g, liters" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Cost per Unit (₹) *</label>
-                      <input type="number" step="0.001" required value={newInventoryItem.cost} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, cost: Number(e.target.value), costPrice: Number(e.target.value) })} className="form-input" />
+                      <label htmlFor="add-inv-minstock" className="form-label">Safety Minimum *</label>
+                      <input type="number" id="add-inv-minstock" name="add-inv-minstock" required value={newInventoryItem.minStock} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, minStock: Number(e.target.value), reorderLevel: Number(e.target.value) })} className="form-input" />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Selling Price (₹) *</label>
-                      <input type="number" step="0.01" required value={newInventoryItem.sellingPrice} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, sellingPrice: Number(e.target.value) })} className="form-input" />
+                      <label htmlFor="add-inv-unit" className="form-label">Unit of Measurement *</label>
+                      <input type="text" id="add-inv-unit" name="add-inv-unit" required value={newInventoryItem.unit} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })} className="form-input" placeholder="e.g. kg, pcs, g, liters" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Category *</label>
-                      <input type="text" required value={newInventoryItem.category} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, category: e.target.value })} className="form-input" placeholder="e.g. Ingredients, Dairy, Beverage Raw" />
+                      <label htmlFor="add-inv-cost" className="form-label">Cost per Unit (₹) *</label>
+                      <input type="number" step="0.001" id="add-inv-cost" name="add-inv-cost" required value={newInventoryItem.cost} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, cost: Number(e.target.value), costPrice: Number(e.target.value) })} className="form-input" />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Supplier *</label>
-                      <input type="text" required value={newInventoryItem.supplier} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, supplier: e.target.value })} className="form-input" placeholder="Supplier name" />
+                      <label htmlFor="add-inv-sellingprice" className="form-label">Selling Price (₹) *</label>
+                      <input type="number" step="0.01" id="add-inv-sellingprice" name="add-inv-sellingprice" required value={newInventoryItem.sellingPrice} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, sellingPrice: Number(e.target.value) })} className="form-input" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Branch *</label>
-                      <input type="text" required value={newInventoryItem.branch} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, branch: e.target.value })} className="form-input" placeholder="e.g. Main, Uptown" />
+                      <label htmlFor="add-inv-category" className="form-label">Category *</label>
+                      <input type="text" id="add-inv-category" name="add-inv-category" required value={newInventoryItem.category} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, category: e.target.value })} className="form-input" placeholder="e.g. Ingredients, Dairy, Beverage Raw" />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="add-inv-supplier" className="form-label">Supplier *</label>
+                      <input type="text" id="add-inv-supplier" name="add-inv-supplier" required value={newInventoryItem.supplier} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, supplier: e.target.value })} className="form-input" placeholder="Supplier name" />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="add-inv-branch" className="form-label">Branch *</label>
+                      <input type="text" id="add-inv-branch" name="add-inv-branch" required value={newInventoryItem.branch} onChange={(e) => setNewInventoryItem({ ...newInventoryItem, branch: e.target.value })} className="form-input" placeholder="e.g. Main, Uptown" />
                     </div>
                   </div>
                 </div>
@@ -2472,47 +3615,47 @@ const OwnerDashboard = () => {
               <form onSubmit={handleEditInventoryItem}>
                 <div className="modal-body">
                   <div className="form-group">
-                    <label className="form-label">Ingredient Name *</label>
-                    <input type="text" required value={editingInventoryItem.name} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, name: e.target.value })} className="form-input" />
+                    <label htmlFor="edit-inv-name" className="form-label">Ingredient Name *</label>
+                    <input type="text" id="edit-inv-name" name="edit-inv-name" required value={editingInventoryItem.name} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, name: e.target.value })} className="form-input" />
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Current Stock *</label>
-                      <input type="number" required value={editingInventoryItem.stock} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, stock: Number(e.target.value), quantity: Number(e.target.value) })} className="form-input" />
+                      <label htmlFor="edit-inv-stock" className="form-label">Current Stock *</label>
+                      <input type="number" id="edit-inv-stock" name="edit-inv-stock" required value={editingInventoryItem.stock} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, stock: Number(e.target.value), quantity: Number(e.target.value) })} className="form-input" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Safety Minimum *</label>
-                      <input type="number" required value={editingInventoryItem.minStock} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, minStock: Number(e.target.value), reorderLevel: Number(e.target.value) })} className="form-input" />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">Unit of Measurement *</label>
-                      <input type="text" required value={editingInventoryItem.unit} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Cost per Unit (₹) *</label>
-                      <input type="number" step="0.001" required value={editingInventoryItem.cost} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, cost: Number(e.target.value), costPrice: Number(e.target.value) })} className="form-input" />
+                      <label htmlFor="edit-inv-minstock" className="form-label">Safety Minimum *</label>
+                      <input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.minStock} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, minStock: Number(e.target.value), reorderLevel: Number(e.target.value) })} className="form-input" />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Selling Price (₹) *</label>
-                      <input type="number" step="0.01" required value={editingInventoryItem.sellingPrice || 0} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, sellingPrice: Number(e.target.value) })} className="form-input" />
+                      <label htmlFor="edit-inv-unit" className="form-label">Unit of Measurement *</label>
+                      <input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Category *</label>
-                      <input type="text" required value={editingInventoryItem.category || 'Ingredients'} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, category: e.target.value })} className="form-input" />
+                      <label htmlFor="edit-inv-cost" className="form-label">Cost per Unit (₹) *</label>
+                      <input type="number" step="0.001" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.cost} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, cost: Number(e.target.value), costPrice: Number(e.target.value) })} className="form-input" />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label className="form-label">Supplier *</label>
-                      <input type="text" required value={editingInventoryItem.supplier || ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, supplier: e.target.value })} className="form-input" />
+                      <label htmlFor="edit-inv-sellingprice" className="form-label">Selling Price (₹) *</label>
+                      <input type="number" step="0.01" id="edit-inv-sellingprice" name="edit-inv-sellingprice" required value={editingInventoryItem.sellingPrice || 0} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, sellingPrice: Number(e.target.value) })} className="form-input" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Branch *</label>
-                      <input type="text" required value={editingInventoryItem.branch || 'Main'} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, branch: e.target.value })} className="form-input" />
+                      <label htmlFor="edit-inv-category" className="form-label">Category *</label>
+                      <input type="text" id="edit-inv-category" name="edit-inv-category" required value={editingInventoryItem.category || 'Ingredients'} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, category: e.target.value })} className="form-input" />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="edit-inv-supplier" className="form-label">Supplier *</label>
+                      <input type="text" id="edit-inv-supplier" name="edit-inv-supplier" required value={editingInventoryItem.supplier || ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, supplier: e.target.value })} className="form-input" />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="edit-inv-branch" className="form-label">Branch *</label>
+                      <input type="text" id="edit-inv-branch" name="edit-inv-branch" required value={editingInventoryItem.branch || 'Main'} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, branch: e.target.value })} className="form-input" />
                     </div>
                   </div>
                 </div>
@@ -2621,12 +3764,21 @@ const OwnerDashboard = () => {
                     <input type="text" required value={editingStaff.name} onChange={(e) => setEditingStaff({ ...editingStaff, name: e.target.value })} className="form-input" />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Email Address *</label>
-                    <input type="email" required value={editingStaff.email} onChange={(e) => setEditingStaff({ ...editingStaff, email: e.target.value })} className="form-input" />
+                    <label className="form-label">Email Address (Optional)</label>
+                    <input type="email" value={editingStaff.email || ''} onChange={(e) => setEditingStaff({ ...editingStaff, email: e.target.value })} className="form-input" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Phone Number *</label>
                     <input type="text" required value={editingStaff.phone} onChange={(e) => setEditingStaff({ ...editingStaff, phone: e.target.value })} className="form-input" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Assigned Branch *</label>
+                    <select value={editingStaff.assignedBranch || ''} onChange={(e) => setEditingStaff({ ...editingStaff, assignedBranch: e.target.value })} className="form-input" required>
+                      <option value="">-- Choose Branch --</option>
+                      {branches.map(b => (
+                        <option key={b.branchId} value={b.branchId}>{b.branchName}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="form-row">
                     <div className="form-group">
@@ -2654,6 +3806,225 @@ const OwnerDashboard = () => {
                   <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Changes</button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL 4: ADD BRANCH */}
+        {showAddBranchModal && (
+          <div className="modal-overlay">
+            <div className="modal-container">
+              <div className="modal-header">
+                <h3 className="modal-title">🏢 Add New Branch</h3>
+                <button onClick={() => setShowAddBranchModal(false)} className="modal-close">&times;</button>
+              </div>
+              <form onSubmit={handleAddBranch}>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label className="form-label">Branch Name *</label>
+                    <input type="text" required value={newBranch.branchName} onChange={(e) => setNewBranch({ ...newBranch, branchName: e.target.value })} className="form-input" placeholder="e.g. Uptown Branch" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Branch Address *</label>
+                    <input type="text" required value={newBranch.address} onChange={(e) => setNewBranch({ ...newBranch, address: e.target.value })} className="form-input" placeholder="123 Main Street" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Manager Name</label>
+                    <input type="text" value={newBranch.manager} onChange={(e) => setNewBranch({ ...newBranch, manager: e.target.value })} className="form-input" placeholder="Manager full name" />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Latitude *</label>
+                      <input type="number" step="0.000001" required value={newBranch.latitude} onChange={(e) => setNewBranch({ ...newBranch, latitude: e.target.value })} className="form-input" placeholder="e.g. 16.5062" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Longitude *</label>
+                      <input type="number" step="0.000001" required value={newBranch.longitude} onChange={(e) => setNewBranch({ ...newBranch, longitude: e.target.value })} className="form-input" placeholder="e.g. 80.6480" />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Allowed Geofence Radius *</label>
+                    <select value={newBranch.allowedRadius} onChange={(e) => setNewBranch({ ...newBranch, allowedRadius: Number(e.target.value) })} className="form-input" required>
+                      <option value={20}>20 meters</option>
+                      <option value={30}>30 meters (Default)</option>
+                      <option value={50}>50 meters</option>
+                      <option value={100}>100 meters</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" onClick={() => setShowAddBranchModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Create Branch</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL 5: EDIT BRANCH */}
+        {showEditBranchModal && editingBranch && (
+          <div className="modal-overlay">
+            <div className="modal-container">
+              <div className="modal-header">
+                <h3 className="modal-title">✏️ Edit Branch Location</h3>
+                <button onClick={() => { setShowEditBranchModal(false); setEditingBranch(null); }} className="modal-close">&times;</button>
+              </div>
+              <form onSubmit={handleEditBranch}>
+                <div className="modal-body">
+                  <div className="form-group">
+                    <label className="form-label">Branch Name *</label>
+                    <input type="text" required value={editingBranch.branchName} onChange={(e) => setEditingBranch({ ...editingBranch, branchName: e.target.value })} className="form-input" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Branch Address *</label>
+                    <input type="text" required value={editingBranch.address} onChange={(e) => setEditingBranch({ ...editingBranch, address: e.target.value })} className="form-input" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Manager Name</label>
+                    <input type="text" value={editingBranch.manager || ''} onChange={(e) => setEditingBranch({ ...editingBranch, manager: e.target.value })} className="form-input" />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Latitude *</label>
+                      <input type="number" step="0.000001" required value={editingBranch.latitude || ''} onChange={(e) => setEditingBranch({ ...editingBranch, latitude: e.target.value })} className="form-input" />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Longitude *</label>
+                      <input type="number" step="0.000001" required value={editingBranch.longitude || ''} onChange={(e) => setEditingBranch({ ...editingBranch, longitude: e.target.value })} className="form-input" />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Allowed Geofence Radius *</label>
+                      <select value={editingBranch.allowedRadius || 30} onChange={(e) => setEditingBranch({ ...editingBranch, allowedRadius: Number(e.target.value) })} className="form-input" required>
+                        <option value={20}>20 meters</option>
+                        <option value={30}>30 meters</option>
+                        <option value={50}>50 meters</option>
+                        <option value={100}>100 meters</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Status *</label>
+                      <select value={editingBranch.isActive ? 'true' : 'false'} onChange={(e) => setEditingBranch({ ...editingBranch, isActive: e.target.value === 'true' })} className="form-input" required>
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" onClick={() => { setShowEditBranchModal(false); setEditingBranch(null); }} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Changes</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {selectedReport && (
+          <div className="modal-overlay">
+            <div className="modal-container" style={{ maxWidth: '800px', width: '90%' }}>
+              <div className="modal-header">
+                <h3 className="modal-title">📸 Work Report - {selectedReport.staffName}</h3>
+                <button onClick={() => setSelectedReport(null)} className="modal-close">&times;</button>
+              </div>
+              <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                {/* Meta details */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '8px', border: '1px solid var(--color-border)', marginBottom: '20px' }}>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', textTransform: 'uppercase' }}>Staff Member</span>
+                    <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{selectedReport.staffName}</strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', textTransform: 'uppercase' }}>Assigned Branch</span>
+                    <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{selectedReport.branchName}</strong>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', textTransform: 'uppercase' }}>Submitted Time</span>
+                    <strong style={{ color: '#fff', fontSize: '0.95rem' }}>
+                      {new Date(selectedReport.createdAt).toLocaleDateString()} at {new Date(selectedReport.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div style={{ marginBottom: '24px' }}>
+                  <h4 style={{ color: '#fff', fontSize: '0.9rem', marginBottom: '8px', fontWeight: 700 }}>💬 Description / Notes:</h4>
+                  <p style={{
+                    backgroundColor: 'rgba(0,0,0,0.15)',
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    color: '#E6D5C3',
+                    fontSize: '0.9rem',
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: '1.5'
+                  }}>
+                    {selectedReport.notes || 'No description notes provided for this report.'}
+                  </p>
+                </div>
+
+                {/* Photos Grid */}
+                <div>
+                  <h4 style={{ color: '#fff', fontSize: '0.9rem', marginBottom: '12px', fontWeight: 700 }}>
+                    🖼️ Photo Gallery ({selectedReport.photos.length} photos)
+                  </h4>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                    gap: '15px'
+                  }}>
+                    {selectedReport.photos.map((photo, idx) => (
+                      <div key={idx} style={{
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        border: '1px solid var(--color-border)',
+                        height: '180px',
+                        background: '#000',
+                        cursor: 'zoom-in',
+                        position: 'relative'
+                      }}
+                      onClick={() => window.open(photo, '_blank')}
+                      >
+                        <img
+                          src={photo}
+                          alt={`Report ${idx + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.2s' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                        />
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '6px',
+                          right: '6px',
+                          background: 'rgba(0,0,0,0.6)',
+                          color: '#fff',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '10px',
+                          pointerEvents: 'none'
+                        }}>
+                          #{idx + 1}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+                  🕒 Automatically purged after 24 hours.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReport(null)}
+                  className="btn btn-secondary"
+                  style={{ width: 'auto', padding: '8px 18px' }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

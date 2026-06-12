@@ -11,7 +11,7 @@ const mongoose = require('mongoose');
  */
 const createOrder = async (req, res) => {
   try {
-    const { cafeId, items, tableNumber, customerName, customerEmail, customerPhone } = req.body;
+    const { cafeId, items, tableNumber, customerName, customerEmail, customerPhone, specialInstructions } = req.body;
 
     // Basic validation
     if (!items || items.length === 0) {
@@ -69,6 +69,7 @@ const createOrder = async (req, res) => {
       customerName,
       customerEmail,
       customerPhone,
+      specialInstructions: specialInstructions || '',
       paymentStatus: 'Pending',
       status: 'Placed'
     });
