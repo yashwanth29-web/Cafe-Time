@@ -1,7 +1,7 @@
 const fs = require('fs');
 const filePath = 'c:/CoffeeDayCafe/restaurant-qr-app/client/src/App.jsx';
 let content = fs.readFileSync(filePath, 'utf8');
-//test
+//test maker
 const targetStr = '{/* Auth Flow */}';
 
 if (content.indexOf(targetStr) !== -1) {
