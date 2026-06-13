@@ -137,7 +137,7 @@ const CashierDashboard = () =>{
  const renderPendingBills = () =>{
  return (
 <div>
-<h2 style={{ color: '#E6D5C3', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+<h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
  Pending Receipts ({pendingPayments.length})
 </h2>
 

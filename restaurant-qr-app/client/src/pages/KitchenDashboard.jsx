@@ -271,7 +271,7 @@ const KitchenDashboard = () =>{
  KOT (Kitchen Order Ticket)
 </div>
  {order.items.map((item, idx) =>
-<div key={idx} style={{ display: 'flex', justifyContent: 'space-between', margin: '5px 0', color: '#E6D5C3' }}>
+<div key={idx} style={{ display: 'flex', justifyContent: 'space-between', margin: '5px 0', color: 'var(--color-text-secondary)' }}>
 <span>
 <strong>{item.quantity}x</strong>{item.name}
 </span>
@@ -508,7 +508,7 @@ const KitchenDashboard = () =>{
  }}>
 <div className="admin-menu-info" style={{ padding: '15px', display: 'flex', flexDirection: 'column', height: '100%' }}>
 <div style={{ flexGrow: 1 }}>
-<span style={{ fontSize: '11px', background: 'var(--color-primary)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+<span style={{ fontSize: '11px', background: 'var(--color-primary)', color: 'var(--color-text-primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
  {item.category}
 </span>
 <h4 style={{ color: 'var(--color-text-primary)', margin: '8px 0 4px 0', fontSize: '1.05rem', fontWeight: 700 }}>{item.name}</h4>
@@ -559,7 +559,7 @@ const KitchenDashboard = () =>{
 <div className="mobile-only-kitchen" style={{ display: 'none' }}>
  {activeTab === 'cooking' ?
 <div>
-<h2 style={{ color: '#E6D5C3', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+<h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
  Active cooking queue ({activeOrders.length})
 </h2>
  {renderActiveCookingQueue()}
@@ -578,7 +578,7 @@ const KitchenDashboard = () =>{
 <div className="desktop-tablet-kitchen" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px' }}>
  {/* Preparing Column */}
 <div>
-<h2 style={{ color: '#E6D5C3', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
+<h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 20px 0', fontSize: '1.4rem', fontWeight: 700 }}>
  Active cooking queue ({activeOrders.length})
 </h2>
  {renderActiveCookingQueue()}

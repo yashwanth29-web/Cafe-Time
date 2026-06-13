@@ -128,7 +128,7 @@ const PaymentDemo = () => {
                     borderRadius: '8px',
                     border: '1px solid var(--color-border)',
                     background: 'rgba(0, 0, 0,0.05)',
-                    color: '#fff',
+                    color: 'var(--color-text-primary)',
                     outline: 'none',
                     fontSize: '14px'
                   }} />
@@ -149,7 +149,7 @@ const PaymentDemo = () => {
                     borderRadius: '8px',
                     border: '1px solid var(--color-border)',
                     background: 'rgba(0, 0, 0,0.05)',
-                    color: '#fff',
+                    color: 'var(--color-text-primary)',
                     outline: 'none',
                     fontSize: '14px'
                   }} />
@@ -170,7 +170,7 @@ const PaymentDemo = () => {
                     borderRadius: '8px',
                     border: '1px solid var(--color-border)',
                     background: 'rgba(0, 0, 0,0.05)',
-                    color: '#fff',
+                    color: 'var(--color-text-primary)',
                     outline: 'none',
                     fontSize: '14px'
                   }} />
@@ -319,7 +319,7 @@ const PaymentDemo = () => {
               borderRadius: '12px',
               textAlign: 'left',
               fontSize: '13px',
-              color: '#fff',
+              color: 'var(--color-text-primary)',
               marginBottom: '24px',
               border: '1px solid rgba(0, 0, 0,0.05)'
             }}>

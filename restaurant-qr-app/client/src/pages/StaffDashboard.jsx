@@ -413,7 +413,7 @@ const StaffDashboard = () => {
  '0 0 10px #2ecc71' :
  'none'
  }} />
- <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#E6D5C3' }}>
+ <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
  Status: {
  todayStatus?.checkedIn ?
  todayStatus?.checkedOut ?
@@ -499,7 +499,7 @@ const StaffDashboard = () => {
  
  {actionLoading ?
  <>
- <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderColor: '#fff' }} />
+ <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', bordercolor: 'var(--color-text-primary)' }} />
  <span>Verifying Location & Device...</span>
  </> :
 
@@ -532,7 +532,7 @@ const StaffDashboard = () => {
  
  {actionLoading ?
  <>
- <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderColor: '#fff' }} />
+ <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', bordercolor: 'var(--color-text-primary)' }} />
  <span>Checking Out...</span>
  </> :
 
@@ -677,13 +677,13 @@ const StaffDashboard = () => {
  <td style={{ padding: '12px 8px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
  {formatDate(record.date)}
  </td>
- <td style={{ padding: '12px 8px', color: '#E6D5C3' }}>
+ <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
  {record.branchName || 'Main Branch'}
  </td>
- <td style={{ padding: '12px 8px', color: '#E6D5C3' }}>
+ <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
  {formatTime(record.checkInTime)}
  </td>
- <td style={{ padding: '12px 8px', color: '#E6D5C3' }}>
+ <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
  {record.checkOutTime ? formatTime(record.checkOutTime) : 'N/A'}
  </td>
  <td style={{ padding: '12px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
@@ -892,7 +892,7 @@ const StaffDashboard = () => {
  border: '1px solid var(--color-border)',
  borderRadius: '8px',
  padding: '12px',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  fontSize: '0.9rem',
  outline: 'none',
  resize: 'vertical',
@@ -929,7 +929,7 @@ const StaffDashboard = () => {
  
  {reportLoading ?
  <>
- <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderColor: '#fff' }} />
+ <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', bordercolor: 'var(--color-text-primary)' }} />
  <span>Submitting Work Report Proof...</span>
  </> :
 

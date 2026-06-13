@@ -442,7 +442,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                   borderRadius: '8px',
                   border: '1px solid var(--color-border)',
                   background: 'rgba(0,0,0,0.15)',
-                  color: '#fff',
+                  color: 'var(--color-text-primary)',
                   outline: 'none',
                   fontSize: '13px'
                 }} />
@@ -461,7 +461,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                   borderRadius: '8px',
                   border: '1px solid var(--color-border)',
                   background: 'rgba(0,0,0,0.15)',
-                  color: '#fff',
+                  color: 'var(--color-text-primary)',
                   outline: 'none',
                   fontSize: '13px'
                 }} />
@@ -480,7 +480,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                   borderRadius: '8px',
                   border: '1px solid var(--color-border)',
                   background: 'rgba(0,0,0,0.15)',
-                  color: '#fff',
+                  color: 'var(--color-text-primary)',
                   outline: 'none',
                   fontSize: '13px'
                 }} />
@@ -498,7 +498,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                   borderRadius: '8px',
                   border: '1px solid var(--color-border)',
                   background: 'rgba(0,0,0,0.15)',
-                  color: '#fff',
+                  color: 'var(--color-text-primary)',
                   outline: 'none',
                   fontSize: '13px',
                   minHeight: '60px',
@@ -542,7 +542,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 borderRadius: '12px',
                 border: 'none',
                 background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
-                color: '#fff',
+                color: 'var(--color-text-primary)',
                 cursor: loading || cart.length === 0 || !customerName || !customerEmail || !customerPhone ? 'not-allowed' : 'pointer'
               }}>
               

@@ -180,7 +180,7 @@ const WaiterDashboard = () =>{
 <span style={{
  fontSize: '11px',
  fontWeight: 'bold',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  background: '#e67e22',
  padding: '2px 6px',
  borderRadius: '4px',
@@ -215,7 +215,7 @@ const WaiterDashboard = () =>{
  className="touch-btn"
  style={{
  background: '#2980B9',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  padding: '10px 12px',
  borderRadius: '8px',
  fontSize: '12px',
@@ -231,7 +231,7 @@ const WaiterDashboard = () =>{
  className="touch-btn"
  style={{
  background: '#27AE60',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  padding: '10px 16px',
  borderRadius: '8px',
  fontSize: '12.5px',
@@ -333,7 +333,7 @@ const WaiterDashboard = () =>{
  className="touch-btn"
  style={{
  background: '#27AE60',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  padding: '10px 16px',
  borderRadius: '8px',
  fontSize: '12.5px',

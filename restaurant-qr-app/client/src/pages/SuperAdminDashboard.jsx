@@ -559,37 +559,37 @@ const SuperAdminDashboard = () => {
               <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div className="form-grid-v2">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>OWNER NAME</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>OWNER NAME</label>
                     <input
                   type="text"
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#1F140E' }}
                   placeholder="John Doe"
                   disabled={loading} />
                 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>OWNER EMAIL</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>OWNER EMAIL</label>
                     <input
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#1F140E' }}
                   placeholder="john@example.com"
                   disabled={loading} />
                 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>OWNER PHONE</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>OWNER PHONE</label>
                     <input
                   type="text"
                   name="phone"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#1F140E' }}
                   placeholder="+91 9876543210"
                   disabled={loading} />
                 
@@ -598,36 +598,36 @@ const SuperAdminDashboard = () => {
     
                 <div className="form-grid-v2">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>CAFE NAME</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>CAFE NAME</label>
                     <input
                   type="text"
                   name="cafeName"
                   value={formData.cafeName}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#1F140E' }}
                   placeholder="Central Perk"
                   disabled={loading} />
                 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>CAFE ID (CODE)</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>CAFE ID (CODE)</label>
                     <input
                   type="text"
                   name="cafeId"
                   value={formData.cafeId}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#1F140E' }}
                   placeholder="CP001"
                   disabled={loading} />
                 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>BUSINESS TYPE</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>BUSINESS TYPE</label>
                     <select
                   name="businessType"
                   value={formData.businessType}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', background: '#1F140E', fontSize: '0.9rem', color: '#fff' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', background: '#1F140E', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}
                   disabled={loading}>
                   
                       <option value="Cafe">Cafe</option>
@@ -640,37 +640,37 @@ const SuperAdminDashboard = () => {
     
                 <div className="form-grid-v2-uneven">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>CITY</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>CITY</label>
                     <input
                   type="text"
                   name="city"
                   value={formData.city}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#1F140E' }}
                   placeholder="Mumbai"
                   disabled={loading} />
                 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>STATE</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>STATE</label>
                     <input
                   type="text"
                   name="state"
                   value={formData.state}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#1F140E' }}
                   placeholder="Maharashtra"
                   disabled={loading} />
                 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>BRANCH COUNT</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>BRANCH COUNT</label>
                     <input
                   type="number"
                   name="branchCount"
                   value={formData.branchCount}
                   onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#1F140E' }}
                   min={1}
                   disabled={loading} />
                 
@@ -846,7 +846,7 @@ const SuperAdminDashboard = () => {
                           e.stopPropagation();
                           setSelectedCafeForDetails(cafe);
                         }}
-                        style={{ backgroundColor: '#1F140E', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
+                        style={{ backgroundColor: '#1F140E', color: 'var(--color-text-primary)', border: 'none', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
                         
                               Inspect
                             </button>
@@ -884,7 +884,7 @@ const SuperAdminDashboard = () => {
                         }}
                         style={{
                           backgroundColor: '#E74C3C',
-                          color: '#fff',
+                          color: 'var(--color-text-primary)',
                           border: 'none',
                           padding: '6px 14px',
                           borderRadius: '9999px',
@@ -1060,7 +1060,7 @@ const SuperAdminDashboard = () => {
                         {cafe.subscriptionStatus || 'Active'}
                       </span>
                     </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center', color: '#E6D5C3' }}>
+                    <td style={{ padding: '12px 8px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
                       {formatDate(cafe.subscriptionRenewal || defaultRenewalDate)}
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
@@ -1077,7 +1077,7 @@ const SuperAdminDashboard = () => {
                       }}
                       style={{
                         backgroundColor: '#6F4E37',
-                        color: '#fff',
+                        color: 'var(--color-text-primary)',
                         border: 'none',
                         padding: '6px 12px',
                         borderRadius: '6px',
@@ -1114,7 +1114,7 @@ const SuperAdminDashboard = () => {
                     <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontWeight: 850 }}>
                       {cafe.name} ({cafe.cafeId})
                     </h4>
-                    <span style={{ fontSize: '0.75rem', background: '#6F4E37', color: '#fff', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
+                    <span style={{ fontSize: '0.75rem', background: '#6F4E37', color: 'var(--color-text-primary)', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
                       {activeBranches} / {(cafe.branchesList || []).length} Branches Active
                     </span>
                   </div>
@@ -1140,7 +1140,7 @@ const SuperAdminDashboard = () => {
                             <div style={{ fontSize: '0.75rem', color: '#A0826C', marginTop: '4px' }}>
                               ID: {br.branchId}
                             </div>
-                            <div style={{ fontSize: '0.8rem', color: '#E6D5C3', marginTop: '6px' }}>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '6px' }}>
                               📍 {br.address}
                             </div>
                           </div>
@@ -1195,13 +1195,13 @@ const SuperAdminDashboard = () => {
               return (
                 <tr key={ticket._id} style={{ borderBottom: '1px solid #432E22' }}>
                       <td style={{ padding: '12px 8px', color: 'var(--color-text-primary)', fontWeight: 600, verticalAlign: 'top' }}>
-                        <span style={{ color: '#E6D5C3', fontSize: '0.8rem', display: 'block' }}>{ticket.ticketId}</span>
+                        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', display: 'block' }}>{ticket.ticketId}</span>
                         {ticket.cafeName}
                         <span style={{ fontSize: '0.75rem', color: '#A0826C', display: 'block' }}>({ticket.cafeId})</span>
                       </td>
                       <td style={{ padding: '12px 8px', verticalAlign: 'top', maxWidth: '300px' }}>
                         <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '4px' }}>{ticket.subject}</strong>
-                        <p style={{ margin: 0, fontSize: '0.8rem', color: '#E6D5C3', lineHeight: '1.4' }}>{ticket.message}</p>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-secondary)', lineHeight: '1.4' }}>{ticket.message}</p>
                         <span style={{ fontSize: '0.7rem', color: '#A0826C', display: 'block', marginTop: '6px' }}>Created: {formatDate(ticket.createdAt)}</span>
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
@@ -1345,7 +1345,7 @@ const SuperAdminDashboard = () => {
                       <td style={{ padding: '12px 8px', color: 'var(--color-text-primary)', fontWeight: 600 }}>
                         {cafe.name} ({cafe.cafeId})
                       </td>
-                      <td style={{ padding: '12px 8px', color: '#E6D5C3' }}>
+                      <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
                         {cafe.subscriptionPlan || 'Basic'}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'center', color: '#27AE60', fontWeight: 'bold' }}>
@@ -1556,7 +1556,7 @@ const SuperAdminDashboard = () => {
                 type="submit"
                 style={{
                   backgroundColor: '#6F4E37',
-                  color: '#fff',
+                  color: 'var(--color-text-primary)',
                   border: 'none',
                   padding: '8px 20px',
                   borderRadius: '9999px',
@@ -1651,7 +1651,7 @@ const SuperAdminDashboard = () => {
                 type="submit"
                 style={{
                   backgroundColor: '#6F4E37',
-                  color: '#fff',
+                  color: 'var(--color-text-primary)',
                   border: 'none',
                   padding: '8px 20px',
                   borderRadius: '9999px',

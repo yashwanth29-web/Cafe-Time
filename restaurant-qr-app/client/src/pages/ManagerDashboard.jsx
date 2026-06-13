@@ -573,7 +573,7 @@ const ManagerDashboard = () =>{
  return (
 <tr key={item._id} style={{ borderBottom: '1px solid #432E22' }}>
 <td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{item.name}</td>
-<td style={{ padding: '10px 8px', color: '#E6D5C3' }}>{item.category || 'Ingredients'}</td>
+<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{item.category || 'Ingredients'}</td>
 <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: isLow ? '#E74C3C' : 'var(--color-text-primary)' }}>
  {qtyVal} {item.unit}
 </td>
@@ -603,7 +603,7 @@ const ManagerDashboard = () =>{
  setStockForm({ quantity: qtyVal });
  setShowUpdateStockModal(true);
  }}
- style={{ background: '#6F4E37', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+ style={{ background: '#6F4E37', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
  
   Stock Qty
 </button>
@@ -618,7 +618,7 @@ const ManagerDashboard = () =>{
  });
  setShowPurchaseModal(true);
  }}
- style={{ background: '#27AE60', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+ style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
  
  Purchase
 </button>
@@ -632,7 +632,7 @@ const ManagerDashboard = () =>{
  });
  setShowWastageModal(true);
  }}
- style={{ background: '#E74C3C', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+ style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
  
  Wastage
 </button>
@@ -688,7 +688,7 @@ const ManagerDashboard = () =>{
  setStockForm({ quantity: qtyVal });
  setShowUpdateStockModal(true);
  }}
- style={{ background: '#6F4E37', color: '#fff', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
+ style={{ background: '#6F4E37', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
  
   Stock
 </button>
@@ -703,7 +703,7 @@ const ManagerDashboard = () =>{
  });
  setShowPurchaseModal(true);
  }}
- style={{ background: '#27AE60', color: '#fff', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
+ style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
  
  Purchase
 </button>
@@ -717,7 +717,7 @@ const ManagerDashboard = () =>{
  });
  setShowWastageModal(true);
  }}
- style={{ background: '#E74C3C', color: '#fff', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
+ style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
  
  Wastage
 </button>
@@ -826,7 +826,7 @@ const ManagerDashboard = () =>{
  }}>
 <div className="admin-menu-info" style={{ padding: '15px', display: 'flex', flexDirection: 'column', height: '100%' }}>
 <div style={{ flexGrow: 1 }}>
-<span style={{ fontSize: '11px', background: 'var(--color-primary)', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+<span style={{ fontSize: '11px', background: 'var(--color-primary)', color: 'var(--color-text-primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', textTransform: 'uppercase' }}>
  {item.category}
 </span>
 <h4 style={{ color: 'var(--color-text-primary)', margin: '8px 0 4px 0', fontSize: '1.05rem', fontWeight: 700 }}>{item.name}</h4>
@@ -847,7 +847,7 @@ const ManagerDashboard = () =>{
  setNewPrice(item.price);
  setShowPriceModal(true);
  }}
- style={{ background: '#6F4E37', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+ style={{ background: '#6F4E37', color: 'var(--color-text-primary)', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
  
  ₹ Price
 </button>

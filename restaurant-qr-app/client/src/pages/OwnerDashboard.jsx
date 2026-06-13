@@ -158,6 +158,11 @@ const OwnerDashboard = () =>{
  const [orders, setOrders] = useState([]);
  const [ordersLoading, setOrdersLoading] = useState(true);
  const [ordersError, setOrdersError] = useState('');
+ const [orderDateFilter, setOrderDateFilter] = useState(() => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+ });
+ const [orderSearchQuery, setOrderSearchQuery] = useState('');
  const [menuItems, setMenuItems] = useState([]);
  const [menuLoading, setMenuLoading] = useState(false);
  const [menuError, setMenuError] = useState('');
@@ -1470,7 +1475,7 @@ const OwnerDashboard = () =>{
  .dashboard-header-clean h2 {
  font-size: 1.35rem;
  font-weight: 800;
- color: #FAF6F0;
+ color: var(--color-text-primary);
  margin: 0;
  }
  .dashboard-header-clean p {
@@ -1595,7 +1600,7 @@ const OwnerDashboard = () =>{
  .admin-menu-title {
  font-size: 13px;
  font-weight: 700;
- color: #FAF6F0;
+ color: var(--color-text-primary);
  white-space: nowrap;
  overflow: hidden;
  text-overflow: ellipsis;
@@ -1675,6 +1680,23 @@ const OwnerDashboard = () =>{
  .owner-double-deck {
  grid-template-columns: 1fr 1fr;
  gap: 30px;
+ }
+ }
+ .orders-monitor-wrapper {
+ padding: 12px;
+ }
+ .orders-monitor-grid {
+ display: grid;
+ grid-template-columns: repeat(2, 1fr);
+ gap: 10px;
+ }
+ @media (min-width: 600px) {
+ .orders-monitor-wrapper {
+ padding: 25px;
+ }
+ .orders-monitor-grid {
+ grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+ gap: 16px;
  }
  }
  `}</style>
@@ -1886,10 +1908,10 @@ const OwnerDashboard = () =>{
 </div>
 <div className="menu-header-actions">
 <button onClick={() =>setShowCategoryModal(true)} className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', fontSize: '13px' }}>
-<span className="btn-label">Categories</span>
+📂 <span className="btn-label">Categories</span>
 </button>
 <button onClick={() =>setShowAddModal(true)} className="btn btn-primary" style={{ width: 'auto', padding: '8px 14px', fontSize: '13px' }}>
-<span className="btn-label">Add Item</span>
+➕ <span className="btn-label">Add Item</span>
 </button>
 </div>
 </div>
@@ -1929,8 +1951,8 @@ const OwnerDashboard = () =>{
 <div className="admin-menu-meta">
 <span className="admin-menu-price">₹{parseFloat(item.price).toFixed(2)}</span>
 <div className="menu-card-actions">
-<button onClick={() =>{setEditingItem({ ...item });setShowEditModal(true);}} className="btn btn-secondary menu-card-btn"><span className="btn-text">Edit</span></button>
-<button onClick={() =>handleDeleteMenuItem(item.id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}><span className="btn-text">Del</span></button>
+  <button onClick={() =>{setEditingItem({ ...item });setShowEditModal(true);}} className="btn btn-secondary menu-card-btn">✏️<span className="btn-text"> Edit</span></button>
+  <button onClick={() =>handleDeleteMenuItem(item.id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
 </div>
 </div>
 </div>
@@ -2018,7 +2040,7 @@ const OwnerDashboard = () =>{
  border: '1px solid var(--color-border)',
  borderRadius: '8px',
  padding: '6px 10px',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  fontSize: '12px',
  outline: 'none',
  fontFamily: 'inherit'
@@ -2105,7 +2127,7 @@ const OwnerDashboard = () =>{
  
  {/* Review Text */}
  {r.reviewText ?
-<p style={{ margin: 0, color: '#E6D5C3', fontSize: '13px', lineHeight: '1.5', borderLeft: '2px solid var(--color-primary)', paddingLeft: '10px' }}>
+<p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '13px', lineHeight: '1.5', borderLeft: '2px solid var(--color-primary)', paddingLeft: '10px' }}>
  {r.reviewText}
 </p>:
 
@@ -2246,7 +2268,7 @@ const OwnerDashboard = () =>{
  style={{
  background: 'rgba(0, 0, 0,0.06)', border: '1px solid rgba(0, 0, 0,0.08)',
  borderRadius: '50%', width: '36px', height: '36px',
- color: '#fff', fontSize: '18px', cursor: 'pointer',
+ color: 'var(--color-text-primary)', fontSize: '18px', cursor: 'pointer',
  display: 'flex', alignItems: 'center', justifyContent: 'center',
  flexShrink: 0
  }}>
@@ -2322,7 +2344,7 @@ const OwnerDashboard = () =>{
  onClick={() =>setShowAddStaffModal(true)}
  style={{
  display: 'flex', alignItems: 'center', gap: '8px',
- background: 'var(--color-primary)', color: '#fff',
+ background: 'var(--color-primary)', color: 'var(--color-text-primary)',
  border: 'none', borderRadius: '10px',
  padding: '8px 16px', fontSize: '13px', fontWeight: 700,
  cursor: 'pointer', fontFamily: 'inherit',
@@ -2683,7 +2705,7 @@ const OwnerDashboard = () =>{
  border: '1px solid var(--color-border)',
  borderRadius: '8px',
  padding: '8px 12px',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  fontSize: '0.85rem',
  outline: 'none'
  }}>
@@ -2705,7 +2727,7 @@ const OwnerDashboard = () =>{
  border: '1px solid var(--color-border)',
  borderRadius: '8px',
  padding: '8px 12px',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  fontSize: '0.85rem',
  outline: 'none'
  }}>
@@ -2730,7 +2752,7 @@ const OwnerDashboard = () =>{
  border: '1px solid var(--color-border)',
  borderRadius: '8px',
  padding: '8px 12px',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  fontSize: '0.85rem',
  outline: 'none'
  }}>
@@ -2865,7 +2887,7 @@ const OwnerDashboard = () =>{
 <p style={{
  margin: 0,
  fontSize: '0.8rem',
- color: '#E6D5C3',
+ color: 'var(--color-text-secondary)',
  lineHeight: '1.4',
  overflow: 'hidden',
  textOverflow: 'ellipsis',
@@ -3001,12 +3023,12 @@ const OwnerDashboard = () =>{
  Wastage</button>
 <button
  onClick={() =>{setEditingInventoryItem({ ...item });setShowEditInventoryModal(true);}}
- style={{ background: 'rgba(0, 0, 0,0.06)', color: '#fff', border: '1px solid var(--color-border)', padding: '6px 10px', borderRadius: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'inherit' }}>
- </button>
+ style={{ flex: 1, background: 'rgba(0, 0, 0,0.06)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
+ ✏️ Edit</button>
 <button
  onClick={() =>handleDeleteInventoryItem(item._id)}
- style={{ background: 'rgba(231,76,60,0.06)', color: '#E74C3C', border: '1px solid #E74C3C', padding: '6px 10px', borderRadius: '7px', cursor: 'pointer', fontSize: '13px', fontFamily: 'inherit' }}>
- </button>
+ style={{ flex: 1, background: 'rgba(231,76,60,0.06)', color: '#E74C3C', border: '1px solid #E74C3C', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
+ 🗑️ Delete</button>
 </div>
 </div>);
 
@@ -3047,7 +3069,7 @@ const OwnerDashboard = () =>{
  return (
 <tr key={item._id} style={{ borderBottom: '1px solid #432E22' }}>
 <td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{item.name}</td>
-<td style={{ padding: '10px 8px', color: '#E6D5C3' }}>{item.category || 'Ingredients'}</td>
+<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{item.category || 'Ingredients'}</td>
 <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: isLow ? '#E74C3C' : 'var(--color-text-primary)' }}>{qtyVal} {item.unit}</td>
 <td style={{ padding: '10px 8px', textAlign: 'center' }}>
 <span style={{ backgroundColor: `${statusColor}1A`, border: `1px solid ${statusColor}`, color: statusColor, padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
@@ -3061,10 +3083,10 @@ const OwnerDashboard = () =>{
 <td style={{ padding: '10px 8px', textAlign: 'center' }}>{reorderVal} {item.unit}</td>
 <td style={{ padding: '10px 8px', textAlign: 'center' }}>
 <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-<button onClick={() =>{setPurchaseForm({ itemId: item._id, itemName: item.name, quantityAdded: 0, costPrice: costPriceVal, supplier: item.supplier || '', notes: '' });setShowPurchaseModal(true);}} style={{ background: '#27AE60', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Purchase</button>
-<button onClick={() =>{setWastageForm({ itemId: item._id, itemName: item.name, quantityWasted: 0, type: 'Wastage', reason: '' });setShowWastageModal(true);}} style={{ background: '#E74C3C', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Wastage</button>
-<button onClick={() =>{setEditingInventoryItem({ ...item });setShowEditInventoryModal(true);}} style={{ background: 'transparent', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}></button>
-<button onClick={() =>handleDeleteInventoryItem(item._id)} style={{ background: 'transparent', color: '#E74C3C', border: '1px solid #E74C3C', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}></button>
+<button onClick={() =>{setPurchaseForm({ itemId: item._id, itemName: item.name, quantityAdded: 0, costPrice: costPriceVal, supplier: item.supplier || '', notes: '' });setShowPurchaseModal(true);}} style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Purchase</button>
+<button onClick={() =>{setWastageForm({ itemId: item._id, itemName: item.name, quantityWasted: 0, type: 'Wastage', reason: '' });setShowWastageModal(true);}} style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Wastage</button>
+<button onClick={() =>{setEditingInventoryItem({ ...item });setShowEditInventoryModal(true);}} style={{ background: 'transparent', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>✏️ Edit</button>
+<button onClick={() =>handleDeleteInventoryItem(item._id)} style={{ background: 'transparent', color: '#E74C3C', border: '1px solid #E74C3C', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>🗑️</button>
 </div>
 </td>
 </tr>);
@@ -3120,7 +3142,7 @@ const OwnerDashboard = () =>{
 <td style={{ padding: '10px 8px', textAlign: 'right', color: 'var(--color-text-primary)' }}>
  ₹{(log.cost || 0).toFixed(2)}
 </td>
-<td style={{ padding: '10px 8px', color: '#E6D5C3' }}>{log.reason}</td>
+<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{log.reason}</td>
 <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{log.userEmail || 'system'}</td>
 </tr>);
 
@@ -3174,7 +3196,7 @@ const OwnerDashboard = () =>{
 <td style={{ padding: '10px 8px', textAlign: 'right', color: '#E74C3C', fontWeight: 'bold' }}>
  ₹{log.cost.toFixed(2)}
 </td>
-<td style={{ padding: '10px 8px', color: '#E6D5C3' }}>{log.reason}</td>
+<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{log.reason}</td>
 </tr>
 )}
 </tbody>
@@ -3192,14 +3214,14 @@ const OwnerDashboard = () =>{
 <div key={sup} style={{ background: '#1F140E', border: '1px solid #432E22', borderRadius: '12px', padding: '16px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #432E22', paddingBottom: '8px', marginBottom: '12px' }}>
 <strong style={{ color: 'var(--color-text-primary)', fontSize: '1rem' }}>{sup}</strong>
-<span style={{ fontSize: '11px', background: '#6F4E37', color: '#fff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+<span style={{ fontSize: '11px', background: '#6F4E37', color: 'var(--color-text-primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
  {supItems.length} Products
 </span>
 </div>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
  {supItems.map((item) =>
 <div key={item._id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-<span style={{ color: '#E6D5C3' }}>{item.name}</span>
+<span style={{ color: 'var(--color-text-secondary)' }}>{item.name}</span>
 <strong style={{ color: 'var(--color-text-primary)' }}>{item.quantity || item.stock} {item.unit}</strong>
 </div>
 )}
@@ -3222,9 +3244,71 @@ const OwnerDashboard = () =>{
  {/* TAB 5: ORDERS MONITOR (READ-ONLY) */}
  {activeTab === 'orders' &&
 <div className="fade-in">
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', overflowX: 'auto' }}>
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
- {orders.map((order) =>
+<div className="orders-monitor-wrapper" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', overflowX: 'auto' }}>
+
+{/* Filter Controls for Orders */}
+<div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+ <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+ <label style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Select Date</label>
+ <input 
+ type="date" 
+ value={orderDateFilter} 
+ onChange={(e) => setOrderDateFilter(e.target.value)}
+ style={{
+ padding: '10px 14px',
+ borderRadius: '8px',
+ border: '1px solid var(--color-border)',
+ background: 'var(--bg-secondary)',
+ color: 'var(--color-text-primary)',
+ outline: 'none',
+ fontFamily: 'inherit',
+ fontSize: '14px'
+ }}
+ />
+ </div>
+ <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: '200px' }}>
+ <label style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Search Orders</label>
+ <input 
+ type="text" 
+ placeholder="Search by Order ID, Table number, or Status..."
+ value={orderSearchQuery} 
+ onChange={(e) => setOrderSearchQuery(e.target.value)}
+ style={{
+ padding: '10px 14px',
+ borderRadius: '8px',
+ border: '1px solid var(--color-border)',
+ background: 'var(--bg-secondary)',
+ color: 'var(--color-text-primary)',
+ outline: 'none',
+ fontFamily: 'inherit',
+ width: '100%',
+ fontSize: '14px'
+ }}
+ />
+ </div>
+</div>
+
+<div className="orders-monitor-grid">
+ {orders
+ .filter((order) => {
+ if (!order.createdAt) return true;
+ const localDate = new Date(order.createdAt);
+ const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+ 
+ const matchesDate = orderDateStr === orderDateFilter;
+ if (!matchesDate) return false;
+ 
+ if (!orderSearchQuery) return true;
+ 
+ const q = orderSearchQuery.toLowerCase();
+ return (
+ (order._id && order._id.toLowerCase().includes(q)) || 
+ (order.tableNumber && String(order.tableNumber).toLowerCase().includes(q)) || 
+ (order.status && order.status.toLowerCase().includes(q)) ||
+ (order.items && order.items.some(i => i.name && i.name.toLowerCase().includes(q)))
+ );
+ })
+ .map((order) =>
 <div key={order._id} style={{
  background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)',
  borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
@@ -3247,7 +3331,7 @@ const OwnerDashboard = () =>{
 </div>
 
  {/* Items List */}
-<div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: '#E6D5C3', maxHeight: '100px', overflowY: 'auto' }}>
+<div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '100px', overflowY: 'auto' }}>
  {order.items.map((i, idx) =>
 <div key={idx} style={{ display: 'flex', gap: '6px', marginBottom: idx !== order.items.length - 1 ? '4px' : 0 }}>
 <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{i.quantity}x</span>
@@ -3518,7 +3602,7 @@ const OwnerDashboard = () =>{
  borderRadius: '8px',
  fontSize: '13px',
  fontWeight: 'bold',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  minHeight: '44px'
  }}>
  
@@ -3645,7 +3729,7 @@ const OwnerDashboard = () =>{
  borderRadius: '8px',
  fontSize: '13px',
  fontWeight: 'bold',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  minHeight: '44px'
  }}>
  
@@ -3839,7 +3923,7 @@ const OwnerDashboard = () =>{
 
  {/* Edit/Delete */}
  {cat._id && typeof cat._id === 'string' ?
-<div style={{ display: 'flex', gap: '10px', borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '12px' }}>
+<div style={{ display: 'flex', gap: '10px', borderLeft: '1px solid var(--color-border)', paddingLeft: '12px' }}>
 <button
  type="button"
  onClick={() =>{setEditingCategory(cat);setCategoryNameInput(cat.name);}}
@@ -4352,7 +4436,7 @@ const OwnerDashboard = () =>{
  padding: '12px 16px',
  borderRadius: '8px',
  border: '1px solid var(--color-border)',
- color: '#E6D5C3',
+ color: 'var(--color-text-secondary)',
  fontSize: '0.9rem',
  margin: 0,
  whiteSpace: 'pre-wrap',
@@ -4396,7 +4480,7 @@ const OwnerDashboard = () =>{
  bottom: '6px',
  right: '6px',
  background: 'rgba(0,0,0,0.6)',
- color: '#fff',
+ color: 'var(--color-text-primary)',
  padding: '2px 6px',
  borderRadius: '4px',
  fontSize: '10px',

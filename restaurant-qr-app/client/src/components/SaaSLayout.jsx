@@ -425,7 +425,7 @@ const SaaSLayout = ({ children }) => {
               height: '36px',
               borderRadius: '50%',
               backgroundColor: '#3f3f3f',
-              color: '#fff',
+              color: 'var(--color-text-primary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -555,7 +555,7 @@ const SaaSLayout = ({ children }) => {
                   textAlign: 'left',
                   background: 'transparent',
                   border: 'none',
-                  color: '#E6D5C3',
+                  color: 'var(--color-text-secondary)',
                   fontSize: '13.5px',
                   cursor: 'pointer'
                 }}>
@@ -776,7 +776,7 @@ const SaaSLayout = ({ children }) => {
                   justifyContent: 'center',
                   cursor: 'pointer',
                   fontSize: '16px',
-                  color: '#E6D5C3',
+                  color: 'var(--color-text-secondary)',
                   transition: 'all 0.2s',
                   position: 'relative'
                 }}>
@@ -791,7 +791,7 @@ const SaaSLayout = ({ children }) => {
                   height: '18px',
                   borderRadius: '50%',
                   backgroundColor: '#e74c3c',
-                  color: '#fff',
+                  color: 'var(--color-text-primary)',
                   fontSize: '10px',
                   fontWeight: 'bold',
                   display: 'flex',
@@ -861,7 +861,7 @@ const SaaSLayout = ({ children }) => {
                   height: '36px',
                   borderRadius: '50%',
                   backgroundColor: '#3f3f3f',
-                  color: '#fff',
+                  color: 'var(--color-text-primary)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -910,7 +910,7 @@ const SaaSLayout = ({ children }) => {
                     textAlign: 'left',
                     background: 'transparent',
                     border: 'none',
-                    color: '#E6D5C3',
+                    color: 'var(--color-text-secondary)',
                     fontSize: '13.5px',
                     cursor: 'pointer'
                   }}>

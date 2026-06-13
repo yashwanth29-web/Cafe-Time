@@ -242,7 +242,7 @@ const OwnerProfilePage = () => {
           width: '100%', padding: '11px', marginBottom: '18px',
           background: geoLoading ? 'rgba(111,78,55,.3)' : 'rgba(111,78,55,.15)',
           border: '1px solid rgba(111,78,55,.5)',
-          borderRadius: '10px', color: '#E6D5C3',
+          borderRadius: '10px', color: 'var(--color-text-secondary)',
           fontWeight: 700, fontSize: '.875rem', cursor: geoLoading ? 'wait' : 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           fontFamily: 'inherit', transition: 'all .2s'
@@ -251,7 +251,7 @@ const OwnerProfilePage = () => {
         onMouseOut={(e) => {if (!geoLoading) e.currentTarget.style.background = 'rgba(111,78,55,.15)';}}>
         
           {geoLoading ?
-        <><span style={{ width: 14, height: 14, border: '2px solid rgba(230,213,195,.3)', borderTopColor: '#E6D5C3', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }} /> Detecting location…</> :
+        <><span style={{ width: 14, height: 14, border: '2px solid rgba(230,213,195,.3)', borderTopcolor: 'var(--color-text-secondary)', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }} /> Detecting location…</> :
 
         <>📍 Use Current Location<span style={{ fontSize: '.75rem', opacity: .7, fontWeight: 500 }}>— auto-fill all fields</span></>
         }
@@ -436,7 +436,7 @@ const OwnerProfilePage = () => {
           box-shadow:0 6px 20px rgba(0,0,0,.5);
         }
         .pp-avatar img { width:100%; height:100%; object-fit:cover; }
-        .pp-identity h2 { font-size:1.35rem; font-weight:800; color:#FAF6F0; margin:0; text-align:center; }
+        .pp-identity h2 { font-size:1.35rem; font-weight:800; color: var(--color-text-primary); margin:0; text-align:center; }
         .pp-identity p  { font-size:.78rem; color:#788E82; margin:2px 0 0; font-weight:600; text-align:center; }
 
         /* progress */
@@ -447,7 +447,7 @@ const OwnerProfilePage = () => {
         }
         .prog-outer { flex:1; height:7px; background:rgba(0,0,0,.4); border-radius:4px; overflow:hidden; }
         .prog-inner { height:100%; background:linear-gradient(90deg,#8FA89B,#A2B9AC); border-radius:4px; transition:width .4s; }
-        .pp-prog span { font-size:.82rem; font-weight:700; color:#FAF6F0; white-space:nowrap; }
+        .pp-prog span { font-size:.82rem; font-weight:700; color: var(--color-text-primary); white-space:nowrap; }
         .btn-setup { background:#8FA89B; color:#121815; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:.8rem; cursor:pointer; white-space:nowrap; font-family:inherit; }
         .btn-setup:hover { background:#A2B9AC; }
 
@@ -470,13 +470,13 @@ const OwnerProfilePage = () => {
 
         .sec-card-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
         .sec-card-icon { font-size:1.1rem; }
-        .sec-card-title { font-size:.88rem; font-weight:800; color:#FAF6F0; text-transform:uppercase; letter-spacing:.5px; }
+        .sec-card-title { font-size:.88rem; font-weight:800; color: var(--color-text-primary); text-transform:uppercase; letter-spacing:.5px; }
         .sec-card-edit { margin-left:auto; font-size:.7rem; color:#8FA89B; font-weight:700; opacity:.8; }
 
         .sec-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid rgba(143,168,155,.05); }
         .sec-row:last-child { border-bottom:none; }
         .sec-row-label { font-size:.72rem; color:#788E82; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
-        .sec-row-value { font-size:.82rem; color:#FAF6F0; font-weight:500; text-align:right; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .sec-row-value { font-size:.82rem; color: var(--color-text-primary); font-weight:500; text-align:right; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .sec-row-empty { color:#2C3A33; font-style:italic; }
 
         /* branches card full-width */
@@ -501,15 +501,15 @@ const OwnerProfilePage = () => {
         .mcard::-webkit-scrollbar-thumb { background:#2C3A33; border-radius:4px; }
 
         .mhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
-        .mhead h3 { font-size:1.05rem; font-weight:800; color:#FAF6F0; margin:0; }
+        .mhead h3 { font-size:1.05rem; font-weight:800; color: var(--color-text-primary); margin:0; }
         .mclose { background:none; border:none; color:#788E82; font-size:1.2rem; cursor:pointer; padding:4px; line-height:1; }
-        .mclose:hover { color:#FAF6F0; }
+        .mclose:hover { color: var(--color-text-primary); }
 
         .mlabel { display:block; font-size:.72rem; font-weight:700; color:#788E82; text-transform:uppercase; letter-spacing:.4px; margin:14px 0 6px; }
         .minput {
           width:100%; padding:10px 14px; box-sizing:border-box;
           background:#121815; border:1px solid rgba(143,168,155,.18);
-          border-radius:9px; color:#FAF6F0; font-size:.9rem; font-family:inherit;
+          border-radius:9px; color: var(--color-text-primary); font-size:.9rem; font-family:inherit;
           outline:none; transition:border-color .2s;
         }
         .minput:focus { border-color:#8FA89B; }
@@ -522,22 +522,22 @@ const OwnerProfilePage = () => {
         .mbtn-save:hover:not(:disabled) { background:#A2B9AC; }
         .mbtn-save:disabled { opacity:.6; cursor:default; }
         .mbtn-cancel { background:rgba(255,255,255,.06); color:#788E82; border:1px solid rgba(143,168,155,.12); padding:11px 20px; border-radius:9px; font-weight:700; font-size:.875rem; cursor:pointer; font-family:inherit; }
-        .mbtn-cancel:hover { background:rgba(255,255,255,.1); color:#FAF6F0; }
+        .mbtn-cancel:hover { background:rgba(255,255,255,.1); color: var(--color-text-primary); }
 
         /* branches list */
         .branch-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(143,168,155,.06); }
-        .branch-name { font-weight:700; color:#FAF6F0; font-size:.875rem; }
+        .branch-name { font-weight:700; color: var(--color-text-primary); font-size:.875rem; }
         .branch-addr { font-size:.75rem; color:#788E82; margin-top:2px; }
         .badge-on  { background:rgba(46,204,113,.15); color:#2ecc71; padding:2px 9px; border-radius:20px; font-size:.7rem; font-weight:700; }
         .badge-off { background:rgba(255,255,255,.06); color:#2C3A33; padding:2px 9px; border-radius:20px; font-size:.7rem; font-weight:700; }
         .add-branch-row { padding-top:12px; }
         .btn-add { background:transparent; border:1px dashed rgba(143,168,155,.4); color:#8FA89B; padding:9px; border-radius:9px; font-weight:700; font-size:.82rem; cursor:pointer; width:100%; font-family:inherit; transition:all .2s; }
-        .btn-add:hover { border-color:#8FA89B; color:#FAF6F0; background:rgba(143,168,155,.08); }
+        .btn-add:hover { border-color:#8FA89B; color: var(--color-text-primary); background:rgba(143,168,155,.08); }
 
         /* toast */
         .toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:9999; padding:11px 22px; border-radius:10px; font-weight:700; font-size:.875rem; box-shadow:0 8px 24px rgba(0,0,0,.5); animation:fadeIn .25s ease; white-space:nowrap; }
-        .tok { background:#27ae60; color:#fff; }
-        .terr { background:#e74c3c; color:#fff; }
+        .tok { background:#27ae60; color: var(--color-text-primary); }
+        .terr { background:#e74c3c; color: var(--color-text-primary); }
 
         .spinner { width:36px; height:36px; border:3px solid rgba(143,168,155,.2); border-top-color:#8FA89B; border-radius:50%; animation:spin 1s linear infinite; margin:80px auto; }
         @keyframes spin { to{transform:rotate(360deg)} }
@@ -611,7 +611,7 @@ const OwnerProfilePage = () => {
               {branches.map((b) =>
               <div key={b._id} className="branch-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(230,213,195,.06)' }}>
                   <div>
-                    <div className="branch-name" style={{ fontWeight: 700, color: '#E6D5C3', fontSize: '.875rem' }}>{b.branchName}</div>
+                    <div className="branch-name" style={{ fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '.875rem' }}>{b.branchName}</div>
                     <div className="branch-addr" style={{ fontSize: '.75rem', color: '#7A6055', marginTop: '2px' }}>{b.address}{b.manager ? ` · ${b.manager}` : ''}</div>
                     <span className={b.isActive ? 'badge-on' : 'badge-off'} style={{ display: 'inline-block', marginTop: '4px' }}>{b.isActive ? 'Active' : 'Inactive'}</span>
                   </div>
@@ -624,7 +624,7 @@ const OwnerProfilePage = () => {
                     </button>
                     <button
                     onClick={(e) => {e.stopPropagation();handleDeleteBranch(b._id, b.branchName);}}
-                    style={{ background: '#E74C3C', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
+                    style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
                     
                       🗑️ Delete
                     </button>

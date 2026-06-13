@@ -188,7 +188,7 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
               <button
             onClick={() => setSearchQuery('')}
             style={{
-              marginTop: '14px', background: 'var(--color-primary)', color: '#fff',
+              marginTop: '14px', background: 'var(--color-primary)', color: 'var(--color-text-primary)',
               border: 'none', borderRadius: '8px', padding: '8px 18px',
               fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600
             }}>

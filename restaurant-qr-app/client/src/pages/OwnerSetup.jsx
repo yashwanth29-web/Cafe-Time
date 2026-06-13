@@ -302,7 +302,7 @@ const OwnerSetup = () => {
           border-radius: 20px;
           padding: 35px;
           box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-          color: #FFF;
+          color: var(--color-text-primary);
         }
         .progress-bar-container {
           display: flex;
@@ -345,15 +345,15 @@ const OwnerSetup = () => {
         }
         .step-node.active {
           background: #6F4E37;
-          border-color: #E6D5C3;
-          color: #FFF;
+          border-color: var(--color-text-secondary);
+          color: var(--color-text-primary);
           box-shadow: 0 0 10px #6F4E37;
           transform: scale(1.1);
         }
         .step-node.completed {
           background: #27AE60;
           border-color: #2ECC71;
-          color: #FFF;
+          color: var(--color-text-primary);
         }
         .step-label {
           position: absolute;
@@ -365,14 +365,14 @@ const OwnerSetup = () => {
           white-space: nowrap;
         }
         .step-label.active {
-          color: #E6D5C3;
+          color: var(--color-text-secondary);
         }
         .mobile-step-indicator {
           display: none;
           text-align: center;
           margin: -15px 0 25px 0;
           font-size: 0.9rem;
-          color: #E6D5C3;
+          color: var(--color-text-secondary);
           font-weight: 600;
         }
         .form-grid {
@@ -396,14 +396,14 @@ const OwnerSetup = () => {
         .form-group input, .form-group textarea, .form-group select {
           background: rgba(0, 0, 0, 0.2);
           border: 1px solid #5C4331;
-          color: #FFF;
+          color: var(--color-text-primary);
           padding: 12px;
           border-radius: 8px;
           outline: none;
           transition: border 0.2s;
         }
         .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
-          border-color: #E6D5C3;
+          border-color: var(--color-text-secondary);
         }
         .wizard-button {
           padding: 12px 28px;
@@ -418,7 +418,7 @@ const OwnerSetup = () => {
         }
         .btn-primary {
           background: #6F4E37;
-          color: #FFF;
+          color: var(--color-text-primary);
         }
         .btn-primary:hover {
           background: #8B6347;
@@ -426,14 +426,14 @@ const OwnerSetup = () => {
         .btn-secondary {
           background: transparent;
           border: 1px solid #6F4E37;
-          color: #E6D5C3;
+          color: var(--color-text-secondary);
         }
         .btn-secondary:hover {
           background: rgba(111, 78, 55, 0.1);
         }
         .btn-success {
           background: #27AE60;
-          color: #FFF;
+          color: var(--color-text-primary);
         }
         .btn-success:hover {
           background: #2ECC71;
@@ -467,14 +467,14 @@ const OwnerSetup = () => {
           background: transparent;
           border: none;
           border-bottom: 1px solid #5C4331;
-          color: #FFF;
+          color: var(--color-text-primary);
           width: 100%;
           outline: none;
           font-size: 0.9rem;
           padding: 4px;
         }
         .table-card input:focus {
-          border-color: #E6D5C3;
+          border-color: var(--color-text-secondary);
         }
         .toggle-card {
           background: rgba(255, 255, 255, 0.02);
@@ -645,7 +645,7 @@ const OwnerSetup = () => {
         {/* STEP 1: Cafe Profile */}
         {step === 1 &&
         <div className="fade-in">
-            <h2 style={{ color: '#E6D5C3', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
+            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 1: Setup Cafe Profile
             </h2>
             
@@ -809,7 +809,7 @@ const OwnerSetup = () => {
                   <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
                     Map Preview Mode
                   </div>
-                  <div style={{ color: '#E6D5C3', fontWeight: 600, fontSize: '0.85rem' }}>
+                  <div style={{ color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: '0.85rem' }}>
                     📍 Coordinates set to: {mapsLocation}
                   </div>
                   <div style={{
@@ -836,7 +836,7 @@ const OwnerSetup = () => {
         {/* STEP 2: Payment Setup */}
         {step === 2 &&
         <div className="fade-in">
-            <h2 style={{ color: '#E6D5C3', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
+            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 2: Payment Integration (Owner Razorpay Keys)
             </h2>
             <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '20px', lineHeight: '1.5' }}>
@@ -948,7 +948,7 @@ const OwnerSetup = () => {
         {/* STEP 3: Operational Setup */}
         {step === 3 &&
         <div className="fade-in">
-            <h2 style={{ color: '#E6D5C3', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
+            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 3: Operational Configuration & Custom Tables
             </h2>
 
@@ -1067,7 +1067,7 @@ const OwnerSetup = () => {
         {/* STEP 4: Staff Setup */}
         {step === 4 &&
         <div className="fade-in">
-            <h2 style={{ color: '#E6D5C3', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
+            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 4: Register Initial Staff Accounts
             </h2>
             <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '20px' }}>
@@ -1081,7 +1081,7 @@ const OwnerSetup = () => {
             border: '1px solid #5C4331',
             marginBottom: '25px'
           }}>
-              <h4 style={{ margin: '0 0 15px 0', color: '#E6D5C3' }}>Add Staff Member</h4>
+              <h4 style={{ margin: '0 0 15px 0', color: 'var(--color-text-secondary)' }}>Add Staff Member</h4>
               <div className="form-grid" style={{ marginBottom: '15px' }}>
                 <div className="form-group">
                   <label htmlFor="staff-name">Staff Name</label>
@@ -1141,7 +1141,7 @@ const OwnerSetup = () => {
 
             {/* Local Staff Grid */}
             <div style={{ overflowX: 'auto' }}>
-              <h4 style={{ margin: '0 0 10px 0', color: '#E6D5C3' }}>Staff Roster ({tempStaffList.length})</h4>
+              <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-text-secondary)' }}>Staff Roster ({tempStaffList.length})</h4>
               {tempStaffList.length === 0 ?
             <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No staff members added to this setup session yet.</p> :
 
@@ -1189,7 +1189,7 @@ const OwnerSetup = () => {
             height: '80px',
             borderRadius: '50%',
             background: '#27AE60',
-            color: '#fff',
+            color: 'var(--color-text-primary)',
             fontSize: '2.5rem',
             display: 'flex',
             alignItems: 'center',
@@ -1209,7 +1209,7 @@ const OwnerSetup = () => {
               }
             `}</style>
 
-            <h2 style={{ color: '#E6D5C3', margin: '0 0 10px 0' }}>All Steps Completed!</h2>
+            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 10px 0' }}>All Steps Completed!</h2>
             <p style={{ color: '#A0826C', maxWidth: '500px', margin: '0 auto 30px auto', lineHeight: '1.5' }}>
               Your cafe configuration details, encrypted keys, and staff roles have been validated. Click below to launch your operations portal.
             </p>
@@ -1223,7 +1223,7 @@ const OwnerSetup = () => {
             margin: '0 auto 30px auto',
             textAlign: 'left'
           }}>
-              <h4 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #5C4331', paddingBottom: '6px', color: '#E6D5C3' }}>Configuration Summary</h4>
+              <h4 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #5C4331', paddingBottom: '6px', color: 'var(--color-text-secondary)' }}>Configuration Summary</h4>
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Dining Tables:</strong> {tablesList.length} Tables Registered</p>
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Hardware Printing:</strong> {printerEnabled ? 'Enabled' : 'Disabled'}</p>
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Kitchen Display:</strong> {kitchenDisplayEnabled ? 'Enabled' : 'Disabled'}</p>
