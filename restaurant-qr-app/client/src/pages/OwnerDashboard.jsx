@@ -457,8 +457,8 @@ const OwnerDashboard = () =>{
  };
 
  // Fetch Menu
- const fetchMenu = async () =>{
- setMenuLoading(true);
+ const fetchMenu = async (isSilent = false) =>{
+ if (!isSilent) setMenuLoading(true);
  try {
  const response = await getMenu();
  if (response.success) {
@@ -476,8 +476,8 @@ const OwnerDashboard = () =>{
  };
 
  // Fetch Categories
- const fetchCategories = async () =>{
- setCategoryLoading(true);
+ const fetchCategories = async (isSilent = false) =>{
+ if (!isSilent) setCategoryLoading(true);
  try {
  const response = await getCategories();
  if (response && response.success) {
@@ -829,10 +829,12 @@ const OwnerDashboard = () =>{
  // Live background polling every 5 seconds for menu, categories, orders & inventory levels
  const pollingInterval = setInterval(() =>{
  fetchOrders();
- fetchMenu();
- fetchCategories();
+ if (activeTab !== 'menu') {
+   fetchMenu(true);
+   fetchCategories(true);
+ }
 
- if (activeTab === 'inventory' || activeTab === 'analytics' || activeTab === 'menu') {
+ if (activeTab === 'inventory' || activeTab === 'analytics') {
  const fetchInventorySilent = async () =>{
  try {
  const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
@@ -3632,8 +3634,9 @@ const OwnerDashboard = () =>{
 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '6px' }}>
 <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{ing.name}</span>
 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-<span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{ing.quantity} {invItem?.unit || 'g'}</span>
-<button type="button" onClick={() =>handleRemoveIngredientFromNewItem(ing.name)} style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '12px' }}></button>
+<input type="number" value={ing.quantity} min="0.001" step="0.001" onChange={(e) => { const updated = [...newItem.recipe]; updated[idx].quantity = Number(e.target.value); setNewItem({ ...newItem, recipe: updated }); }} style={{ width: '60px', padding: '4px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent', textAlign: 'center' }} />
+<span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{invItem?.unit || 'g'}</span>
+<button type="button" onClick={() =>handleRemoveIngredientFromNewItem(ing.name)} style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '12px' }}>🗑️</button>
 </div>
 </div>);
 
@@ -3759,8 +3762,9 @@ const OwnerDashboard = () =>{
 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '6px' }}>
 <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{ing.name}</span>
 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-<span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{ing.quantity} {invItem?.unit || 'g'}</span>
-<button type="button" onClick={() =>handleRemoveIngredientFromEditingItem(ing.name)} style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '12px' }}></button>
+<input type="number" value={ing.quantity} min="0.001" step="0.001" onChange={(e) => { const updated = [...editingItem.recipe]; updated[idx].quantity = Number(e.target.value); setEditingItem({ ...editingItem, recipe: updated }); }} style={{ width: '60px', padding: '4px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent', textAlign: 'center' }} />
+<span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{invItem?.unit || 'g'}</span>
+<button type="button" onClick={() =>handleRemoveIngredientFromEditingItem(ing.name)} style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '12px' }}>🗑️</button>
 </div>
 </div>);
 

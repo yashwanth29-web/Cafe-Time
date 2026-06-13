@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const seedMenu = require('./seed');
 
 const connectDB = async () => {
   const primaryUri = process.env.MONGO_URI;
@@ -36,10 +35,6 @@ const connectDB = async () => {
     }
   }
 
-  // Seed menu items if connected successfully
-  if (connected) {
-    await seedMenu();
-  }
 };
 
 module.exports = connectDB;
