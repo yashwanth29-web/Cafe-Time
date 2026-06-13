@@ -21,14 +21,14 @@ const OrderCard = ({ order, onStatusUpdate }) => {
       </div>
       
       <div className="order-items-list">
-        {items.map((item, idx) => (
-          <div key={idx} className="order-item-row">
+        {items.map((item, idx) =>
+        <div key={idx} className="order-item-row">
             <span>
               {item.name} <span className="order-item-qty">x{item.quantity}</span>
             </span>
             <span>₹{(item.price * item.quantity).toFixed(2)}</span>
           </div>
-        ))}
+        )}
       </div>
       
       <div className="order-card-footer">
@@ -37,34 +37,34 @@ const OrderCard = ({ order, onStatusUpdate }) => {
       </div>
       
       <div className="order-actions">
-        {status === 'Placed' ? (
-          <button 
-            onClick={() => onStatusUpdate(_id, 'Preparing')}
-            className="btn btn-action"
-            style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#E67E22', color: '#fff', border: '1px solid #d35400' }}
-          >
+        {status === 'Placed' ?
+        <button
+          onClick={() => onStatusUpdate(_id, 'Preparing')}
+          className="btn btn-action"
+          style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#E67E22', color: 'var(--color-text-primary)', border: '1px solid #d35400' }}>
+          
             🍳 Accept Order
-          </button>
-        ) : status === 'Preparing' ? (
-          <button 
-            onClick={() => onStatusUpdate(_id, 'Ready')}
-            className="btn btn-action btn-action-ready"
-            style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold' }}
-          >
+          </button> :
+        status === 'Preparing' ?
+        <button
+          onClick={() => onStatusUpdate(_id, 'Ready')}
+          className="btn btn-action btn-action-ready"
+          style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold' }}>
+          
             🍽️ Mark Ready
-          </button>
-        ) : (
-          <button 
-            className="btn btn-action btn-disabled"
-            disabled
-            style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#1b4d3e', color: '#85e3b2', border: '1px solid #2e7d63' }}
-          >
+          </button> :
+
+        <button
+          className="btn btn-action btn-disabled"
+          disabled
+          style={{ width: '100%', padding: '12px', fontSize: '14px', fontWeight: 'bold', backgroundColor: '#1b4d3e', color: '#85e3b2', border: '1px solid #2e7d63' }}>
+          
             ✓ {status}
           </button>
-        )}
+        }
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default OrderCard;

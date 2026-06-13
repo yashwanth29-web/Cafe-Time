@@ -14,6 +14,16 @@ const getBaseURL = () => {
   return 'http://localhost:5000/api';
 };
 
+// Helper to format absolute asset URLs to use the current host (useful when testing via local network IPs)
+export const getAssetUrl = (url) => {
+  if (!url) return '';
+  if (url.includes('localhost:5000') && window.location.hostname !== 'localhost') {
+    const backendHost = window.location.port === '5173' ? `${window.location.hostname}:5000` : window.location.host;
+    return url.replace('localhost:5000', backendHost);
+  }
+  return url;
+};
+
 const API = axios.create({
   baseURL: getBaseURL(),
   withCredentials: true,

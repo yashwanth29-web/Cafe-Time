@@ -15,20 +15,20 @@ const VerifyOtp = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const isVerifyingRef = useRef(false);
-  
+
   // Resend Timer State
   const [timer, setTimer] = useState(60);
   const [resendAttempts, setResendAttempts] = useState(0);
   const [canResend, setCanResend] = useState(false);
 
   const inputRefs = [
-    useRef(null),
-    useRef(null),
-    useRef(null),
-    useRef(null),
-    useRef(null),
-    useRef(null),
-  ];
+  useRef(null),
+  useRef(null),
+  useRef(null),
+  useRef(null),
+  useRef(null),
+  useRef(null)];
+
 
   // Redirect to login if email is missing on mount
   useEffect(() => {
@@ -84,7 +84,7 @@ const VerifyOtp = () => {
 
   const handleChange = (index, value) => {
     setErrorMsg('');
-    
+
     // Only accept numeric inputs
     if (isNaN(value)) return;
 
@@ -119,7 +119,7 @@ const VerifyOtp = () => {
   const handlePaste = (e) => {
     e.preventDefault();
     const pasteData = e.clipboardData.getData('text').trim();
-    
+
     // Validate paste is a 6-digit number
     if (!/^\d{6}$/.test(pasteData)) {
       setErrorMsg('Please paste a valid 6-digit verification code.');
@@ -128,7 +128,7 @@ const VerifyOtp = () => {
 
     const pasteArray = pasteData.split('');
     setOtpValues(pasteArray);
-    
+
     // Focus the last input box
     if (inputRefs[5].current) {
       inputRefs[5].current.focus();
@@ -153,7 +153,7 @@ const VerifyOtp = () => {
 
       if (data.success && data.user) {
         setSuccessMsg('Successfully logged in! Redirecting...');
-        
+
         // Dynamic dashboard routing based on authenticated user role
         setTimeout(() => {
           const userRole = (data.user.role || '').toLowerCase();
@@ -193,7 +193,7 @@ const VerifyOtp = () => {
 
     setErrorMsg('');
     setSuccessMsg('');
-    
+
     try {
       setLoading(true);
       const res = await resendOtp(email);
@@ -223,7 +223,7 @@ const VerifyOtp = () => {
 
         <h2 className="auth-title">Verify Your OTP</h2>
         <p style={{ fontSize: '0.9rem', color: '#D4C3B3', textAlign: 'left', marginBottom: '20px', lineHeight: '1.4' }}>
-          We sent a verification code to <strong style={{ color: '#ffffff' }}>{email}</strong>. Please enter it below.
+          We sent a verification code to <strong style={{ color: 'var(--color-text-primary)' }}>{email}</strong>. Please enter it below.
         </p>
 
         {errorMsg && <div className="auth-alert auth-alert-error">{errorMsg}</div>}
@@ -233,70 +233,70 @@ const VerifyOtp = () => {
           <div className="auth-input-group">
             <label htmlFor="otp-0">6-Digit Verification Code</label>
             <div className="otp-container" onPaste={handlePaste}>
-              {otpValues.map((value, index) => (
-                <input
-                  key={index}
-                  id={`otp-${index}`}
-                  name={`otp-${index}`}
-                  type="text"
-                  maxLength={1}
-                  className="otp-box"
-                  ref={inputRefs[index]}
-                  value={value}
-                  onChange={(e) => handleChange(index, e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(index, e)}
-                  disabled={loading}
-                  pattern="\d*"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                />
-              ))}
+              {otpValues.map((value, index) =>
+              <input
+                key={index}
+                id={`otp-${index}`}
+                name={`otp-${index}`}
+                type="text"
+                maxLength={1}
+                className="otp-box"
+                ref={inputRefs[index]}
+                value={value}
+                onChange={(e) => handleChange(index, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(index, e)}
+                disabled={loading}
+                pattern="\d*"
+                inputMode="numeric"
+                autoComplete="one-time-code" />
+
+              )}
             </div>
           </div>
 
           <button type="submit" className="auth-button" disabled={loading}>
-            {loading ? (
-              <>
+            {loading ?
+            <>
                 <div className="spinner" />
                 Verifying Code...
-              </>
-            ) : (
-              'Verify & Authenticate'
-            )}
+              </> :
+
+            'Verify & Authenticate'
+            }
           </button>
         </form>
 
         <div className="resend-section">
-          {resendAttempts >= 3 ? (
-            <span style={{ color: '#FF8A8A', fontSize: '0.85rem' }}>
+          {resendAttempts >= 3 ?
+          <span style={{ color: '#FF8A8A', fontSize: '0.85rem' }}>
               Maximum resend attempts reached. Please request a new login session.
-            </span>
-          ) : (
-            <>
+            </span> :
+
+          <>
               <span style={{ color: '#9E8E8E' }}>Didn't receive the email?</span>
-              <button 
-                type="button" 
-                onClick={handleResend} 
-                className="resend-btn" 
-                disabled={!canResend || loading}
-              >
+              <button
+              type="button"
+              onClick={handleResend}
+              className="resend-btn"
+              disabled={!canResend || loading}>
+              
                 Resend Code
               </button>
-              {!canResend && (
-                <span className="resend-timer">
+              {!canResend &&
+            <span className="resend-timer">
                   Resend available in {timer}s
                 </span>
-              )}
+            }
             </>
-          )}
+          }
         </div>
 
         <Link to="/login" className="back-link">
           ← Back to Login
         </Link>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default VerifyOtp;

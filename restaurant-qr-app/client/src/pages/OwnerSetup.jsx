@@ -38,12 +38,12 @@ const OwnerSetup = () => {
   // Step 3: Operational Setup States
   const [tableCount, setTableCount] = useState(5);
   const [tablesList, setTablesList] = useState([
-    { id: 'T1', label: 'Table-1' },
-    { id: 'T2', label: 'Table-2' },
-    { id: 'T3', label: 'Table-3' },
-    { id: 'T4', label: 'Table-4' },
-    { id: 'T5', label: 'Table-5' }
-  ]);
+  { id: 'T1', label: 'Table-1' },
+  { id: 'T2', label: 'Table-2' },
+  { id: 'T3', label: 'Table-3' },
+  { id: 'T4', label: 'Table-4' },
+  { id: 'T5', label: 'Table-5' }]
+  );
   const [printerEnabled, setPrinterEnabled] = useState(false);
   const [kitchenDisplayEnabled, setKitchenDisplayEnabled] = useState(true);
   const [inventoryEnabled, setInventoryEnabled] = useState(false);
@@ -103,7 +103,7 @@ const OwnerSetup = () => {
   const handleTableCountChange = (count) => {
     const newCount = Math.max(1, Math.min(50, Number(count)));
     setTableCount(newCount);
-    
+
     setTablesList((prev) => {
       const list = [...prev];
       if (list.length < newCount) {
@@ -186,21 +186,21 @@ const OwnerSetup = () => {
     setErrorMsg('');
 
     // Check duplicate email in current temp list
-    if (tempStaffList.find(s => s.email.toLowerCase() === staffEmail.toLowerCase())) {
+    if (tempStaffList.find((s) => s.email.toLowerCase() === staffEmail.toLowerCase())) {
       setErrorMsg('Staff member with this email is already added.');
       return;
     }
 
     setTempStaffList((prev) => [
-      ...prev,
-      {
-        name: staffName,
-        email: staffEmail,
-        phone: staffPhone,
-        staffRole: staffRole,
-        role: ['chef', 'manager'].includes(staffRole) ? staffRole : 'staff'
-      }
-    ]);
+    ...prev,
+    {
+      name: staffName,
+      email: staffEmail,
+      phone: staffPhone,
+      staffRole: staffRole,
+      role: ['chef', 'manager'].includes(staffRole) ? staffRole : 'staff'
+    }]
+    );
 
     // Reset inputs
     setStaffName('');
@@ -276,16 +276,16 @@ const OwnerSetup = () => {
         }
       }
     }
-    setStep(prev => prev + 1);
+    setStep((prev) => prev + 1);
   };
 
   const stepTitles = [
-    'Cafe Profile',
-    'Payment Setup',
-    'Operational Setup',
-    'Staff Roster',
-    'Complete Onboarding'
-  ];
+  'Cafe Profile',
+  'Payment Setup',
+  'Operational Setup',
+  'Staff Roster',
+  'Complete Onboarding'];
+
 
   return (
     <div style={{
@@ -553,7 +553,7 @@ const OwnerSetup = () => {
             background: 'rgba(92, 67, 49, 0.85)',
             backdropFilter: 'blur(8px)',
             border: '1px solid rgba(230, 213, 195, 0.25)',
-            color: '#FAF6F0',
+            color: 'var(--color-text-primary)',
             fontSize: '1rem',
             fontWeight: 800,
             cursor: 'pointer',
@@ -564,9 +564,9 @@ const OwnerSetup = () => {
             transition: 'background 0.2s, transform 0.2s',
             lineHeight: 1
           }}
-          onMouseOver={e => { e.currentTarget.style.background = 'rgba(140, 90, 60, 0.95)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-          onMouseOut={e => { e.currentTarget.style.background = 'rgba(92, 67, 49, 0.85)'; e.currentTarget.style.transform = 'scale(1)'; }}
-        >
+          onMouseOver={(e) => {e.currentTarget.style.background = 'rgba(140, 90, 60, 0.95)';e.currentTarget.style.transform = 'scale(1.08)';}}
+          onMouseOut={(e) => {e.currentTarget.style.background = 'rgba(92, 67, 49, 0.85)';e.currentTarget.style.transform = 'scale(1)';}}>
+          
           ✕
         </button>
       </div>
@@ -595,7 +595,7 @@ const OwnerSetup = () => {
             const stepNum = index + 1;
             const isActive = step === stepNum;
             const isCompleted = step > stepNum;
-            
+
             return (
               <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} key={index}>
                 <div className={`step-node ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}>
@@ -604,8 +604,8 @@ const OwnerSetup = () => {
                 <div className={`step-label ${isActive ? 'active' : ''}`}>
                   {title}
                 </div>
-              </div>
-            );
+              </div>);
+
           })}
         </div>
 
@@ -615,36 +615,36 @@ const OwnerSetup = () => {
         </div>
 
         {/* Form Messages */}
-        {errorMsg && (
-          <div style={{
-            background: '#FDF2F2',
-            borderLeft: '4px solid #EC5B5B',
-            color: '#D83A3A',
-            padding: '14px',
-            borderRadius: '6px',
-            marginBottom: '25px',
-            fontWeight: 500
-          }}>
+        {errorMsg &&
+        <div style={{
+          background: '#FDF2F2',
+          borderLeft: '4px solid #EC5B5B',
+          color: '#D83A3A',
+          padding: '14px',
+          borderRadius: '6px',
+          marginBottom: '25px',
+          fontWeight: 500
+        }}>
             ⚠️ {errorMsg}
           </div>
-        )}
-        {successMsg && (
-          <div style={{
-            background: '#F2FDF5',
-            borderLeft: '4px solid #2ECC71',
-            color: '#27AE60',
-            padding: '14px',
-            borderRadius: '6px',
-            marginBottom: '25px',
-            fontWeight: 500
-          }}>
+        }
+        {successMsg &&
+        <div style={{
+          background: '#F2FDF5',
+          borderLeft: '4px solid #2ECC71',
+          color: '#27AE60',
+          padding: '14px',
+          borderRadius: '6px',
+          marginBottom: '25px',
+          fontWeight: 500
+        }}>
             ✓ {successMsg}
           </div>
-        )}
+        }
 
         {/* STEP 1: Cafe Profile */}
-        {step === 1 && (
-          <div className="fade-in">
+        {step === 1 &&
+        <div className="fade-in">
             <h2 style={{ color: '#E6D5C3', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 1: Setup Cafe Profile
             </h2>
@@ -655,14 +655,14 @@ const OwnerSetup = () => {
               </div>
               <div className="form-group" style={{ flex: 1 }}>
                 <label htmlFor="cafe-logo">Upload Cafe Logo</label>
-                <input 
-                  type="file" 
-                  id="cafe-logo"
-                  name="cafe-logo"
-                  accept="image/*" 
-                  onChange={handleLogoUpload} 
-                  disabled={loading} 
-                />
+                <input
+                type="file"
+                id="cafe-logo"
+                name="cafe-logo"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                disabled={loading} />
+              
                 <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Recommended: Square format image, Max 2MB.</span>
               </div>
             </div>
@@ -670,121 +670,142 @@ const OwnerSetup = () => {
             <div className="form-grid">
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label htmlFor="registered-cafe-name">Cafe Name (Registered)</label>
-                <input 
-                  type="text" 
-                  id="registered-cafe-name"
-                  name="registered-cafe-name"
-                  value={cafeName} 
-                  disabled 
-                  style={{ background: 'rgba(255,255,255,0.05)', color: '#A0826C' }}
-                />
+                <input
+                type="text"
+                id="registered-cafe-name"
+                name="registered-cafe-name"
+                value={cafeName}
+                disabled
+                style={{ background: 'rgba(0, 0, 0,0.05)', color: '#A0826C' }} />
+              
               </div>
 
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label htmlFor="cafe-address">Cafe Street Address</label>
-                <textarea 
-                  rows={2} 
-                  id="cafe-address"
-                  name="cafe-address"
-                  value={address} 
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="123 Main St, Near Central Square..." 
-                  disabled={loading}
-                />
+                <textarea
+                rows={2}
+                id="cafe-address"
+                name="cafe-address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="123 Main St, Near Central Square..."
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group">
                 <label htmlFor="opening-time">Opening Time</label>
-                <input 
-                  type="time" 
-                  id="opening-time"
-                  name="opening-time"
-                  value={openingTime} 
-                  onChange={(e) => setOpeningTime(e.target.value)} 
-                  disabled={loading}
-                />
+                <input
+                type="time"
+                id="opening-time"
+                name="opening-time"
+                value={openingTime}
+                onChange={(e) => setOpeningTime(e.target.value)}
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group">
                 <label htmlFor="closing-time">Closing Time</label>
-                <input 
-                  type="time" 
-                  id="closing-time"
-                  name="closing-time"
-                  value={closingTime} 
-                  onChange={(e) => setClosingTime(e.target.value)} 
-                  disabled={loading}
-                />
+                <input
+                type="time"
+                id="closing-time"
+                name="closing-time"
+                value={closingTime}
+                onChange={(e) => setClosingTime(e.target.value)}
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group">
                 <label htmlFor="support-number">Support Contact Number</label>
-                <input 
-                  type="text" 
-                  id="support-number"
-                  name="support-number"
-                  value={supportNumber} 
-                  onChange={(e) => setSupportNumber(e.target.value)} 
-                  placeholder="+91 9999988888"
-                  disabled={loading}
-                />
+                <input
+                type="text"
+                id="support-number"
+                name="support-number"
+                value={supportNumber}
+                onChange={(e) => setSupportNumber(e.target.value)}
+                placeholder="+91 9999988888"
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group">
                 <label htmlFor="gst-number">GST Registration Number (Optional)</label>
-                <input 
-                  type="text" 
-                  id="gst-number"
-                  name="gst-number"
-                  value={gstNumber} 
-                  onChange={(e) => setGstNumber(e.target.value)} 
-                  placeholder="22AAAAA0000A1Z5"
-                  disabled={loading}
-                />
+                <input
+                type="text"
+                id="gst-number"
+                name="gst-number"
+                value={gstNumber}
+                onChange={(e) => setGstNumber(e.target.value)}
+                placeholder="22AAAAA0000A1Z5"
+                disabled={loading} />
+              
               </div>
 
               {/* Simulated Google Maps Location Picker */}
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label htmlFor="maps-location">Google Maps Location Coordinates</label>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <input 
-                    type="text" 
-                    id="maps-location"
-                    name="maps-location"
-                    value={mapsLocation} 
-                    onChange={(e) => setMapsLocation(e.target.value)} 
-                    placeholder="Latitude, Longitude"
-                    disabled={loading}
-                    style={{ flex: 1 }}
-                  />
-                  <button 
-                    type="button" 
-                    className="wizard-button btn-secondary"
-                    onClick={() => {
-                      // Simulates picking coordinates randomly around cafe center
-                      const randLat = (40.7128 + (Math.random() - 0.5) * 0.05).toFixed(6);
-                      const randLng = (-74.0060 + (Math.random() - 0.5) * 0.05).toFixed(6);
+                  <input
+                  type="text"
+                  id="maps-location"
+                  name="maps-location"
+                  value={mapsLocation}
+                  onChange={(e) => setMapsLocation(e.target.value)}
+                  placeholder="Latitude, Longitude"
+                  disabled={loading}
+                  style={{ flex: 1 }} />
+                
+                  <button
+                  type="button"
+                  className="wizard-button btn-secondary"
+                  onClick={() => {
+                    if (navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                          const { latitude, longitude } = position.coords;
+                          setMapsLocation(`${latitude.toFixed(6)},${longitude.toFixed(6)}`);
+                          setSuccessMsg('Coordinates detected from GPS device!');
+                          setTimeout(() => setSuccessMsg(''), 2000);
+                        },
+                        (error) => {
+                          console.warn("Geolocation failed, using fallback simulation:", error);
+                          // Fallback simulation
+                          const randLat = (16.5062 + (Math.random() - 0.5) * 0.01).toFixed(6);
+                          const randLng = (80.6480 + (Math.random() - 0.5) * 0.01).toFixed(6);
+                          setMapsLocation(`${randLat},${randLng}`);
+                          setSuccessMsg('Coordinates simulated (GPS denied/failed)!');
+                          setTimeout(() => setSuccessMsg(''), 2000);
+                        },
+                        { enableHighAccuracy: true, timeout: 5000 }
+                      );
+                    } else {
+                      // Fallback simulation
+                      const randLat = (16.5062 + (Math.random() - 0.5) * 0.01).toFixed(6);
+                      const randLng = (80.6480 + (Math.random() - 0.5) * 0.01).toFixed(6);
                       setMapsLocation(`${randLat},${randLng}`);
-                      setSuccessMsg('Coordinates detected from GPS picker!');
+                      setSuccessMsg('Coordinates simulated!');
                       setTimeout(() => setSuccessMsg(''), 2000);
-                    }}
-                  >
+                    }
+                  }}>
+                  
                     📍 Detect GPS
                   </button>
                 </div>
                 {/* Micro simulated map widget */}
                 <div style={{
-                  height: '100px',
-                  background: '#1F2937',
-                  border: '1px solid #4B5563',
-                  borderRadius: '8px',
-                  marginTop: '10px',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
+                height: '100px',
+                background: '#1F2937',
+                border: '1px solid #4B5563',
+                borderRadius: '8px',
+                marginTop: '10px',
+                position: 'relative',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
                   <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
                     Map Preview Mode
                   </div>
@@ -792,14 +813,14 @@ const OwnerSetup = () => {
                     📍 Coordinates set to: {mapsLocation}
                   </div>
                   <div style={{
-                    width: '30px',
-                    height: '30px',
-                    borderRadius: '50%',
-                    background: 'rgba(111, 78, 55, 0.2)',
-                    border: '2px solid #6F4E37',
-                    position: 'absolute',
-                    animation: 'ping 2s infinite'
-                  }} />
+                  width: '30px',
+                  height: '30px',
+                  borderRadius: '50%',
+                  background: 'rgba(111, 78, 55, 0.2)',
+                  border: '2px solid #6F4E37',
+                  position: 'absolute',
+                  animation: 'ping 2s infinite'
+                }} />
                   <style>{`
                     @keyframes ping {
                       0% { transform: scale(1); opacity: 1; }
@@ -810,11 +831,11 @@ const OwnerSetup = () => {
               </div>
             </div>
           </div>
-        )}
+        }
 
         {/* STEP 2: Payment Setup */}
-        {step === 2 && (
-          <div className="fade-in">
+        {step === 2 &&
+        <div className="fade-in">
             <h2 style={{ color: '#E6D5C3', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 2: Payment Integration (Owner Razorpay Keys)
             </h2>
@@ -825,45 +846,45 @@ const OwnerSetup = () => {
             <div className="form-grid">
               <div className="form-group">
                 <label htmlFor="razorpay-key-id">Razorpay Key ID</label>
-                <input 
-                  type="text" 
-                  id="razorpay-key-id"
-                  name="razorpay-key-id"
-                  value={razorpayKeyId} 
-                  onChange={(e) => setRazorpayKeyId(e.target.value)} 
-                  placeholder="rzp_test_..."
-                  disabled={loading}
-                />
+                <input
+                type="text"
+                id="razorpay-key-id"
+                name="razorpay-key-id"
+                value={razorpayKeyId}
+                onChange={(e) => setRazorpayKeyId(e.target.value)}
+                placeholder="rzp_test_..."
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group">
                 <label htmlFor="razorpay-secret-key">Razorpay Secret Key</label>
-                <input 
-                  type="password" 
-                  id="razorpay-secret-key"
-                  name="razorpay-secret-key"
-                  value={razorpaySecret} 
-                  onChange={(e) => setRazorpaySecret(e.target.value)} 
-                  placeholder="••••••••••••••••••••"
-                  disabled={loading}
-                />
+                <input
+                type="password"
+                id="razorpay-secret-key"
+                name="razorpay-secret-key"
+                value={razorpaySecret}
+                onChange={(e) => setRazorpaySecret(e.target.value)}
+                placeholder="••••••••••••••••••••"
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <div className="mobile-full-width" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '8px', border: '1px dashed #6F4E37' }}>
+                <div className="mobile-full-width" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0, 0, 0,0.02)', padding: '15px', borderRadius: '8px', border: '1px dashed #6F4E37' }}>
                   <div>
                     <span style={{ fontWeight: 600, fontSize: '0.9rem', color: isRazorpayVerified ? '#2ECC71' : '#E6D5C3' }}>
                       Status: {isRazorpayVerified ? 'Payment Verified & Configured ✅' : 'Verification Required'}
                     </span>
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#A0826C' }}>Test your connection keys before saving.</p>
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={testRazorpayConnection}
-                    disabled={verifyingKeys || loading}
-                    className="wizard-button btn-primary"
-                    style={{ background: isRazorpayVerified ? '#27AE60' : '#6F4E37' }}
-                  >
+                  <button
+                  type="button"
+                  onClick={testRazorpayConnection}
+                  disabled={verifyingKeys || loading}
+                  className="wizard-button btn-primary"
+                  style={{ background: isRazorpayVerified ? '#27AE60' : '#6F4E37' }}>
+                  
                     {verifyingKeys ? 'Testing Connection...' : 'Test Razorpay Connection'}
                   </button>
                 </div>
@@ -871,62 +892,62 @@ const OwnerSetup = () => {
 
               <div className="form-group">
                 <label htmlFor="upi-id">UPI ID (Optional)</label>
-                <input 
-                  type="text" 
-                  id="upi-id"
-                  name="upi-id"
-                  value={upiId} 
-                  onChange={(e) => setUpiId(e.target.value)} 
-                  placeholder="owner@okaxis"
-                  disabled={loading}
-                />
+                <input
+                type="text"
+                id="upi-id"
+                name="upi-id"
+                value={upiId}
+                onChange={(e) => setUpiId(e.target.value)}
+                placeholder="owner@okaxis"
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group">
                 <label htmlFor="bank-holder-name">Bank Account Holder Name</label>
-                <input 
-                  type="text" 
-                  id="bank-holder-name"
-                  name="bank-holder-name"
-                  value={bankHolderName} 
-                  onChange={(e) => setBankHolderName(e.target.value)} 
-                  placeholder="John Doe Enterprise"
-                  disabled={loading}
-                />
+                <input
+                type="text"
+                id="bank-holder-name"
+                name="bank-holder-name"
+                value={bankHolderName}
+                onChange={(e) => setBankHolderName(e.target.value)}
+                placeholder="John Doe Enterprise"
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group">
                 <label htmlFor="bank-account-number">Bank Account Number</label>
-                <input 
-                  type="text" 
-                  id="bank-account-number"
-                  name="bank-account-number"
-                  value={accountNumber} 
-                  onChange={(e) => setAccountNumber(e.target.value)} 
-                  placeholder="1002998877665"
-                  disabled={loading}
-                />
+                <input
+                type="text"
+                id="bank-account-number"
+                name="bank-account-number"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                placeholder="1002998877665"
+                disabled={loading} />
+              
               </div>
 
               <div className="form-group">
                 <label htmlFor="ifsc-code">IFSC Code</label>
-                <input 
-                  type="text" 
-                  id="ifsc-code"
-                  name="ifsc-code"
-                  value={ifscCode} 
-                  onChange={(e) => setIfscCode(e.target.value)} 
-                  placeholder="HDFC0000123"
-                  disabled={loading}
-                />
+                <input
+                type="text"
+                id="ifsc-code"
+                name="ifsc-code"
+                value={ifscCode}
+                onChange={(e) => setIfscCode(e.target.value)}
+                placeholder="HDFC0000123"
+                disabled={loading} />
+              
               </div>
             </div>
           </div>
-        )}
+        }
 
         {/* STEP 3: Operational Setup */}
-        {step === 3 && (
-          <div className="fade-in">
+        {step === 3 &&
+        <div className="fade-in">
             <h2 style={{ color: '#E6D5C3', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 3: Operational Configuration & Custom Tables
             </h2>
@@ -935,28 +956,28 @@ const OwnerSetup = () => {
               <div className="form-group" style={{ maxWidth: '300px' }}>
                 <label htmlFor="total-dining-tables">Total Dining Tables</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button 
-                    type="button" 
-                    className="wizard-button btn-secondary"
-                    style={{ padding: '6px 15px' }}
-                    onClick={() => handleTableCountChange(tableCount - 1)}
-                  >
+                  <button
+                  type="button"
+                  className="wizard-button btn-secondary"
+                  style={{ padding: '6px 15px' }}
+                  onClick={() => handleTableCountChange(tableCount - 1)}>
+                  
                     -
                   </button>
-                  <input 
-                    type="number" 
-                    id="total-dining-tables"
-                    name="total-dining-tables"
-                    value={tableCount} 
-                    onChange={(e) => handleTableCountChange(e.target.value)}
-                    style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}
-                  />
-                  <button 
-                    type="button" 
-                    className="wizard-button btn-secondary"
-                    style={{ padding: '6px 15px' }}
-                    onClick={() => handleTableCountChange(tableCount + 1)}
-                  >
+                  <input
+                  type="number"
+                  id="total-dining-tables"
+                  name="total-dining-tables"
+                  value={tableCount}
+                  onChange={(e) => handleTableCountChange(e.target.value)}
+                  style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 'bold' }} />
+                
+                  <button
+                  type="button"
+                  className="wizard-button btn-secondary"
+                  style={{ padding: '6px 15px' }}
+                  onClick={() => handleTableCountChange(tableCount + 1)}>
+                  
                     +
                   </button>
                 </div>
@@ -967,29 +988,29 @@ const OwnerSetup = () => {
                   Custom Table QR Labels (Click labels to rename)
                 </span>
                 <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-                  gap: '12px',
-                  maxHeight: '180px',
-                  overflowY: 'auto',
-                  background: 'rgba(0,0,0,0.1)',
-                  padding: '15px',
-                  borderRadius: '10px',
-                  border: '1px solid #5C4331'
-                }} aria-labelledby="custom-tables-heading">
-                  {tablesList.map((tbl, idx) => (
-                    <div key={idx} className="table-card">
-                      <label htmlFor={`table-label-${idx}`} style={{ fontSize: '0.75rem', color: '#A0826C' }}>#{idx+1}</label>
-                      <input 
-                        type="text" 
-                        id={`table-label-${idx}`}
-                        name={`table-label-${idx}`}
-                        value={tbl.label} 
-                        onChange={(e) => handleTableLabelChange(idx, e.target.value)} 
-                        placeholder={`Table-${idx+1}`}
-                      />
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                gap: '12px',
+                maxHeight: '180px',
+                overflowY: 'auto',
+                background: 'rgba(0,0,0,0.1)',
+                padding: '15px',
+                borderRadius: '10px',
+                border: '1px solid #5C4331'
+              }} aria-labelledby="custom-tables-heading">
+                  {tablesList.map((tbl, idx) =>
+                <div key={idx} className="table-card">
+                      <label htmlFor={`table-label-${idx}`} style={{ fontSize: '0.75rem', color: '#A0826C' }}>#{idx + 1}</label>
+                      <input
+                    type="text"
+                    id={`table-label-${idx}`}
+                    name={`table-label-${idx}`}
+                    value={tbl.label}
+                    onChange={(e) => handleTableLabelChange(idx, e.target.value)}
+                    placeholder={`Table-${idx + 1}`} />
+                  
                     </div>
-                  ))}
+                )}
                 </div>
               </div>
 
@@ -999,14 +1020,14 @@ const OwnerSetup = () => {
                     <strong style={{ display: 'block', fontSize: '0.9rem' }}>Kitchen Screen Console</strong>
                     <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Staff order tracking board</span>
                   </label>
-                  <input 
-                    type="checkbox" 
-                    id="kitchen-display-enabled"
-                    name="kitchen-display-enabled"
-                    checked={kitchenDisplayEnabled} 
-                    onChange={(e) => setKitchenDisplayEnabled(e.target.checked)}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
+                  <input
+                  type="checkbox"
+                  id="kitchen-display-enabled"
+                  name="kitchen-display-enabled"
+                  checked={kitchenDisplayEnabled}
+                  onChange={(e) => setKitchenDisplayEnabled(e.target.checked)}
+                  style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
+                
                 </div>
 
                 <div className="toggle-card">
@@ -1014,14 +1035,14 @@ const OwnerSetup = () => {
                     <strong style={{ display: 'block', fontSize: '0.9rem' }}>Thermal Printer Settings</strong>
                     <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Auto-print receipt on order</span>
                   </label>
-                  <input 
-                    type="checkbox" 
-                    id="printer-enabled"
-                    name="printer-enabled"
-                    checked={printerEnabled} 
-                    onChange={(e) => setPrinterEnabled(e.target.checked)}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
+                  <input
+                  type="checkbox"
+                  id="printer-enabled"
+                  name="printer-enabled"
+                  checked={printerEnabled}
+                  onChange={(e) => setPrinterEnabled(e.target.checked)}
+                  style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
+                
                 </div>
 
                 <div className="toggle-card">
@@ -1029,23 +1050,23 @@ const OwnerSetup = () => {
                     <strong style={{ display: 'block', fontSize: '0.9rem' }}>Inventory Tracking</strong>
                     <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Track ingredient consumption</span>
                   </label>
-                  <input 
-                    type="checkbox" 
-                    id="inventory-enabled"
-                    name="inventory-enabled"
-                    checked={inventoryEnabled} 
-                    onChange={(e) => setInventoryEnabled(e.target.checked)}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
+                  <input
+                  type="checkbox"
+                  id="inventory-enabled"
+                  name="inventory-enabled"
+                  checked={inventoryEnabled}
+                  onChange={(e) => setInventoryEnabled(e.target.checked)}
+                  style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
+                
                 </div>
               </div>
             </div>
           </div>
-        )}
+        }
 
         {/* STEP 4: Staff Setup */}
-        {step === 4 && (
-          <div className="fade-in">
+        {step === 4 &&
+        <div className="fade-in">
             <h2 style={{ color: '#E6D5C3', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 4: Register Initial Staff Accounts
             </h2>
@@ -1054,66 +1075,66 @@ const OwnerSetup = () => {
             </p>
 
             <div style={{
-              background: 'rgba(0,0,0,0.1)',
-              padding: '20px',
-              borderRadius: '12px',
-              border: '1px solid #5C4331',
-              marginBottom: '25px'
-            }}>
+            background: 'rgba(0,0,0,0.1)',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid #5C4331',
+            marginBottom: '25px'
+          }}>
               <h4 style={{ margin: '0 0 15px 0', color: '#E6D5C3' }}>Add Staff Member</h4>
               <div className="form-grid" style={{ marginBottom: '15px' }}>
                 <div className="form-group">
                   <label htmlFor="staff-name">Staff Name</label>
-                  <input 
-                    type="text" 
-                    id="staff-name"
-                    name="staff-name"
-                    value={staffName} 
-                    onChange={(e) => setStaffName(e.target.value)} 
-                    placeholder="Chef Ram"
-                  />
+                  <input
+                  type="text"
+                  id="staff-name"
+                  name="staff-name"
+                  value={staffName}
+                  onChange={(e) => setStaffName(e.target.value)}
+                  placeholder="Chef Ram" />
+                
                 </div>
                 <div className="form-group">
                   <label htmlFor="staff-email">Email Address</label>
-                  <input 
-                    type="email" 
-                    id="staff-email"
-                    name="staff-email"
-                    value={staffEmail} 
-                    onChange={(e) => setStaffEmail(e.target.value)} 
-                    placeholder="ram@cafe.com"
-                  />
+                  <input
+                  type="email"
+                  id="staff-email"
+                  name="staff-email"
+                  value={staffEmail}
+                  onChange={(e) => setStaffEmail(e.target.value)}
+                  placeholder="ram@cafe.com" />
+                
                 </div>
                 <div className="form-group">
                   <label htmlFor="staff-phone">Phone Number</label>
-                  <input 
-                    type="text" 
-                    id="staff-phone"
-                    name="staff-phone"
-                    value={staffPhone} 
-                    onChange={(e) => setStaffPhone(e.target.value)} 
-                    placeholder="+91 9090909090"
-                  />
+                  <input
+                  type="text"
+                  id="staff-phone"
+                  name="staff-phone"
+                  value={staffPhone}
+                  onChange={(e) => setStaffPhone(e.target.value)}
+                  placeholder="+91 9090909090" />
+                
                 </div>
                 <div className="form-group">
                   <label htmlFor="staff-role">Staff Role</label>
-                  <select 
-                    id="staff-role"
-                    name="staff-role"
-                    value={staffRole} 
-                    onChange={(e) => setStaffRole(e.target.value)}
-                  >
+                  <select
+                  id="staff-role"
+                  name="staff-role"
+                  value={staffRole}
+                  onChange={(e) => setStaffRole(e.target.value)}>
+                  
                     <option value="chef">Chef (Kitchen Staff)</option>
                     <option value="manager">Manager (Operations)</option>
                     <option value="staff">Server (Table Staff)</option>
                   </select>
                 </div>
               </div>
-              <button 
-                type="button" 
-                onClick={addStaffToRoster}
-                className="wizard-button btn-secondary"
-              >
+              <button
+              type="button"
+              onClick={addStaffToRoster}
+              className="wizard-button btn-secondary">
+              
                 + Add Staff Member
               </button>
             </div>
@@ -1121,10 +1142,10 @@ const OwnerSetup = () => {
             {/* Local Staff Grid */}
             <div style={{ overflowX: 'auto' }}>
               <h4 style={{ margin: '0 0 10px 0', color: '#E6D5C3' }}>Staff Roster ({tempStaffList.length})</h4>
-              {tempStaffList.length === 0 ? (
-                <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No staff members added to this setup session yet.</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              {tempStaffList.length === 0 ?
+            <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No staff members added to this setup session yet.</p> :
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #5C4331', color: '#D4C3B3', textAlign: 'left' }}>
                       <th style={{ padding: '8px' }}>Name</th>
@@ -1135,48 +1156,48 @@ const OwnerSetup = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {tempStaffList.map((stf, index) => (
-                      <tr key={index} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    {tempStaffList.map((stf, index) =>
+                <tr key={index} style={{ borderBottom: '1px solid rgba(0, 0, 0,0.05)' }}>
                         <td style={{ padding: '8px' }}>{stf.name}</td>
                         <td style={{ padding: '8px' }}>{stf.email}</td>
                         <td style={{ padding: '8px' }}>{stf.phone}</td>
                         <td style={{ padding: '8px', textTransform: 'capitalize' }}>{stf.staffRole}</td>
                         <td style={{ padding: '8px', textAlign: 'center' }}>
-                          <button 
-                            type="button" 
-                            onClick={() => removeStaffFromRoster(index)}
-                            style={{ background: 'transparent', border: 'none', color: '#E74C3C', cursor: 'pointer', fontWeight: 'bold' }}
-                          >
+                          <button
+                      type="button"
+                      onClick={() => removeStaffFromRoster(index)}
+                      style={{ background: 'transparent', border: 'none', color: '#E74C3C', cursor: 'pointer', fontWeight: 'bold' }}>
+                      
                             ✕
                           </button>
                         </td>
                       </tr>
-                    ))}
+                )}
                   </tbody>
                 </table>
-              )}
+            }
             </div>
           </div>
-        )}
+        }
 
         {/* STEP 5: Review & Complete */}
-        {step === 5 && (
-          <div className="fade-in" style={{ textAlign: 'center', padding: '20px 0' }}>
+        {step === 5 &&
+        <div className="fade-in" style={{ textAlign: 'center', padding: '20px 0' }}>
             {/* Visual Animated Checkbox checkmark */}
             <div style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '50%',
-              background: '#27AE60',
-              color: '#FFF',
-              fontSize: '2.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 20px auto',
-              boxShadow: '0 0 15px rgba(39, 174, 96, 0.4)',
-              animation: 'bounceIn 0.8s ease'
-            }}>
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            background: '#27AE60',
+            color: '#fff',
+            fontSize: '2.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px auto',
+            boxShadow: '0 0 15px rgba(39, 174, 96, 0.4)',
+            animation: 'bounceIn 0.8s ease'
+          }}>
               ✓
             </div>
             <style>{`
@@ -1194,14 +1215,14 @@ const OwnerSetup = () => {
             </p>
 
             <div style={{
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid #5C4331',
-              borderRadius: '10px',
-              padding: '20px',
-              maxWidth: '500px',
-              margin: '0 auto 30px auto',
-              textAlign: 'left'
-            }}>
+            background: 'rgba(0, 0, 0,0.02)',
+            border: '1px solid #5C4331',
+            borderRadius: '10px',
+            padding: '20px',
+            maxWidth: '500px',
+            margin: '0 auto 30px auto',
+            textAlign: 'left'
+          }}>
               <h4 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #5C4331', paddingBottom: '6px', color: '#E6D5C3' }}>Configuration Summary</h4>
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Dining Tables:</strong> {tablesList.length} Tables Registered</p>
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Hardware Printing:</strong> {printerEnabled ? 'Enabled' : 'Disabled'}</p>
@@ -1210,17 +1231,17 @@ const OwnerSetup = () => {
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Staff accounts:</strong> {tempStaffList.length} Users queued for registration</p>
             </div>
 
-            <button 
-              type="button" 
-              onClick={handleFinalizeSetup}
-              disabled={loading}
-              className="wizard-button btn-success"
-              style={{ fontSize: '1.1rem', padding: '14px 45px' }}
-            >
+            <button
+            type="button"
+            onClick={handleFinalizeSetup}
+            disabled={loading}
+            className="wizard-button btn-success"
+            style={{ fontSize: '1.1rem', padding: '14px 45px' }}>
+            
               {loading ? 'Saving configuration...' : 'Finalize & Launch Portal'}
             </button>
           </div>
-        )}
+        }
 
         {/* Wizard Navigation Footer controls */}
         <div style={{
@@ -1230,35 +1251,35 @@ const OwnerSetup = () => {
           borderTop: '1px solid #5C4331',
           paddingTop: '20px'
         }}>
-          {step > 1 && step < 5 ? (
-            <button 
-              type="button" 
-              onClick={() => setStep(prev => prev - 1)} 
-              className="wizard-button btn-secondary"
-              disabled={loading}
-            >
+          {step > 1 && step < 5 ?
+          <button
+            type="button"
+            onClick={() => setStep((prev) => prev - 1)}
+            className="wizard-button btn-secondary"
+            disabled={loading}>
+            
               ← Previous Step
-            </button>
-          ) : (
-            <div />
-          )}
+            </button> :
 
-          {step < 5 ? (
-            <button 
-              type="button" 
-              onClick={validateAndNext} 
-              className="wizard-button btn-primary"
-              disabled={loading}
-            >
+          <div />
+          }
+
+          {step < 5 ?
+          <button
+            type="button"
+            onClick={validateAndNext}
+            className="wizard-button btn-primary"
+            disabled={loading}>
+            
               Next Step →
-            </button>
-          ) : (
-            <div />
-          )}
+            </button> :
+
+          <div />
+          }
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default OwnerSetup;

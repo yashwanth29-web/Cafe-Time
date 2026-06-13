@@ -182,6 +182,7 @@ const getReports = async (req, res) => {
       query.createdAt = { $gte: sevenDaysAgo };
     }
 
+    console.log('WorkReport Query:', query);
     const reports = await WorkReport.find(query).sort({ createdAt: -1 });
 
     return res.status(200).json({

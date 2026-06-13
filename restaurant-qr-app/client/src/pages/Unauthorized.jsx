@@ -74,7 +74,7 @@ const Unauthorized = () => {
           🔒
         </div>
         <h1 style={{
-          color: '#fff',
+          color: 'var(--color-text-primary)',
           fontSize: '26px',
           fontWeight: 900,
           marginBottom: '10px',
@@ -91,24 +91,24 @@ const Unauthorized = () => {
           You do not have permission to view this page. This resource is restricted to authorized roles only.
         </p>
 
-        {user && (
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.02)',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
-            borderRadius: '12px',
-            padding: '12px 16px',
-            marginBottom: '32px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '13.5px'
-          }}>
+        {user &&
+        <div style={{
+          background: 'rgba(0, 0, 0, 0.02)',
+          border: '1px solid rgba(0, 0, 0, 0.05)',
+          borderRadius: '12px',
+          padding: '12px 16px',
+          marginBottom: '32px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '13.5px'
+        }}>
             <span style={{ color: '#888' }}>Logged in as:</span>
-            <span style={{ color: '#fff', fontWeight: 600, textTransform: 'capitalize' }}>
+            <span style={{ color: 'var(--color-text-primary)', fontWeight: 600, textTransform: 'capitalize' }}>
               {user.name} ({user.role})
             </span>
           </div>
-        )}
+        }
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <button
@@ -118,36 +118,36 @@ const Unauthorized = () => {
               background: 'linear-gradient(135deg, var(--color-primary, #ff6b08) 0%, #aa820a 100%)',
               border: 'none',
               borderRadius: '12px',
-              color: '#fff',
+              color: 'var(--color-text-primary)',
               fontSize: '15px',
               fontWeight: 800,
               cursor: 'pointer',
               boxShadow: '0 4px 15px rgba(255, 107, 8, 0.2)',
               transition: 'transform 0.2s ease'
-            }}
-          >
+            }}>
+            
             Go to My Dashboard
           </button>
           <button
             onClick={handleLogout}
             style={{
               padding: '12px',
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'rgba(0, 0, 0, 0.04)',
+              border: '1px solid rgba(0, 0, 0, 0.08)',
               borderRadius: '12px',
               color: '#ff9800',
               fontSize: '14px',
               fontWeight: 700,
               cursor: 'pointer',
               transition: 'all 0.2s ease'
-            }}
-          >
+            }}>
+            
             Logout & Switch Accounts
           </button>
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default Unauthorized;

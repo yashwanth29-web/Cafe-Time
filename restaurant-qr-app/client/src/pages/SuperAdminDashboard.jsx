@@ -5,11 +5,11 @@ import { createOwner, getCafes, updateCafe, deleteCafe, getTickets, updateTicket
 
 const SuperAdminDashboard = () => {
   const navigate = useNavigate();
-  const defaultRenewalDate = React.useMemo(() => new Date(Date.now() + 365*24*60*60*1000), []);
+  const defaultRenewalDate = React.useMemo(() => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), []);
   const { logout, user } = useAuth();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  
+
   const [activeTab, setActiveTab] = useState(() => tabParam || 'analytics');
   const [cafes, setCafes] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -129,14 +129,14 @@ const SuperAdminDashboard = () => {
 
   useEffect(() => {
     loadCafes();
-    
+
     // Override body style for professional warm coffee theme
     const originalBg = document.body.style.backgroundColor;
     const originalColor = document.body.style.color;
-    
+
     document.body.style.backgroundColor = '#1F140E'; // Dark Espresso Coffee
     document.body.style.color = '#FAF6F0'; // Warm milk/cream
-    
+
     return () => {
       document.body.style.backgroundColor = originalBg;
       document.body.style.color = originalColor;
@@ -147,7 +147,7 @@ const SuperAdminDashboard = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: value
     }));
   };
 
@@ -199,7 +199,7 @@ const SuperAdminDashboard = () => {
         loadCafes();
         // If details modal is open for this cafe, update it
         if (selectedCafeForDetails && selectedCafeForDetails._id === id) {
-          setSelectedCafeForDetails(prev => ({ ...prev, isActive: !currentStatus }));
+          setSelectedCafeForDetails((prev) => ({ ...prev, isActive: !currentStatus }));
         }
       }
     } catch (err) {
@@ -223,7 +223,7 @@ const SuperAdminDashboard = () => {
         setSuccessMsg(data.message);
         loadCafes();
         if (selectedCafeForDetails && selectedCafeForDetails._id === id) {
-          setSelectedCafeForDetails(prev => ({ ...prev, isActive: false }));
+          setSelectedCafeForDetails((prev) => ({ ...prev, isActive: false }));
         }
       }
     } catch (err) {
@@ -272,18 +272,18 @@ const SuperAdminDashboard = () => {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit',
+      minute: '2-digit'
     });
   };
 
   // Get Live Health Status
   const getHealthStatus = (health) => {
     if (!health) return { label: 'Healthy', color: '#27AE60', bg: '#EDF9F1' };
-    
-    const totalIssues = (health.frontendErrors || 0) + 
-                        (health.backendErrors || 0) + 
-                        (health.paymentFailures || 0) + 
-                        (health.printerFailures || 0);
+
+    const totalIssues = (health.frontendErrors || 0) + (
+    health.backendErrors || 0) + (
+    health.paymentFailures || 0) + (
+    health.printerFailures || 0);
 
     if (health.printerFailures > 0 || health.paymentFailures > 2) {
       return { label: 'Critical', color: '#EC5B5B', bg: '#FDF2F2', details: health };
@@ -468,36 +468,36 @@ const SuperAdminDashboard = () => {
       `}</style>
 
       {/* Alerts */}
-      {errorMsg && (
-        <div style={{
-          backgroundColor: '#FDF2F2',
-          borderLeft: '4px solid #EC5B5B',
-          color: '#D83A3A',
-          padding: '15px',
-          borderRadius: '6px',
-          marginBottom: '20px',
-          fontWeight: 500
-        }}>
+      {errorMsg &&
+      <div style={{
+        backgroundColor: '#FDF2F2',
+        borderLeft: '4px solid #EC5B5B',
+        color: '#D83A3A',
+        padding: '15px',
+        borderRadius: '6px',
+        marginBottom: '20px',
+        fontWeight: 500
+      }}>
           ⚠️ {errorMsg}
         </div>
-      )}
-      {successMsg && (
-        <div style={{
-          backgroundColor: '#F2FDF5',
-          borderLeft: '4px solid #2ECC71',
-          color: '#27AE60',
-          padding: '15px',
-          borderRadius: '6px',
-          marginBottom: '20px',
-          fontWeight: 500
-        }}>
+      }
+      {successMsg &&
+      <div style={{
+        backgroundColor: '#F2FDF5',
+        borderLeft: '4px solid #2ECC71',
+        color: '#27AE60',
+        padding: '15px',
+        borderRadius: '6px',
+        marginBottom: '20px',
+        fontWeight: 500
+      }}>
           ✓ {successMsg}
         </div>
-      )}
+      }
 
       {/* TAB 1: Platform Stats */}
-      {activeTab === 'analytics' && (
-        <div className="fade-in">
+      {activeTab === 'analytics' &&
+      <div className="fade-in">
           {/* Analytics Counter Cards */}
           <div className="stats-row-1">
             <div className="stat-card">
@@ -515,7 +515,7 @@ const SuperAdminDashboard = () => {
           </div>
 
           <div style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', marginTop: '20px' }}>
-            <h3 style={{ color: '#fff', margin: '0 0 15px 0', fontSize: '1.25rem', fontWeight: 800 }}>Platform Summary Overview</h3>
+            <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1.25rem', fontWeight: 800 }}>Platform Summary Overview</h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginTop: '16px' }}>
               <div style={{ background: '#FAF6F0', color: '#3E2723', padding: '16px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
                 <span style={{ fontSize: '0.8rem', color: '#8B6E58', fontWeight: 'bold' }}>COMPLETED ONBOARDING</span>
@@ -528,32 +528,32 @@ const SuperAdminDashboard = () => {
             </div>
           </div>
         </div>
-      )}
+      }
 
       {/* TAB 2: Manage Cafes */}
-      {(activeTab === 'cafes' || activeTab === 'manage') && (
-        <div className="fade-in">
+      {(activeTab === 'cafes' || activeTab === 'manage') &&
+      <div className="fade-in">
           {/* Create Owner & Cafe Form V2 */}
-          {showAddForm && (
-            <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', marginBottom: '20px' }}>
+          {showAddForm &&
+        <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', position: 'relative', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', marginBottom: '20px' }}>
               <button
-                onClick={() => setShowAddForm(false)}
-                style={{
-                  position: 'absolute',
-                  top: '15px',
-                  right: '15px',
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '1.2rem',
-                  color: '#FAF6F0',
-                  cursor: 'pointer',
-                  fontWeight: '700'
-                }}
-                title="Close Form"
-              >
+            onClick={() => setShowAddForm(false)}
+            style={{
+              position: 'absolute',
+              top: '15px',
+              right: '15px',
+              background: 'none',
+              border: 'none',
+              fontSize: '1.2rem',
+              color: 'var(--color-text-primary)',
+              cursor: 'pointer',
+              fontWeight: '700'
+            }}
+            title="Close Form">
+            
                 ✕
               </button>
-              <h2 style={{ color: '#FAF6F0', margin: '0 0 20px 0', fontSize: '1.3rem', fontWeight: 800 }}>
+              <h2 style={{ color: 'var(--color-text-primary)', margin: '0 0 20px 0', fontSize: '1.3rem', fontWeight: 800 }}>
                 Register New Cafe & Owner Account
               </h2>
               <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -561,38 +561,38 @@ const SuperAdminDashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>OWNER NAME</label>
                     <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#FAF6F0', background: '#1F140E' }}
-                      placeholder="John Doe"
-                      disabled={loading}
-                    />
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  placeholder="John Doe"
+                  disabled={loading} />
+                
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>OWNER EMAIL</label>
                     <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#FAF6F0', background: '#1F140E' }}
-                      placeholder="john@example.com"
-                      disabled={loading}
-                    />
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  placeholder="john@example.com"
+                  disabled={loading} />
+                
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>OWNER PHONE</label>
                     <input
-                      type="text"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#FAF6F0', background: '#1F140E' }}
-                      placeholder="+91 9876543210"
-                      disabled={loading}
-                    />
+                  type="text"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  placeholder="+91 9876543210"
+                  disabled={loading} />
+                
                   </div>
                 </div>
     
@@ -600,36 +600,36 @@ const SuperAdminDashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>CAFE NAME</label>
                     <input
-                      type="text"
-                      name="cafeName"
-                      value={formData.cafeName}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#FAF6F0', background: '#1F140E' }}
-                      placeholder="Central Perk"
-                      disabled={loading}
-                    />
+                  type="text"
+                  name="cafeName"
+                  value={formData.cafeName}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  placeholder="Central Perk"
+                  disabled={loading} />
+                
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>CAFE ID (CODE)</label>
                     <input
-                      type="text"
-                      name="cafeId"
-                      value={formData.cafeId}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#FAF6F0', background: '#1F140E' }}
-                      placeholder="CP001"
-                      disabled={loading}
-                    />
+                  type="text"
+                  name="cafeId"
+                  value={formData.cafeId}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  placeholder="CP001"
+                  disabled={loading} />
+                
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>BUSINESS TYPE</label>
                     <select
-                      name="businessType"
-                      value={formData.businessType}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', background: '#1F140E', fontSize: '0.9rem', color: '#FAF6F0' }}
-                      disabled={loading}
-                    >
+                  name="businessType"
+                  value={formData.businessType}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', background: '#1F140E', fontSize: '0.9rem', color: '#fff' }}
+                  disabled={loading}>
+                  
                       <option value="Cafe">Cafe</option>
                       <option value="Restaurant">Restaurant</option>
                       <option value="Bakery">Bakery</option>
@@ -642,114 +642,114 @@ const SuperAdminDashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>CITY</label>
                     <input
-                      type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#FAF6F0', background: '#1F140E' }}
-                      placeholder="Mumbai"
-                      disabled={loading}
-                    />
+                  type="text"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  placeholder="Mumbai"
+                  disabled={loading} />
+                
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>STATE</label>
                     <input
-                      type="text"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#FAF6F0', background: '#1F140E' }}
-                      placeholder="Maharashtra"
-                      disabled={loading}
-                    />
+                  type="text"
+                  name="state"
+                  value={formData.state}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  placeholder="Maharashtra"
+                  disabled={loading} />
+                
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#E6D5C3', letterSpacing: '0.5px' }}>BRANCH COUNT</label>
                     <input
-                      type="number"
-                      name="branchCount"
-                      value={formData.branchCount}
-                      onChange={handleInputChange}
-                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#FAF6F0', background: '#1F140E' }}
-                      min={1}
-                      disabled={loading}
-                    />
+                  type="number"
+                  name="branchCount"
+                  value={formData.branchCount}
+                  onChange={handleInputChange}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #432E22', outline: 'none', fontSize: '0.9rem', color: '#fff', background: '#1F140E' }}
+                  min={1}
+                  disabled={loading} />
+                
                   </div>
                 </div>
     
                 <button
-                  type="submit"
-                  style={{
-                    backgroundColor: '#FAF6F0',
-                    color: '#1F140E',
-                    border: 'none',
-                    padding: '10px 20px',
-                    borderRadius: '9999px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    width: 'auto',
-                    alignSelf: 'flex-start',
-                    transition: 'background 0.2s',
-                    marginTop: '10px',
-                    fontSize: '0.85rem'
-                  }}
-                  disabled={loading}
-                >
+              type="submit"
+              style={{
+                backgroundcolor: 'var(--color-text-primary)',
+                color: '#1F140E',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '9999px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                width: 'auto',
+                alignSelf: 'flex-start',
+                transition: 'background 0.2s',
+                marginTop: '10px',
+                fontSize: '0.85rem'
+              }}
+              disabled={loading}>
+              
                   {loading ? 'Registering...' : 'Register Owner & Cafe'}
                 </button>
               </form>
             </div>
-          )}
+        }
     
           {/* Cafe Listing Grid */}
           <div style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
             <div style={{ display: 'flex', justifycontent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '15px', flexWrap: 'wrap' }}>
-              <h2 style={{ color: '#FAF6F0', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
+              <h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
                 Registered Cafe Directory
               </h2>
               <button
-                onClick={() => {
-                  setShowAddForm(!showAddForm);
-                  setErrorMsg('');
-                  setSuccessMsg('');
-                }}
-                style={{
-                  backgroundColor: showAddForm ? 'transparent' : '#FAF6F0',
-                  color: showAddForm ? '#FAF6F0' : '#1F140E',
-                  border: showAddForm ? '1px solid #E6D5C3' : 'none',
-                  padding: '8px 16px',
-                  borderRadius: '9999px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '0.8rem',
-                  transition: 'all 0.2s'
-                }}
-              >
+              onClick={() => {
+                setShowAddForm(!showAddForm);
+                setErrorMsg('');
+                setSuccessMsg('');
+              }}
+              style={{
+                backgroundColor: showAddForm ? 'transparent' : '#FAF6F0',
+                color: showAddForm ? '#FAF6F0' : '#1F140E',
+                border: showAddForm ? '1px solid #E6D5C3' : 'none',
+                padding: '8px 16px',
+                borderRadius: '9999px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '0.8rem',
+                transition: 'all 0.2s'
+              }}>
+              
                 {showAddForm ? '✕ Close Form' : '➕ Register Cafe'}
               </button>
             </div>
-            {loading && cafes.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            {loading && cafes.length === 0 ?
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
                 <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading registered cafes...</p>
-              </div>
-            ) : cafes.length === 0 ? (
-              <p style={{ color: '#9E8E8E', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>No cafes registered yet.</p>
-            ) : (
-              <div className="cafe-grid">
+              </div> :
+          cafes.length === 0 ?
+          <p style={{ color: '#9E8E8E', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>No cafes registered yet.</p> :
+
+          <div className="cafe-grid">
                 {cafes.map((cafe) => {
-                  const healthObj = getHealthStatus(cafe.health);
-                  const isExpanded = expandedCafeId === cafe._id;
+              const healthObj = getHealthStatus(cafe.health);
+              const isExpanded = expandedCafeId === cafe._id;
+
+              return (
+                <div
+                  key={cafe._id}
+                  className="cafe-card"
+                  onClick={() => setExpandedCafeId(isExpanded ? null : cafe._id)}>
                   
-                  return (
-                    <div 
-                      key={cafe._id} 
-                      className="cafe-card"
-                      onClick={() => setExpandedCafeId(isExpanded ? null : cafe._id)}
-                    >
                       {/* Header: Name, Business Type, and Active Status */}
                       <div className="cafe-card-header">
                         <div>
@@ -757,13 +757,13 @@ const SuperAdminDashboard = () => {
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '4px' }}>
                             <span className="badge-type" style={{ fontSize: '0.65rem', padding: '2px 6px' }}>{cafe.businessType}</span>
                             <span style={{
-                              backgroundColor: cafe.isActive ? '#E8F8F5' : '#FDF2F2',
-                              color: cafe.isActive ? '#16A085' : '#EC5B5B',
-                              padding: '2px 6px',
-                              borderRadius: '8px',
-                              fontSize: '0.65rem',
-                              fontWeight: '700'
-                            }}>
+                          backgroundColor: cafe.isActive ? '#E8F8F5' : '#FDF2F2',
+                          color: cafe.isActive ? '#16A085' : '#EC5B5B',
+                          padding: '2px 6px',
+                          borderRadius: '8px',
+                          fontSize: '0.65rem',
+                          fontWeight: '700'
+                        }}>
                               {cafe.isActive ? 'Active' : 'Inactive'}
                             </span>
                           </div>
@@ -784,8 +784,8 @@ const SuperAdminDashboard = () => {
                       </div>
     
                       {/* Expanded Content: Show all details */}
-                      {isExpanded && (
-                        <div className="cafe-card-details-expanded">
+                      {isExpanded &&
+                  <div className="cafe-card-details-expanded">
                           <div className="details-row">
                             <span>Owner Name:</span>
                             <span style={{ color: '#3E2723', fontWeight: 650 }}>{cafe.ownerName}</span>
@@ -805,120 +805,120 @@ const SuperAdminDashboard = () => {
                           <div className="details-row">
                             <span>Setup Completed:</span>
                             <span style={{
-                              backgroundColor: cafe.setupCompleted ? '#E8F8F5' : '#FEF9E7',
-                              color: cafe.setupCompleted ? '#16A085' : '#D35400',
-                              padding: '1px 6px',
-                              borderRadius: '8px',
-                              fontSize: '0.7rem',
-                              fontWeight: '700'
-                            }}>
+                        backgroundColor: cafe.setupCompleted ? '#E8F8F5' : '#FEF9E7',
+                        color: cafe.setupCompleted ? '#16A085' : '#D35400',
+                        padding: '1px 6px',
+                        borderRadius: '8px',
+                        fontSize: '0.7rem',
+                        fontWeight: '700'
+                      }}>
                               {cafe.setupCompleted ? 'Completed ✅' : 'Pending ⏳'}
                             </span>
                           </div>
                           <div className="details-row">
                             <span>System Health:</span>
                             <span style={{
-                              backgroundColor: healthObj.bg,
-                              color: healthObj.color,
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '0.7rem',
-                              fontWeight: '700',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}>
+                        backgroundColor: healthObj.bg,
+                        color: healthObj.color,
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.7rem',
+                        fontWeight: '700',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
                               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthObj.color }} />
                               {healthObj.label}
                             </span>
                           </div>
                           <div className="details-row" style={{ fontSize: '0.8rem', marginTop: '10px', borderTop: '1px dashed #E5E7EB', paddingTop: '10px' }}>
-                            <div><strong>Last Login:</strong><br/>{formatDate(cafe.ownerLastLogin)}</div>
+                            <div><strong>Last Login:</strong><br />{formatDate(cafe.ownerLastLogin)}</div>
                           </div>
                           <div className="details-row" style={{ fontSize: '0.8rem' }}>
-                            <div><strong>Last Seen:</strong><br/>{formatDate(cafe.ownerLastSeen)}</div>
+                            <div><strong>Last Seen:</strong><br />{formatDate(cafe.ownerLastSeen)}</div>
                           </div>
     
                           {/* Actions Inside Card */}
                           <div className="cafe-card-actions">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedCafeForDetails(cafe);
-                              }}
-                              style={{ backgroundColor: '#1F140E', color: '#FAF6F0', border: 'none', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}
-                            >
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCafeForDetails(cafe);
+                        }}
+                        style={{ backgroundColor: '#1F140E', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
+                        
                               Inspect
                             </button>
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startEditing(cafe);
-                              }}
-                              style={{ backgroundColor: 'transparent', color: '#6F4E37', border: '1px solid #6F4E37', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}
-                            >
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditing(cafe);
+                        }}
+                        style={{ backgroundColor: 'transparent', color: '#6F4E37', border: '1px solid #6F4E37', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
+                        
                               Edit
                             </button>
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleActive(cafe._id, cafe.isActive);
-                              }}
-                              style={{
-                                backgroundColor: cafe.isActive ? '#FDF2F2' : '#E8F8F5',
-                                color: cafe.isActive ? '#16A085' : '#EC5B5B',
-                                border: cafe.isActive ? '1px solid #FDE2E2' : '1px solid #D1F2EB',
-                                padding: '6px 14px',
-                                borderRadius: '9999px',
-                                cursor: 'pointer',
-                                fontSize: '0.75rem',
-                                fontWeight: '700'
-                              }}
-                            >
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleActive(cafe._id, cafe.isActive);
+                        }}
+                        style={{
+                          backgroundColor: cafe.isActive ? '#FDF2F2' : '#E8F8F5',
+                          color: cafe.isActive ? '#16A085' : '#EC5B5B',
+                          border: cafe.isActive ? '1px solid #FDE2E2' : '1px solid #D1F2EB',
+                          padding: '6px 14px',
+                          borderRadius: '9999px',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem',
+                          fontWeight: '700'
+                        }}>
+                        
                               {cafe.isActive ? 'Deactivate' : 'Activate'}
                             </button>
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteCafe(cafe._id);
-                              }}
-                              style={{
-                                backgroundColor: '#E74C3C',
-                                color: '#fff',
-                                border: 'none',
-                                padding: '6px 14px',
-                                borderRadius: '9999px',
-                                cursor: 'pointer',
-                                fontSize: '0.75rem',
-                                fontWeight: '700'
-                              }}
-                              disabled={!cafe.isActive}
-                            >
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCafe(cafe._id);
+                        }}
+                        style={{
+                          backgroundColor: '#E74C3C',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '6px 14px',
+                          borderRadius: '9999px',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem',
+                          fontWeight: '700'
+                        }}
+                        disabled={!cafe.isActive}>
+                        
                               Delete
                             </button>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                  }
+                    </div>);
+
+            })}
               </div>
-            )}
+          }
           </div>
         </div>
-      )}
+      }
 
       {/* TAB 3: System Health */}
-      {activeTab === 'health' && (
-        <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
-          <h3 style={{ color: '#fff', margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: 800 }}>❤️ System Diagnostics & Node Health</h3>
-          <p style={{ fontSize: '13px', color: '#FAF6F0', opacity: 0.7, marginBottom: '20px' }}>
+      {activeTab === 'health' &&
+      <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+          <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 20px 0', fontSize: '1.25rem', fontWeight: 800 }}>❤️ System Diagnostics & Node Health</h3>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', opacity: 0.7, marginBottom: '20px' }}>
             Real-time tracking of transaction alerts, client frontend crashes, printing failures, and server API heartbeat logs.
           </p>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
             <thead>
-              <tr style={{ borderBottom: '2px solid #432E22', color: '#FAF6F0' }}>
+              <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
                 <th style={{ padding: '8px' }}>Cafe Name / Code</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>Printer Status</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>Payment Gateway</th>
@@ -928,12 +928,12 @@ const SuperAdminDashboard = () => {
               </tr>
             </thead>
             <tbody>
-              {cafes.map(cafe => {
-                const health = cafe.health || {};
-                const healthObj = getHealthStatus(cafe.health);
-                return (
-                  <tr key={cafe._id} style={{ borderBottom: '1px solid #432E22' }}>
-                    <td style={{ padding: '12px 8px', color: '#fff', fontWeight: 600 }}>
+              {cafes.map((cafe) => {
+              const health = cafe.health || {};
+              const healthObj = getHealthStatus(cafe.health);
+              return (
+                <tr key={cafe._id} style={{ borderBottom: '1px solid #432E22' }}>
+                    <td style={{ padding: '12px 8px', color: 'var(--color-text-primary)', fontWeight: 600 }}>
                       {cafe.name} ({cafe.cafeId})
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
@@ -954,48 +954,48 @@ const SuperAdminDashboard = () => {
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                       <span style={{
-                        backgroundColor: healthObj.bg,
-                        color: healthObj.color,
-                        padding: '3px 8px',
-                        borderRadius: '12px',
-                        fontSize: '11px',
-                        fontWeight: 'bold',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
+                      backgroundColor: healthObj.bg,
+                      color: healthObj.color,
+                      padding: '3px 8px',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
                         <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthObj.color }} />
                         {healthObj.label}
                       </span>
                     </td>
-                  </tr>
-                );
-              })}
+                  </tr>);
+
+            })}
             </tbody>
           </table>
         </div>
-      )}
+      }
 
       {/* TAB 4: Error Logs */}
-      {activeTab === 'logs' && (
-        <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
-          <h3 style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>Live Platform Event & Error Console</h3>
-          <p style={{ fontSize: '13px', color: '#FAF6F0', opacity: 0.7, marginBottom: '20px' }}>
+      {activeTab === 'logs' &&
+      <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+          <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>Live Platform Event & Error Console</h3>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', opacity: 0.7, marginBottom: '20px' }}>
             System logs from the main database clusters, session dispatches, and incoming API validations.
           </p>
 
           <div style={{
-            background: '#0F0906',
-            color: '#39FF14',
-            fontFamily: "'Courier New', Courier, monospace",
-            padding: '16px',
-            borderRadius: '8px',
-            maxHeight: '400px',
-            overflowY: 'auto',
-            fontSize: '0.8rem',
-            lineHeight: '1.5',
-            border: '1px solid #432E22'
-          }}>
+          background: '#0F0906',
+          color: '#39FF14',
+          fontFamily: "'Courier New', Courier, monospace",
+          padding: '16px',
+          borderRadius: '8px',
+          maxHeight: '400px',
+          overflowY: 'auto',
+          fontSize: '0.8rem',
+          lineHeight: '1.5',
+          border: '1px solid #432E22'
+        }}>
             <div>[INFO] {new Date().toISOString()} - Database Connection Pool Initialized.</div>
             <div>[INFO] {new Date().toISOString()} - Mongoose cluster listening on port 27017.</div>
             <div>[INFO] {new Date().toISOString()} - Session check: Loaded {cafes.length} registered units.</div>
@@ -1006,19 +1006,19 @@ const SuperAdminDashboard = () => {
             <div>[INFO] {new Date().toISOString()} - System status: HEALTHY.</div>
           </div>
         </div>
-      )}
+      }
 
       {/* TAB 5: Subscription Management */}
-      {activeTab === 'subscriptions' && (
-        <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
-          <h3 style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>💳 Subscription Management</h3>
-          <p style={{ fontSize: '13px', color: '#FAF6F0', opacity: 0.7, marginBottom: '20px' }}>
+      {activeTab === 'subscriptions' &&
+      <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+          <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>💳 Subscription Management</h3>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', opacity: 0.7, marginBottom: '20px' }}>
             Monitor and modify SaaS plans, suspension statuses, and renewal cycles for all cafe accounts.
           </p>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
             <thead>
-              <tr style={{ borderBottom: '2px solid #432E22', color: '#FAF6F0' }}>
+              <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
                 <th style={{ padding: '8px' }}>Cafe Name / ID</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>Plan</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>Billing Status</th>
@@ -1027,36 +1027,36 @@ const SuperAdminDashboard = () => {
               </tr>
             </thead>
             <tbody>
-              {cafes.map(cafe => {
-                const planColor = cafe.subscriptionPlan === 'Enterprise' ? '#9B59B6' : cafe.subscriptionPlan === 'Premium' ? '#F1C40F' : '#3498DB';
-                const statusColor = cafe.subscriptionStatus === 'Active' ? '#2ECC71' : cafe.subscriptionStatus === 'Expired' ? '#E74C3C' : '#F39C12';
-                return (
-                  <tr key={cafe._id} style={{ borderBottom: '1px solid #432E22' }}>
-                    <td style={{ padding: '12px 8px', color: '#fff', fontWeight: 600 }}>
+              {cafes.map((cafe) => {
+              const planColor = cafe.subscriptionPlan === 'Enterprise' ? '#9B59B6' : cafe.subscriptionPlan === 'Premium' ? '#F1C40F' : '#3498DB';
+              const statusColor = cafe.subscriptionStatus === 'Active' ? '#2ECC71' : cafe.subscriptionStatus === 'Expired' ? '#E74C3C' : '#F39C12';
+              return (
+                <tr key={cafe._id} style={{ borderBottom: '1px solid #432E22' }}>
+                    <td style={{ padding: '12px 8px', color: 'var(--color-text-primary)', fontWeight: 600 }}>
                       {cafe.name} <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>({cafe.cafeId})</span>
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                       <span style={{
-                        border: `1px solid ${planColor}`,
-                        color: planColor,
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 'bold'
-                      }}>
+                      border: `1px solid ${planColor}`,
+                      color: planColor,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold'
+                    }}>
                         {cafe.subscriptionPlan || 'Basic'}
                       </span>
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                       <span style={{
-                        backgroundColor: `${statusColor}1A`,
-                        border: `1px solid ${statusColor}`,
-                        color: statusColor,
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '0.75rem',
-                        fontWeight: 'bold'
-                      }}>
+                      backgroundColor: `${statusColor}1A`,
+                      border: `1px solid ${statusColor}`,
+                      color: statusColor,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold'
+                    }}>
                         {cafe.subscriptionStatus || 'Active'}
                       </span>
                     </td>
@@ -1065,75 +1065,75 @@ const SuperAdminDashboard = () => {
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                       <button
-                        onClick={() => {
-                          const dateObj = cafe.subscriptionRenewal ? new Date(cafe.subscriptionRenewal) : new Date(Date.now() + 365*24*60*60*1000);
-                          const formattedDate = dateObj.toISOString().split('T')[0];
-                          setEditingSubscriptionCafe(cafe);
-                          setSubEditFormData({
-                            subscriptionPlan: cafe.subscriptionPlan || 'Basic',
-                            subscriptionStatus: cafe.subscriptionStatus || 'Active',
-                            subscriptionRenewal: formattedDate
-                          });
-                        }}
-                        style={{
-                          backgroundColor: '#6F4E37',
-                          color: '#FAF6F0',
-                          border: 'none',
-                          padding: '6px 12px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold'
-                        }}
-                      >
+                      onClick={() => {
+                        const dateObj = cafe.subscriptionRenewal ? new Date(cafe.subscriptionRenewal) : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+                        const formattedDate = dateObj.toISOString().split('T')[0];
+                        setEditingSubscriptionCafe(cafe);
+                        setSubEditFormData({
+                          subscriptionPlan: cafe.subscriptionPlan || 'Basic',
+                          subscriptionStatus: cafe.subscriptionStatus || 'Active',
+                          subscriptionRenewal: formattedDate
+                        });
+                      }}
+                      style={{
+                        backgroundColor: '#6F4E37',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold'
+                      }}>
+                      
                         Modify Plan
                       </button>
                     </td>
-                  </tr>
-                );
-              })}
+                  </tr>);
+
+            })}
             </tbody>
           </table>
         </div>
-      )}
+      }
 
       {/* TAB 6: Branch Monitoring */}
-      {activeTab === 'branches' && (
-        <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
-          <h3 style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>🏢 Multi-Branch Monitor</h3>
-          <p style={{ fontSize: '13px', color: '#FAF6F0', opacity: 0.7, marginBottom: '20px' }}>
+      {activeTab === 'branches' &&
+      <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+          <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>🏢 Multi-Branch Monitor</h3>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', opacity: 0.7, marginBottom: '20px' }}>
             Global directory of all active physical cafe branches, managers, and operational configuration status.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {cafes.map(cafe => {
-              const activeBranches = (cafe.branchesList || []).filter(b => b.isActive).length;
-              return (
-                <div key={cafe._id} style={{ background: '#1F140E', border: '1px solid #432E22', borderRadius: '12px', padding: '16px' }}>
+            {cafes.map((cafe) => {
+            const activeBranches = (cafe.branchesList || []).filter((b) => b.isActive).length;
+            return (
+              <div key={cafe._id} style={{ background: '#1F140E', border: '1px solid #432E22', borderRadius: '12px', padding: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #432E22', paddingBottom: '8px', marginBottom: '12px' }}>
-                    <h4 style={{ color: '#FAF6F0', margin: 0, fontWeight: 850 }}>
+                    <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontWeight: 850 }}>
                       {cafe.name} ({cafe.cafeId})
                     </h4>
-                    <span style={{ fontSize: '0.75rem', background: '#6F4E37', color: '#FAF6F0', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
+                    <span style={{ fontSize: '0.75rem', background: '#6F4E37', color: '#fff', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
                       {activeBranches} / {(cafe.branchesList || []).length} Branches Active
                     </span>
                   </div>
 
-                  {cafe.branchesList && cafe.branchesList.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-                      {cafe.branchesList.map(br => (
-                        <div key={br._id} style={{ background: '#2B1D15', border: '1px solid #432E22', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', justifycontent: 'space-between' }}>
+                  {cafe.branchesList && cafe.branchesList.length > 0 ?
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+                      {cafe.branchesList.map((br) =>
+                  <div key={br._id} style={{ background: '#2B1D15', border: '1px solid #432E22', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', justifycontent: 'space-between' }}>
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <strong style={{ color: '#fff', fontSize: '0.9rem' }}>{br.branchName}</strong>
+                              <strong style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem' }}>{br.branchName}</strong>
                               <span style={{
-                                backgroundColor: br.isActive ? '#2ECC7122' : '#E74C3C22',
-                                color: br.isActive ? '#2ECC71' : '#E74C3C',
-                                fontSize: '0.65rem',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                fontWeight: 'bold'
-                              }}>
+                          backgroundColor: br.isActive ? '#2ECC7122' : '#E74C3C22',
+                          color: br.isActive ? '#2ECC71' : '#E74C3C',
+                          fontSize: '0.65rem',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 'bold'
+                        }}>
                                 {br.isActive ? 'Active' : 'Inactive'}
                               </span>
                             </div>
@@ -1145,42 +1145,42 @@ const SuperAdminDashboard = () => {
                             </div>
                           </div>
                           <div style={{ borderTop: '1px dashed #432E22', marginTop: '8px', paddingTop: '6px', fontSize: '0.8rem', color: '#A0826C' }}>
-                            Manager: <strong style={{ color: '#fff' }}>{br.manager || 'Not Assigned'}</strong>
+                            Manager: <strong style={{ color: 'var(--color-text-primary)' }}>{br.manager || 'Not Assigned'}</strong>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#A0826C', fontStyle: 'italic' }}>
+                  )}
+                    </div> :
+
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#A0826C', fontStyle: 'italic' }}>
                       No branches registered for this cafe.
                     </p>
-                  )}
-                </div>
-              );
-            })}
+                }
+                </div>);
+
+          })}
           </div>
         </div>
-      )}
+      }
 
       {/* TAB 7: Support Tickets */}
-      {activeTab === 'tickets' && (
-        <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
-          <h3 style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>🎫 Cafe Support Center</h3>
-          <p style={{ fontSize: '13px', color: '#FAF6F0', opacity: 0.7, marginBottom: '20px' }}>
+      {activeTab === 'tickets' &&
+      <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+          <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>🎫 Cafe Support Center</h3>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', opacity: 0.7, marginBottom: '20px' }}>
             Resolve technical assistance requests, integration issues, and general customer tickets.
           </p>
 
-          {loadingTickets ? (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          {loadingTickets ?
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <div className="spinner" style={{ margin: '0 auto 15px auto' }} />
-              <p style={{ color: '#FAF6F0', opacity: 0.7 }}>Loading support tickets...</p>
-            </div>
-          ) : tickets.length === 0 ? (
-            <p style={{ color: '#A0826C', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>No support tickets registered.</p>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <p style={{ color: 'var(--color-text-primary)', opacity: 0.7 }}>Loading support tickets...</p>
+            </div> :
+        tickets.length === 0 ?
+        <p style={{ color: '#A0826C', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>No support tickets registered.</p> :
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #432E22', color: '#FAF6F0' }}>
+                <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
                   <th style={{ padding: '8px' }}>Ticket ID / Cafe</th>
                   <th style={{ padding: '8px' }}>Details</th>
                   <th style={{ padding: '8px', textAlign: 'center' }}>Priority</th>
@@ -1189,83 +1189,83 @@ const SuperAdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {tickets.map(ticket => {
-                  const prioColor = ticket.priority === 'High' ? '#E74C3C' : ticket.priority === 'Medium' ? '#F39C12' : '#3498DB';
-                  const statusColor = ticket.status === 'Open' ? '#E74C3C' : ticket.status === 'Pending' ? '#F1C40F' : '#2ECC71';
-                  return (
-                    <tr key={ticket._id} style={{ borderBottom: '1px solid #432E22' }}>
-                      <td style={{ padding: '12px 8px', color: '#fff', fontWeight: 600, verticalAlign: 'top' }}>
+                {tickets.map((ticket) => {
+              const prioColor = ticket.priority === 'High' ? '#E74C3C' : ticket.priority === 'Medium' ? '#F39C12' : '#3498DB';
+              const statusColor = ticket.status === 'Open' ? '#E74C3C' : ticket.status === 'Pending' ? '#F1C40F' : '#2ECC71';
+              return (
+                <tr key={ticket._id} style={{ borderBottom: '1px solid #432E22' }}>
+                      <td style={{ padding: '12px 8px', color: 'var(--color-text-primary)', fontWeight: 600, verticalAlign: 'top' }}>
                         <span style={{ color: '#E6D5C3', fontSize: '0.8rem', display: 'block' }}>{ticket.ticketId}</span>
                         {ticket.cafeName}
                         <span style={{ fontSize: '0.75rem', color: '#A0826C', display: 'block' }}>({ticket.cafeId})</span>
                       </td>
                       <td style={{ padding: '12px 8px', verticalAlign: 'top', maxWidth: '300px' }}>
-                        <strong style={{ color: '#fff', display: 'block', marginBottom: '4px' }}>{ticket.subject}</strong>
+                        <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '4px' }}>{ticket.subject}</strong>
                         <p style={{ margin: 0, fontSize: '0.8rem', color: '#E6D5C3', lineHeight: '1.4' }}>{ticket.message}</p>
                         <span style={{ fontSize: '0.7rem', color: '#A0826C', display: 'block', marginTop: '6px' }}>Created: {formatDate(ticket.createdAt)}</span>
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
                         <span style={{
-                          backgroundColor: `${prioColor}1A`,
-                          border: `1px solid ${prioColor}`,
-                          color: prioColor,
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold'
-                        }}>
+                      backgroundColor: `${prioColor}1A`,
+                      border: `1px solid ${prioColor}`,
+                      color: prioColor,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold'
+                    }}>
                           {ticket.priority}
                         </span>
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
                         <span style={{
-                          backgroundColor: `${statusColor}1A`,
-                          border: `1px solid ${statusColor}`,
-                          color: statusColor,
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold'
-                        }}>
+                      backgroundColor: `${statusColor}1A`,
+                      border: `1px solid ${statusColor}`,
+                      color: statusColor,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold'
+                    }}>
                           {ticket.status}
                         </span>
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                           <button
-                            onClick={() => handleUpdateTicketStatus(ticket._id, 'Open')}
-                            style={{ background: ticket.status === 'Open' ? '#E74C3C' : '#1F140E', border: '1px solid #E74C3C', color: '#fff', fontSize: '0.7rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                          >
+                        onClick={() => handleUpdateTicketStatus(ticket._id, 'Open')}
+                        style={{ background: ticket.status === 'Open' ? '#E74C3C' : '#1F140E', border: '1px solid #E74C3C', color: 'var(--color-text-primary)', fontSize: '0.7rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>
+                        
                             Open
                           </button>
                           <button
-                            onClick={() => handleUpdateTicketStatus(ticket._id, 'Pending')}
-                            style={{ background: ticket.status === 'Pending' ? '#F1C40F' : '#1F140E', border: '1px solid #F1C40F', color: '#fff', fontSize: '0.7rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                          >
+                        onClick={() => handleUpdateTicketStatus(ticket._id, 'Pending')}
+                        style={{ background: ticket.status === 'Pending' ? '#F1C40F' : '#1F140E', border: '1px solid #F1C40F', color: 'var(--color-text-primary)', fontSize: '0.7rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>
+                        
                             Pend
                           </button>
                           <button
-                            onClick={() => handleUpdateTicketStatus(ticket._id, 'Resolved')}
-                            style={{ background: ticket.status === 'Resolved' ? '#2ECC71' : '#1F140E', border: '1px solid #2ECC71', color: '#fff', fontSize: '0.7rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}
-                          >
+                        onClick={() => handleUpdateTicketStatus(ticket._id, 'Resolved')}
+                        style={{ background: ticket.status === 'Resolved' ? '#2ECC71' : '#1F140E', border: '1px solid #2ECC71', color: 'var(--color-text-primary)', fontSize: '0.7rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>
+                        
                             Res
                           </button>
                         </div>
                       </td>
-                    </tr>
-                  );
-                })}
+                    </tr>);
+
+            })}
               </tbody>
             </table>
-          )}
+        }
         </div>
-      )}
+      }
 
       {/* TAB 8: Revenue Monitoring */}
-      {activeTab === 'revenue' && (
-        <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
-          <h3 style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>💵 Revenue Monitoring & SaaS Analytics</h3>
-          <p style={{ fontSize: '13px', color: '#FAF6F0', opacity: 0.7, marginBottom: '20px' }}>
+      {activeTab === 'revenue' &&
+      <div className="fade-in" style={{ background: '#2B1D15', border: '1px solid #432E22', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+          <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}>💵 Revenue Monitoring & SaaS Analytics</h3>
+          <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', opacity: 0.7, marginBottom: '20px' }}>
             Real-time platform financial statistics computed from subscription plans and order traffic.
           </p>
 
@@ -1273,61 +1273,61 @@ const SuperAdminDashboard = () => {
           <div className="stats-row-1" style={{ marginBottom: '24px' }}>
             <div className="stat-card">
               <p style={{ color: '#27AE60' }}>
-                ₹{(cafes.reduce((sum, c) => {
-                  const val = c.subscriptionPlan === 'Enterprise' ? 19999 : c.subscriptionPlan === 'Premium' ? 7999 : 3999;
-                  return sum + (c.isActive ? val : 0);
-                }, 0)).toLocaleString('en-IN')}
+                ₹{cafes.reduce((sum, c) => {
+                const val = c.subscriptionPlan === 'Enterprise' ? 19999 : c.subscriptionPlan === 'Premium' ? 7999 : 3999;
+                return sum + (c.isActive ? val : 0);
+              }, 0).toLocaleString('en-IN')}
               </p>
             </div>
             <div className="stat-card">
               <h3>Annual Recurring (ARR)</h3>
               <p style={{ color: '#27AE60' }}>
                 ₹{(cafes.reduce((sum, c) => {
-                  const val = c.subscriptionPlan === 'Enterprise' ? 19999 : c.subscriptionPlan === 'Premium' ? 7999 : 3999;
-                  return sum + (c.isActive ? val : 0);
-                }, 0) * 12).toLocaleString('en-IN')}
+                const val = c.subscriptionPlan === 'Enterprise' ? 19999 : c.subscriptionPlan === 'Premium' ? 7999 : 3999;
+                return sum + (c.isActive ? val : 0);
+              }, 0) * 12).toLocaleString('en-IN')}
               </p>
             </div>
             <div className="stat-card">
               <h3>Avg Revenue Per Cafe</h3>
               <p style={{ color: '#F39C12' }}>
                 ₹{(cafes.length ? Math.round(cafes.reduce((sum, c) => {
-                  const val = c.subscriptionPlan === 'Enterprise' ? 19999 : c.subscriptionPlan === 'Premium' ? 7999 : 3999;
-                  return sum + (c.isActive ? val : 0);
-                }, 0) / cafes.length) : 0).toLocaleString('en-IN')}/mo
+                const val = c.subscriptionPlan === 'Enterprise' ? 19999 : c.subscriptionPlan === 'Premium' ? 7999 : 3999;
+                return sum + (c.isActive ? val : 0);
+              }, 0) / cafes.length) : 0).toLocaleString('en-IN')}/mo
               </p>
             </div>
           </div>
 
           <div style={{ background: '#1F140E', border: '1px solid #432E22', borderRadius: '12px', padding: '20px' }}>
-            <h4 style={{ color: '#fff', margin: '0 0 15px 0' }}>Plan-wise Account Breakdown</h4>
+            <h4 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0' }}>Plan-wise Account Breakdown</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
               <div style={{ background: '#2B1D15', border: '1px solid #432E22', borderRadius: '8px', padding: '12px' }}>
                 <span style={{ fontSize: '0.75rem', color: '#3498DB', fontWeight: 'bold' }}>BASIC PLAN (₹3,999/mo)</span>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>
-                  {cafes.filter(c => c.subscriptionPlan === 'Basic' || !c.subscriptionPlan).length} Cafes
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '4px' }}>
+                  {cafes.filter((c) => c.subscriptionPlan === 'Basic' || !c.subscriptionPlan).length} Cafes
                 </div>
               </div>
               <div style={{ background: '#2B1D15', border: '1px solid #432E22', borderRadius: '8px', padding: '12px' }}>
                 <span style={{ fontSize: '0.75rem', color: '#F1C40F', fontWeight: 'bold' }}>PREMIUM PLAN (₹7,999/mo)</span>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>
-                  {cafes.filter(c => c.subscriptionPlan === 'Premium').length} Cafes
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '4px' }}>
+                  {cafes.filter((c) => c.subscriptionPlan === 'Premium').length} Cafes
                 </div>
               </div>
               <div style={{ background: '#2B1D15', border: '1px solid #432E22', borderRadius: '8px', padding: '12px' }}>
                 <span style={{ fontSize: '0.75rem', color: '#9B59B6', fontWeight: 'bold' }}>ENTERPRISE PLAN (₹19,999/mo)</span>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginTop: '4px' }}>
-                  {cafes.filter(c => c.subscriptionPlan === 'Enterprise').length} Cafes
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '4px' }}>
+                  {cafes.filter((c) => c.subscriptionPlan === 'Enterprise').length} Cafes
                 </div>
               </div>
             </div>
           </div>
 
           <div style={{ marginTop: '24px' }}>
-            <h4 style={{ color: '#fff', margin: '0 0 12px 0' }}>Cafe Sales & Bill Ledger</h4>
+            <h4 style={{ color: 'var(--color-text-primary)', margin: '0 0 12px 0' }}>Cafe Sales & Bill Ledger</h4>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #432E22', color: '#FAF6F0' }}>
+                <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
                   <th style={{ padding: '8px' }}>Cafe Name</th>
                   <th style={{ padding: '8px' }}>Active Plan</th>
                   <th style={{ padding: '8px', textAlign: 'center' }}>Monthly Cost</th>
@@ -1335,14 +1335,14 @@ const SuperAdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {cafes.map(cafe => {
-                  const planCost = cafe.subscriptionPlan === 'Enterprise' ? 19999 : cafe.subscriptionPlan === 'Premium' ? 7999 : 3999;
-                  // Generate an elegant pseudo-random revenue figure based on cafeId for visuals
-                  const charSum = cafe.cafeId.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-                  const estSales = cafe.isActive ? (charSum * 12.5 + 400).toFixed(2) : '0.00';
-                  return (
-                    <tr key={cafe._id} style={{ borderBottom: '1px solid #432E22' }}>
-                      <td style={{ padding: '12px 8px', color: '#fff', fontWeight: 600 }}>
+                {cafes.map((cafe) => {
+                const planCost = cafe.subscriptionPlan === 'Enterprise' ? 19999 : cafe.subscriptionPlan === 'Premium' ? 7999 : 3999;
+                // Generate an elegant pseudo-random revenue figure based on cafeId for visuals
+                const charSum = cafe.cafeId.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+                const estSales = cafe.isActive ? (charSum * 12.5 + 400).toFixed(2) : '0.00';
+                return (
+                  <tr key={cafe._id} style={{ borderBottom: '1px solid #432E22' }}>
+                      <td style={{ padding: '12px 8px', color: 'var(--color-text-primary)', fontWeight: 600 }}>
                         {cafe.name} ({cafe.cafeId})
                       </td>
                       <td style={{ padding: '12px 8px', color: '#E6D5C3' }}>
@@ -1354,18 +1354,18 @@ const SuperAdminDashboard = () => {
                       <td style={{ padding: '12px 8px', textAlign: 'center', color: '#F39C12', fontWeight: 'bold' }}>
                         ₹{estSales}
                       </td>
-                    </tr>
-                  );
-                })}
+                    </tr>);
+
+              })}
               </tbody>
             </table>
           </div>
         </div>
-      )}
+      }
 
       {/* VIEW DETAILS MODAL */}
-      {selectedCafeForDetails && (
-        <div className="modal-overlay" onClick={() => setSelectedCafeForDetails(null)}>
+      {selectedCafeForDetails &&
+      <div className="modal-overlay" onClick={() => setSelectedCafeForDetails(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E6D5C3', paddingBottom: '12px', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, color: '#3E2723', fontSize: '1.25rem', fontWeight: 800 }}>Cafe Inspector</h3>
@@ -1402,10 +1402,10 @@ const SuperAdminDashboard = () => {
               {/* Branch list */}
               <div style={{ background: '#FFFDFB', border: '1px solid #E6D5C3', padding: '15px', borderRadius: '12px' }}>
                 <h5 style={{ margin: '0 0 10px 0', color: '#6F4E37', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.5px' }}>Branches Directory ({selectedCafeForDetails.branchesCount || 1})</h5>
-                {selectedCafeForDetails.branchesList && selectedCafeForDetails.branchesList.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {selectedCafeForDetails.branchesList.map((br) => (
-                      <div key={br._id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #E6D5C3', paddingBottom: '4px' }}>
+                {selectedCafeForDetails.branchesList && selectedCafeForDetails.branchesList.length > 0 ?
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {selectedCafeForDetails.branchesList.map((br) =>
+                <div key={br._id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #E6D5C3', paddingBottom: '4px' }}>
                         <div>
                           <strong style={{ fontSize: '0.85rem', color: '#3E2723' }}>{br.branchName}</strong> ({br.branchId})
                           <div style={{ fontSize: '0.75rem', color: '#6F4E37' }}>{br.address}</div>
@@ -1414,11 +1414,11 @@ const SuperAdminDashboard = () => {
                           {br.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#6F4E37', fontStyle: 'italic' }}>Default main branch pending creation.</p>
                 )}
+                  </div> :
+
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#6F4E37', fontStyle: 'italic' }}>Default main branch pending creation.</p>
+              }
               </div>
 
               {/* System Health Card */}
@@ -1445,29 +1445,29 @@ const SuperAdminDashboard = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
-              <button 
-                onClick={() => setSelectedCafeForDetails(null)} 
-                style={{
-                  backgroundColor: 'transparent',
-                  color: '#6F4E37',
-                  border: '1px solid #E6D5C3',
-                  padding: '8px 20px',
-                  borderRadius: '9999px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem'
-                }}
-              >
+              <button
+              onClick={() => setSelectedCafeForDetails(null)}
+              style={{
+                backgroundColor: 'transparent',
+                color: '#6F4E37',
+                border: '1px solid #E6D5C3',
+                padding: '8px 20px',
+                borderRadius: '9999px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}>
+              
                 Close
               </button>
             </div>
           </div>
         </div>
-      )}
+      }
 
       {/* EDIT CAFE MODAL */}
-      {editingCafe && (
-        <div className="modal-overlay" onClick={() => setEditingCafe(null)}>
+      {editingCafe &&
+      <div className="modal-overlay" onClick={() => setEditingCafe(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E6D5C3', paddingBottom: '12px', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, color: '#3E2723', fontSize: '1.25rem', fontWeight: 800 }}>Edit Cafe Registration</h3>
@@ -1478,21 +1478,21 @@ const SuperAdminDashboard = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>CAFE NAME</label>
                 <input
-                  type="text"
-                  value={editFormData.name}
-                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
-                  required
-                />
+                type="text"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
+                required />
+              
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>BUSINESS TYPE</label>
                 <select
-                  value={editFormData.businessType}
-                  onChange={(e) => setEditFormData({ ...editFormData, businessType: e.target.value })}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: '#3E2723' }}
-                >
+                value={editFormData.businessType}
+                onChange={(e) => setEditFormData({ ...editFormData, businessType: e.target.value })}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: '#3E2723' }}>
+                
                   <option value="Cafe">Cafe</option>
                   <option value="Restaurant">Restaurant</option>
                   <option value="Bakery">Bakery</option>
@@ -1504,78 +1504,78 @@ const SuperAdminDashboard = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>CITY</label>
                   <input
-                    type="text"
-                    value={editFormData.city}
-                    onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
-                    required
-                  />
+                  type="text"
+                  value={editFormData.city}
+                  onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
+                  required />
+                
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>STATE</label>
                   <input
-                    type="text"
-                    value={editFormData.state}
-                    onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value })}
-                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
-                    required
-                  />
+                  type="text"
+                  value={editFormData.state}
+                  onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value })}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
+                  required />
+                
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>BRANCH COUNT</label>
                 <input
-                  type="number"
-                  value={editFormData.branchCount}
-                  onChange={(e) => setEditFormData({ ...editFormData, branchCount: Number(e.target.value) })}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
-                  min={1}
-                  required
-                />
+                type="number"
+                value={editFormData.branchCount}
+                onChange={(e) => setEditFormData({ ...editFormData, branchCount: Number(e.target.value) })}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
+                min={1}
+                required />
+              
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px' }}>
-                <button 
-                  type="button" 
-                  onClick={() => setEditingCafe(null)} 
-                  style={{
-                    backgroundColor: 'transparent',
-                    color: '#6F4E37',
-                    border: '1px solid #E6D5C3',
-                    padding: '8px 20px',
-                    borderRadius: '9999px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem'
-                  }}
-                >
+                <button
+                type="button"
+                onClick={() => setEditingCafe(null)}
+                style={{
+                  backgroundColor: 'transparent',
+                  color: '#6F4E37',
+                  border: '1px solid #E6D5C3',
+                  padding: '8px 20px',
+                  borderRadius: '9999px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}>
+                
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
-                  style={{
-                    backgroundColor: '#6F4E37',
-                    color: '#FAF6F0',
-                    border: 'none',
-                    padding: '8px 20px',
-                    borderRadius: '9999px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem'
-                  }}
-                >
+                <button
+                type="submit"
+                style={{
+                  backgroundColor: '#6F4E37',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 20px',
+                  borderRadius: '9999px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}>
+                
                   Save Updates
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
+      }
 
       {/* SUBSCRIPTION EDITING MODAL */}
-      {editingSubscriptionCafe && (
-        <div className="modal-overlay" onClick={() => setEditingSubscriptionCafe(null)}>
+      {editingSubscriptionCafe &&
+      <div className="modal-overlay" onClick={() => setEditingSubscriptionCafe(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E6D5C3', paddingBottom: '12px', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, color: '#3E2723', fontSize: '1.25rem', fontWeight: 800 }}>Manage Subscription</h3>
@@ -1586,20 +1586,20 @@ const SuperAdminDashboard = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>CAFE NAME</label>
                 <input
-                  type="text"
-                  value={editingSubscriptionCafe.name}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', fontSize: '0.9rem', color: '#888', background: '#F5F5F5' }}
-                  disabled
-                />
+                type="text"
+                value={editingSubscriptionCafe.name}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', fontSize: '0.9rem', color: '#888', background: '#F5F5F5' }}
+                disabled />
+              
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>SUBSCRIPTION PLAN</label>
                 <select
-                  value={subEditFormData.subscriptionPlan}
-                  onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionPlan: e.target.value })}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: '#3E2723' }}
-                >
+                value={subEditFormData.subscriptionPlan}
+                onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionPlan: e.target.value })}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: '#3E2723' }}>
+                
                   <option value="Basic">Basic (₹3,999/mo)</option>
                   <option value="Premium">Premium (₹7,999/mo)</option>
                   <option value="Enterprise">Enterprise (₹19,999/mo)</option>
@@ -1609,10 +1609,10 @@ const SuperAdminDashboard = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>STATUS</label>
                 <select
-                  value={subEditFormData.subscriptionStatus}
-                  onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionStatus: e.target.value })}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: '#3E2723' }}
-                >
+                value={subEditFormData.subscriptionStatus}
+                onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionStatus: e.target.value })}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: '#3E2723' }}>
+                
                   <option value="Active">Active</option>
                   <option value="Suspended">Suspended</option>
                   <option value="Expired">Expired</option>
@@ -1622,53 +1622,53 @@ const SuperAdminDashboard = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6F4E37', letterSpacing: '0.5px' }}>RENEWAL DATE</label>
                 <input
-                  type="date"
-                  value={subEditFormData.subscriptionRenewal}
-                  onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionRenewal: e.target.value })}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
-                  required
-                />
+                type="date"
+                value={subEditFormData.subscriptionRenewal}
+                onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionRenewal: e.target.value })}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #E6D5C3', outline: 'none', fontSize: '0.9rem', color: '#3E2723', background: '#FFFDFB' }}
+                required />
+              
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px' }}>
-                <button 
-                  type="button" 
-                  onClick={() => setEditingSubscriptionCafe(null)} 
-                  style={{
-                    backgroundColor: 'transparent',
-                    color: '#6F4E37',
-                    border: '1px solid #E6D5C3',
-                    padding: '8px 20px',
-                    borderRadius: '9999px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem'
-                  }}
-                >
+                <button
+                type="button"
+                onClick={() => setEditingSubscriptionCafe(null)}
+                style={{
+                  backgroundColor: 'transparent',
+                  color: '#6F4E37',
+                  border: '1px solid #E6D5C3',
+                  padding: '8px 20px',
+                  borderRadius: '9999px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}>
+                
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
-                  style={{
-                    backgroundColor: '#6F4E37',
-                    color: '#FAF6F0',
-                    border: 'none',
-                    padding: '8px 20px',
-                    borderRadius: '9999px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem'
-                  }}
-                >
+                <button
+                type="submit"
+                style={{
+                  backgroundColor: '#6F4E37',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 20px',
+                  borderRadius: '9999px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}>
+                
                   Save Subscription
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 };
 
 export default SuperAdminDashboard;

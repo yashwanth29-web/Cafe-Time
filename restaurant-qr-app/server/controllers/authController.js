@@ -73,6 +73,11 @@ const sendOTP = async (req, res) => {
       });
     }
 
+    // Log the generated OTP to console for easy developer bypass / testing
+    console.log('--- GENERATED OTP FOR DEV BYPASS ---');
+    console.log('Email:', cleanEmail, 'OTP:', otp);
+    console.log('------------------------------------');
+
     // Send email via Nodemailer
     await emailService.sendOTP(cleanEmail, otp);
 
@@ -239,6 +244,11 @@ const resendOTP = async (req, res) => {
         resendCount: 1 // Counted as first resend
       });
     }
+
+    // Log the generated OTP to console for easy developer bypass / testing
+    console.log('--- GENERATED RESEND OTP FOR DEV BYPASS ---');
+    console.log('Email:', cleanEmail, 'OTP:', otp);
+    console.log('-------------------------------------------');
 
     // Send email via Nodemailer
     await emailService.sendOTP(cleanEmail, otp);

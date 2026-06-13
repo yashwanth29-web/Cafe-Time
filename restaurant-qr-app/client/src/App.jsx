@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useL
 import Navbar from './components/Navbar';
 import CustomerMenu from './pages/CustomerMenu';
 import CartPage from './pages/CartPage';
+import OrderHistory from './pages/OrderHistory';
 import OwnerDashboard from './pages/OwnerDashboard';
 import PaymentDemo from './pages/PaymentDemo';
 import Login from './pages/Login';
@@ -155,6 +156,8 @@ function AppContent() {
               />
             } 
           />
+
+          <Route path="/history" element={<OrderHistory cafeId={cafeIdParam || 'CD001'} />} />
 
           {/* Auth Flow */}
           <Route path="/login" element={<Login />} />

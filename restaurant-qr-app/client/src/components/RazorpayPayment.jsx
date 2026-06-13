@@ -24,7 +24,7 @@ const RazorpayPayment = ({
         setScriptLoaded(true);
         return;
       }
-      
+
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
       script.async = true;
@@ -64,7 +64,7 @@ const RazorpayPayment = ({
       } else {
         // Create a new order during checkout
         const payload = {
-          items: cart.map(cartItem => ({
+          items: cart.map((cartItem) => ({
             id: cartItem.item.id || cartItem.item._id,
             name: cartItem.item.name,
             price: cartItem.item.price,
@@ -80,7 +80,7 @@ const RazorpayPayment = ({
 
         orderData = await createPaymentOrder(payload);
       }
-      
+
       if (!orderData.success) {
         throw new Error(orderData.message || 'Failed to initiate order payment on server.');
       }
@@ -99,7 +99,7 @@ const RazorpayPayment = ({
         handler: async function (response) {
           // Payment successful inside checkout modal
           setProcessingStatus('Verifying payment signature...');
-          
+
           try {
             const verificationPayload = {
               appOrderId: orderData.appOrderId,
@@ -131,6 +131,11 @@ const RazorpayPayment = ({
           name: name,
           email: email,
           contact: phone
+        },
+        readonly: {
+          contact: false,
+          email: false,
+          name: false
         },
         notes: {
           appOrderId: orderData.appOrderId
@@ -179,46 +184,46 @@ const RazorpayPayment = ({
           fontWeight: '800',
           borderRadius: '12px',
           border: 'none',
-          cursor: (isDisabled || loading || !scriptLoaded) ? 'not-allowed' : 'pointer',
+          cursor: isDisabled || loading || !scriptLoaded ? 'not-allowed' : 'pointer',
           background: 'linear-gradient(135deg, #d4af37 0%, #aa820a 100%)',
-          color: '#fff',
+          color: 'var(--color-text-primary)',
           boxShadow: '0 6px 20px rgba(170, 130, 10, 0.3)',
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-        }}
-      >
-        {loading ? (
-          <>
+        }}>
+        
+        {loading ?
+        <>
             <span className="spinner-rzp" style={{
-              width: '20px',
-              height: '20px',
-              border: '3px solid rgba(255,255,255,0.3)',
-              borderTop: '3px solid #ffffff',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
-              display: 'inline-block'
-            }}></span>
+            width: '20px',
+            height: '20px',
+            border: '3px solid rgba(0, 0, 0,0.3)',
+            borderTop: '3px solid #ffffff',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+            display: 'inline-block'
+          }}></span>
             <span>{processingStatus || 'Processing...'}</span>
-          </>
-        ) : (
-          <>
+          </> :
+
+        <>
             <span>💳</span>
             <span>{buttonText}</span>
           </>
-        )}
+        }
       </button>
       
-      {!scriptLoaded && (
-        <p style={{
-          fontSize: '11px',
-          color: 'var(--color-text-secondary)',
-          textAlign: 'center',
-          marginTop: '6px'
-        }}>
+      {!scriptLoaded &&
+      <p style={{
+        fontSize: '11px',
+        color: 'var(--color-text-secondary)',
+        textAlign: 'center',
+        marginTop: '6px'
+      }}>
           Loading secure Razorpay SDK...
         </p>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 };
 
 export default RazorpayPayment;
