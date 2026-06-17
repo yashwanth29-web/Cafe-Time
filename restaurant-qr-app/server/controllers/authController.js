@@ -157,6 +157,12 @@ const verifyOTP = async (req, res) => {
       } else if (!user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
       }
+
+      // Self-heal existing corrupted demo users who have an empty cafeId
+      if (user.role === 'owner' && !user.cafeId) {
+        user.cafeId = 'CD001';
+        await user.save();
+      }
     }
 
     // Update login timestamps
