@@ -26,11 +26,10 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: (origin, callback) => {
-    // Dynamically mirror the request origin to support credential sharing across local networks/IPs
-    if (!origin) return callback(null, true);
-    callback(null, true);
-  },
+  origin: [
+    "http://localhost:5173",
+    process.env.CLIENT_URL
+  ],
   credentials: true
 }));
 app.use(cookieParser());
