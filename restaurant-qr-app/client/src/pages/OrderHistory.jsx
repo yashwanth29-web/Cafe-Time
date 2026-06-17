@@ -1,3 +1,4 @@
+import { toast } from '../components/Toast';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import RazorpayPayment from '../components/RazorpayPayment';
@@ -549,21 +550,34 @@ const OrderHistory = ({ cafeId }) => {
                         </div>
 
                         <button
-                        onClick={() => printPOSReceipt(order, null, cafeInfo)}
-                        className="btn"
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          fontSize: '12px',
-                          marginTop: '15px',
-                          color: 'var(--color-text-primary)',
-                          border: '1px solid #33271c',
-                          background: '#33271c',
-                          fontWeight: 'bold',
-                          borderRadius: '6px',
-                          cursor: 'pointer'
-                        }}>
-                        
+                          onClick={() => printPOSReceipt(order, null, cafeInfo)}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            fontSize: '13px',
+                            marginTop: '15px',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            background: 'var(--color-primary, #C27D5F)',
+                            fontWeight: 'bold',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            boxShadow: '0 4px 12px rgba(194, 125, 95, 0.3)',
+                            fontFamily: 'var(--font-family)',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'var(--color-primary-hover, #D49073)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'var(--color-primary, #C27D5F)';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                          }}>
                           🖨️ Download & Print PDF Invoice
                         </button>
                       </div>
@@ -633,11 +647,11 @@ const OrderHistory = ({ cafeId }) => {
                               setSubmittedReviews(updatedReviews);
                               localStorage.setItem('submittedReviews', JSON.stringify(updatedReviews));
                             } else {
-                              alert('Failed to submit review.');
+                              toast.error('Failed to submit review.');
                             }
                           } catch (err) {
                             console.error('Review submit failed:', err);
-                            alert('Connection error submitting review.');
+                            toast.error('Connection error submitting review.');
                           } finally {
                             setSubmittingReview((prev) => ({ ...prev, [order._id]: false }));
                           }

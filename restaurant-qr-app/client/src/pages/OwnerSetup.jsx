@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSetupData, saveSetupData, verifyRazorpayKeys, uploadLogo } from '../services/api';
+import { confirm } from '../components/Toast';
 
 const OwnerSetup = () => {
   const { user, checkSession } = useAuth();
@@ -257,7 +258,7 @@ const OwnerSetup = () => {
   };
 
   // Wizard navigation validations
-  const validateAndNext = () => {
+  const validateAndNext = async () => {
     setErrorMsg('');
     if (step === 1) {
       if (!address) {
@@ -271,7 +272,7 @@ const OwnerSetup = () => {
         return;
       }
       if (!isRazorpayVerified) {
-        if (!window.confirm('You have not verified your Razorpay credentials. Proceed anyway?')) {
+        if (!(await confirm('You have not verified your Razorpay credentials. Proceed anyway?'))) {
           return;
         }
       }

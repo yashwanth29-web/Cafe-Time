@@ -6,6 +6,18 @@ const connectDB = async () => {
 
   let connected = false;
 
+  // Setup connection event listeners for runtime monitoring
+  mongoose.connection.removeAllListeners('error');
+  mongoose.connection.removeAllListeners('disconnected');
+
+  mongoose.connection.on('error', (err) => {
+    console.error(`MongoDB connection error during runtime: ${err.message}`);
+  });
+
+  mongoose.connection.on('disconnected', () => {
+    console.warn('MongoDB connection disconnected.');
+  });
+
   // If a MONGO_URI is defined and is different from the local fallback, try it first
   if (primaryUri && primaryUri !== fallbackUri) {
     try {
@@ -15,6 +27,14 @@ const connectDB = async () => {
       connected = true;
     } catch (error) {
       console.error(`Primary database connection failed: ${error.message}`);
+      
+      // Cleanly disconnect to close any half-open connection attempts or lingering replica set monitors
+      try {
+        await mongoose.disconnect();
+      } catch (disconnectError) {
+        // Ignore disconnect errors
+      }
+      
       console.log('Attempting connection to local fallback MongoDB...');
     }
   }

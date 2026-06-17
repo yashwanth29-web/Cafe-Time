@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { confirm } from '../components/Toast';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -54,39 +55,49 @@ const StaffDashboard = () => {
  const timerRef = useRef(null);
 
  // Fetch initial data
- const fetchData = async () => {
- try {
- setLoading(true);
- setErrorMsg('');
+ const fetchData = async (isSilent = false) => {
+   try {
+     if (!isSilent) {
+       setLoading(true);
+       setErrorMsg('');
+     }
 
- const todayRes = await getTodayAttendanceStatus();
- if (todayRes.success) {
- setTodayStatus(todayRes);
- }
+     const todayRes = await getTodayAttendanceStatus();
+     if (todayRes.success) {
+       setTodayStatus(todayRes);
+     }
 
- const historyRes = await getStaffAttendanceHistory();
- if (historyRes.success) {
- setHistoryData(historyRes.history || []);
- setSummary(historyRes.summary || {
- totalWorkingHours: 0,
- attendancePercentage: 0,
- lateDays: 0,
- presentDays: 0
- });
- }
- } catch (error) {
- console.error('Error fetching staff attendance data:', error);
- setErrorMsg('Failed to sync attendance details with server.');
- } finally {
- setLoading(false);
- }
+     const historyRes = await getStaffAttendanceHistory();
+     if (historyRes.success) {
+       setHistoryData(historyRes.history || []);
+       setSummary(historyRes.summary || {
+         totalWorkingHours: 0,
+         attendancePercentage: 0,
+         lateDays: 0,
+         presentDays: 0
+       });
+     }
+   } catch (error) {
+     console.error('Error fetching staff attendance data:', error);
+     if (!isSilent) {
+       setErrorMsg('Failed to sync attendance details with server.');
+     }
+   } finally {
+     if (!isSilent) {
+       setLoading(false);
+     }
+   }
  };
 
  useEffect(() => {
- fetchData();
- return () => {
- if (timerRef.current) clearInterval(timerRef.current);
- };
+   fetchData();
+   const intervalId = setInterval(() => {
+     fetchData(true);
+   }, 5000);
+   return () => {
+     clearInterval(intervalId);
+     if (timerRef.current) clearInterval(timerRef.current);
+   };
  }, []);
 
  // Update live shift duration timer
@@ -155,7 +166,7 @@ const StaffDashboard = () => {
 
  if (res.success) {
  setSuccessMsg(res.message || 'Check-in registered successfully!');
- fetchData();
+ fetchData(true);
  } else {
  setErrorMsg(res.message || 'Check-in validation failed.');
  }
@@ -189,7 +200,7 @@ const StaffDashboard = () => {
 
  // Perform Check-Out
  const handleCheckOut = async () => {
- if (!window.confirm('Are you sure you want to check out from your shift?')) {
+ if (!(await confirm('Are you sure you want to check out from your shift?'))) {
  return;
  }
 
@@ -201,7 +212,7 @@ const StaffDashboard = () => {
  const res = await checkOut();
  if (res.success) {
  setSuccessMsg(res.message || 'Check-out registered successfully!');
- fetchData();
+ fetchData(true);
  } else {
  setErrorMsg(res.message || 'Check-out request failed.');
  }
@@ -807,7 +818,7 @@ const StaffDashboard = () => {
  }}
  disabled={reportLoading} />
  
- <div style={{ fontSize: '2rem', marginBottom: '8px' }}></div>
+ <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📤</div>
  <strong style={{ color: 'var(--color-text-primary)', display: 'block', fontSize: '0.9rem' }}>
  Tap to upload photos
  </strong>

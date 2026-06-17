@@ -7,6 +7,58 @@ const emailService = require('../services/emailService');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Razorpay = require('razorpay');
 
+const parseCoordinates = (input) => {
+  if (!input) return null;
+  const str = String(input).trim();
+  
+  // 1. q=lat,lng
+  const qMatch = str.match(/[?&](?:q|query)=([\d.-]+)\s*,\s*([\d.-]+)/i);
+  if (qMatch) {
+    return {
+      latitude: parseFloat(qMatch[1]),
+      longitude: parseFloat(qMatch[2])
+    };
+  }
+  
+  // 2. @lat,lng
+  const atMatch = str.match(/@([\d.-]+)\s*,\s*([\d.-]+)/);
+  if (atMatch) {
+    return {
+      latitude: parseFloat(atMatch[1]),
+      longitude: parseFloat(atMatch[2])
+    };
+  }
+
+  // 3. /place/lat,lng
+  const placeMatch = str.match(/\/place\/([\d.-]+)\s*,\s*([\d.-]+)/i);
+  if (placeMatch) {
+    return {
+      latitude: parseFloat(placeMatch[1]),
+      longitude: parseFloat(placeMatch[2])
+    };
+  }
+
+  // 4. simple lat,lng
+  const simpleMatch = str.match(/^([\d.-]+)\s*,\s*([\d.-]+)$/);
+  if (simpleMatch) {
+    return {
+      latitude: parseFloat(simpleMatch[1]),
+      longitude: parseFloat(simpleMatch[2])
+    };
+  }
+
+  // 5. general fallback for any lat,lng in the string
+  const generalMatch = str.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+  if (generalMatch) {
+    return {
+      latitude: parseFloat(generalMatch[1]),
+      longitude: parseFloat(generalMatch[2])
+    };
+  }
+
+  return null;
+};
+
 /**
  * Register a new Staff member bound to the Owner's cafe
  */
@@ -290,7 +342,7 @@ const saveSetupData = async (req, res) => {
   const cafeId = req.user.cafeId;
   const {
     name, businessType, branchCount, city, state, pincode,
-    logoUrl, address, mapsLocation, openingTime, closingTime, gstNumber, supportNumber,
+    logoUrl, address, mapsLocation, latitude, longitude, openingTime, closingTime, gstNumber, supportNumber,
     paymentConfig,
     operationalConfig,
     staffList
@@ -315,7 +367,43 @@ const saveSetupData = async (req, res) => {
     if (pincode) cafe.pincode = pincode;
     if (logoUrl) cafe.logoUrl = logoUrl;
     if (address) cafe.address = address;
-    if (mapsLocation) cafe.mapsLocation = mapsLocation;
+
+    let latVal = cafe.latitude || 0;
+    let lngVal = cafe.longitude || 0;
+
+    if (latitude !== undefined && latitude !== '') {
+      latVal = Number(latitude);
+    }
+    if (longitude !== undefined && longitude !== '') {
+      lngVal = Number(longitude);
+    }
+
+    if (mapsLocation) {
+      cafe.mapsLocation = mapsLocation;
+      const coords = parseCoordinates(mapsLocation);
+      if (coords) {
+        latVal = coords.latitude;
+        lngVal = coords.longitude;
+      }
+    }
+
+    cafe.latitude = latVal;
+    cafe.longitude = lngVal;
+
+    // Sync default branch coordinates immediately
+    await Branch.findOneAndUpdate(
+      { branchId: 'default', cafeId },
+      {
+        branchName: cafe.name || name || 'Primary Location',
+        latitude: latVal,
+        longitude: lngVal,
+        address: cafe.address || address || 'Default Address',
+        allowedRadius: 30,
+        isActive: true
+      },
+      { upsert: true }
+    );
+
     if (openingTime) cafe.openingTime = openingTime;
     if (closingTime) cafe.closingTime = closingTime;
     if (gstNumber) cafe.gstNumber = gstNumber;
@@ -464,8 +552,30 @@ const createBranch = async (req, res) => {
       cafeId,
       address: address.trim(),
       manager: (manager || '').trim(),
-      latitude: latitude !== undefined ? Number(latitude) : 0,
-      longitude: longitude !== undefined ? Number(longitude) : 0,
+      latitude: (() => {
+        const latStr = String(latitude || '');
+        const lngStr = String(longitude || '');
+        if (latStr.includes('http') || latStr.includes('maps')) {
+          const coords = parseCoordinates(latStr);
+          return coords ? coords.latitude : 0;
+        } else if (lngStr.includes('http') || lngStr.includes('maps')) {
+          const coords = parseCoordinates(lngStr);
+          return coords ? coords.latitude : 0;
+        }
+        return latitude !== undefined && latitude !== '' ? Number(latitude) : 0;
+      })(),
+      longitude: (() => {
+        const latStr = String(latitude || '');
+        const lngStr = String(longitude || '');
+        if (latStr.includes('http') || latStr.includes('maps')) {
+          const coords = parseCoordinates(latStr);
+          return coords ? coords.longitude : 0;
+        } else if (lngStr.includes('http') || lngStr.includes('maps')) {
+          const coords = parseCoordinates(lngStr);
+          return coords ? coords.longitude : 0;
+        }
+        return longitude !== undefined && longitude !== '' ? Number(longitude) : 0;
+      })(),
       allowedRadius: allowedRadius !== undefined ? Number(allowedRadius) : 30,
       isActive: isActive !== undefined ? isActive : true
     });
@@ -552,11 +662,47 @@ const updateBranch = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Branch not found or does not belong to your cafe' });
     }
 
-    if (branchName) branch.branchName = branchName.trim();
-    if (address) branch.address = address.trim();
-    if (manager !== undefined) branch.manager = manager.trim();
-    if (latitude !== undefined) branch.latitude = Number(latitude);
-    if (longitude !== undefined) branch.longitude = Number(longitude);
+    if (branchName !== undefined) {
+      const trimmed = (branchName || '').trim();
+      if (!trimmed) {
+        return res.status(400).json({ success: false, message: 'Branch Name cannot be empty' });
+      }
+      branch.branchName = trimmed;
+    }
+    if (address !== undefined) {
+      const trimmed = (address || '').trim();
+      if (!trimmed) {
+        return res.status(400).json({ success: false, message: 'Address cannot be empty' });
+      }
+      branch.address = trimmed;
+    }
+    if (manager !== undefined) {
+      branch.manager = (manager || '').trim();
+    }
+    
+    if (latitude !== undefined || longitude !== undefined) {
+      let latVal = latitude !== undefined && latitude !== '' ? Number(latitude) : branch.latitude;
+      let lngVal = longitude !== undefined && longitude !== '' ? Number(longitude) : branch.longitude;
+      
+      const latStr = String(latitude || '');
+      const lngStr = String(longitude || '');
+      if (latStr.includes('http') || latStr.includes('maps')) {
+        const coords = parseCoordinates(latStr);
+        if (coords) {
+          latVal = coords.latitude;
+          lngVal = coords.longitude;
+        }
+      } else if (lngStr.includes('http') || lngStr.includes('maps')) {
+        const coords = parseCoordinates(lngStr);
+        if (coords) {
+          latVal = coords.latitude;
+          lngVal = coords.longitude;
+        }
+      }
+      
+      branch.latitude = latVal;
+      branch.longitude = lngVal;
+    }
     if (allowedRadius !== undefined) branch.allowedRadius = Number(allowedRadius);
     if (isActive !== undefined) branch.isActive = isActive;
 

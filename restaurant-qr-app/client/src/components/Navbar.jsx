@@ -1,12 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-const Navbar = ({ tableNumber, cartItemCount }) => {
+const Navbar = ({ tableNumber, cartItemCount, cafeInfo }) => {
   return (
     <nav className="navbar">
       <Link to="/" className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <img src="/logo.png" alt="Cypher's Café Logo" style={{ height: '40px', width: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #6F4E37' }} />
-        <span className="nav-brand-text">Cypher's Café</span>
+        <img src={cafeInfo?.logoUrl || "/logo.png"} alt={`${cafeInfo?.name || "Cypher's Café"} Logo`} style={{ height: '40px', width: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #6F4E37' }} />
+        <span className="nav-brand-text">{cafeInfo?.name || "Cypher's Café"}</span>
       </Link>
       <div className="nav-right">
         {tableNumber && (

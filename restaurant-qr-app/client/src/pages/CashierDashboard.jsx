@@ -1,3 +1,4 @@
+import { toast } from '../components/Toast';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
@@ -12,6 +13,7 @@ const CashierDashboard = () =>{
  const [activeTab, setActiveTab] = useState(() =>{
  return tabParam || 'billing';
  });
+ const [actionLoading, setActionLoading] = useState(false);
 
  const [inventory, setInventory] = useState([]);
  const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -41,8 +43,8 @@ const CashierDashboard = () =>{
  }
  }, [tabParam]);
 
- const fetchInventory = async () =>{
- setInventoryLoading(true);
+ const fetchInventory = async (isSilent = false) =>{
+ if (!isSilent) setInventoryLoading(true);
  try {
  const response = await getInventory();
  if (response && response.success) {
@@ -51,7 +53,7 @@ const CashierDashboard = () =>{
  } catch (error) {
  console.error('Error fetching inventory:', error);
  } finally {
- setInventoryLoading(false);
+ if (!isSilent) setInventoryLoading(false);
  }
  };
 
@@ -67,7 +69,7 @@ const CashierDashboard = () =>{
  const [selectedOrder, setSelectedOrder] = useState(null);
  const [refreshCountdown, setRefreshCountdown] = useState(5);
 
- const fetchOrders = async () =>{
+ const fetchOrders = async (isSilent = false) =>{
  try {
  const response = await getOrders();
  if (response.success) {
@@ -83,7 +85,7 @@ const CashierDashboard = () =>{
  console.error('Error fetching cashier orders:', error);
  setErrorMsg('Cannot connect to billing server.');
  } finally {
- setLoading(false);
+ if (!isSilent) setLoading(false);
  }
  };
 
@@ -91,7 +93,10 @@ const CashierDashboard = () =>{
  fetchOrders();
 
  const pollingInterval = setInterval(() =>{
- fetchOrders();
+ fetchOrders(true);
+ if (activeTab === 'inventory') {
+ fetchInventory(true);
+ }
  setRefreshCountdown(5);
  }, 5000);
 
@@ -103,22 +108,23 @@ const CashierDashboard = () =>{
  clearInterval(pollingInterval);
  clearInterval(countdownInterval);
  };
- }, []);
+ }, [activeTab]);
 
  const handleProcessPayment = async (orderId, paymentMethod) =>{
  try {
+ setActionLoading(true);
  const response = await updateOrderStatus(orderId, {
  status: 'Completed',
  paymentStatus: 'Paid'
  });
 
  if (response.success) {
- alert(`Payment of ₹${selectedOrder.totalAmount.toFixed(2)} processed via ${paymentMethod}!`);
+ toast.info(`Payment of ₹${selectedOrder.totalAmount.toFixed(2)} processed via ${paymentMethod}!`);
  // Update local list
  setOrders((prev) =>prev.map((o) =>o._id === orderId ? { ...o, paymentStatus: 'Paid', status: 'Completed' } : o));
  setSelectedOrder((prev) =>prev && prev._id === orderId ? { ...prev, paymentStatus: 'Paid', status: 'Completed' } : prev);
  } else {
- alert('Server failed to record payment.');
+ toast.error('Server failed to record payment.');
  }
  } catch (e) {
  console.error('Payment process error:', e);
@@ -127,7 +133,9 @@ const CashierDashboard = () =>{
  if (selectedOrder) {
  setSelectedOrder({ ...selectedOrder, paymentStatus: 'Paid', status: 'Completed' });
  }
- alert(`[Offline Mode] Payment processed via ${paymentMethod}.`);
+ toast.info(`[Offline Mode] Payment processed via ${paymentMethod}.`);
+ } finally {
+ setActionLoading(false);
  }
  };
 
@@ -329,16 +337,16 @@ const CashierDashboard = () =>{
 <button
  onClick={() =>handleProcessPayment(selectedOrder._id, 'Cash')}
  className="btn btn-primary touch-btn"
- style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px' }}>
- 
- Settle with Cash
+ disabled={actionLoading}
+ style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px', opacity: actionLoading ? 0.7 : 1 }}>
+ {actionLoading ? 'Processing...' : 'Settle with Cash'}
 </button>
 <button
  onClick={() =>handleProcessPayment(selectedOrder._id, 'Online Confirm')}
  className="btn btn-primary touch-btn"
- style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9', minHeight: '44px' }}>
- 
- Confirm Online Pay
+ disabled={actionLoading}
+ style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9', minHeight: '44px', opacity: actionLoading ? 0.7 : 1 }}>
+ {actionLoading ? 'Processing...' : 'Confirm Online Pay'}
 </button>
 </div>:
 

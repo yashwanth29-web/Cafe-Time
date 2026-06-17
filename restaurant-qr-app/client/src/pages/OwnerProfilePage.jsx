@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import OwnerLayout from '../components/OwnerLayout';
 import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff, verifyRazorpayKeys } from '../services/api';
+import { confirm } from '../components/Toast';
 
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
@@ -72,7 +73,7 @@ const OwnerProfilePage = () => {
   };
 
   const handleDeleteBranch = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete branch "${name}"?`)) return;
+    if (!(await confirm(`Are you sure you want to delete branch "${name}"?`))) return;
     setSaving(true);
     try {
       await deleteBranch(id);
@@ -137,8 +138,32 @@ const OwnerProfilePage = () => {
       if (activeModal === 'ops') {
         const tables = Array.from({ length: Number(form.tableCount) }, (_, i) => ({ id: `T${i + 1}`, label: `Table-${i + 1}` }));
         await saveSetupData({ operationalConfig: { tables, kitchenDisplayEnabled: form.kitchenDisplayEnabled, printerEnabled: form.printerEnabled, inventoryEnabled: form.inventoryEnabled } });
-      } else if (activeModal === 'branch') {await createBranch(form);} else
-      if (activeModal === 'editBranch') {await updateBranch(editingBranchId, form);}
+      } else if (activeModal === 'branch') {
+        if (!form.branchName || !form.branchName.trim()) {
+          showToast('Branch Name is required.', false);
+          setSaving(false);
+          return;
+        }
+        if (!form.address || !form.address.trim()) {
+          showToast('Address is required.', false);
+          setSaving(false);
+          return;
+        }
+        await createBranch(form);
+      } else
+      if (activeModal === 'editBranch') {
+        if (!form.branchName || !form.branchName.trim()) {
+          showToast('Branch Name is required.', false);
+          setSaving(false);
+          return;
+        }
+        if (!form.address || !form.address.trim()) {
+          showToast('Address is required.', false);
+          setSaving(false);
+          return;
+        }
+        await updateBranch(editingBranchId, form);
+      }
       await load();showToast('Saved successfully!');closeModal();
     } catch (err) {showToast(err?.response?.data?.message || 'Save failed.', false);} finally
     {setSaving(false);}
@@ -165,7 +190,7 @@ const OwnerProfilePage = () => {
           const state = a.state || '';
           const pin = a.postcode || '';
           const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
-          setForm((f) => ({ ...f, address: street || f.address, city, state, pincode: pin, mapsLocation: mapsUrl }));
+          setForm((f) => ({ ...f, address: street || f.address, city, state, pincode: pin, mapsLocation: mapsUrl, latitude: lat.toFixed(6), longitude: lon.toFixed(6) }));
           showToast('Location filled from GPS!');
         } catch {showToast('Could not fetch address. Try manually.', false);} finally
         {setGeoLoading(false);}
@@ -259,14 +284,39 @@ const OwnerProfilePage = () => {
 
         <label className="mlabel" htmlFor="profile-address">Full Address</label>
         <input className="minput" id="profile-address" name="profile-address" value={form.address || ''} onChange={fld('address')} placeholder="Street, Area" />
-        <label className="mlabel" htmlFor="profile-city">City</label>
-        <input className="minput" id="profile-city" name="profile-city" value={form.city || ''} onChange={fld('city')} />
-        <label className="mlabel" htmlFor="profile-state">State</label>
-        <input className="minput" id="profile-state" name="profile-state" value={form.state || ''} onChange={fld('state')} />
-        <label className="mlabel" htmlFor="profile-pincode">Pincode</label>
-        <input className="minput" id="profile-pincode" name="profile-pincode" value={form.pincode || ''} onChange={fld('pincode')} />
-        <label className="mlabel" htmlFor="profile-maps-location">Google Maps URL</label>
-        <input className="minput" id="profile-maps-location" name="profile-maps-location" value={form.mapsLocation || ''} onChange={fld('mapsLocation')} placeholder="https://maps.google.com/..." />
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
+          <div>
+            <label className="mlabel" htmlFor="profile-city" style={{ marginTop: 0 }}>City</label>
+            <input className="minput" id="profile-city" name="profile-city" value={form.city || ''} onChange={fld('city')} style={{ marginBottom: 0 }} />
+          </div>
+          <div>
+            <label className="mlabel" htmlFor="profile-state" style={{ marginTop: 0 }}>State</label>
+            <input className="minput" id="profile-state" name="profile-state" value={form.state || ''} onChange={fld('state')} style={{ marginBottom: 0 }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
+          <div>
+            <label className="mlabel" htmlFor="profile-pincode" style={{ marginTop: 0 }}>Pincode</label>
+            <input className="minput" id="profile-pincode" name="profile-pincode" value={form.pincode || ''} onChange={fld('pincode')} style={{ marginBottom: 0 }} />
+          </div>
+          <div>
+            <label className="mlabel" htmlFor="profile-maps-location" style={{ marginTop: 0 }}>Google Maps URL</label>
+            <input className="minput" id="profile-maps-location" name="profile-maps-location" value={form.mapsLocation || ''} onChange={fld('mapsLocation')} placeholder="https://maps.google.com/..." style={{ marginBottom: 0 }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
+          <div>
+            <label className="mlabel" htmlFor="profile-latitude" style={{ marginTop: 0 }}>Latitude</label>
+            <input className="minput" id="profile-latitude" name="profile-latitude" type="number" step="0.000001" value={form.latitude || ''} onChange={fld('latitude')} placeholder="e.g. 16.455215" style={{ marginBottom: 0 }} />
+          </div>
+          <div>
+            <label className="mlabel" htmlFor="profile-longitude" style={{ marginTop: 0 }}>Longitude</label>
+            <input className="minput" id="profile-longitude" name="profile-longitude" type="number" step="0.000001" value={form.longitude || ''} onChange={fld('longitude')} placeholder="e.g. 80.574133" style={{ marginBottom: 0 }} />
+          </div>
+        </div>
       </>,
 
     hours:
@@ -644,8 +694,8 @@ const OwnerProfilePage = () => {
           {/* Sign Out Button */}
           <div style={{ marginTop: '40px', textAlign: 'center' }}>
             <button
-              onClick={() => {
-                if (window.confirm('Are you sure you want to sign out?')) {
+              onClick={async () => {
+                if (await confirm('Are you sure you want to sign out?')) {
                   logout();
                 }
               }}

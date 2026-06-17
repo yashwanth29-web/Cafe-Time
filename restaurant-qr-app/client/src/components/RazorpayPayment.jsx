@@ -1,3 +1,4 @@
+import { toast } from './Toast';
 import React, { useState, useEffect } from 'react';
 import { createPaymentOrder, verifyPayment, payExistingOrder } from '../services/api';
 
@@ -43,13 +44,13 @@ const RazorpayPayment = ({
 
   const handlePayment = async () => {
     if (!scriptLoaded) {
-      alert('Razorpay Checkout SDK is still loading. Please try again in a moment.');
+      toast.info('Razorpay Checkout SDK is still loading. Please try again in a moment.');
       return;
     }
 
     const { name, email, phone } = customerDetails;
     if (!name || !email || !phone) {
-      alert('Please fill in your name, email, and contact number before proceeding.');
+      toast.info('Please fill in your name, email, and contact number before proceeding.');
       return;
     }
 

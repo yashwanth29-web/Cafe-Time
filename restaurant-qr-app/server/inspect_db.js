@@ -21,7 +21,7 @@ const inspect = async () => {
 
   const cafes = await Cafe.find({});
   console.log('--- CAFES ---');
-  console.log(JSON.stringify(cafes.map(c => ({ cafeId: c.cafeId, name: c.name, address: c.address })), null, 2));
+  console.log(JSON.stringify(cafes, null, 2));
 
   const branches = await Branch.find({});
   console.log('--- BRANCHES ---');

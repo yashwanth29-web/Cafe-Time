@@ -1,3 +1,4 @@
+import { toast } from '../components/Toast';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
@@ -64,6 +65,8 @@ const ManagerDashboard = () =>{
  const [showPriceModal, setShowPriceModal] = useState(false);
  const [newPrice, setNewPrice] = useState('');
 
+ const [actionLoading, setActionLoading] = useState(false);
+
  // Search states
  const [menuSearch, setMenuSearch] = useState('');
  const [inventorySearch, setInventorySearch] = useState('');
@@ -78,39 +81,43 @@ const ManagerDashboard = () =>{
  (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
 );
 
- const fetchMenu = async () =>{
- setMenuLoading(true);
- try {
- const response = await getMenu();
- if (response.success) {
- setMenuItems(response.data);
- }
- } catch (error) {
- console.error('Error fetching menu:', error);
- } finally {
- setMenuLoading(false);
- }
- };
+ const fetchMenu = async (isSilent = false) =>{
+  if (!isSilent) setMenuLoading(true);
+  try {
+  const response = await getMenu();
+  if (response.success) {
+  setMenuItems(response.data);
+  }
+  } catch (error) {
+  console.error('Error fetching menu:', error);
+  } finally {
+  if (!isSilent) setMenuLoading(false);
+  }
+  };
 
  const handleToggleAvailability = async (item) =>{
  try {
+ setActionLoading(true);
  const response = await updateMenuItem(item.id, { available: !item.available });
  if (response.success) {
  setMenuItems((prev) =>prev.map((m) =>m.id === item.id ? response.data : m));
  }
  } catch (err) {
  console.error('Error toggling availability:', err);
- alert('Error updating availability.');
+ toast.error('Error updating availability.');
+ } finally {
+ setActionLoading(false);
  }
  };
 
  const handleUpdatePrice = async (e) =>{
  e.preventDefault();
  if (!newPrice || parseFloat(newPrice)<= 0) {
- alert('Please enter a valid price.');
+ toast.info('Please enter a valid price.');
  return;
  }
  try {
+ setActionLoading(true);
  const response = await updateMenuItem(updatingItem.id, { price: parseFloat(newPrice) });
  if (response.success) {
  setMenuItems((prev) =>prev.map((m) =>m.id === updatingItem.id ? response.data : m));
@@ -120,28 +127,34 @@ const ManagerDashboard = () =>{
  }
  } catch (err) {
  console.error('Error updating price:', err);
- alert('Error updating price.');
+ toast.error('Error updating price.');
+ } finally {
+ setActionLoading(false);
  }
  };
 
  const handleUpdateStock = async (e) =>{
  e.preventDefault();
  try {
+ setActionLoading(true);
  const response = await updateInventoryItem(selectedItem._id, { quantity: stockForm.quantity });
  if (response && response.success) {
- alert('Stock quantity updated successfully.');
+ toast.success('Stock quantity updated successfully.');
  setShowUpdateStockModal(false);
  fetchInitialData(); // reload list
  }
  } catch (error) {
  console.error('Error updating stock:', error);
- alert('Error updating stock quantity.');
+ toast.error('Error updating stock quantity.');
+ } finally {
+ setActionLoading(false);
  }
  };
 
  const handleRecordPurchase = async (e) =>{
  e.preventDefault();
  try {
+ setActionLoading(true);
  const response = await recordPurchase({
  itemId: selectedItem._id,
  quantityAdded: Number(purchaseForm.quantityAdded),
@@ -150,19 +163,22 @@ const ManagerDashboard = () =>{
  notes: purchaseForm.notes
  });
  if (response && response.success) {
- alert('Purchase recorded successfully.');
+ toast.success('Purchase recorded successfully.');
  setShowPurchaseModal(false);
  fetchInitialData(); // reload list
  }
  } catch (error) {
  console.error('Error recording purchase:', error);
- alert(error.response?.data?.message || 'Error recording purchase.');
+ toast.error(error.response?.data?.message || 'Error recording purchase.');
+ } finally {
+ setActionLoading(false);
  }
  };
 
  const handleRecordWastage = async (e) =>{
  e.preventDefault();
  try {
+ setActionLoading(true);
  const response = await recordWastage({
  itemId: selectedItem._id,
  quantityWasted: Number(wastageForm.quantityWasted),
@@ -170,63 +186,69 @@ const ManagerDashboard = () =>{
  reason: wastageForm.reason
  });
  if (response && response.success) {
- alert('Wastage entry recorded successfully.');
+ toast.success('Wastage entry recorded successfully.');
  setShowWastageModal(false);
  fetchInitialData(); // reload list
  }
  } catch (error) {
  console.error('Error recording wastage:', error);
- alert(error.response?.data?.message || 'Error recording wastage.');
- }
- };
-
- const fetchInitialData = async () =>{
- try {
- const ordersRes = await getOrders();
- if (ordersRes.success) {
- const cafeOrders = user?.cafeId ?
- ordersRes.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
- ordersRes.data;
- setOrders(cafeOrders);
- }
-
- const staffRes = await getStaff();
- if (staffRes.success) {
- setStaffList(staffRes.staff);
- // Initialize attendance to Present by default
- const initialAttendance = {};
- staffRes.staff.forEach((member) =>{
- initialAttendance[member._id] = 'Present';
- });
- setAttendance(initialAttendance);
- }
-
- // Fetch actual inventory from backend
- const inventoryRes = await getInventory();
- if (inventoryRes.success) {
- setInventory(inventoryRes.data);
- }
-
- // Fetch menu items
- await fetchMenu();
- } catch (e) {
- console.error('Error fetching manager dashboard data:', e);
- setErrorMsg('Could not fetch operational data from backend.');
+ toast.error(error.response?.data?.message || 'Error recording wastage.');
  } finally {
- setLoading(false);
+ setActionLoading(false);
  }
  };
 
- useEffect(() =>{
- fetchInitialData();
+  const fetchInitialData = async (isSilent = false) =>{
+    try {
+      const ordersRes = await getOrders();
+      if (ordersRes.success) {
+        const cafeOrders = user?.cafeId ?
+          ordersRes.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
+          ordersRes.data;
+        setOrders(cafeOrders);
+      }
 
- // Polling every 5 seconds for real-time updates
- const pollingInterval = setInterval(() =>{
- fetchInitialData();
- }, 5000);
+      const staffRes = await getStaff();
+      if (staffRes.success) {
+        setStaffList(staffRes.staff);
+        // Initialize attendance to Present by default if not already set
+        setAttendance((prev) => {
+          const updated = { ...prev };
+          staffRes.staff.forEach((member) => {
+            if (updated[member._id] === undefined) {
+              updated[member._id] = 'Present';
+            }
+          });
+          return updated;
+        });
+      }
 
- return () =>clearInterval(pollingInterval);
- }, []);
+      // Fetch actual inventory from backend
+      const inventoryRes = await getInventory();
+      if (inventoryRes.success) {
+        setInventory(inventoryRes.data);
+      }
+
+      // Fetch menu items
+      await fetchMenu(isSilent);
+    } catch (e) {
+      console.error('Error fetching manager dashboard data:', e);
+      if (!isSilent) setErrorMsg('Could not fetch operational data from backend.');
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
+  };
+
+  useEffect(() =>{
+    fetchInitialData();
+
+    // Polling every 5 seconds for real-time updates
+    const pollingInterval = setInterval(() =>{
+      fetchInitialData(true);
+    }, 5000);
+
+    return () =>clearInterval(pollingInterval);
+  }, []);
 
  const handleAttendanceChange = (staffId, status) =>{
  setAttendance((prev) =>({ ...prev, [staffId]: status }));
@@ -240,7 +262,7 @@ const ManagerDashboard = () =>{
  }
  } catch (error) {
  console.error('Error restocking item:', error);
- alert('Error updating inventory stock');
+ toast.error('Error updating inventory stock');
  }
  };
 
@@ -544,7 +566,7 @@ const ManagerDashboard = () =>{
 
  {/* Desktop Table View */}
 <div className="desktop-tablet-manager-inventory" style={{ display: 'none', overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
 <thead>
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
 <th style={{ padding: '8px' }}>Ingredient Name</th>
@@ -899,7 +921,9 @@ const ManagerDashboard = () =>{
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowUpdateStockModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Changes</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
+  {actionLoading ? 'Saving...' : 'Save Changes'}
+</button>
 </div>
 </form>
 </div>
@@ -940,7 +964,9 @@ const ManagerDashboard = () =>{
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowPurchaseModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Entry</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
+  {actionLoading ? 'Saving...' : 'Save Entry'}
+</button>
 </div>
 </form>
 </div>
@@ -980,7 +1006,9 @@ const ManagerDashboard = () =>{
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowWastageModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Entry</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
+  {actionLoading ? 'Saving...' : 'Save Entry'}
+</button>
 </div>
 </form>
 </div>
@@ -1007,7 +1035,9 @@ const ManagerDashboard = () =>{
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>{setShowPriceModal(false);setUpdatingItem(null);}} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Price</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
+  {actionLoading ? 'Saving...' : 'Save Price'}
+</button>
 </div>
 </form>
 </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { createOwner, getCafes, updateCafe, deleteCafe, getTickets, updateTicketStatus } from '../services/api';
+import { confirm } from '../components/Toast';
 
 const SuperAdminDashboard = () => {
   const navigate = useNavigate();
@@ -60,17 +61,17 @@ const SuperAdminDashboard = () => {
     subscriptionRenewal: ''
   });
 
-  const loadTickets = async () => {
+  const loadTickets = async (isSilent = false) => {
     try {
-      setLoadingTickets(true);
+      if (!isSilent) setLoadingTickets(true);
       const data = await getTickets();
       if (data.success) {
         setTickets(data.tickets);
       }
     } catch (err) {
-      setErrorMsg('Failed to load support tickets.');
+      if (!isSilent) setErrorMsg('Failed to load support tickets.');
     } finally {
-      setLoadingTickets(false);
+      if (!isSilent) setLoadingTickets(false);
     }
   };
 
@@ -81,7 +82,7 @@ const SuperAdminDashboard = () => {
       const data = await updateTicketStatus(ticketId, newStatus);
       if (data.success) {
         setSuccessMsg(data.message);
-        loadTickets();
+        loadTickets(true);
       }
     } catch (err) {
       setErrorMsg('Failed to update ticket status.');
@@ -98,7 +99,7 @@ const SuperAdminDashboard = () => {
       if (data.success) {
         setSuccessMsg('Subscription updated successfully.');
         setEditingSubscriptionCafe(null);
-        loadCafes();
+        loadCafes(true);
       }
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Error updating subscription.');
@@ -113,17 +114,17 @@ const SuperAdminDashboard = () => {
     }
   }, [activeTab]);
 
-  const loadCafes = async () => {
+  const loadCafes = async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       const data = await getCafes();
       if (data.success) {
         setCafes(data.cafes);
       }
     } catch (err) {
-      setErrorMsg('Failed to load cafe registrations.');
+      if (!isSilent) setErrorMsg('Failed to load cafe registrations.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
@@ -142,6 +143,17 @@ const SuperAdminDashboard = () => {
       document.body.style.color = originalColor;
     };
   }, []);
+
+  useEffect(() => {
+    const pollingInterval = setInterval(() => {
+      if (activeTab === 'tickets') {
+        loadTickets(true);
+      } else {
+        loadCafes(true);
+      }
+    }, 5000);
+    return () => clearInterval(pollingInterval);
+  }, [activeTab]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -210,7 +222,7 @@ const SuperAdminDashboard = () => {
   };
 
   const handleDeleteCafe = async (id) => {
-    if (!window.confirm('Are you sure you want to deactivate this cafe? This soft-deactivates the cafe, all branches, and associated owner/staff profiles to preserve histories.')) {
+    if (!(await confirm('Are you sure you want to deactivate this cafe? This soft-deactivates the cafe, all branches, and associated owner/staff profiles to preserve histories.'))) {
       return;
     }
 
@@ -916,7 +928,8 @@ const SuperAdminDashboard = () => {
             Real-time tracking of transaction alerts, client frontend crashes, printing failures, and server API heartbeat logs.
           </p>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
                 <th style={{ padding: '8px' }}>Cafe Name / Code</th>
@@ -973,6 +986,7 @@ const SuperAdminDashboard = () => {
             })}
             </tbody>
           </table>
+          </div>
         </div>
       }
 
@@ -1016,7 +1030,8 @@ const SuperAdminDashboard = () => {
             Monitor and modify SaaS plans, suspension statuses, and renewal cycles for all cafe accounts.
           </p>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
                 <th style={{ padding: '8px' }}>Cafe Name / ID</th>
@@ -1094,6 +1109,7 @@ const SuperAdminDashboard = () => {
             })}
             </tbody>
           </table>
+          </div>
         </div>
       }
 
@@ -1178,7 +1194,8 @@ const SuperAdminDashboard = () => {
         tickets.length === 0 ?
         <p style={{ color: '#A0826C', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>No support tickets registered.</p> :
 
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
                   <th style={{ padding: '8px' }}>Ticket ID / Cafe</th>
@@ -1257,6 +1274,7 @@ const SuperAdminDashboard = () => {
             })}
               </tbody>
             </table>
+          </div>
         }
         </div>
       }
@@ -1325,7 +1343,8 @@ const SuperAdminDashboard = () => {
 
           <div style={{ marginTop: '24px' }}>
             <h4 style={{ color: 'var(--color-text-primary)', margin: '0 0 12px 0' }}>Cafe Sales & Bill Ledger</h4>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
                   <th style={{ padding: '8px' }}>Cafe Name</th>
@@ -1359,6 +1378,7 @@ const SuperAdminDashboard = () => {
               })}
               </tbody>
             </table>
+          </div>
           </div>
         </div>
       }
@@ -1539,6 +1559,7 @@ const SuperAdminDashboard = () => {
                 <button
                 type="button"
                 onClick={() => setEditingCafe(null)}
+                disabled={loading}
                 style={{
                   backgroundColor: 'transparent',
                   color: '#6F4E37',
@@ -1546,7 +1567,7 @@ const SuperAdminDashboard = () => {
                   padding: '8px 20px',
                   borderRadius: '9999px',
                   fontWeight: '700',
-                  cursor: 'pointer',
+                  cursor: loading ? 'not-allowed' : 'pointer',
                   fontSize: '0.85rem'
                 }}>
                 
@@ -1554,6 +1575,7 @@ const SuperAdminDashboard = () => {
                 </button>
                 <button
                 type="submit"
+                disabled={loading}
                 style={{
                   backgroundColor: '#6F4E37',
                   color: 'var(--color-text-primary)',
@@ -1561,11 +1583,11 @@ const SuperAdminDashboard = () => {
                   padding: '8px 20px',
                   borderRadius: '9999px',
                   fontWeight: '700',
-                  cursor: 'pointer',
+                  cursor: loading ? 'not-allowed' : 'pointer',
                   fontSize: '0.85rem'
                 }}>
                 
-                  Save Updates
+                  {loading ? 'Saving...' : 'Save Updates'}
                 </button>
               </div>
             </form>
@@ -1649,6 +1671,7 @@ const SuperAdminDashboard = () => {
                 </button>
                 <button
                 type="submit"
+                disabled={loading}
                 style={{
                   backgroundColor: '#6F4E37',
                   color: 'var(--color-text-primary)',
@@ -1656,11 +1679,10 @@ const SuperAdminDashboard = () => {
                   padding: '8px 20px',
                   borderRadius: '9999px',
                   fontWeight: '700',
-                  cursor: 'pointer',
+                  cursor: loading ? 'not-allowed' : 'pointer',
                   fontSize: '0.85rem'
                 }}>
-                
-                  Save Subscription
+                  {loading ? 'Saving...' : 'Save Subscription'}
                 </button>
               </div>
             </form>

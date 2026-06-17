@@ -21,6 +21,8 @@ import ManagerDashboard from './pages/ManagerDashboard';
 import './styles/App.css';
 import SaaSLayout from './components/SaaSLayout';
 import Unauthorized from './pages/Unauthorized';
+import { ToastProvider } from './components/Toast';
+import { getCafeInfo } from './services/api';
 
 function AppContent() {
   const [cart, setCart] = useState([]);
@@ -56,6 +58,34 @@ function AppContent() {
       console.log(`Updated cafe ID from URL: ${cafeIdParam}`);
     }
   }, [cafeIdParam]);
+
+  // Cafe Info state for branding
+  const [cafeInfo, setCafeInfo] = useState(null);
+
+  // Fetch cafe info on cafeId changes
+  useEffect(() => {
+    const fetchCafe = async () => {
+      const activeCafeId = cafeId || 'CD001';
+      try {
+        const res = await getCafeInfo(activeCafeId);
+        if (res.success) {
+          setCafeInfo(res.data);
+        }
+      } catch (err) {
+        console.error('Error fetching cafe info in AppContent:', err);
+      }
+    };
+    fetchCafe();
+  }, [cafeId]);
+
+  // Sync browser page title with cafe name
+  useEffect(() => {
+    if (cafeInfo?.name) {
+      document.title = `${cafeInfo.name} | QR Ordering`;
+    } else {
+      document.title = 'Dr.chai Café | QR Ordering';
+    }
+  }, [cafeInfo]);
 
   // Cart operations
   const addToCart = (item) => {
@@ -116,12 +146,13 @@ function AppContent() {
     location.pathname.startsWith('/manager') ||
     location.pathname.startsWith('/kitchen') ||
     location.pathname.startsWith('/cashier') ||
+    location.pathname.startsWith('/waiter') ||
     ['/login', '/verify-otp'].includes(location.pathname);
 
   return (
     <div className={`app-container${isAdminOrAuthRoute ? ' admin-no-padding' : ''}`}>
       {!isAdminOrAuthRoute && (
-        <Navbar tableNumber={tableNumber} cartItemCount={totalItemCount} />
+        <Navbar tableNumber={tableNumber} cartItemCount={totalItemCount} cafeInfo={cafeInfo} />
       )}
       
       <main className={`main-content${isAdminOrAuthRoute ? ' admin-full-width' : ''}`}>
@@ -282,7 +313,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
       </AuthProvider>
     </Router>
   );

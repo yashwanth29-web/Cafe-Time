@@ -3,6 +3,59 @@ const User = require('../models/User');
 const Branch = require('../models/Branch');
 const Cafe = require('../models/Cafe');
 
+// Helper: Parse coordinates from Google Maps URLs or strings
+const parseCoordinates = (input) => {
+  if (!input) return null;
+  const str = String(input).trim();
+  
+  // 1. q=lat,lng
+  const qMatch = str.match(/[?&](?:q|query)=([\d.-]+)\s*,\s*([\d.-]+)/i);
+  if (qMatch) {
+    return {
+      latitude: parseFloat(qMatch[1]),
+      longitude: parseFloat(qMatch[2])
+    };
+  }
+  
+  // 2. @lat,lng
+  const atMatch = str.match(/@([\d.-]+)\s*,\s*([\d.-]+)/);
+  if (atMatch) {
+    return {
+      latitude: parseFloat(atMatch[1]),
+      longitude: parseFloat(atMatch[2])
+    };
+  }
+
+  // 3. /place/lat,lng
+  const placeMatch = str.match(/\/place\/([\d.-]+)\s*,\s*([\d.-]+)/i);
+  if (placeMatch) {
+    return {
+      latitude: parseFloat(placeMatch[1]),
+      longitude: parseFloat(placeMatch[2])
+    };
+  }
+
+  // 4. simple lat,lng
+  const simpleMatch = str.match(/^([\d.-]+)\s*,\s*([\d.-]+)$/);
+  if (simpleMatch) {
+    return {
+      latitude: parseFloat(simpleMatch[1]),
+      longitude: parseFloat(simpleMatch[2])
+    };
+  }
+
+  // 5. general fallback for any lat,lng in the string
+  const generalMatch = str.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+  if (generalMatch) {
+    return {
+      latitude: parseFloat(generalMatch[1]),
+      longitude: parseFloat(generalMatch[2])
+    };
+  }
+
+  return null;
+};
+
 // Helper: Get IST Date String (YYYY-MM-DD)
 const getISTDate = (date = new Date()) => {
   const tzOffset = 5.5 * 60 * 60 * 1000;
@@ -78,18 +131,61 @@ const checkIn = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Assigned branch is currently inactive' });
     }
 
-    // 3. Distance Validation (Skip if geofencing coords are not configured / set to 0)
-    const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
-                            typeof branch.longitude === 'number' && branch.longitude !== 0;
-    const distance = isGeoConfigured
-      ? calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude)
-      : 0;
-    const allowedRadius = branch.allowedRadius || 30;
+    // 3. Distance Validation (Fallback/Double check with Cafe coordinates if user is far from branch)
+    let checkLat = branch.latitude;
+    let checkLng = branch.longitude;
+    let allowedRadius = branch.allowedRadius || 30;
+
+    const isBranchGeoConfigured = typeof checkLat === 'number' && checkLat !== 0 &&
+                                  typeof checkLng === 'number' && checkLng !== 0;
+    
+    let isGeoConfigured = isBranchGeoConfigured;
+    let distance = 0;
+
+    // Fetch Cafe coordinates for fallback/double-check
+    let cafeLat = 0;
+    let cafeLng = 0;
+    let isCafeGeoConfigured = false;
+
+    const cafe = await Cafe.findOne({ cafeId: staff.cafeId });
+    if (cafe) {
+      if (typeof cafe.latitude === 'number' && cafe.latitude !== 0 && typeof cafe.longitude === 'number' && cafe.longitude !== 0) {
+        cafeLat = cafe.latitude;
+        cafeLng = cafe.longitude;
+        isCafeGeoConfigured = true;
+      } else if (cafe.mapsLocation) {
+        const coords = parseCoordinates(cafe.mapsLocation);
+        if (coords) {
+          cafeLat = coords.latitude;
+          cafeLng = coords.longitude;
+          isCafeGeoConfigured = true;
+        }
+      }
+    }
+
+    if (isBranchGeoConfigured) {
+      distance = calculateDistance(Number(latitude), Number(longitude), Number(checkLat), Number(checkLng));
+      
+      // Double check: if they are too far from branch, check if they are near the main cafe location
+      if (distance > allowedRadius && isCafeGeoConfigured) {
+        const distanceToCafe = calculateDistance(Number(latitude), Number(longitude), Number(cafeLat), Number(cafeLng));
+        if (distanceToCafe <= allowedRadius) {
+          distance = distanceToCafe;
+          checkLat = cafeLat;
+          checkLng = cafeLng;
+        }
+      }
+    } else if (isCafeGeoConfigured) {
+      checkLat = cafeLat;
+      checkLng = cafeLng;
+      isGeoConfigured = true;
+      distance = calculateDistance(Number(latitude), Number(longitude), Number(checkLat), Number(checkLng));
+    }
 
     if (isGeoConfigured && distance > allowedRadius) {
       return res.status(400).json({
         success: false,
-        message: `Attendance restricted. You are outside the allowed radius of ${allowedRadius} meters.`,
+        message: `Attendance restricted. You are ${Math.round(distance)} meters from the workplace location. Allowed geofence: ${allowedRadius} meters.`,
         distance: Math.round(distance),
         allowedRadius
       });
@@ -160,9 +256,11 @@ const checkIn = async (req, res) => {
       status: isLate ? 'Late' : 'Present'
     });
 
+    const msg = `Checked in successfully. Location verified successfully. You are ${Math.round(distance)} meters from the workplace location. Attendance recorded.${isLate ? ' (Late Arrival)' : ''}`;
+
     return res.status(201).json({
       success: true,
-      message: isLate ? 'Checked in successfully (Late Arrival).' : 'Checked in successfully.',
+      message: msg,
       attendance
     });
   } catch (error) {

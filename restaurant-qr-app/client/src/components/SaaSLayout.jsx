@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getInventory } from '../services/api';
+import { getInventory, getCafeInfo } from '../services/api';
 
 const SaaSLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -9,6 +9,8 @@ const SaaSLayout = ({ children }) => {
   const location = useLocation();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationRef = useRef(null);
+  const bellButtonRef = useRef(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return window.innerWidth >= 768 && window.innerWidth < 1024;
   });
@@ -33,6 +35,24 @@ const SaaSLayout = ({ children }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const [cafeInfo, setCafeInfo] = useState(null);
+
+  useEffect(() => {
+    if (user?.cafeId) {
+      const fetchCafe = async () => {
+        try {
+          const res = await getCafeInfo(user.cafeId);
+          if (res.success) {
+            setCafeInfo(res.data);
+          }
+        } catch (err) {
+          console.error('Error fetching cafe info in SaaSLayout:', err);
+        }
+      };
+      fetchCafe();
+    }
+  }, [user?.cafeId]);
+
   useEffect(() => {
     if (user && ['admin', 'owner', 'manager'].includes(userRole)) {
       const fetchAlerts = async () => {
@@ -56,6 +76,32 @@ const SaaSLayout = ({ children }) => {
       return () => clearInterval(interval);
     }
   }, [user, userRole]);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (
+        notificationsOpen &&
+        notificationRef.current &&
+        !notificationRef.current.contains(e.target) &&
+        bellButtonRef.current &&
+        !bellButtonRef.current.contains(e.target)
+      ) {
+        setNotificationsOpen(false);
+      }
+      if (profileDropdownOpen && !e.target.closest('.profile-dropdown-container')) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [notificationsOpen, profileDropdownOpen]);
+
+  useEffect(() => {
+    setNotificationsOpen(false);
+    setProfileDropdownOpen(false);
+    setMoreMenuOpen(false);
+    setMobileDrawerOpen(false);
+  }, [location]);
 
   if (!user) return <>{children}</>;
 
@@ -370,8 +416,10 @@ const SaaSLayout = ({ children }) => {
       <aside className={`sidebar-drawer ${mobileDrawerOpen ? 'open' : ''}`}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #2d2d2d' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="mh-logo">☕</div>
-            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>Cypher's Café</span>
+            <div className="mh-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {cafeInfo?.logoUrl ? <img src={cafeInfo.logoUrl} alt="logo" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} /> : '☕'}
+            </div>
+            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>{cafeInfo?.name || "Cypher's Café"}</span>
           </div>
           <button className="drawer-close-btn" onClick={() => setMobileDrawerOpen(false)}>×</button>
         </div>
@@ -469,20 +517,22 @@ const SaaSLayout = ({ children }) => {
           <button className="hamburger-btn" onClick={() => setMobileDrawerOpen(true)}>
             ☰
           </button>
-          <div className="mh-logo">☕</div>
-          <span className="mh-name">Cypher's Café</span>
+          <div className="mh-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {cafeInfo?.logoUrl ? <img src={cafeInfo.logoUrl} alt="logo" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} /> : '☕'}
+          </div>
+          <span className="mh-name">{cafeInfo?.name || "Cypher's Café"}</span>
         </div>
         <div className="mh-actions">
           {/* Notification Bell */}
           <div style={{ position: 'relative' }}>
-            <button className="mh-icon-btn" onClick={() => setNotificationsOpen(!notificationsOpen)}>
+            <button ref={bellButtonRef} className="mh-icon-btn" onClick={() => setNotificationsOpen(!notificationsOpen)}>
               🔔
               {lowStockAlerts.length > 0 &&
               <span className="bnav-badge" style={{ top: '-4px', right: '-4px' }}>{lowStockAlerts.length}</span>
               }
             </button>
             {notificationsOpen &&
-            <div style={{
+            <div ref={notificationRef} style={{
               position: 'absolute',
               top: '50px',
               right: 0,
@@ -630,17 +680,21 @@ const SaaSLayout = ({ children }) => {
               fontSize: '18px',
               flexShrink: 0
             }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
-                <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
-                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
-                <line x1="6" y1="1" x2="6" y2="4"></line>
-                <line x1="10" y1="1" x2="10" y2="4"></line>
-                <line x1="14" y1="1" x2="14" y2="4"></line>
-              </svg>
+              {cafeInfo?.logoUrl ? (
+                <img src={cafeInfo.logoUrl} alt="logo" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
+                  <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+                  <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+                  <line x1="6" y1="1" x2="6" y2="4"></line>
+                  <line x1="10" y1="1" x2="10" y2="4"></line>
+                  <line x1="14" y1="1" x2="14" y2="4"></line>
+                </svg>
+              )}
             </div>
             {!sidebarCollapsed &&
-            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
-                Cypher's Café
+            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)', letterSpacing: '-0.5px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} title={cafeInfo?.name}>
+                {cafeInfo?.name || "Cypher's Café"}
               </span>
             }
           </div>
@@ -764,6 +818,7 @@ const SaaSLayout = ({ children }) => {
             {/* Notification Bell */}
             <div style={{ position: 'relative' }}>
               <button
+                ref={bellButtonRef}
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
                 style={{
                   background: 'rgba(0, 0, 0, 0.04)',
@@ -804,7 +859,7 @@ const SaaSLayout = ({ children }) => {
               </button>
 
               {notificationsOpen &&
-              <div style={{
+              <div ref={notificationRef} style={{
                 position: 'absolute',
                 top: '50px',
                 right: 0,

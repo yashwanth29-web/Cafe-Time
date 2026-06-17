@@ -3,15 +3,18 @@ import { useAuth } from '../context/AuthContext';
 import { getOrders, updateOrderStatus, getCafeInfo } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
+import { useToast, confirm } from '../components/Toast';
 
 const WaiterDashboard = () =>{
  const { user } = useAuth();
+ const toast = useToast();
  
  const [cafeInfo, setCafeInfo] = useState(null);
  const [orders, setOrders] = useState([]);
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
  const [refreshCountdown, setRefreshCountdown] = useState(5);
+ const [updatingOrders, setUpdatingOrders] = useState({});
 
  useEffect(() =>{
  const fetchCafe = async () =>{
@@ -29,7 +32,7 @@ const WaiterDashboard = () =>{
  fetchCafe();
  }, [user]);
 
- const fetchOrders = async () =>{
+ const fetchOrders = async (isSilent = false) =>{
  try {
  const response = await getOrders();
  if (response.success) {
@@ -43,18 +46,18 @@ const WaiterDashboard = () =>{
  }
  } catch (error) {
  console.error('Error fetching waiter orders:', error);
- setErrorMsg('Cannot connect to live server.');
+ setErrorMsg('Server connection issues.');
  } finally {
- setLoading(false);
+ if (!isSilent) setLoading(false);
  }
  };
 
  useEffect(() =>{
  fetchOrders();
 
+ // Poll orders every 5 seconds for waiter view
  const pollingInterval = setInterval(() =>{
- fetchOrders();
- setRefreshCountdown(5);
+ fetchOrders(true);
  }, 5000);
 
  const countdownInterval = setInterval(() =>{
@@ -69,6 +72,7 @@ const WaiterDashboard = () =>{
 
  const handleStatusUpdate = async (id, newStatus) =>{
  try {
+ setUpdatingOrders(prev => ({ ...prev, [id]: true }));
  const response = await updateOrderStatus(id, newStatus);
  if (response.success) {
  setOrders((prevOrders) =>
@@ -79,15 +83,18 @@ const WaiterDashboard = () =>{
  }
  } catch (error) {
  console.error('Error updating status:', error);
- alert('Error connecting to server.');
+ toast.error('Error connecting to server.');
+ } finally {
+ setUpdatingOrders(prev => ({ ...prev, [id]: false }));
  }
  };
 
  const handleMarkPaid = async (id) =>{
- if (!window.confirm('Confirm that you have received payment for this order?')) {
+ if (!(await confirm('Confirm that you have received payment for this order?'))) {
  return;
  }
  try {
+ setUpdatingOrders(prev => ({ ...prev, [id]: true }));
  const response = await updateOrderStatus(id, { status: 'Completed', paymentStatus: 'Paid' });
  if (response.success) {
  setOrders((prevOrders) =>
@@ -95,11 +102,13 @@ const WaiterDashboard = () =>{
  order._id === id ? { ...order, status: 'Completed', paymentStatus: 'Paid' } : order
 )
 );
- alert('Payment marked as Completed successfully!');
+ toast.success('Payment marked as Completed successfully!');
  }
  } catch (error) {
  console.error('Error marking paid:', error);
- alert('Error updating payment status.');
+ toast.error('Error updating payment status.');
+ } finally {
+ setUpdatingOrders(prev => ({ ...prev, [id]: false }));
  }
  };
 
@@ -229,18 +238,20 @@ const WaiterDashboard = () =>{
 <button
  onClick={() =>handleMarkPaid(order._id)}
  className="touch-btn"
+ disabled={updatingOrders[order._id]}
  style={{
  background: '#27AE60',
  color: 'var(--color-text-primary)',
  padding: '10px 16px',
  borderRadius: '8px',
  fontSize: '12.5px',
- cursor: 'pointer',
+ cursor: updatingOrders[order._id] ? 'not-allowed' : 'pointer',
  fontWeight: 'bold',
  border: 'none',
- minHeight: '44px'
+ minHeight: '44px',
+ opacity: updatingOrders[order._id] ? 0.7 : 1
  }}>
- Mark Paid
+ {updatingOrders[order._id] ? 'Saving...' : 'Mark Paid'}
 </button>
 </div>
 </div>
@@ -331,19 +342,20 @@ const WaiterDashboard = () =>{
 <button
  onClick={() =>handleStatusUpdate(order._id, 'Delivered')}
  className="touch-btn"
+ disabled={updatingOrders[order._id]}
  style={{
  background: '#27AE60',
  color: 'var(--color-text-primary)',
  padding: '10px 16px',
  borderRadius: '8px',
  fontSize: '12.5px',
- cursor: 'pointer',
+ cursor: updatingOrders[order._id] ? 'not-allowed' : 'pointer',
  fontWeight: 'bold',
  border: 'none',
- minHeight: '44px'
+ minHeight: '44px',
+ opacity: updatingOrders[order._id] ? 0.7 : 1
  }}>
- 
- Serve
+ {updatingOrders[order._id] ? 'Serving...' : 'Serve'}
 </button>
 </div>
 </div>

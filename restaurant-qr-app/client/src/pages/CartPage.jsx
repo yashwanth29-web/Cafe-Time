@@ -1,3 +1,4 @@
+import { toast } from '../components/Toast';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CartItem from '../components/CartItem';
@@ -299,7 +300,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
     if (!customerName || !customerEmail || !customerPhone) {
-      alert('Please fill out your contact details before placing your order.');
+      toast.info('Please fill out your contact details before placing your order.');
       return;
     }
 
@@ -433,7 +434,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
               <div>
                 <input
                 type="text"
-                placeholder="Full Name"
+                placeholder="Full Name * (Required)"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 style={{
@@ -452,7 +453,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
               <div>
                 <input
                 type="email"
-                placeholder="Email Address"
+                placeholder="Email Address * (Required)"
                 value={customerEmail}
                 onChange={(e) => setCustomerEmail(e.target.value)}
                 style={{
@@ -471,7 +472,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
               <div>
                 <input
                 type="tel"
-                placeholder="Contact Mobile Number"
+                placeholder="Contact Mobile Number * (Required)"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 style={{

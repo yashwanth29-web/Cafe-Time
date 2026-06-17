@@ -350,6 +350,15 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  outline: none;
+}
+
+.btn:focus-visible, button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(143, 168, 155, 0.4) !important;
+}
+
+.btn:active, button:active, .touch-btn:active {
+  transform: scale(0.96) !important;
 }
 
 .btn-primary {
@@ -1641,8 +1650,6 @@ textarea.form-input {
   .desktop-tablet-kitchen { display: none !important; }
   .mobile-only-cashier { display: block !important; }
   .desktop-tablet-cashier { display: none !important; }
-  .mobile-only-staff { display: block !important; }
-  .desktop-tablet-staff { display: none !important; }
   .mobile-only-manager-orders { display: block !important; }
   .desktop-tablet-manager-orders { display: none !important; }
   .mobile-only-manager-attendance { display: block !important; }
@@ -1651,21 +1658,29 @@ textarea.form-input {
   .desktop-tablet-manager-inventory { display: none !important; }
 }
 
+@media (max-width: 767px) {
+  .mobile-only-staff { display: block !important; }
+  .desktop-tablet-staff { display: none !important; }
+}
+
 @media (min-width: 768px) {
+  .mobile-only-staff { display: none !important; }
+  .desktop-tablet-staff { display: block !important; }
   .mobile-only-tables { display: none !important; }
   .desktop-tablet-tables { display: grid !important; }
   .mobile-only-kitchen { display: none !important; }
   .desktop-tablet-kitchen { display: grid !important; }
   .mobile-only-cashier { display: none !important; }
   .desktop-tablet-cashier { display: grid !important; }
-  .mobile-only-staff { display: none !important; }
-  .desktop-tablet-staff { display: block !important; }
   .mobile-only-manager-orders { display: none !important; }
   .desktop-tablet-manager-orders { display: block !important; }
   .mobile-only-manager-attendance { display: none !important; }
   .desktop-tablet-manager-attendance { display: block !important; }
   .mobile-only-manager-inventory { display: none !important; }
   .desktop-tablet-manager-inventory { display: block !important; }
+}
+
+@media (min-width: 1024px) {
 }
 
 /* Fallback Menu Image styles */
@@ -1796,5 +1811,11 @@ textarea.form-input {
 @media (min-width: 768px) {
   .saas-content-inner {
     padding: 24px !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .hide-tablet {
+    display: none !important;
   }
 }

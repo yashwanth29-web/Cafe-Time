@@ -1,3 +1,4 @@
+import { toast } from '../components/Toast';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +14,8 @@ const KitchenDashboard = () =>{
  const [refreshCountdown, setRefreshCountdown] = useState(5);
  const [soundEnabled, setSoundEnabled] = useState(true);
  const [previousActiveCount, setPreviousActiveCount] = useState(0);
+ const [updatingOrders, setUpdatingOrders] = useState({});
+ const [actionLoading, setActionLoading] = useState(false);
 
  // Tab & Inventory state
  const [searchParams] = useSearchParams();
@@ -37,19 +40,22 @@ const KitchenDashboard = () =>{
  const handleReportShortageSubmit = async (e) =>{
  e.preventDefault();
  try {
+ setActionLoading(true);
  const response = await reportShortage({
  itemId: selectedItemForShortage._id,
  reason: shortageReason
  });
  if (response && response.success) {
- alert('Stock shortage reported successfully.');
+ toast.success('Stock shortage reported successfully.');
  setShowShortageModal(false);
  setShortageReason('');
  fetchInventory(); // refresh inventory list
  }
  } catch (error) {
  console.error('Error reporting shortage:', error);
- alert(error.response?.data?.message || 'Error reporting shortage.');
+ toast.error(error.response?.data?.message || 'Error reporting shortage.');
+ } finally {
+ setActionLoading(false);
  }
  };
 
@@ -61,50 +67,50 @@ const KitchenDashboard = () =>{
  }
  }, [tabParam]);
 
- const fetchInventory = async () =>{
- setInventoryLoading(true);
- try {
- const response = await getInventory();
- if (response && response.success) {
- setInventory(response.data);
- setInventoryError('');
- } else {
- setInventoryError('Failed to load inventory.');
- }
- } catch (error) {
- console.error('Error fetching inventory:', error);
- setInventoryError('Cannot connect to inventory database.');
- } finally {
- setInventoryLoading(false);
- }
- };
+  const fetchInventory = async (isSilent = false) =>{
+  if (!isSilent) setInventoryLoading(true);
+  try {
+  const response = await getInventory();
+  if (response && response.success) {
+  setInventory(response.data);
+  setInventoryError('');
+  } else {
+  setInventoryError('Failed to load inventory.');
+  }
+  } catch (error) {
+  console.error('Error fetching inventory:', error);
+  setInventoryError('Cannot connect to inventory database.');
+  } finally {
+  if (!isSilent) setInventoryLoading(false);
+  }
+  };
 
- const fetchMenu = async () =>{
- setMenuLoading(true);
- try {
- const response = await getMenu();
- if (response && response.success) {
- setMenuItems(response.data);
- setMenuError('');
- } else {
- setMenuError('Failed to load menu items.');
- }
- } catch (error) {
- console.error('Error fetching menu:', error);
- setMenuError('Cannot connect to menu database.');
- } finally {
- setMenuLoading(false);
- }
- };
+  const fetchMenu = async (isSilent = false) =>{
+  if (!isSilent) setMenuLoading(true);
+  try {
+  const response = await getMenu();
+  if (response && response.success) {
+  setMenuItems(response.data);
+  setMenuError('');
+  } else {
+  setMenuError('Failed to load menu items.');
+  }
+  } catch (error) {
+  console.error('Error fetching menu:', error);
+  setMenuError('Cannot connect to menu database.');
+  } finally {
+  if (!isSilent) setMenuLoading(false);
+  }
+  };
 
- useEffect(() =>{
- if (activeTab === 'inventory') {
- fetchInventory();
- }
- if (activeTab === 'menu') {
- fetchMenu();
- }
- }, [activeTab]);
+  useEffect(() =>{
+  if (activeTab === 'inventory') {
+  fetchInventory();
+  }
+  if (activeTab === 'menu') {
+  fetchMenu();
+  }
+  }, [activeTab]);
 
  // Play notification sound for new orders
  const playNotificationSound = () =>{
@@ -141,76 +147,79 @@ const KitchenDashboard = () =>{
  }
  };
 
- const fetchOrders = async () =>{
- try {
- const response = await getOrders();
- if (response.success) {
- // Filter by cafeId if bound, fallback to allow undefined/null cafeIds
- const cafeOrders = user?.cafeId ?
- response.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
- response.data;
+  const fetchOrders = async (isSilent = false) => {
+    try {
+      const response = await getOrders();
+      if (response.success) {
+        // Filter by cafeId if bound, fallback to allow undefined/null cafeIds
+        const cafeOrders = user?.cafeId ?
+          response.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
+          response.data;
 
- setOrders(cafeOrders);
+        setOrders(cafeOrders);
 
- // Alert sound check for new active orders
- const currentActiveCount = cafeOrders.filter((o) =>o.status === 'Placed' || o.status === 'Preparing').length;
- if (currentActiveCount >previousActiveCount) {
- playNotificationSound();
- }
- setPreviousActiveCount(currentActiveCount);
- setErrorMsg('');
- } else {
- setErrorMsg('Failed to refresh kitchen orders feed.');
- }
- } catch (error) {
- console.error('Error fetching kitchen orders:', error);
- setErrorMsg('Cannot connect to live orders server.');
- } finally {
- setLoading(false);
- }
- };
+        // Alert sound check for new active orders
+        const currentActiveCount = cafeOrders.filter((o) =>o.status === 'Placed' || o.status === 'Preparing').length;
+        if (currentActiveCount > previousActiveCount) {
+          playNotificationSound();
+        }
+        setPreviousActiveCount(currentActiveCount);
+        setErrorMsg('');
+      } else {
+        setErrorMsg('Failed to refresh kitchen orders feed.');
+      }
+    } catch (error) {
+      console.error('Error fetching kitchen orders:', error);
+      setErrorMsg('Cannot connect to live orders server.');
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
+  };
 
- useEffect(() =>{
- fetchOrders();
+  useEffect(() =>{
+    fetchOrders();
 
- const pollingInterval = setInterval(() =>{
- fetchOrders();
- if (activeTab === 'inventory') {
- fetchInventory();
- }
- if (activeTab === 'menu') {
- fetchMenu();
- }
- setRefreshCountdown(5);
- }, 5000);
+    const pollingInterval = setInterval(() =>{
+      fetchOrders(true);
+      if (activeTab === 'inventory') {
+        fetchInventory(true);
+      }
+      if (activeTab === 'menu') {
+        fetchMenu(true);
+      }
+      setRefreshCountdown(5);
+    }, 5000);
 
- const countdownInterval = setInterval(() =>{
- setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
- }, 1000);
+    const countdownInterval = setInterval(() =>{
+      setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
+    }, 1000);
 
- return () =>{
- clearInterval(pollingInterval);
- clearInterval(countdownInterval);
- };
- }, [previousActiveCount]);
+    return () =>{
+      clearInterval(pollingInterval);
+      clearInterval(countdownInterval);
+    };
+  }, [previousActiveCount, activeTab]);
 
- const handleStatusUpdate = async (id, newStatus) =>{
- try {
- const response = await updateOrderStatus(id, newStatus);
- if (response.success) {
- setOrders((prevOrders) =>
- prevOrders.map((order) =>
- order._id === id ? { ...order, status: newStatus } : order
-)
-);
- } else {
- alert('Failed to update status');
- }
- } catch (error) {
- console.error('Error updating status:', error);
- alert('Error connecting to server.');
- }
- };
+  const handleStatusUpdate = async (id, newStatus) =>{
+  try {
+  setUpdatingOrders(prev => ({ ...prev, [id]: true }));
+  const response = await updateOrderStatus(id, newStatus);
+  if (response.success) {
+  setOrders((prevOrders) =>
+  prevOrders.map((order) =>
+  order._id === id ? { ...order, status: newStatus } : order
+ )
+ );
+  } else {
+  toast.error('Failed to update status');
+  }
+  } catch (error) {
+  console.error('Error updating status:', error);
+  toast.error('Error connecting to server.');
+  } finally {
+  setUpdatingOrders(prev => ({ ...prev, [id]: false }));
+  }
+  };
 
  const activeOrders = orders.filter((order) =>order.status === 'Placed' || order.status === 'Preparing');
  const readyOrders = orders.filter((order) =>order.status === 'Ready'); // Ready corresponds to ready in this flow
@@ -284,17 +293,17 @@ const KitchenDashboard = () =>{
 <button
  onClick={() =>handleStatusUpdate(order._id, 'Preparing')}
  className="btn btn-primary touch-btn"
+ disabled={updatingOrders[order._id]}
  style={{ width: 'auto', padding: '10px 18px', fontSize: '13px', background: '#E67E22', borderColor: '#E67E22', minHeight: '44px' }}>
- 
- Accept Order
+ {updatingOrders[order._id] ? 'Accepting...' : 'Accept Order'}
 </button>:
 
 <button
  onClick={() =>handleStatusUpdate(order._id, 'Ready')}
  className="btn btn-primary touch-btn"
+ disabled={updatingOrders[order._id]}
  style={{ width: 'auto', padding: '10px 18px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px' }}>
- 
- Mark Ready
+ {updatingOrders[order._id] ? 'Updating...' : 'Mark Ready'}
 </button>
  }
 <button
@@ -623,8 +632,10 @@ const KitchenDashboard = () =>{
 </div>
 </div>
 <div className="modal-footer">
-<button type="button" onClick={() =>setShowShortageModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Send Alert</button>
+<button type="button" onClick={() =>setShowShortageModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }} disabled={actionLoading}>Cancel</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
+  {actionLoading ? 'Sending Alert...' : 'Send Alert'}
+</button>
 </div>
 </form>
 </div>

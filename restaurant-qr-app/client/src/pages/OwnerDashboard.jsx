@@ -169,6 +169,10 @@ const OwnerDashboard = () =>{
  const [staff, setStaff] = useState([]);
  const [staffLoading, setStaffLoading] = useState(false);
  const [staffError, setStaffError] = useState('');
+ const [staffSearchQuery, setStaffSearchQuery] = useState('');
+ const [staffFilterRole, setStaffFilterRole] = useState('');
+ const [staffFilterBranch, setStaffFilterBranch] = useState('');
+ const [staffFilterStatus, setStaffFilterStatus] = useState('');
 
  // Branch & Attendance States
  const [branches, setBranches] = useState([]);
@@ -375,10 +379,27 @@ const OwnerDashboard = () =>{
  (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
 );
 
- const filteredInventoryList = inventoryList.filter((item) =>
- item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
- (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
+  const filteredInventoryList = inventoryList.filter((item) =>
+  item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+  (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
 );
+
+  const filteredStaff = staff.filter(member => {
+    const query = staffSearchQuery.toLowerCase();
+    const matchesSearch = !staffSearchQuery || 
+      (member.name || '').toLowerCase().includes(query) ||
+      (member.phone || '').toLowerCase().includes(query) ||
+      (member.email || '').toLowerCase().includes(query) ||
+      (member.employeeId || '').toLowerCase().includes(query);
+    
+    const matchesRole = !staffFilterRole || (member.staffRole || '').toLowerCase() === staffFilterRole.toLowerCase();
+    const matchesBranch = !staffFilterBranch || member.assignedBranch === staffFilterBranch;
+    const matchesStatus = !staffFilterStatus || (
+      staffFilterStatus === 'active' ? member.isActive : !member.isActive
+    );
+
+    return matchesSearch && matchesRole && matchesBranch && matchesStatus;
+  });
 
  const [imageUploading, setImageUploading] = useState(false);
 
@@ -676,7 +697,7 @@ const OwnerDashboard = () =>{
  setStaff(response.staff);
  setStaffError('');
  } else {
- setStaffError('Failed to load staff roster.');
+ setStaffError('Failed to load jail barrier.');
  }
  } catch (error) {
  console.error('Error fetching staff:', error);
@@ -2194,8 +2215,7 @@ const OwnerDashboard = () =>{
  transition: 'all 0.2s',
  fontFamily: 'inherit'
  }}>
- 
- Staff Roster
+  Jail Barrier
 </button>
 <button
  onClick={() =>setStaffSubTab('reports')}
@@ -2263,7 +2283,7 @@ const OwnerDashboard = () =>{
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
 <div>
 <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Add New Staff</h3>
-<p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Register a new team member to the roster</p>
+<p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Register a new team member to the jail barrier</p>
 </div>
 <button
  onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '' });}}
@@ -2341,7 +2361,7 @@ const OwnerDashboard = () =>{
  {/* Staff Roster List Card */}
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-<h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff Roster List</h4>
+<h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Jail Barrier List</h4>
 <button
  onClick={() =>setShowAddStaffModal(true)}
  style={{
@@ -2360,103 +2380,228 @@ const OwnerDashboard = () =>{
 <span>Add Staff</span>
 </button>
 </div>
+
+{/* Search and Filters Bar */}
+<div style={{
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: '12px',
+  marginBottom: '20px',
+  alignItems: 'center'
+}} className="staff-filters-bar">
+  {/* Search input */}
+  <div style={{ position: 'relative', gridColumn: 'span 2' }} className="staff-search-wrapper">
+    <span style={{
+      position: 'absolute',
+      left: '12px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      color: 'var(--color-text-secondary)',
+      fontSize: '14px',
+      pointerEvents: 'none'
+    }}>🔍</span>
+    <input
+      type="text"
+      placeholder="Search by name, phone, ID..."
+      value={staffSearchQuery}
+      onChange={(e) => setStaffSearchQuery(e.target.value)}
+      className="form-input"
+      style={{
+        paddingLeft: '36px',
+        width: '100%',
+        margin: 0
+      }}
+    />
+  </div>
+
+  {/* Filter by Role */}
+  <div style={{ position: 'relative' }}>
+    <select
+      value={staffFilterRole}
+      onChange={(e) => setStaffFilterRole(e.target.value)}
+      className="form-input"
+      style={{ width: '100%', margin: 0 }}
+    >
+      <option value="">All Roles</option>
+      <option value="chef">Chef</option>
+      <option value="waiter">Waiter</option>
+      <option value="barista">Barista</option>
+      <option value="cashier">Cashier</option>
+      <option value="manager">Manager</option>
+      <option value="staff">Staff / Server</option>
+    </select>
+  </div>
+
+  {/* Filter by Branch */}
+  <div style={{ position: 'relative' }}>
+    <select
+      value={staffFilterBranch}
+      onChange={(e) => setStaffFilterBranch(e.target.value)}
+      className="form-input"
+      style={{ width: '100%', margin: 0 }}
+    >
+      <option value="">All Branches</option>
+      {branches.map((b) => (
+        <option key={b.branchId} value={b.branchId}>{b.branchName}</option>
+      ))}
+    </select>
+  </div>
+
+  {/* Filter by Status */}
+  <div style={{ position: 'relative' }}>
+    <select
+      value={staffFilterStatus}
+      onChange={(e) => setStaffFilterStatus(e.target.value)}
+      className="form-input"
+      style={{ width: '100%', margin: 0 }}
+    >
+      <option value="">All Statuses</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+    </select>
+  </div>
+</div>
+
+{/* Clear Filters Button */}
+{(staffSearchQuery || staffFilterRole || staffFilterBranch || staffFilterStatus) && (
+  <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '16px' }}>
+    <button
+      onClick={() => {
+        setStaffSearchQuery('');
+        setStaffFilterRole('');
+        setStaffFilterBranch('');
+        setStaffFilterStatus('');
+      }}
+      style={{
+        background: 'transparent',
+        border: '1px solid var(--color-danger)',
+        color: 'var(--color-danger)',
+        padding: '6px 12px',
+        borderRadius: '8px',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        cursor: 'pointer',
+        transition: 'all 0.2s'
+      }}
+    >
+      Clear Filters
+    </button>
+  </div>
+)}
+
  {staffLoading && staff.length === 0 ?
 <div style={{ textAlign: 'center', padding: '40px 0' }}>
 <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading staff roster...</p>
+<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading jail barrier...</p>
 </div>:
 
 <>
-<div className="desktop-tablet-staff" style={{ display: 'none', width: '100%', overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
-<th style={{ padding: '10px' }}>Emp ID</th>
-<th style={{ padding: '10px' }}>Name</th>
-<th style={{ padding: '10px' }}>Email</th>
-<th style={{ padding: '10px' }}>Phone</th>
-<th style={{ padding: '10px' }}>Role</th>
-<th style={{ padding: '10px' }}>Branch</th>
-<th style={{ padding: '10px' }}>Last Seen</th>
-<th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
-<th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
-</tr>
-</thead>
-<tbody>
- {staff.map((member) =>
-<tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-<td style={{ padding: '12px 10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</td>
-<td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
-<td style={{ padding: '12px 10px' }}>{member.email || 'N/A'}</td>
-<td style={{ padding: '12px 10px' }}>{member.phone}</td>
-<td style={{ padding: '12px 10px' }}>
-<span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
-</td>
-<td style={{ padding: '12px 10px' }}>
- {branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}
-</td>
-<td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
- {formatLastSeen(member.lastSeen)}
-</td>
-<td style={{ padding: '12px 10px', textAlign: 'center' }}>
-<span style={{
- backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
- color: member.isActive ? '#2ecc71' : '#e74c3c',
- padding: '3px 8px',
- borderRadius: '12px',
- fontSize: '11px',
- fontWeight: 'bold'
- }}>
- {member.isActive ? 'Active' : 'Inactive'}
-</span>
-</td>
-<td style={{ padding: '12px 10px', textAlign: 'center' }}>
-<div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-<button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}> Edit</button>
-<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
-</div>
-</td>
-</tr>
-)}
-</tbody>
-</table>
-</div>
+{filteredStaff.length === 0 ? (
+  <div style={{
+    padding: '50px 20px',
+    textAlign: 'center',
+    background: 'rgba(0, 0, 0,0.01)',
+    borderRadius: '12px',
+    border: '1px dashed var(--color-border)',
+    color: 'var(--color-text-secondary)',
+    fontStyle: 'italic'
+  }}>
+    No staff members found matching the selected filters.
+  </div>
+) : (
+  <>
+  <div className="desktop-tablet-staff" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
+  <thead>
+  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+  <th style={{ padding: '10px' }}>Emp ID</th>
+  <th style={{ padding: '10px' }}>Name</th>
+  <th style={{ padding: '10px' }}>Email</th>
+  <th style={{ padding: '10px' }}>Phone</th>
+  <th style={{ padding: '10px' }}>Role</th>
+  <th style={{ padding: '10px' }}>Branch</th>
+  <th style={{ padding: '10px' }}>Last Seen</th>
+  <th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
+  <th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
+  </tr>
+  </thead>
+  <tbody>
+   {filteredStaff.map((member) =>
+  <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+  <td style={{ padding: '12px 10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</td>
+  <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
+  <td style={{ padding: '12px 10px' }}>{member.email || 'N/A'}</td>
+  <td style={{ padding: '12px 10px' }}>{member.phone}</td>
+  <td style={{ padding: '12px 10px' }}>
+  <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
+  </td>
+  <td style={{ padding: '12px 10px' }}>
+   {branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}
+  </td>
+  <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+   {formatLastSeen(member.lastSeen)}
+  </td>
+  <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+  <span style={{
+   backgroundColor: member.isActive ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+   color: member.isActive ? 'var(--color-success)' : 'var(--color-danger)',
+   padding: '3px 8px',
+   borderRadius: '12px',
+   fontSize: '11px',
+   fontWeight: 'bold'
+   }}>
+   {member.isActive ? 'Active' : 'Inactive'}
+  </span>
+  </td>
+  <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+  <button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}> Edit</button>
+  <button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
+  </div>
+  </td>
+  </tr>
+  )}
+  </tbody>
+  </table>
+  </div>
 
-<div className="mobile-only-staff" style={{ display: 'none' }}>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
- {staff.map((member) =>
-<div key={member._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-<span style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</span>
-<span className="admin-menu-badge" style={{ textTransform: 'capitalize', background: 'rgba(255, 107, 8, 0.15)', color: '#FF6B08', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>{member.staffRole}</span>
-</div>
-<div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
-<div>🆔 ID:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</span></div>
-<div>{member.email || 'No Email'}</div>
-<div>{member.phone}</div>
-<div>Branch:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}</span></div>
-<div style={{ marginTop: '4px' }}>Seen: {formatLastSeen(member.lastSeen)}</div>
-</div>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
-<span style={{
- backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
- color: member.isActive ? '#2ecc71' : '#e74c3c',
- padding: '4px 10px',
- borderRadius: '12px',
- fontSize: '12px',
- fontWeight: 'bold'
- }}>
- {member.isActive ? 'Active' : 'Inactive'}
-</span>
-<div style={{ display: 'flex', gap: '10px' }}>
-<button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px' }}> Edit</button>
-<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
-</div>
-</div>
-</div>
+  <div className="mobile-only-staff">
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+   {filteredStaff.map((member) =>
+  <div key={member._id} style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px', boxShadow: 'var(--shadow-sm)' }}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+  <span style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</span>
+  <span className="admin-menu-badge" style={{ textTransform: 'capitalize', background: 'rgba(255, 107, 8, 0.15)', color: '#FF6B08', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>{member.staffRole}</span>
+  </div>
+  <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
+  <div>🆔 ID:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</span></div>
+  <div>{member.email || 'No Email'}</div>
+  <div>{member.phone}</div>
+  <div>Branch:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}</span></div>
+  <div style={{ marginTop: '4px' }}>Seen: {formatLastSeen(member.lastSeen)}</div>
+  </div>
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
+  <span style={{
+   backgroundColor: member.isActive ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+   color: member.isActive ? 'var(--color-success)' : 'var(--color-danger)',
+   padding: '4px 10px',
+   borderRadius: '12px',
+   fontSize: '12px',
+   fontWeight: 'bold'
+   }}>
+   {member.isActive ? 'Active' : 'Inactive'}
+  </span>
+  <div style={{ display: 'flex', gap: '10px' }}>
+  <button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px' }}> Edit</button>
+  <button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
+  </div>
+  </div>
+  </div>
+  )}
+  </div>
+  </div>
+  </>
 )}
-</div>
-</div>
 </>
  }
 </div>
@@ -2702,15 +2847,8 @@ const OwnerDashboard = () =>{
 <select
  value={reportsFilterRange}
  onChange={(e) =>setReportsFilterRange(e.target.value)}
- style={{
- backgroundColor: 'rgba(0,0,0,0.2)',
- border: '1px solid var(--color-border)',
- borderRadius: '8px',
- padding: '8px 12px',
- color: 'var(--color-text-primary)',
- fontSize: '0.85rem',
- outline: 'none'
- }}>
+ className="form-input"
+ style={{ margin: 0 }}>
  
 <option value="today">Today</option>
 <option value="this_week">This Week (Last 7 Days)</option>
@@ -2724,15 +2862,8 @@ const OwnerDashboard = () =>{
 <select
  value={reportsFilterStaff}
  onChange={(e) =>setReportsFilterStaff(e.target.value)}
- style={{
- backgroundColor: 'rgba(0,0,0,0.2)',
- border: '1px solid var(--color-border)',
- borderRadius: '8px',
- padding: '8px 12px',
- color: 'var(--color-text-primary)',
- fontSize: '0.85rem',
- outline: 'none'
- }}>
+ className="form-input"
+ style={{ margin: 0 }}>
  
 <option value="">All Staff</option>
  {staff.map((member) =>
@@ -2749,15 +2880,8 @@ const OwnerDashboard = () =>{
 <select
  value={reportsFilterBranch}
  onChange={(e) =>setReportsFilterBranch(e.target.value)}
- style={{
- backgroundColor: 'rgba(0,0,0,0.2)',
- border: '1px solid var(--color-border)',
- borderRadius: '8px',
- padding: '8px 12px',
- color: 'var(--color-text-primary)',
- fontSize: '0.85rem',
- outline: 'none'
- }}>
+ className="form-input"
+ style={{ margin: 0 }}>
  
 <option value="">All Branches</option>
  {branches.map((b) =>
@@ -2826,24 +2950,27 @@ const OwnerDashboard = () =>{
  key={report._id}
  onClick={() =>setSelectedReport(report)}
  style={{
- background: 'rgba(0, 0, 0,0.01)',
+ background: 'var(--bg-card)',
  border: '1px solid var(--color-border)',
  borderRadius: '12px',
  padding: '16px',
  cursor: 'pointer',
- transition: 'transform 0.15s, border-color 0.15s',
+ transition: 'transform 0.15s, border-color 0.15s, box-shadow 0.15s',
  display: 'flex',
  flexDirection: 'column',
  justifyContent: 'space-between',
- minHeight: '220px'
+ minHeight: '220px',
+ boxShadow: 'var(--shadow-sm)'
  }}
  onMouseEnter={(e) =>{
  e.currentTarget.style.borderColor = 'var(--color-primary)';
  e.currentTarget.style.transform = 'translateY(-2px)';
+ e.currentTarget.style.boxShadow = 'var(--shadow-md)';
  }}
  onMouseLeave={(e) =>{
  e.currentTarget.style.borderColor = 'var(--color-border)';
  e.currentTarget.style.transform = 'translateY(0)';
+ e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
  }}>
  
 <div>
@@ -4436,11 +4563,11 @@ const OwnerDashboard = () =>{
 <div style={{ marginBottom: '24px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem', marginBottom: '8px', fontWeight: 700 }}>Description / Notes:</h4>
 <p style={{
- backgroundColor: 'rgba(0,0,0,0.15)',
+ backgroundColor: 'var(--bg-secondary)',
  padding: '12px 16px',
  borderRadius: '8px',
  border: '1px solid var(--color-border)',
- color: 'var(--color-text-secondary)',
+ color: 'var(--color-text-primary)',
  fontSize: '0.9rem',
  margin: 0,
  whiteSpace: 'pre-wrap',

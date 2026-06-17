@@ -1,7 +1,8 @@
+import { toast } from '../components/Toast';
 export const printPOSReceipt = (order, user = null, cafe = null) => {
   const printWindow = window.open('', '_blank', 'width=450,height=700');
   if (!printWindow) {
-    alert('Popup blocker prevented printing receipt. Please allow popups.');
+    toast.warning('Popup blocker prevented printing receipt. Please allow popups.');
     return;
   }
 
@@ -188,7 +189,7 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
 export const printKOT = (order, user = null, cafe = null) => {
   const printWindow = window.open('', '_blank', 'width=450,height=600');
   if (!printWindow) {
-    alert('Popup blocker prevented printing KOT. Please allow popups.');
+    toast.warning('Popup blocker prevented printing KOT. Please allow popups.');
     return;
   }
 
