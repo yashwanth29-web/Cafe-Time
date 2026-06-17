@@ -151,7 +151,7 @@ const verifyOTP = async (req, res) => {
           email: cleanEmail,
           phone: 'N/A',
           role: 'owner', // Default role so they can access the dashboard
-          cafeId: '',
+          cafeId: 'CD001', // Assign to seeded Demo Cafe
           isActive: true
         });
       } else if (!user.isActive) {
@@ -175,13 +175,8 @@ const verifyOTP = async (req, res) => {
     // Save token in cookie
     res.cookie('token', token, getCookieOptions());
 
-    let setupCompleted = false;
-    if (user.cafeId) {
-      const cafe = await Cafe.findOne({ cafeId: user.cafeId });
-      if (cafe) {
-        setupCompleted = cafe.setupCompleted;
-      }
-    }
+    // In Demo Mode, always bypass the Setup Wizard
+    let setupCompleted = true;
 
     return res.status(200).json({
       success: true,
