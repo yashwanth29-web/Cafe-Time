@@ -2,10 +2,16 @@ const nodemailer = require('nodemailer');
 
 // Create reusable transporter object using SMTP transport
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
+  family: 4, // Force IPv4 to prevent Render's ENETUNREACH on IPv6
   auth: {
     user: process.env.SMTP_EMAIL,
     pass: process.env.SMTP_APP_PASSWORD
+  },
+  tls: {
+    rejectUnauthorized: false
   }
 });
 

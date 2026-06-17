@@ -6,12 +6,12 @@ const getBaseURL = () => {
   if (envUrl) return envUrl;
 
   // If in production or accessed via non-localhost, dynamically match the window origin
-  if (window.location.hostname !== 'localhost') {
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     return `${window.location.origin}/api`;
   }
   
   // Default to development local server port
-  return 'http://localhost:5000/api';
+  return `http://${window.location.hostname}:5000/api`;
 };
 
 // Helper to format absolute asset URLs to use the current host (useful when testing via local network IPs)
@@ -25,12 +25,12 @@ export const getAssetUrl = (url) => {
     if (envUrl) {
       return envUrl.replace(/\/api$/, '') + url;
     }
-    if (window.location.hostname === 'localhost' && window.location.port === '5173') {
-      return `http://localhost:5000${url}`;
+    if ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port === '5173') {
+      return `http://${window.location.hostname}:5000${url}`;
     }
   }
 
-  if (url.includes('localhost:5000') && window.location.hostname !== 'localhost') {
+  if (url.includes('localhost:5000') && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     const backendHost = window.location.port === '5173' ? `${window.location.hostname}:5000` : window.location.host;
     return url.replace('localhost:5000', backendHost);
   }
