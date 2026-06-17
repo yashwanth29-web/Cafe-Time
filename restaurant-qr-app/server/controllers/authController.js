@@ -27,13 +27,11 @@ const sendOTP = async (req, res) => {
   try {
     const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
 
-    // If not super admin, check if user exists in the database
+    // In this demo mode, we allow ANY email to generate an OTP.
+    // If not super admin, check if user exists (to check if deactivated), but don't block if they don't exist.
     if (!isSuperAdmin) {
       const user = await User.findOne({ email: cleanEmail });
-      if (!user) {
-        return res.status(404).json({ success: false, message: 'Account not found. Contact App Owner.' });
-      }
-      if (!user.isActive) {
+      if (user && !user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
       }
     }
@@ -150,9 +148,16 @@ const verifyOTP = async (req, res) => {
     } else {
       user = await User.findOne({ email: cleanEmail });
       if (!user) {
-        return res.status(404).json({ success: false, message: 'User account not found' });
-      }
-      if (!user.isActive) {
+        // Automatically create a new account for any email
+        user = await User.create({
+          name: 'Demo User',
+          email: cleanEmail,
+          phone: 'N/A',
+          role: 'owner', // Default role so they can access the dashboard
+          cafeId: '',
+          isActive: true
+        });
+      } else if (!user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
       }
     }
