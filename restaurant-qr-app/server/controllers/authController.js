@@ -76,13 +76,10 @@ const sendOTP = async (req, res) => {
     console.log('Email:', cleanEmail, 'OTP:', otp);
     console.log('------------------------------------');
 
-    // Send email via Nodemailer
-    try {
-      await emailService.sendOTP(cleanEmail, otp);
-    } catch (emailError) {
-      console.warn('Email delivery failed, but OTP was successfully generated in DB:', emailError.message);
-      // We do not throw here, allowing the frontend to proceed to the verification screen.
-    }
+    // Send email via Nodemailer in the background without waiting
+    emailService.sendOTP(cleanEmail, otp).catch(err => {
+      console.warn('Background email delivery failed:', err.message);
+    });
 
     return res.status(200).json({ 
       success: true, 
