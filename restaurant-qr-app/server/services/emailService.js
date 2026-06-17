@@ -1,22 +1,8 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns');
+const { Resend } = require('resend');
 
-// Force Node.js 18+ to use IPv4 instead of IPv6 to fix Render's ENETUNREACH error
-dns.setDefaultResultOrder('ipv4first');
-// Create reusable transporter object using SMTP transport
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // true for 465, false for other ports (will use STARTTLS)
-  family: 4, // Force IPv4 to prevent Render's ENETUNREACH on IPv6
-  auth: {
-    user: process.env.SMTP_EMAIL,
-    pass: process.env.SMTP_APP_PASSWORD
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
+// Initialize Resend with the API key from either the new RESEND_API_KEY env or the old SMTP_APP_PASSWORD env
+const resendApiKey = process.env.RESEND_API_KEY || process.env.SMTP_APP_PASSWORD;
+const resend = new Resend(resendApiKey);
 
 /**
  * Send an OTP code to a user's email
@@ -24,40 +10,44 @@ const transporter = nodemailer.createTransport({
  * @param {string} otp - 6-digit OTP code
  */
 const sendOTP = async (email, otp) => {
-  const mailOptions = {
-    from: `"Cypher's Café" <${process.env.SMTP_EMAIL}>`,
-    to: email,
-    subject: 'Your Cafe Access Verification Code',
-    html: `
-      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background-color: #FAF6F0; border-radius: 12px; border: 1px solid #E6D5C3; color: #4A3E3D;">
-        <div style="text-align: center; margin-bottom: 25px;">
-          <h2 style="color: #6F4E37; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.5px;">Cypher's Café</h2>
-          <p style="color: #A0826C; margin: 5px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;">Staff & Owner Access</p>
-        </div>
-        
-        <div style="background-color: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(111, 78, 55, 0.05); text-align: center; border: 1px solid #F0E6DC;">
-          <p style="font-size: 16px; margin: 0 0 20px 0; color: #5C4D4D;">Use the verification code below to complete your login session. This code is active for <strong>5 minutes</strong>.</p>
-          
-          <div style="font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #6F4E37; background-color: #FDFBF7; border: 2px dashed #D4C3B3; display: inline-block; padding: 12px 30px; border-radius: 8px; margin-bottom: 20px;">
-            ${otp}
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'Cypher\'s Café <onboarding@resend.dev>', // Free tier domain
+      to: email,
+      subject: 'Your Cafe Access Verification Code',
+      html: `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background-color: #FAF6F0; border-radius: 12px; border: 1px solid #E6D5C3; color: #4A3E3D;">
+          <div style="text-align: center; margin-bottom: 25px;">
+            <h2 style="color: #6F4E37; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.5px;">Cypher's Café</h2>
+            <p style="color: #A0826C; margin: 5px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;">Staff & Owner Access</p>
           </div>
           
-          <p style="font-size: 12px; color: #9E8E8E; margin: 0;">If you did not initiate this request, please disregard this email or contact security.</p>
+          <div style="background-color: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(111, 78, 55, 0.05); text-align: center; border: 1px solid #F0E6DC;">
+            <p style="font-size: 16px; margin: 0 0 20px 0; color: #5C4D4D;">Use the verification code below to complete your login session. This code is active for <strong>5 minutes</strong>.</p>
+            
+            <div style="font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #6F4E37; background-color: #FDFBF7; border: 2px dashed #D4C3B3; display: inline-block; padding: 12px 30px; border-radius: 8px; margin-bottom: 20px;">
+              ${otp}
+            </div>
+            
+            <p style="font-size: 12px; color: #9E8E8E; margin: 0;">If you did not initiate this request, please disregard this email or contact security.</p>
+          </div>
+          
+          <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #A0826C;">
+            <p style="margin: 0;">&copy; ${new Date().getFullYear()} Cypher's Café. All rights reserved.</p>
+          </div>
         </div>
-        
-        <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #A0826C;">
-          <p style="margin: 0;">&copy; ${new Date().getFullYear()} Cypher's Café. All rights reserved.</p>
-        </div>
-      </div>
-    `
-  };
+      `
+    });
 
-  try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Verification OTP email sent to ${email}. Message ID: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+    if (error) {
+      console.error(`Error sending OTP email via Resend to ${email}:`, error);
+      throw error;
+    }
+
+    console.log(`Verification OTP email sent to ${email} via Resend. ID: ${data.id}`);
+    return { success: true, messageId: data.id };
   } catch (error) {
-    console.error(`Error sending OTP email to ${email}:`, error);
+    console.error(`Error sending OTP email via Resend to ${email}:`, error);
     throw new Error('Failed to send verification email. Please try again.');
   }
 };
