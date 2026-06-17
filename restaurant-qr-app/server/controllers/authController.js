@@ -79,11 +79,16 @@ const sendOTP = async (req, res) => {
     console.log('------------------------------------');
 
     // Send email via Nodemailer
-    await emailService.sendOTP(cleanEmail, otp);
+    try {
+      await emailService.sendOTP(cleanEmail, otp);
+    } catch (emailError) {
+      console.warn('Email delivery failed, but OTP was successfully generated in DB:', emailError.message);
+      // We do not throw here, allowing the frontend to proceed to the verification screen.
+    }
 
     return res.status(200).json({ 
       success: true, 
-      message: 'Verification code sent to your email successfully.' 
+      message: 'Verification code generated successfully.' 
     });
   } catch (error) {
     console.error('sendOTP controller error:', error);
