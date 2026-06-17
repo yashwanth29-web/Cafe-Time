@@ -3,6 +3,7 @@ const Cafe = require('../models/Cafe');
 const PaymentConfig = require('../models/PaymentConfig');
 const OperationalConfig = require('../models/OperationalConfig');
 const Branch = require('../models/Branch');
+const Order = require('../models/Order');
 const emailService = require('../services/emailService');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Razorpay = require('razorpay');
@@ -109,8 +110,25 @@ const getStaff = async (req, res) => {
     }
 
     const staff = await User.find(query).sort({ createdAt: -1 });
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const staffWithOrders = await Promise.all(staff.map(async (s) => {
+      const ordersCount = await Order.countDocuments({
+        cafeId,
+        staffId: s._id,
+        source: 'STAFF',
+        createdAt: { $gte: todayStart }
+      });
+      
+      return {
+        ...s.toObject(),
+        ordersHandledToday: ordersCount
+      };
+    }));
     
-    return res.status(200).json({ success: true, staff });
+    return res.status(200).json({ success: true, staff: staffWithOrders });
   } catch (error) {
     console.error('getStaff error:', error);
     return res.status(500).json({ success: false, message: 'Server error retrieving staff list' });
@@ -290,7 +308,7 @@ const saveSetupData = async (req, res) => {
   const cafeId = req.user.cafeId;
   const {
     name, businessType, branchCount, city, state, pincode,
-    logoUrl, address, mapsLocation, openingTime, closingTime, gstNumber, supportNumber,
+    logoUrl, address, mapsLocation, openingTime, closingTime, gstNumber, supportNumber, uiPrimaryColor,
     paymentConfig,
     operationalConfig,
     staffList
@@ -320,6 +338,7 @@ const saveSetupData = async (req, res) => {
     if (closingTime) cafe.closingTime = closingTime;
     if (gstNumber) cafe.gstNumber = gstNumber;
     if (supportNumber) cafe.supportNumber = supportNumber;
+    if (uiPrimaryColor) cafe.uiPrimaryColor = uiPrimaryColor;
     cafe.setupCompleted = true; // Complete setup flag!
     await cafe.save();
 
@@ -600,6 +619,37 @@ const deleteBranch = async (req, res) => {
   }
 };
 
+/**
+ * Update Cafe UI Theme Color
+ */
+const updateCafeTheme = async (req, res) => {
+  const { uiPrimaryColor } = req.body;
+  const cafeId = req.user.cafeId;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    const cafe = await Cafe.findOne({ cafeId });
+    if (!cafe) {
+      return res.status(404).json({ success: false, message: 'Cafe not found' });
+    }
+
+    if (uiPrimaryColor) cafe.uiPrimaryColor = uiPrimaryColor;
+    await cafe.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Theme color updated successfully',
+      cafe
+    });
+  } catch (error) {
+    console.error('updateCafeTheme error:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating theme' });
+  }
+};
+
 module.exports = {
   createStaff,
   getStaff,
@@ -614,5 +664,6 @@ module.exports = {
   updateBranch,
   deleteBranch,
   getStaffSummary,
-  uploadLogo
+  uploadLogo,
+  updateCafeTheme
 };

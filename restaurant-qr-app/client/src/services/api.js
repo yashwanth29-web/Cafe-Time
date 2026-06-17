@@ -17,6 +17,19 @@ const getBaseURL = () => {
 // Helper to format absolute asset URLs to use the current host (useful when testing via local network IPs)
 export const getAssetUrl = (url) => {
   if (!url) return '';
+  
+  // If the URL is just a relative path like "/uploads/lassi.png", 
+  // we must prepend the backend server address if we are in local development.
+  if (url.startsWith('/uploads')) {
+    const envUrl = import.meta.env.VITE_API_URL;
+    if (envUrl) {
+      return envUrl.replace(/\/api$/, '') + url;
+    }
+    if (window.location.hostname === 'localhost' && window.location.port === '5173') {
+      return `http://localhost:5000${url}`;
+    }
+  }
+
   if (url.includes('localhost:5000') && window.location.hostname !== 'localhost') {
     const backendHost = window.location.port === '5173' ? `${window.location.hostname}:5000` : window.location.host;
     return url.replace('localhost:5000', backendHost);

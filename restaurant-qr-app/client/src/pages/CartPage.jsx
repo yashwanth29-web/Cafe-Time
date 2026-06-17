@@ -4,9 +4,13 @@ import CartItem from '../components/CartItem';
 import RazorpayPayment from '../components/RazorpayPayment';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
+import { useAuth } from '../context/AuthContext';
 
 const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isUserStaff = user && ['admin', 'owner', 'manager', 'waiter', 'cashier', 'staff'].includes(user.role);
+  const isStaff = isUserStaff || sessionStorage.getItem('orderSource') === 'staff';
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -298,7 +302,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
-    if (!customerName || !customerEmail || !customerPhone) {
+    
+    if (!isStaff && (!customerName || !customerEmail || !customerPhone)) {
       alert('Please fill out your contact details before placing your order.');
       return;
     }
@@ -318,17 +323,25 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         tableNumber: tableNumber || 'Takeaway',
         items: itemsPayload,
         totalAmount: grandTotal,
-        customerName,
-        customerEmail,
-        customerPhone,
+        customerName: customerName || (isStaff ? 'Walk-in Customer' : ''),
+        customerEmail: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
+        customerPhone: customerPhone || (isStaff ? '0000000000' : ''),
         specialInstructions,
-        cafeId: cafeId || 'CD001'
+        cafeId: cafeId || 'CD001',
+        source: isStaff ? 'STAFF' : 'QR',
+        staffId: isStaff && user ? user._id : undefined
       };
 
       const response = await placeOrder(orderPayload);
 
       if (response.success) {
         clearCart();
+        sessionStorage.removeItem('orderSource');
+
+        if (isStaff) {
+          window.location.href = '/waiter/dashboard';
+          return;
+        }
 
         // Add to activeOrderIds in sessionStorage
         const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
@@ -390,123 +403,125 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             </div>
 
             {/* Customer Details Section */}
-            <div className="customer-details-card" style={{
-            background: 'rgba(0, 0, 0, 0.02)',
-            border: '1px solid var(--color-border)',
-            padding: '16px',
-            borderRadius: '12px',
-            margin: '16px 0',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px'
-          }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: '800', margin: '0', color: 'var(--color-text-primary)', letterSpacing: '0.5px' }}>
-                  👤 CONTACT INFORMATION
-                </h4>
-                {(customerName || customerEmail || customerPhone) &&
-              <button
-                type="button"
-                onClick={() => {
-                  setCustomerName('');
-                  setCustomerEmail('');
-                  setCustomerPhone('');
-                  localStorage.removeItem('customerName');
-                  localStorage.removeItem('customerEmail');
-                  localStorage.removeItem('customerPhone');
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--color-danger)',
-                  fontSize: '11px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  padding: '0'
-                }}>
+            {!isStaff && (
+              <div className="customer-details-card" style={{
+              background: 'rgba(0, 0, 0, 0.02)',
+              border: '1px solid var(--color-border)',
+              padding: '16px',
+              borderRadius: '12px',
+              margin: '16px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: '800', margin: '0', color: 'var(--color-text-primary)', letterSpacing: '0.5px' }}>
+                    👤 CONTACT INFORMATION
+                  </h4>
+                  {(customerName || customerEmail || customerPhone) &&
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomerName('');
+                    setCustomerEmail('');
+                    setCustomerPhone('');
+                    localStorage.removeItem('customerName');
+                    localStorage.removeItem('customerEmail');
+                    localStorage.removeItem('customerPhone');
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-danger)',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    padding: '0'
+                  }}>
+                  
+                      Reset Details
+                    </button>
+                }
+                </div>
                 
-                    Reset Details
-                  </button>
-              }
-              </div>
-              
-              <div>
-                <input
-                type="text"
-                placeholder="Full Name"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                  fontSize: '13px'
-                }} />
-              
-              </div>
+                <div>
+                  <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'rgba(0,0,0,0.15)',
+                    color: 'var(--color-text-primary)',
+                    outline: 'none',
+                    fontSize: '13px'
+                  }} />
+                
+                </div>
 
-              <div>
-                <input
-                type="email"
-                placeholder="Email Address"
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                  fontSize: '13px'
-                }} />
-              
-              </div>
+                <div>
+                  <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'rgba(0,0,0,0.15)',
+                    color: 'var(--color-text-primary)',
+                    outline: 'none',
+                    fontSize: '13px'
+                  }} />
+                
+                </div>
 
-              <div>
-                <input
-                type="tel"
-                placeholder="Contact Mobile Number"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                  fontSize: '13px'
-                }} />
-              
-              </div>
+                <div>
+                  <input
+                  type="tel"
+                  placeholder="Contact Mobile Number"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'rgba(0,0,0,0.15)',
+                    color: 'var(--color-text-primary)',
+                    outline: 'none',
+                    fontSize: '13px'
+                  }} />
+                
+                </div>
 
-              <div>
-                <textarea
-                placeholder="Special Instructions (e.g. Less sugar, make it spicy...)"
-                value={specialInstructions}
-                onChange={(e) => setSpecialInstructions(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                  fontSize: '13px',
-                  minHeight: '60px',
-                  resize: 'vertical'
-                }} />
-              
+                <div>
+                  <textarea
+                  placeholder="Special Instructions (e.g. Less sugar, make it spicy...)"
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'rgba(0,0,0,0.15)',
+                    color: 'var(--color-text-primary)',
+                    outline: 'none',
+                    fontSize: '13px',
+                    minHeight: '60px',
+                    resize: 'vertical'
+                  }} />
+                
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="summary-row">
               <span>Items Total</span>
@@ -532,8 +547,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             <div style={{ marginTop: '24px' }}>
               <button
               onClick={handlePlaceOrder}
-              className={`btn btn-primary ${loading || cart.length === 0 || !customerName || !customerEmail || !customerPhone ? 'btn-disabled' : ''}`}
-              disabled={loading || cart.length === 0 || !customerName || !customerEmail || !customerPhone}
+              className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone)) ? 'btn-disabled' : ''}`}
+              disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone))}
               style={{
                 width: '100%',
                 padding: '14px 20px',
@@ -543,7 +558,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 border: 'none',
                 background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
                 color: 'var(--color-text-primary)',
-                cursor: loading || cart.length === 0 || !customerName || !customerEmail || !customerPhone ? 'not-allowed' : 'pointer'
+                cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone)) ? 'not-allowed' : 'pointer'
               }}>
               
                 {loading ?

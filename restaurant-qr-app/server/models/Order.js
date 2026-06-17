@@ -80,6 +80,16 @@ const OrderSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  source: {
+    type: String,
+    enum: ['QR', 'STAFF'],
+    default: 'QR'
+  },
+  staffId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

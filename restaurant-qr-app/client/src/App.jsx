@@ -14,6 +14,7 @@ import OwnerSetup from './pages/OwnerSetup';
 import OwnerProfilePage from './pages/OwnerProfilePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import KitchenDashboard from './pages/KitchenDashboard';
 import WaiterDashboard from './pages/WaiterDashboard';
 import CashierDashboard from './pages/CashierDashboard';
@@ -28,6 +29,7 @@ function AppContent() {
   const location = useLocation();
   const tableParam = searchParams.get('table');
   const cafeIdParam = searchParams.get('cafeId');
+  const sourceParam = searchParams.get('source');
 
   // Synchronously initialize table number state from query param or session storage
   const [tableNumber, setTableNumber] = useState(() => {
@@ -38,6 +40,13 @@ function AppContent() {
   const [cafeId, setCafeId] = useState(() => {
     return cafeIdParam || sessionStorage.getItem('cafeId') || '';
   });
+
+  // Save source param to session storage if present
+  useEffect(() => {
+    if (sourceParam) {
+      sessionStorage.setItem('orderSource', sourceParam);
+    }
+  }, [sourceParam]);
 
   // Sync tableNumber state when search parameter changes reactively
   useEffect(() => {
@@ -115,6 +124,7 @@ function AppContent() {
     location.pathname.startsWith('/staff') ||
     location.pathname.startsWith('/manager') ||
     location.pathname.startsWith('/kitchen') ||
+    location.pathname.startsWith('/waiter') ||
     location.pathname.startsWith('/cashier') ||
     ['/login', '/verify-otp'].includes(location.pathname);
 
@@ -282,7 +292,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <ThemeProvider>
+          <AppContent />
+        </ThemeProvider>
       </AuthProvider>
     </Router>
   );

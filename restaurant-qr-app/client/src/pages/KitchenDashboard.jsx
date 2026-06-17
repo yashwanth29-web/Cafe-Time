@@ -253,8 +253,9 @@ const KitchenDashboard = () =>{
  }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
 <div>
-<span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 'bold', textTransform: 'uppercase' }}>
+<span style={{ fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: 'bold', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}>
  Table {order.tableNumber}
+ {order.source === 'STAFF' && <span style={{ background: '#3498db', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>STAFF</span>}
 </span>
 <h3 style={{ margin: '4px 0 0 0', color: 'var(--color-text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>
  Order #{order._id.substring(order._id.length - 6).toUpperCase()}

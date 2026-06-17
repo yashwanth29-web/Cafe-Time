@@ -48,6 +48,10 @@ const CafeSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  uiPrimaryColor: {
+    type: String,
+    default: '#D47F46' // Default coffee orange color
+  },
   // V2 Setup fields
   logoUrl: {
     type: String,

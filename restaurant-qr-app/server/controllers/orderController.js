@@ -6,7 +6,7 @@ const { deductInventoryForOrder } = require('./inventoryController');
 // @access  Public
 const createOrder = async (req, res) => {
   try {
-    const { cafeId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions } = req.body;
+    const { cafeId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions, source, staffId } = req.body;
 
     // Simple validation
     if (!tableNumber) {
@@ -29,7 +29,9 @@ const createOrder = async (req, res) => {
       customerEmail: customerEmail || '',
       customerPhone: customerPhone || '',
       specialInstructions: specialInstructions || '',
-      paymentStatus: 'Pending'
+      paymentStatus: 'Pending',
+      source: source || 'QR',
+      staffId: staffId || null
     });
 
     const savedOrder = await newOrder.save();

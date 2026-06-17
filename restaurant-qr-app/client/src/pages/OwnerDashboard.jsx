@@ -96,7 +96,7 @@ const AdminMenuImage = ({ item }) =>{
 
  return (
 <img
- src={item.image}
+ src={getAssetUrl(item.image)}
  alt={item.name}
  className="admin-menu-img"
  onError={() =>setImgFailed(true)} />);
@@ -1726,9 +1726,17 @@ const OwnerDashboard = () =>{
 <span className="sub">All stock items valued</span>
 </div>
 <div className="analytics-card">
-<h4>Total Ticket Orders</h4>
-<span className="val">{totalOrdersCount} orders</span>
-<span className="sub" style={{ color: '#ff9800' }}>Active monitoring active</span>
+<h4>Order Source Breakdown</h4>
+<div style={{ display: 'flex', gap: '15px', marginTop: '8px' }}>
+  <div>
+    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>QR</span>
+    <span className="val" style={{ margin: 0, fontSize: '20px' }}>{orders.filter(o => o.source !== 'STAFF').length}</span>
+  </div>
+  <div>
+    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>STAFF</span>
+    <span className="val" style={{ margin: 0, fontSize: '20px', color: '#3498db' }}>{orders.filter(o => o.source === 'STAFF').length}</span>
+  </div>
+</div>
 </div>
 </div>
 
@@ -2373,11 +2381,12 @@ const OwnerDashboard = () =>{
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
 <th style={{ padding: '10px' }}>Emp ID</th>
 <th style={{ padding: '10px' }}>Name</th>
-<th style={{ padding: '10px' }}>Email</th>
-<th style={{ padding: '10px' }}>Phone</th>
+<th style={{ padding: '10px' }}>Contact</th>
 <th style={{ padding: '10px' }}>Role</th>
 <th style={{ padding: '10px' }}>Branch</th>
-<th style={{ padding: '10px' }}>Last Seen</th>
+<th style={{ padding: '10px' }}>Last Login</th>
+<th style={{ padding: '10px' }}>Orders (Today)</th>
+<th style={{ padding: '10px' }}>Joined Date</th>
 <th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
 <th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
 </tr>
@@ -2387,8 +2396,10 @@ const OwnerDashboard = () =>{
 <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
 <td style={{ padding: '12px 10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</td>
 <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
-<td style={{ padding: '12px 10px' }}>{member.email || 'N/A'}</td>
-<td style={{ padding: '12px 10px' }}>{member.phone}</td>
+<td style={{ padding: '12px 10px' }}>
+  <div style={{ fontSize: '13px' }}>{member.phone}</div>
+  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{member.email || 'N/A'}</div>
+</td>
 <td style={{ padding: '12px 10px' }}>
 <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
 </td>
@@ -2396,7 +2407,13 @@ const OwnerDashboard = () =>{
  {branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}
 </td>
 <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
- {formatLastSeen(member.lastSeen)}
+ {formatLastSeen(member.lastSeen || member.lastLogin)}
+</td>
+<td style={{ padding: '12px 10px', fontSize: '13px', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+ {member.ordersHandledToday || 0}
+</td>
+<td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+ {new Date(member.createdAt).toLocaleDateString()}
 </td>
 <td style={{ padding: '12px 10px', textAlign: 'center' }}>
 <span style={{
@@ -2435,7 +2452,9 @@ const OwnerDashboard = () =>{
 <div>{member.email || 'No Email'}</div>
 <div>{member.phone}</div>
 <div>Branch:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}</span></div>
-<div style={{ marginTop: '4px' }}>Seen: {formatLastSeen(member.lastSeen)}</div>
+<div>Orders Today: <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.ordersHandledToday || 0}</span></div>
+<div>Joined: {new Date(member.createdAt).toLocaleDateString()}</div>
+<div style={{ marginTop: '4px' }}>Login: {formatLastSeen(member.lastSeen || member.lastLogin)}</div>
 </div>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
 <span style={{

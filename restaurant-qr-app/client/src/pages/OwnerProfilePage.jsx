@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import OwnerLayout from '../components/OwnerLayout';
 import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff, verifyRazorpayKeys } from '../services/api';
 
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
+  const { themeMode, setThemeMode, primaryColor, updatePrimaryColor } = useTheme();
   const navigate = useNavigate();
 
   const [cafeData, setCafeData] = useState(null);
@@ -106,6 +108,7 @@ const OwnerProfilePage = () => {
       hours: { openingTime: cafeData?.openingTime || '', closingTime: cafeData?.closingTime || '', supportNumber: cafeData?.supportNumber || '' },
       payment: { razorpayKeyId: paymentConfig?.razorpayKeyId || '', razorpaySecret: '', upiId: paymentConfig?.upiId || '', bankHolderName: paymentConfig?.bankHolderName || '', accountNumber: paymentConfig?.accountNumber || '', ifscCode: paymentConfig?.ifscCode || '', taxRate: taxRate, serviceCharge: serviceCharge, isVerified: paymentConfig?.isVerified || false },
       ops: { tableCount: operationalConfig?.tables?.length || 0, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
+      theme: { themeMode: themeMode, uiPrimaryColor: primaryColor },
       branch: { branchName: '', address: '', manager: '' },
       qr_codes: {}
     }[key] || {};
@@ -137,6 +140,9 @@ const OwnerProfilePage = () => {
       if (activeModal === 'ops') {
         const tables = Array.from({ length: Number(form.tableCount) }, (_, i) => ({ id: `T${i + 1}`, label: `Table-${i + 1}` }));
         await saveSetupData({ operationalConfig: { tables, kitchenDisplayEnabled: form.kitchenDisplayEnabled, printerEnabled: form.printerEnabled, inventoryEnabled: form.inventoryEnabled } });
+      } else if (activeModal === 'theme') {
+        setThemeMode(form.themeMode);
+        await updatePrimaryColor(form.uiPrimaryColor);
       } else if (activeModal === 'branch') {await createBranch(form);} else
       if (activeModal === 'editBranch') {await updateBranch(editingBranchId, form);}
       await load();showToast('Saved successfully!');closeModal();
@@ -179,31 +185,35 @@ const OwnerProfilePage = () => {
 
   const cards = [
   {
-    key: 'owner', icon: '👤', title: 'Owner Profile',
+    key: 'owner', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>, title: 'Owner Profile',
     rows: [['Name', user?.name], ['Phone', user?.phone], ['Email', user?.email], ['Last Login', fmtDate(user?.lastLogin)]]
   },
   {
-    key: 'cafe', icon: '🏪', title: 'Cafe Identity',
+    key: 'cafe', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>, title: 'Cafe Identity',
     rows: [['Cafe Name', cafeData?.name], ['Type', cafeData?.businessType], ['Staff Count', staffCount], ['GST', cafeData?.gstNumber || '—']]
   },
   {
-    key: 'location', icon: '📍', title: 'Location',
+    key: 'location', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>, title: 'Location',
     rows: [['Address', cafeData?.address || '—'], ['City', cafeData?.city || '—'], ['State', cafeData?.state || '—'], ['Pincode', cafeData?.pincode || '—']]
   },
   {
-    key: 'hours', icon: '⏰', title: 'Business Hours',
+    key: 'hours', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>, title: 'Business Hours',
     rows: [['Opens', cafeData?.openingTime || '—'], ['Closes', cafeData?.closingTime || '—'], ['Support', cafeData?.supportNumber || '—']]
   },
   {
-    key: 'payment', icon: '💳', title: 'Payment Setup',
+    key: 'payment', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>, title: 'Payment Setup',
     rows: [['Razorpay', paymentConfig?.isVerified ? '✅ Verified' : '○ Not set'], ['Tax Rate (GST)', `${taxRate}%`], ['Service Charge', `${serviceCharge}%`], ['UPI ID', paymentConfig?.upiId || '—']]
   },
   {
-    key: 'ops', icon: '⚙️', title: 'Operations',
+    key: 'ops', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>, title: 'Operations',
     rows: [['Tables', operationalConfig?.tables?.length || 0], ['Kitchen Display', operationalConfig?.kitchenDisplayEnabled ? 'On' : 'Off'], ['Printer', operationalConfig?.printerEnabled ? 'On' : 'Off']]
   },
   {
-    key: 'qr_codes', icon: '📋', title: 'Table QR Codes',
+    key: 'theme', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>, title: 'Appearance & Theme',
+    rows: [['Theme Mode', themeMode === 'system' ? 'System Default' : themeMode === 'dark' ? 'Dark Mode' : 'Light Mode'], ['Cafe Brand Color', <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>{primaryColor} <span style={{ width: '12px', height: '12px', background: primaryColor, borderRadius: '50%', display: 'inline-block' }}></span></div>]]
+  },
+  {
+    key: 'qr_codes', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="3"></rect><rect x="14" y="7" width="3" height="3"></rect><rect x="7" y="14" width="3" height="3"></rect><rect x="14" y="14" width="3" height="3"></rect></svg>, title: 'Table QR Codes',
     rows: [['Total Tables', operationalConfig?.tables?.length || 0], ['QR Generator', 'Click to view & download']]
   }];
 
@@ -404,15 +414,64 @@ const OwnerProfilePage = () => {
           <label className="mlabel" htmlFor="branch-edit-active" style={{ margin: 0 }}>Is Active</label>
           <input type="checkbox" id="branch-edit-active" name="branch-edit-active" className="mtoggle" checked={!!form.isActive} onChange={fld('isActive')} />
         </div>
+      </>,
+
+    theme:
+    <>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', marginBottom: '16px' }}>Customize the look and feel of the application.</p>
+        
+        <label className="mlabel" htmlFor="profile-theme-mode">Your Display Theme (Device Only)</label>
+        <select className="minput" id="profile-theme-mode" name="profile-theme-mode" value={form.themeMode || 'system'} onChange={fld('themeMode')} style={{ marginBottom: '16px' }}>
+          <option value="system">System Default</option>
+          <option value="light">Light Mode</option>
+          <option value="dark">Dark Mode</option>
+        </select>
+
+        <label className="mlabel" htmlFor="profile-ui-primary-color">Cafe Brand Color (Global)</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '16px' }}>
+          {['#D47F46', '#8B4513', '#2ecc71', '#3498db', '#9b59b6'].map((color) => (
+            <div 
+              key={color}
+              onClick={() => setForm(f => ({ ...f, uiPrimaryColor: color }))}
+              style={{
+                width: '100%',
+                aspectRatio: '1',
+                backgroundColor: color,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                border: form.uiPrimaryColor === color ? '3px solid white' : '1px solid rgba(255,255,255,0.2)',
+                boxShadow: form.uiPrimaryColor === color ? '0 0 0 2px var(--color-primary)' : 'none'
+              }}
+            />
+          ))}
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <input 
+            type="color" 
+            id="profile-ui-primary-color" 
+            name="profile-ui-primary-color" 
+            value={form.uiPrimaryColor || '#D47F46'} 
+            onChange={fld('uiPrimaryColor')} 
+            style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          />
+          <span style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem', fontFamily: 'monospace' }}>
+            {form.uiPrimaryColor || '#D47F46'}
+          </span>
+        </div>
       </>
 
   };
 
-  const modalTitles = { owner: 'Edit Owner Profile', cafe: 'Edit Cafe Identity', location: 'Edit Location', hours: 'Edit Business Hours', payment: 'Edit Payment Setup', ops: 'Edit Operations', branch: 'Add New Branch', editBranch: 'Edit Branch Details', qr_codes: 'Table QR Codes' };
+  const modalTitles = { owner: 'Edit Owner Profile', cafe: 'Edit Cafe Identity', location: 'Edit Location', hours: 'Edit Business Hours', payment: 'Edit Payment Setup', ops: 'Edit Operations', branch: 'Add New Branch', editBranch: 'Edit Branch Details', qr_codes: 'Table QR Codes', theme: 'Appearance & Theme' };
 
   return (
     <OwnerLayout>
       <style>{`
+        .pp, .moverlay {
+          --color-text-primary: #F8F5F0;
+          --color-text-secondary: #B4C4B9;
+        }
         .pp { max-width:900px; margin:0 auto; padding:28px 20px 60px; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         .pp { animation:fadeIn .35s ease; }
@@ -604,15 +663,15 @@ const OwnerProfilePage = () => {
             {/* Branches card — full width */}
             <div className="sec-card sec-card-full">
               <div className="sec-card-head">
-                <span className="sec-card-icon">🌿</span>
+                <span className="sec-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>
                 <span className="sec-card-title">Branches ({branches.length})</span>
               </div>
-              {branches.length === 0 && <p style={{ color: '#3D2820', fontStyle: 'italic', fontSize: '.85rem', margin: '4px 0 10px' }}>No branches added yet.</p>}
+              {branches.length === 0 && <p style={{ color: '#A2B9AC', fontStyle: 'italic', fontSize: '.85rem', margin: '4px 0 10px' }}>No branches added yet.</p>}
               {branches.map((b) =>
               <div key={b._id} className="branch-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(230,213,195,.06)' }}>
                   <div>
                     <div className="branch-name" style={{ fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '.875rem' }}>{b.branchName}</div>
-                    <div className="branch-addr" style={{ fontSize: '.75rem', color: '#7A6055', marginTop: '2px' }}>{b.address}{b.manager ? ` · ${b.manager}` : ''}</div>
+                    <div className="branch-addr" style={{ fontSize: '.75rem', color: '#B4C4B9', marginTop: '2px' }}>{b.address}{b.manager ? ` · ${b.manager}` : ''}</div>
                     <span className={b.isActive ? 'badge-on' : 'badge-off'} style={{ display: 'inline-block', marginTop: '4px' }}>{b.isActive ? 'Active' : 'Inactive'}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>

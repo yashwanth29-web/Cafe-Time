@@ -13,6 +13,9 @@ const WaiterDashboard = () =>{
  const [errorMsg, setErrorMsg] = useState('');
  const [refreshCountdown, setRefreshCountdown] = useState(5);
 
+ const [showTakeOrderModal, setShowTakeOrderModal] = useState(false);
+ const [takeOrderTable, setTakeOrderTable] = useState('');
+
  useEffect(() =>{
  const fetchCafe = async () =>{
  if (user?.cafeId) {
@@ -128,8 +131,80 @@ const WaiterDashboard = () =>{
 </div>
  
 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-
+  <button
+    onClick={() => setShowTakeOrderModal(true)}
+    style={{
+      background: 'var(--color-primary)',
+      color: 'white',
+      border: 'none',
+      padding: '10px 16px',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    }}
+  >
+    <span style={{ fontSize: '1.2rem' }}>+</span>
+    Take Order
+  </button>
 </div>
+
+{showTakeOrderModal && (
+  <div style={{
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+    display: 'flex', justifyContent: 'center', alignItems: 'center'
+  }}>
+    <div style={{
+      background: 'var(--bg-card)', padding: '24px', borderRadius: '12px',
+      width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)' }}>Take New Order</h3>
+      <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+        Enter Table Number (leave blank for Takeaway):
+      </p>
+      <input
+        autoFocus
+        type="text"
+        placeholder="e.g. 5"
+        value={takeOrderTable}
+        onChange={(e) => setTakeOrderTable(e.target.value)}
+        style={{
+          width: '100%', padding: '12px', borderRadius: '8px',
+          border: '1px solid var(--color-border)', marginBottom: '20px',
+          background: 'rgba(0,0,0,0.05)', color: 'var(--color-text-primary)'
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff`;
+          }
+        }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        <button
+          onClick={() => setShowTakeOrderModal(false)}
+          style={{
+            padding: '10px 16px', borderRadius: '8px', border: 'none',
+            background: 'var(--color-border)', cursor: 'pointer', fontWeight: 'bold'
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff`}
+          style={{
+            padding: '10px 16px', borderRadius: '8px', border: 'none',
+            background: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 'bold'
+          }}
+        >
+          Open Menu
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 </div>
 
  {errorMsg &&

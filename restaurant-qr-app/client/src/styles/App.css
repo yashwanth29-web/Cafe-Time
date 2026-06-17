@@ -27,6 +27,16 @@
   --radius-lg: 12px;
 }
 
+[data-theme="dark"] {
+  --bg-primary: #121815;
+  --bg-secondary: #1C2420;
+  --bg-card: #1E2723;
+  --bg-card-hover: #2A3630;
+  --color-text-primary: #F8F5F0;
+  --color-text-secondary: #B4C4B9;
+  --color-border: #2C3A33;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

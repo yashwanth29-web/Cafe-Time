@@ -18,7 +18,8 @@ const {
   updateBranch,
   deleteBranch,
   getStaffSummary,
-  uploadLogo 
+  uploadLogo,
+  updateCafeTheme 
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -68,5 +69,6 @@ router.get('/setup', restrictTo('admin', 'owner'), getSetupData);
 router.post('/setup', restrictTo('admin', 'owner'), saveSetupData);
 router.post('/verify-razorpay', restrictTo('admin', 'owner'), verifyRazorpay);
 router.post('/upload-logo', restrictTo('admin', 'owner'), upload.single('logo'), uploadLogo);
+router.put('/theme', restrictTo('admin', 'owner'), updateCafeTheme);
 
 module.exports = router;
