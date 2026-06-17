@@ -27,10 +27,16 @@ const app = express();
 // Middlewares
 app.use(cors({
   origin: [
-    "http://localhost:5173",
-    process.env.CLIENT_URL
+    "http://localhost:5173", // Vite local
+    "http://localhost:3000", // Optional React local
+    process.env.CLIENT_URL, // Main frontend URL
+    "https://cafe-time-xi.vercel.app",
+    "https://cafe-time-d1ffjmio8-yashwanth29-webs-projects.vercel.app",
+    "https://cafe-time-git-main-yashwanth29-webs-projects.vercel.app"
   ],
-  credentials: true
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 app.use(cookieParser());
 app.use(express.json()); // Body parser
