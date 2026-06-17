@@ -1,5 +1,8 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
+// Force Node.js 18+ to use IPv4 instead of IPv6 to fix Render's ENETUNREACH error
+dns.setDefaultResultOrder('ipv4first');
 // Create reusable transporter object using SMTP transport
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
