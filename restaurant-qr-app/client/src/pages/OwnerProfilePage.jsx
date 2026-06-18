@@ -543,10 +543,10 @@ const OwnerProfilePage = () => {
 
         /* modal overlay */
         .moverlay {
-          position:fixed; inset:0; z-index:1000;
-          background:rgba(0,0,0,.6); backdrop-filter:blur(6px);
+          position:fixed; top:0; left:0; right:0; bottom:0;
+          background:rgba(0,0,0,.7); backdrop-filter:blur(6px);
           display:flex; align-items:center; justify-content:center;
-          padding:20px; animation:fadeIn .2s ease;
+          z-index:2000;
         }
         .mcard {
           background:#1C2420; border:1px solid rgba(143,168,155,.18);

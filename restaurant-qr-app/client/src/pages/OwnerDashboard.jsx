@@ -1796,32 +1796,7 @@ const OwnerDashboard = () =>{
 </div>
 </div>
 
- {/* Branch Performance Comparison */}
-<div className="chart-card">
-<h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.1rem', margin: '0 0 20px 0', fontWeight: 700 }}>
- Branch Performance
-</h3>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-<div>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '5px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>Main Branch</span>
-<strong style={{ color: 'var(--color-primary)' }}>60%</strong>
-</div>
-<div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
-<div style={{ width: '60%', height: '100%', background: 'var(--color-primary)' }} />
-</div>
-</div>
-<div>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '5px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>Uptown Branch</span>
-<strong style={{ color: 'var(--color-primary)' }}>40%</strong>
-</div>
-<div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
-<div style={{ width: '40%', height: '100%', background: 'var(--color-primary)' }} />
-</div>
-</div>
-</div>
-</div>
+
 </div>
 
  {/* Best / Worst Selling items */}

@@ -440,26 +440,6 @@ const SaaSLayout = ({ children }) => {
               <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{formatRoleLabel(userRole)}</span>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            style={{
-              width: '100%',
-              padding: '10px',
-              borderRadius: '8px',
-              border: 'none',
-              background: 'rgba(231, 76, 60, 0.12)',
-              color: '#e74c3c',
-              fontSize: '13.5px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}>
-            
-            🚪 Sign Out
-          </button>
         </div>
       </aside>
 
@@ -563,23 +543,6 @@ const SaaSLayout = ({ children }) => {
                     👤 Cafe Panel
                   </button>
               }
-                <button
-                onClick={handleLogout}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 16px',
-                  textAlign: 'left',
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#e74c3c',
-                  fontSize: '13.5px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}>
-                
-                  🚪 Sign Out
-                </button>
               </div>
             }
           </div>
@@ -918,23 +881,6 @@ const SaaSLayout = ({ children }) => {
                       👤 Cafe Panel
                     </button> :
                 null}
-                  <button
-                  onClick={handleLogout}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 16px',
-                    textAlign: 'left',
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#e74c3c',
-                    fontSize: '13.5px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                  }}>
-                  
-                    🚪 Sign Out
-                  </button>
                 </div>
               }
             </div>
@@ -1067,28 +1013,6 @@ const SaaSLayout = ({ children }) => {
               </button>);
 
           })}
-        </div>
-        <div style={{ padding: '16px 20px 0', borderTop: '1px solid rgba(0, 0, 0, 0.05)' }}>
-          <button
-            onClick={handleLogout}
-            style={{
-              width: '100%',
-              padding: '12px',
-              borderRadius: '10px',
-              border: 'none',
-              background: 'rgba(231, 76, 60, 0.1)',
-              color: '#e74c3c',
-              fontSize: '14px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}>
-            
-            🚪 Sign Out
-          </button>
         </div>
       </div>
     </div>);
