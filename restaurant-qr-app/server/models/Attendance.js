@@ -58,10 +58,32 @@ const AttendanceSchema = new mongoose.Schema({
     enum: ['Present', 'Late', 'Absent'],
     default: 'Present'
   },
+  image: {
+    type: String,
+    default: ''
+  },
+  gridFsFileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null
+  },
+  gridFsFilename: {
+    type: String,
+    default: ''
+  },
+  imageExpired: {
+    type: Boolean,
+    default: false
+  },
+  imageExpiredAt: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
   }
+}, {
+  timestamps: true
 });
 
 // Compound index to prevent duplicate attendance on the same day for a staff member

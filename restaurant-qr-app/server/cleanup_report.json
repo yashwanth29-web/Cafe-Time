@@ -1,0 +1,354 @@
+{
+  "spaceRecovered": "6.86 MB",
+  "spaceRecoveredBytes": 7192762,
+  "report": {
+    "SAFE_TO_DELETE": [
+      "dish-1781538740093-126250201.jpg",
+      "dish-1781538778167-209363155.jpg",
+      "dish-1781538864111-249160901.jpg",
+      "dish-1781538899526-739507786.jpg",
+      "dish-1781538914181-286771489.jpg",
+      "dish-1781200240485-551773259.png",
+      "dish-1781323185641-386535956.jpg",
+      "dish-1781347582343-369959938.jpg",
+      "dish-1781348879761-859264491.jpg",
+      "report-1781199109279-697131020.png",
+      "report-1781199109290-44042290.png",
+      "report-1781199109299-111805874.png",
+      "report-1781199109304-435766276.png",
+      "report-1781199109307-379212030.png",
+      "report-1781199109311-968966480.png",
+      "report-1781199109316-657301687.png",
+      "report-1781199409560-945748405.png",
+      "report-1781199409569-425528552.png",
+      "report-1781199409573-592731957.png",
+      "report-1781199409577-894803419.png",
+      "report-1781199755272-236972448.png",
+      "report-1781199755281-526446368.png",
+      "report-1781199755285-381497962.png",
+      "report-1781199755288-943109761.png",
+      "report-1781199755293-101665681.png",
+      "report-1781199755297-667181046.png",
+      "report-1781199755303-93811352.png",
+      "report-1781199755309-900682250.png",
+      "report-1781199755317-369002894.png",
+      "report-1781199789407-520080238.png",
+      "report-1781199789414-49158197.png",
+      "report-1781199789419-896112731.png",
+      "report-1781367658184-159544597.png",
+      "report-1781367718029-947075926.png",
+      "report-1781544729253-493919204.png"
+    ],
+    "DUPLICATE": [
+      {
+        "filename": "dish-1781538740093-126250201.jpg",
+        "size": 33144,
+        "duplicateOf": "dish-1781538724411-761824673.jpg"
+      },
+      {
+        "filename": "dish-1781538778167-209363155.jpg",
+        "size": 30898,
+        "duplicateOf": "dish-1781538753797-477396917.jpg"
+      },
+      {
+        "filename": "dish-1781538864111-249160901.jpg",
+        "size": 31916,
+        "duplicateOf": "dish-1781538851249-109081348.jpg"
+      },
+      {
+        "filename": "dish-1781538899526-739507786.jpg",
+        "size": 29684,
+        "duplicateOf": "dish-1781538814093-704947995.jpg"
+      },
+      {
+        "filename": "dish-1781538914181-286771489.jpg",
+        "size": 29227,
+        "duplicateOf": "dish-1781538799714-892715440.jpg"
+      }
+    ],
+    "UNREFERENCED": [
+      {
+        "filename": "dish-1781200240485-551773259.png",
+        "size": 231158,
+        "reason": "Unused setup screenshot, logo, or burger image"
+      },
+      {
+        "filename": "dish-1781323185641-386535956.jpg",
+        "size": 10660,
+        "reason": "Unused setup screenshot, logo, or burger image"
+      },
+      {
+        "filename": "dish-1781347582343-369959938.jpg",
+        "size": 49871,
+        "reason": "Unused setup screenshot, logo, or burger image"
+      },
+      {
+        "filename": "dish-1781348879761-859264491.jpg",
+        "size": 49871,
+        "reason": "Unused setup screenshot, logo, or burger image"
+      },
+      {
+        "filename": "report-1781199109279-697131020.png",
+        "size": 366328,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199109290-44042290.png",
+        "size": 233470,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199109299-111805874.png",
+        "size": 192925,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199109304-435766276.png",
+        "size": 167899,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199109307-379212030.png",
+        "size": 207906,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199109311-968966480.png",
+        "size": 314119,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199109316-657301687.png",
+        "size": 17356,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199409560-945748405.png",
+        "size": 366328,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199409569-425528552.png",
+        "size": 233470,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199409573-592731957.png",
+        "size": 192925,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199409577-894803419.png",
+        "size": 167899,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755272-236972448.png",
+        "size": 366328,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755281-526446368.png",
+        "size": 233470,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755285-381497962.png",
+        "size": 192925,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755288-943109761.png",
+        "size": 167899,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755293-101665681.png",
+        "size": 207906,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755297-667181046.png",
+        "size": 314119,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755303-93811352.png",
+        "size": 510336,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755309-900682250.png",
+        "size": 580041,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199755317-369002894.png",
+        "size": 17356,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199789407-520080238.png",
+        "size": 366328,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199789414-49158197.png",
+        "size": 233470,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781199789419-896112731.png",
+        "size": 192925,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781367658184-159544597.png",
+        "size": 266625,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781367718029-947075926.png",
+        "size": 266625,
+        "reason": "Expired attendance/work reports"
+      },
+      {
+        "filename": "report-1781544729253-493919204.png",
+        "size": 319355,
+        "reason": "Expired attendance/work reports"
+      }
+    ],
+    "SYSTEM_FILES_KEEP": [
+      {
+        "filename": "CD001_logo.jpg",
+        "size": 10660,
+        "reason": "Active Cafe Logo"
+      },
+      {
+        "filename": "dish-1781538489823-67122816.jpg",
+        "size": 43239,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538504134-261896466.jpg",
+        "size": 24010,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538532243-319866540.jpg",
+        "size": 27494,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538551607-692596989.jpg",
+        "size": 8732,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538572428-867716580.jpg",
+        "size": 33894,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538583872-991399356.jpg",
+        "size": 13700,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538596912-619275300.jpg",
+        "size": 40835,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538609444-803534232.jpg",
+        "size": 14565,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538623899-829667631.jpg",
+        "size": 25977,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538636193-67419414.jpg",
+        "size": 28344,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538653229-393732266.jpg",
+        "size": 27377,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538666666-290059000.jpg",
+        "size": 23066,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538685869-84331898.jpg",
+        "size": 29493,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538698287-868401230.jpg",
+        "size": 26104,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538709856-569433373.jpg",
+        "size": 29446,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538724411-761824673.jpg",
+        "size": 33144,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538753797-477396917.jpg",
+        "size": 30898,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538785540-199900804.jpg",
+        "size": 31436,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538799714-892715440.jpg",
+        "size": 29227,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538814093-704947995.jpg",
+        "size": 29684,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538826877-17461220.jpg",
+        "size": 43647,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538851249-109081348.jpg",
+        "size": 31916,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538878545-434709465.jpg",
+        "size": 17879,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538932366-308263508.jpg",
+        "size": 38540,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      },
+      {
+        "filename": "dish-1781538961827-222484261.jpg",
+        "size": 19283,
+        "reason": "Active Menu Item Image (GridFS Synced)"
+      }
+    ]
+  }
+}

@@ -67,6 +67,7 @@ const AdminMenuImage = ({ item }) =>{
 
  const [imgFailed, setImgFailed] = useState(!isValidUrl(item.image));
  const [prevImage, setPrevImage] = useState(item.image);
+ const resolvedSrc = getAssetUrl(item.image);
 
  if (item.image !== prevImage) {
  setPrevImage(item.image);
@@ -96,7 +97,7 @@ const AdminMenuImage = ({ item }) =>{
 
  return (
 <img
- src={item.image}
+ src={resolvedSrc}
  alt={item.name}
  className="admin-menu-img"
  onError={() =>setImgFailed(true)} />);
@@ -825,11 +826,18 @@ const OwnerDashboard = () =>{
  }
  }, [reportsFilterRange, reportsFilterStaff, reportsFilterBranch, activeTab, staffSubTab]);
 
- useEffect(() =>{
- fetchOrders();
- fetchMenu();
- loadSetupConfig();
+ useEffect(() => {
+   loadSetupConfig();
+ }, []);
 
+ useEffect(() =>{
+ if (activeTab === 'orders' || activeTab === 'analytics') {
+ fetchOrders();
+ }
+ if (activeTab === 'menu') {
+ fetchMenu();
+ fetchCategories();
+ }
  if (activeTab === 'staff') {
  fetchStaffList();
  fetchBranches();
@@ -841,59 +849,51 @@ const OwnerDashboard = () =>{
  fetchAttendanceToday();
  fetchBranches();
  }
- if (activeTab === 'inventory' || activeTab === 'analytics' || activeTab === 'menu') {
+ if (activeTab === 'inventory' || activeTab === 'analytics') {
  fetchInventoryList();
- fetchCategories();
  fetchInventoryCategories();
  }
 
- // Live background polling every 5 seconds for menu, categories, orders & inventory levels
- const pollingInterval = setInterval(() =>{
- fetchOrders();
- if (activeTab !== 'menu') {
-   fetchMenu(true);
-   fetchCategories(true);
- }
+  // Live background polling for orders (real-time visibility)
+  const pollingInterval = setInterval(() =>{
+  fetchOrders();
+  }, 10000); // Poll orders every 10 seconds
 
- if (activeTab === 'inventory' || activeTab === 'analytics') {
- const fetchInventorySilent = async () =>{
- try {
- const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
- getInventory(),
- getInventoryLogs(),
- getWastageReport(),
- getConsumptionReport()]
-);
+  // Separate interval for heavier but still useful background updates (inventory list and reviews)
+  const heavyPollingInterval = setInterval(() => {
+  if (activeTab === 'inventory') {
+  const fetchInventoryListSilent = async () => {
+  try {
+  const invRes = await getInventory();
+  if (invRes.success) setInventoryList(invRes.data);
+  } catch (err) {
+  console.error('Silent inventory refresh failed:', err);
+  }
+  };
+  fetchInventoryListSilent();
+  }
+  if (activeTab === 'menu' && menuSubTab === 'reviews') {
+  const fetchReviewsSilent = async () => {
+  try {
+  const params = {};
+  if (reviewsFilterRating) params.rating = reviewsFilterRating;
+  const response = await getReviews(params);
+  if (response && response.success) {
+  setReviews(response.data || []);
+  if (response.summary) setReviewsSummary(response.summary);
+  }
+  } catch (err) {
+  console.error('Silent reviews refresh failed:', err);
+  }
+  };
+  fetchReviewsSilent();
+  }
+  }, 30000); // Poll heavier items every 30 seconds
 
- if (invRes.success) setInventoryList(invRes.data);
- if (logsRes.success) setInventoryLogs(logsRes.data);
- if (wasteRes.success) setWastageReport(wasteRes);
- if (consRes.success) setConsumptionReport(consRes);
- } catch (err) {
- console.error('Silent inventory refresh failed:', err);
- }
- };
- fetchInventorySilent();
- }
- if (activeTab === 'menu' && menuSubTab === 'reviews') {
- const fetchReviewsSilent = async () =>{
- try {
- const params = {};
- if (reviewsFilterRating) params.rating = reviewsFilterRating;
- const response = await getReviews(params);
- if (response && response.success) {
- setReviews(response.data || []);
- if (response.summary) setReviewsSummary(response.summary);
- }
- } catch (err) {
- console.error('Silent reviews refresh failed:', err);
- }
- };
- fetchReviewsSilent();
- }
- }, 5000);
-
- return () =>clearInterval(pollingInterval);
+  return () => {
+  clearInterval(pollingInterval);
+  clearInterval(heavyPollingInterval);
+  };
  }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating]);
 
  // Register new staff
@@ -1567,24 +1567,30 @@ const OwnerDashboard = () =>{
  padding: 25px;
  }
  }
- /* ── Menu Grid: 2-col on mobile ── */
- .menu-grid-admin {
- display: grid;
- grid-template-columns: repeat(2, 1fr);
- gap: 10px;
- }
- @media (min-width: 768px) {
- .menu-grid-admin {
- grid-template-columns: repeat(3, 1fr);
- gap: 16px;
- }
- }
- @media (min-width: 1200px) {
- .menu-grid-admin {
- grid-template-columns: repeat(4, 1fr);
- gap: 18px;
- }
- }
+  /* ── Menu Grid: 1-col on mobile, 2-col on small tablets, 3-col on desktop ── */
+  .menu-grid-admin {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  }
+  @media (min-width: 600px) {
+  .menu-grid-admin {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  }
+  }
+  @media (min-width: 768px) {
+  .menu-grid-admin {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  }
+  }
+  @media (min-width: 1200px) {
+  .menu-grid-admin {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  }
+  }
  /* ── Menu Card: vertical card layout ── */
  .admin-menu-card {
  background: var(--bg-card);
@@ -2942,7 +2948,7 @@ const OwnerDashboard = () =>{
 
 <div style={{
  display: 'grid',
- gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+ gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
  gap: '20px'
  }}>
  {workReports.map((report) =>
@@ -3335,13 +3341,13 @@ const OwnerDashboard = () =>{
 
  {/* SUBTAB 4: Suppliers */}
  {inventorySubTab === 'suppliers' &&
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '16px' }}>
  {Array.from(new Set(inventoryList.map((item) =>item.supplier || 'Unassigned Supplier'))).map((sup) =>{
  const supItems = inventoryList.filter((item) =>(item.supplier || 'Unassigned Supplier') === sup);
  const totalSupplierValue = supItems.reduce((sum, i) =>sum + (i.quantity || i.stock) * (i.costPrice || i.cost), 0);
  return (
-<div key={sup} style={{ background: '#1F140E', border: '1px solid #432E22', borderRadius: '12px', padding: '16px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #432E22', paddingBottom: '8px', marginBottom: '12px' }}>
+<div key={sup} style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '12px' }}>
 <strong style={{ color: 'var(--color-text-primary)', fontSize: '1rem' }}>{sup}</strong>
 <span style={{ fontSize: '11px', background: '#6F4E37', color: 'var(--color-text-primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
  {supItems.length} Products
@@ -3355,7 +3361,7 @@ const OwnerDashboard = () =>{
 </div>
 )}
 </div>
-<div style={{ borderTop: '1px dashed #432E22', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+<div style={{ borderTop: '1px dashed var(--color-border)', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
 <span>Total Value:</span>
 <strong style={{ color: '#2ECC71' }}>₹{totalSupplierValue.toFixed(2)}</strong>
 </div>
@@ -3630,7 +3636,7 @@ const OwnerDashboard = () =>{
  No branches configured yet. Add one to start tracking location-based attendance.
 </div>:
 
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '20px' }}>
  {branches.map((b) =>
 <div key={b._id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

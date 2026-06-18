@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getAssetUrl } from '../services/api';
 
 const MenuCard = ({ item, cartItem, addToCart, increaseQuantity, decreaseQuantity }) => {
   const { id, name, image, price, category, description, available } = item;
@@ -23,12 +24,13 @@ const MenuCard = ({ item, cartItem, addToCart, increaseQuantity, decreaseQuantit
     return '🍽️';
   };
 
-  const [imgFailed, setImgFailed] = useState(!isValidUrl(image));
-  const [prevImage, setPrevImage] = useState(image);
+  const imageUrl = getAssetUrl(image);
+  const [imgFailed, setImgFailed] = useState(!isValidUrl(imageUrl));
+  const [prevImage, setPrevImage] = useState(imageUrl);
 
-  if (image !== prevImage) {
-    setPrevImage(image);
-    setImgFailed(!isValidUrl(image));
+  if (imageUrl !== prevImage) {
+    setPrevImage(imageUrl);
+    setImgFailed(!isValidUrl(imageUrl));
   }
 
   return (
@@ -46,12 +48,13 @@ const MenuCard = ({ item, cartItem, addToCart, increaseQuantity, decreaseQuantit
           </div>
         ) : (
           <img 
-            src={image} 
+            src={imageUrl} 
             alt={name} 
             className="menu-card-img" 
             onError={() => setImgFailed(true)} 
           />
         )}
+
         <span className="menu-card-badge">{category}</span>
       </div>
       

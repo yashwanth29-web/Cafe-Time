@@ -40,11 +40,39 @@ const WorkReportSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  gridFsFileIds: [
+    {
+      type: mongoose.Schema.Types.ObjectId
+    }
+  ],
+  gridFsFilenames: [
+    {
+      type: String
+    }
+  ],
+  gridFsFileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null
+  },
+  gridFsFilename: {
+    type: String,
+    default: ''
+  },
+  attachmentsExpired: {
+    type: Boolean,
+    default: false
+  },
+  attachmentsExpiredAt: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now,
     index: true
   }
+}, {
+  timestamps: true
 });
 
 module.exports = mongoose.model('WorkReport', WorkReportSchema);

@@ -239,15 +239,44 @@ const ManagerDashboard = () =>{
     }
   };
 
+  const pollManagerData = async () => {
+    try {
+      const ordersRes = await getOrders();
+      if (ordersRes.success) {
+        const cafeOrders = user?.cafeId ?
+          ordersRes.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
+          ordersRes.data;
+        setOrders(cafeOrders);
+      }
+    } catch (e) {
+      console.error('Error polling manager data:', e);
+    }
+  };
+
   useEffect(() =>{
     fetchInitialData();
 
-    // Polling every 5 seconds for real-time updates
+    // Poll orders every 12 seconds
     const pollingInterval = setInterval(() =>{
-      fetchInitialData(true);
-    }, 5000);
+      pollManagerData();
+    }, 12000);
 
-    return () =>clearInterval(pollingInterval);
+    // Poll inventory every 30 seconds
+    const inventoryInterval = setInterval(async () => {
+      try {
+        const inventoryRes = await getInventory();
+        if (inventoryRes.success) {
+          setInventory(inventoryRes.data);
+        }
+      } catch (e) {
+        console.error('Error polling inventory data:', e);
+      }
+    }, 30000);
+
+    return () =>{
+      clearInterval(pollingInterval);
+      clearInterval(inventoryInterval);
+    };
   }, []);
 
  const handleAttendanceChange = (staffId, status) =>{

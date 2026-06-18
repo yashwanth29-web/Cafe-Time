@@ -14,6 +14,7 @@ import OwnerSetup from './pages/OwnerSetup';
 import OwnerProfilePage from './pages/OwnerProfilePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import KitchenDashboard from './pages/KitchenDashboard';
 import WaiterDashboard from './pages/WaiterDashboard';
 import CashierDashboard from './pages/CashierDashboard';
@@ -312,11 +313,13 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <AuthProvider>
-        <ToastProvider>
-          <AppContent />
-        </ToastProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </Router>
   );
 }

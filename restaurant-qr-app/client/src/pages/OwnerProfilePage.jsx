@@ -463,15 +463,16 @@ const OwnerProfilePage = () => {
   return (
     <OwnerLayout>
       <style>{`
-        .pp, .moverlay {
+        /* Modal always has dark bg — force light text there */
+        .moverlay {
           --color-text-primary: #F8F5F0;
           --color-text-secondary: #B4C4B9;
         }
-        .pp { max-width:900px; margin:0 auto; padding:28px 20px 60px; }
+        .pp { width: 100%; max-width:900px; margin:0 auto; padding:28px 20px 60px; box-sizing: border-box; overflow-x: hidden; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         .pp { animation:fadeIn .35s ease; }
 
-        /* banner */
+        /* banner — always dark */
         .pp-banner {
           background:linear-gradient(135deg,#1C2420 0%,#121815 55%,#24302A 100%);
           border-radius:16px; position:relative; overflow:hidden;
@@ -490,10 +491,10 @@ const OwnerProfilePage = () => {
           box-shadow:0 6px 20px rgba(0,0,0,.5);
         }
         .pp-avatar img { width:100%; height:100%; object-fit:cover; }
-        .pp-identity h2 { font-size:1.35rem; font-weight:800; color: var(--color-text-primary); margin:0; text-align:center; }
+        .pp-identity h2 { font-size:1.35rem; font-weight:800; color:#F8F5F0; margin:0; text-align:center; }
         .pp-identity p  { font-size:.78rem; color:#788E82; margin:2px 0 0; font-weight:600; text-align:center; }
 
-        /* progress */
+        /* progress — always dark bg */
         .pp-prog {
           background:rgba(28,36,32,.7); border:1px solid rgba(143,168,155,.1);
           border-radius:12px; padding:14px 18px; margin-bottom:28px;
@@ -501,42 +502,57 @@ const OwnerProfilePage = () => {
         }
         .prog-outer { flex:1; height:7px; background:rgba(0,0,0,.4); border-radius:4px; overflow:hidden; }
         .prog-inner { height:100%; background:linear-gradient(90deg,#8FA89B,#A2B9AC); border-radius:4px; transition:width .4s; }
-        .pp-prog span { font-size:.82rem; font-weight:700; color: var(--color-text-primary); white-space:nowrap; }
+        .pp-prog span { font-size:.82rem; font-weight:700; color:#F8F5F0; white-space:nowrap; }
         .btn-setup { background:#8FA89B; color:#121815; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:.8rem; cursor:pointer; white-space:nowrap; font-family:inherit; }
         .btn-setup:hover { background:#A2B9AC; }
 
-        /* section card */
+        /* section card — theme-aware */
         .sec-card {
-          background:rgba(28,36,32,.75);
-          border:1px solid rgba(143,168,155,.1);
+          background: var(--bg-card);
+          border:1px solid var(--color-border);
           border-radius:14px; padding:20px;
           cursor:pointer; transition:all .2s;
           position:relative; overflow:hidden;
+          box-sizing: border-box !important;
         }
         .sec-card::after {
           content:''; position:absolute; inset:0;
           background:rgba(143,168,155,0); transition:background .2s;
           border-radius:14px; pointer-events:none;
         }
-        .sec-card:hover { border-color:rgba(143,168,155,.28); transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.3); }
+        .sec-card:hover { border-color:var(--color-primary); transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.12); }
         .sec-card:hover::after { background:rgba(143,168,155,.03); }
         .sec-card:active { transform:translateY(0); }
 
         .sec-card-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
         .sec-card-icon { font-size:1.1rem; }
-        .sec-card-title { font-size:.88rem; font-weight:800; color: var(--color-text-primary); text-transform:uppercase; letter-spacing:.5px; }
-        .sec-card-edit { margin-left:auto; font-size:.7rem; color:#8FA89B; font-weight:700; opacity:.8; }
+        .sec-card-title { font-size:.88rem; font-weight:800; color:var(--color-primary); text-transform:uppercase; letter-spacing:.5px; }
+        .sec-card-edit { margin-left:auto; font-size:.7rem; color:var(--color-primary); font-weight:700; opacity:.8; }
 
-        .sec-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid rgba(143,168,155,.05); }
+        .sec-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--color-border); }
         .sec-row:last-child { border-bottom:none; }
-        .sec-row-label { font-size:.72rem; color:#788E82; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
-        .sec-row-value { font-size:.82rem; color: var(--color-text-primary); font-weight:500; text-align:right; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .sec-row-empty { color:#2C3A33; font-style:italic; }
+        .sec-row-label { font-size:.72rem; color:var(--color-text-secondary); font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+        .sec-row-value { font-size:.82rem; color:var(--color-text-primary); font-weight:500; text-align:right; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .sec-row-empty { color:var(--color-text-secondary); opacity:.5; font-style:italic; }
 
         /* branches card full-width */
         .sec-card-full { grid-column:1/-1; }
 
-        /* modal overlay */
+        /* card grid layout */
+        .card-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 20px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        @media (min-width: 600px) {
+          .card-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        /* modal overlay — always dark */
         .moverlay {
           position:fixed; inset:0; z-index:1000;
           background:rgba(0,0,0,.6); backdrop-filter:blur(6px);
@@ -555,15 +571,15 @@ const OwnerProfilePage = () => {
         .mcard::-webkit-scrollbar-thumb { background:#2C3A33; border-radius:4px; }
 
         .mhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
-        .mhead h3 { font-size:1.05rem; font-weight:800; color: var(--color-text-primary); margin:0; }
+        .mhead h3 { font-size:1.05rem; font-weight:800; color:#F8F5F0; margin:0; }
         .mclose { background:none; border:none; color:#788E82; font-size:1.2rem; cursor:pointer; padding:4px; line-height:1; }
-        .mclose:hover { color: var(--color-text-primary); }
+        .mclose:hover { color:#F8F5F0; }
 
         .mlabel { display:block; font-size:.72rem; font-weight:700; color:#788E82; text-transform:uppercase; letter-spacing:.4px; margin:14px 0 6px; }
         .minput {
           width:100%; padding:10px 14px; box-sizing:border-box;
           background:#121815; border:1px solid rgba(143,168,155,.18);
-          border-radius:9px; color: var(--color-text-primary); font-size:.9rem; font-family:inherit;
+          border-radius:9px; color:#F8F5F0; font-size:.9rem; font-family:inherit;
           outline:none; transition:border-color .2s;
         }
         .minput:focus { border-color:#8FA89B; }
@@ -576,38 +592,43 @@ const OwnerProfilePage = () => {
         .mbtn-save:hover:not(:disabled) { background:#A2B9AC; }
         .mbtn-save:disabled { opacity:.6; cursor:default; }
         .mbtn-cancel { background:rgba(255,255,255,.06); color:#788E82; border:1px solid rgba(143,168,155,.12); padding:11px 20px; border-radius:9px; font-weight:700; font-size:.875rem; cursor:pointer; font-family:inherit; }
-        .mbtn-cancel:hover { background:rgba(255,255,255,.1); color: var(--color-text-primary); }
+        .mbtn-cancel:hover { background:rgba(255,255,255,.1); color:#F8F5F0; }
 
-        /* branches list */
-        .branch-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(143,168,155,.06); }
-        .branch-name { font-weight:700; color: var(--color-text-primary); font-size:.875rem; }
-        .branch-addr { font-size:.75rem; color:#788E82; margin-top:2px; }
+        /* branches list — theme-aware */
+        .branch-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--color-border); }
+        .branch-name { font-weight:700; color:var(--color-text-primary); font-size:.875rem; }
+        .branch-addr { font-size:.75rem; color:var(--color-text-secondary); margin-top:2px; }
         .badge-on  { background:rgba(46,204,113,.15); color:#2ecc71; padding:2px 9px; border-radius:20px; font-size:.7rem; font-weight:700; }
-        .badge-off { background:rgba(255,255,255,.06); color:#2C3A33; padding:2px 9px; border-radius:20px; font-size:.7rem; font-weight:700; }
+        .badge-off { background:rgba(255,255,255,.06); color:var(--color-text-secondary); padding:2px 9px; border-radius:20px; font-size:.7rem; font-weight:700; }
         .add-branch-row { padding-top:12px; }
-        .btn-add { background:transparent; border:1px dashed rgba(143,168,155,.4); color:#8FA89B; padding:9px; border-radius:9px; font-weight:700; font-size:.82rem; cursor:pointer; width:100%; font-family:inherit; transition:all .2s; }
-        .btn-add:hover { border-color:#8FA89B; color: var(--color-text-primary); background:rgba(143,168,155,.08); }
+        .btn-add { background:transparent; border:1px dashed var(--color-border); color:var(--color-primary); padding:9px; border-radius:9px; font-weight:700; font-size:.82rem; cursor:pointer; width:100%; font-family:inherit; transition:all .2s; }
+        .btn-add:hover { border-color:var(--color-primary); color:var(--color-text-primary); background:rgba(143,168,155,.08); }
 
         /* toast */
         .toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:9999; padding:11px 22px; border-radius:10px; font-weight:700; font-size:.875rem; box-shadow:0 8px 24px rgba(0,0,0,.5); animation:fadeIn .25s ease; white-space:nowrap; }
-        .tok { background:#27ae60; color: var(--color-text-primary); }
-        .terr { background:#e74c3c; color: var(--color-text-primary); }
+        .tok { background:#27ae60; color:#fff; }
+        .terr { background:#e74c3c; color:#fff; }
 
         .spinner { width:36px; height:36px; border:3px solid rgba(143,168,155,.2); border-top-color:#8FA89B; border-radius:50%; animation:spin 1s linear infinite; margin:80px auto; }
         @keyframes spin { to{transform:rotate(360deg)} }
 
         @media(max-width:767px) {
-          .moverlay { align-items:flex-end; padding:0; }
+          .pp {
+            padding: 16px 12px 60px !important;
+          }
+          .moverlay { align-items:flex-end; padding:0; z-index:1100 !important; }
           .mcard {
             width:100% !important; max-width:100% !important;
-            height:100vh !important; max-height:100vh !important;
+            height:100dvh !important; max-height:100dvh !important;
             border-radius:0 !important; border:none !important;
-            margin:0 !important; padding:16px !important;
+            margin:0 !important; padding:16px 16px 80px 16px !important;
             display:flex !important; flex-direction:column !important;
+            overflow-y:auto !important;
           }
           .mfooter {
-            position:sticky; bottom:0; background:#1C2420;
-            padding:16px 0 8px 0; z-index:10;
+            position:fixed; bottom:0; left:0; right:0; background:#1C2420;
+            padding:16px 16px 24px 16px; z-index:1200;
+            border-top:1px solid rgba(143,168,155,.12);
           }
         }
       `}</style>

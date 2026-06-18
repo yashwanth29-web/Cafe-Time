@@ -240,7 +240,28 @@ const checkIn = async (req, res) => {
       console.error('Late check detection error:', err);
     }
 
-    // 6. Create record
+    // 6. Handle check-in selfie if uploaded
+    let image = '';
+    let gridFsFileId = null;
+    let gridFsFilename = '';
+
+    if (req.file) {
+      try {
+        const { syncToGridFS } = require('../utils/gridfs');
+        const gfsFile = await syncToGridFS(req.file);
+        if (gfsFile) {
+          const protocol = req.protocol;
+          const host = req.get('host');
+          image = `${protocol}://${host}/uploads/${req.file.filename}`;
+          gridFsFileId = gfsFile._id;
+          gridFsFilename = gfsFile.filename;
+        }
+      } catch (err) {
+        console.error('Error syncing attendance selfie to GridFS:', err);
+      }
+    }
+
+    // 7. Create record
     const attendance = await Attendance.create({
       staffId,
       staffName: staff.name,
@@ -253,7 +274,10 @@ const checkIn = async (req, res) => {
       longitude: Number(longitude),
       distanceFromCafe: Math.round(distance),
       deviceInfo: deviceInfo || 'Web Browser',
-      status: isLate ? 'Late' : 'Present'
+      status: isLate ? 'Late' : 'Present',
+      image,
+      gridFsFileId,
+      gridFsFilename
     });
 
     const msg = `Checked in successfully. Location verified successfully. You are ${Math.round(distance)} meters from the workplace location. Attendance recorded.${isLate ? ' (Late Arrival)' : ''}`;
@@ -265,6 +289,11 @@ const checkIn = async (req, res) => {
     });
   } catch (error) {
     console.error('checkIn error:', error);
+    // Cleanup uploaded file if DB creation fails
+    if (req.file && req.file.path) {
+      const fs = require('fs');
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
     return res.status(500).json({ success: false, message: 'Server error processing check-in' });
   }
 };

@@ -1,0 +1,170 @@
+[
+  {
+    "_id": "6a2d354eff1b0feedd0b2350",
+    "name": "Goli Soda",
+    "image": "/uploads/goli_soda.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2388",
+    "name": "Small Fries",
+    "image": "/uploads/small_fries.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b238b",
+    "name": "Medium Fries",
+    "image": "/uploads/medium_fries.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b233d",
+    "name": "Allam Bellam Tea",
+    "image": "/uploads/allam_bellam_tea.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b237e",
+    "name": "Muska Bun",
+    "image": "/uploads/muska_bun.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b232c",
+    "name": "Regular Tea",
+    "image": "/uploads/regular_tea.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2338",
+    "name": "Ginger Tea",
+    "image": "/uploads/ginger_tea.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b237c",
+    "name": "Chicken Puff",
+    "image": "/uploads/chicken_puff.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b235e",
+    "name": "Lassi",
+    "image": "/uploads/lassi.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2378",
+    "name": "Veg Puff",
+    "image": "/uploads/veg_puff.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2358",
+    "name": "Watermelon Juice",
+    "image": "/uploads/watermelon_juice.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b236a",
+    "name": "Vanilla Milkshake",
+    "image": "/uploads/vanilla_milkshake.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2376",
+    "name": "Osmaniya Biscuit",
+    "image": "/uploads/osmaniya_biscuit.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b237a",
+    "name": "Egg Puff",
+    "image": "/uploads/egg_puff.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b238e",
+    "name": "Large Fries",
+    "image": "/uploads/large_fries.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2372",
+    "name": "Hazelnut Milkshake",
+    "image": "/uploads/hazelnut_milkshake.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2346",
+    "name": "Chocolate Coffee",
+    "image": "/uploads/chocolate_coffee.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2354",
+    "name": "Badam Milk",
+    "image": "/uploads/lassi.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2381",
+    "name": "Samosa",
+    "image": "/uploads/veg_puff.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b234b",
+    "name": "Cold Coffee",
+    "image": "/uploads/hazelnut_milkshake.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b235b",
+    "name": "Musk Melon Juice",
+    "image": "/uploads/watermelon_juice.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2362",
+    "name": "Mango Juice",
+    "image": "/uploads/watermelon_juice.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b236e",
+    "name": "Strawberry Milkshake",
+    "image": "/uploads/vanilla_milkshake.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2333",
+    "name": "Elaichi Tea",
+    "image": "/uploads/regular_tea.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2366",
+    "name": "Chocolate Milkshake",
+    "image": "/uploads/hazelnut_milkshake.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2330",
+    "name": "Black Tea",
+    "image": "/uploads/regular_tea.png",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2342",
+    "name": "Classic Coffee",
+    "image": "http://localhost:5000/uploads/dish-1781711651277-750398919.jpg",
+    "imageUrl": null
+  },
+  {
+    "_id": "6a2d354eff1b0feedd0b2383",
+    "name": "Veg Sandwich",
+    "image": "/uploads/muska_bun.png",
+    "imageUrl": null
+  }
+]

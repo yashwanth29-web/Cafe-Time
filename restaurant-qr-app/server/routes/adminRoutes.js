@@ -18,7 +18,8 @@ const {
   updateBranch,
   deleteBranch,
   getStaffSummary,
-  uploadLogo 
+  uploadLogo,
+  getStorageHealth
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -44,7 +45,18 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage,
-  limits: { fileSize: 2 * 1024 * 1024 } // Limit logo to 2MB
+  limits: { fileSize: 2 * 1024 * 1024 }, // Limit logo to 2MB
+  fileFilter: (req, file, cb) => {
+    const filetypes = /jpeg|jpg|png|webp/i;
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = filetypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only JPG, JPEG, PNG, and WEBP formats are supported!'));
+    }
+  }
 });
 
 // Staff Management Routes
@@ -68,5 +80,8 @@ router.get('/setup', restrictTo('admin', 'owner'), getSetupData);
 router.post('/setup', restrictTo('admin', 'owner'), saveSetupData);
 router.post('/verify-razorpay', restrictTo('admin', 'owner'), verifyRazorpay);
 router.post('/upload-logo', restrictTo('admin', 'owner'), upload.single('logo'), uploadLogo);
+
+// Storage Health Route
+router.get('/storage-health', restrictTo('admin', 'owner'), getStorageHealth);
 
 module.exports = router;

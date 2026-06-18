@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-06-18T05:32:02.308Z",
+  "totalGridFsFiles": 27,
+  "totalGridFsSizeMB": 0.686,
+  "orphanedFiles": [],
+  "reclaimableSpaceMB": 0,
+  "chunkIntegrity": {
+    "totalOrphanedChunks": 0,
+    "orphanedChunkFileIds": []
+  }
+}

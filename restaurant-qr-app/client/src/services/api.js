@@ -3,6 +3,15 @@ import axios from 'axios';
 // Dynamically determine the backend API base URL for deployment/local IP testing
 const getBaseURL = () => {
   const envUrl = import.meta.env.VITE_API_URL;
+
+  // In production, ignore localhost VITE_API_URL and fallback to dynamic origin routing
+  if (import.meta.env.PROD) {
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+      return envUrl;
+    }
+    return `${window.location.origin}/api`;
+  }
+
   if (envUrl) return envUrl;
 
   // If in production or accessed via non-localhost, dynamically match the window origin
@@ -17,12 +26,30 @@ const getBaseURL = () => {
 // Helper to format absolute asset URLs to use the current host (useful when testing via local network IPs)
 export const getAssetUrl = (url) => {
   if (!url) return '';
+  if (url.startsWith('/uploads')) {
+    const envUrl = import.meta.env.VITE_API_URL;
+    let apiBase = '';
+
+    if (import.meta.env.PROD) {
+      if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+        apiBase = envUrl.replace(/\/api$/, '');
+      } else {
+        apiBase = window.location.origin;
+      }
+    } else {
+      apiBase = envUrl ? envUrl.replace(/\/api$/, '') : '';
+    }
+
+    const origin = apiBase || (window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin);
+    return `${origin}${url}`;
+  }
   if (url.includes('localhost:5000') && window.location.hostname !== 'localhost') {
     const backendHost = window.location.port === '5173' ? `${window.location.hostname}:5000` : window.location.host;
     return url.replace('localhost:5000', backendHost);
   }
   return url;
 };
+
 
 const API = axios.create({
   baseURL: getBaseURL(),

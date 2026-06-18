@@ -39,6 +39,10 @@ app.use(express.json()); // Body parser
 // Connect to Database
 connectDB();
 
+// Initialize Storage Maintenance Scheduled Jobs
+const { initStorageMaintenanceJobs } = require('./jobs/storageMaintenanceJob');
+initStorageMaintenanceJobs();
+
 const fs = require('fs');
 
 // Ensure uploads folder exists on startup
@@ -47,7 +51,11 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Serve upload static assets
+// Serve upload static assets (GridFS persistent storage with local filesystem fallback)
+const { serveFromGridFS } = require('./utils/gridfs');
+app.get('/uploads/:filename', (req, res) => {
+  serveFromGridFS(req.params.filename, req, res);
+});
 app.use('/uploads', express.static(uploadsDir));
 
 // Mount Routes

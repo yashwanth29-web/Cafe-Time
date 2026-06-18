@@ -634,6 +634,14 @@ const uploadLogo = async (req, res) => {
     return res.status(400).json({ success: false, message: 'No logo file uploaded' });
   }
 
+  // Sync to GridFS
+  try {
+    const { syncToGridFS } = require('../utils/gridfs');
+    await syncToGridFS(req.file);
+  } catch (err) {
+    console.error('Error syncing logo to GridFS:', err);
+  }
+
   const protocol = req.protocol;
   const host = req.get('host');
   const logoUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
@@ -746,6 +754,20 @@ const deleteBranch = async (req, res) => {
   }
 };
 
+/**
+ * Retrieve Storage Health stats
+ */
+const getStorageHealth = async (req, res) => {
+  try {
+    const { getStorageHealthData } = require('../services/storageCleanupService');
+    const healthData = await getStorageHealthData();
+    return res.status(200).json(healthData);
+  } catch (error) {
+    console.error('getStorageHealth error:', error);
+    return res.status(500).json({ success: false, message: 'Server error retrieving storage health stats' });
+  }
+};
+
 module.exports = {
   createStaff,
   getStaff,
@@ -760,5 +782,6 @@ module.exports = {
   updateBranch,
   deleteBranch,
   getStaffSummary,
-  uploadLogo
+  uploadLogo,
+  getStorageHealth
 };

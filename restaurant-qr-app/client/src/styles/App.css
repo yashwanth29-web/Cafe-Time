@@ -105,6 +105,8 @@ body {
   align-items: center;
   gap: 10px;
   text-decoration: none;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .nav-brand-logo {
@@ -118,12 +120,16 @@ body {
   background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .table-badge {
@@ -136,6 +142,45 @@ body {
   font-size: 14px;
   letter-spacing: 0.5px;
   animation: pulse 2s infinite;
+  white-space: nowrap;
+}
+
+/* Mobile compact navbar — keep logo visible, shrink everything else */
+@media (max-width: 480px) {
+  .navbar {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .nav-brand {
+    gap: 6px;
+    flex-shrink: 1;
+    min-width: 40px;
+  }
+  .nav-brand-text {
+    display: none;
+  }
+  .nav-brand img {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .nav-right {
+    gap: 6px;
+  }
+  .table-badge {
+    padding: 4px 8px;
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+  .theme-toggle-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 15px;
+  }
+  .nav-cart-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
 }
 
 .nav-cart-icon {
@@ -1577,7 +1622,7 @@ textarea.form-input {
    ============================================================ */
 
 /* Mobile < 768px */
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   .mobile-header { display: flex !important; }
   .bottom-nav { display: flex !important; }
   .desktop-sidebar { display: none !important; }
@@ -1641,7 +1686,7 @@ textarea.form-input {
 }
 
 /* Mobile dashboard overrides */
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   .waiter-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
   .kitchen-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
   .mobile-only-tables { display: block !important; }
@@ -1658,7 +1703,7 @@ textarea.form-input {
   .desktop-tablet-manager-inventory { display: none !important; }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   .mobile-only-staff { display: block !important; }
   .desktop-tablet-staff { display: none !important; }
 }
@@ -1724,7 +1769,7 @@ textarea.form-input {
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   table th, table td {
     padding: 8px 6px !important;
     font-size: 11px !important;
@@ -1781,7 +1826,7 @@ textarea.form-input {
 }
 
 /* Typography scale-downs for metrics cards on mobile */
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   .analytics-card h4, .stat-card h4 {
     font-size: 10px !important;
     letter-spacing: 0.2px !important;
@@ -1819,3 +1864,445 @@ textarea.form-input {
     display: none !important;
   }
 }
+
+/* ============================================================
+   SAAS LAYOUT & COMPONENT POLISH
+   ============================================================ */
+
+:root {
+  --border-color: var(--color-border);
+}
+
+.dark {
+  --bg-primary: #121815;
+  --bg-secondary: #1C2420;
+  --bg-card: #181E1B;
+  --bg-card-hover: #1F2824;
+  --color-primary: #D49073;
+  --color-primary-hover: #E3A387;
+  --color-secondary: #E3A387;
+  --color-text-primary: #F8F5F0;
+  --color-text-secondary: #A38C7E;
+  --color-border: rgba(230, 213, 195, 0.15);
+  --border-color: rgba(230, 213, 195, 0.15);
+}
+
+/* Profile Dropdown Container & Text Styles */
+.profile-dropdown-card {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  width: 290px;
+  max-width: calc(100vw - 32px);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 18px;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  box-sizing: border-box;
+}
+
+.dropdown-title {
+  color: #111827 !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.dropdown-subtitle {
+  color: #6B7280 !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.dark .dropdown-title {
+  color: #F9FAFB !important;
+}
+
+.dark .dropdown-subtitle {
+  color: #9CA3AF !important;
+}
+
+/* Action Dropdown Buttons */
+.dropdown-action-btn,
+.dropdown-action-btn-danger {
+  height: 48px !important;
+  padding: 0 14px !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--color-text-primary) !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  transition: all 0.2s ease !important;
+  box-sizing: border-box !important;
+}
+
+.dropdown-action-btn:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+  transform: translateY(-1px) !important;
+}
+
+.dark .dropdown-action-btn:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Standardize All Cards */
+.analytics-card, 
+.stat-card, 
+.sec-card, 
+.chart-card, 
+.auth-card, 
+.order-card, 
+.cart-summary-card, 
+.customer-details-card, 
+.branch-card, 
+.reports-card, 
+.saas-card, 
+.profile-card, 
+.mcard, 
+.dashboard-card {
+  border-radius: 18px !important;
+  padding: 24px !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.04) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+@media (max-width: 767.98px) {
+  .analytics-card, 
+  .stat-card, 
+  .sec-card, 
+  .chart-card, 
+  .auth-card, 
+  .order-card, 
+  .cart-summary-card, 
+  .customer-details-card, 
+  .branch-card, 
+  .reports-card, 
+  .saas-card, 
+  .profile-card, 
+  .mcard, 
+  .dashboard-card {
+    padding: 16px !important;
+  }
+}
+
+.analytics-card:hover, 
+.stat-card:hover, 
+.sec-card:hover, 
+.chart-card:hover, 
+.order-card:hover, 
+.branch-card:hover, 
+.reports-card:hover, 
+.profile-card:hover, 
+.mcard:hover, 
+.dashboard-card:hover {
+  transform: translateY(-1px) !important;
+}
+
+.dark .analytics-card, 
+.dark .stat-card, 
+.dark .sec-card, 
+.dark .chart-card, 
+.dark .auth-card, 
+.dark .order-card, 
+.dark .cart-summary-card, 
+.dark .customer-details-card, 
+.dark .branch-card, 
+.dark .reports-card, 
+.dark .saas-card, 
+.dark .profile-card, 
+.dark .mcard, 
+.dark .dashboard-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Card grids spacing */
+.analytics-grid,
+.stats-row-1,
+.stat-card-grid,
+.card-deck,
+.menu-grid,
+.table-card-grid,
+.owner-double-deck,
+.menu-grid-admin,
+.card-grid {
+  gap: 24px !important;
+}
+
+/* Buttons */
+.btn,
+.btn-primary,
+.btn-secondary,
+.mbtn,
+.branch-btn-add,
+.btn-setup {
+  height: 44px !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease !important;
+}
+
+.btn:hover,
+.btn-primary:hover,
+.btn-secondary:hover,
+.mbtn:hover,
+.branch-btn-add:hover,
+.btn-setup:hover {
+  transform: translateY(-1px) !important;
+}
+
+/* Danger Button Styling */
+.btn-danger,
+.dropdown-action-btn-danger,
+.branch-btn-delete {
+  background: #FEF2F2 !important;
+  color: #DC2626 !important;
+  border: 1px solid #FCA5A5 !important;
+}
+
+.btn-danger:hover,
+.dropdown-action-btn-danger:hover,
+.branch-btn-delete:hover {
+  background: #FEE2E2 !important;
+  color: #DC2626 !important;
+  border-color: #F87171 !important;
+  transform: translateY(-1px) !important;
+}
+
+.dark .btn-danger,
+.dark .dropdown-action-btn-danger,
+.dark .branch-btn-delete {
+  background: rgba(220, 38, 38, 0.1) !important;
+  color: #F87171 !important;
+  border: 1px solid rgba(220, 38, 38, 0.3) !important;
+}
+
+.dark .btn-danger:hover,
+.dark .dropdown-action-btn-danger:hover,
+.dark .branch-btn-delete:hover {
+  background: rgba(220, 38, 38, 0.15) !important;
+  border-color: rgba(220, 38, 38, 0.5) !important;
+}
+
+/* Sidebar Menu Buttons */
+.sidebar-menu-btn {
+  height: 44px !important;
+  padding: 0 14px !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--color-text-secondary) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  transition: all 0.2s ease !important;
+  box-sizing: border-box !important;
+  margin-bottom: 4px !important;
+}
+
+.sidebar-menu-btn:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.dark .sidebar-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.sidebar-menu-btn.active {
+  background: rgba(194, 125, 95, 0.12) !important;
+  color: var(--color-primary) !important;
+  font-weight: 600 !important;
+}
+
+/* Top Header */
+@media (min-width: 768px) {
+  .desktop-top-header {
+    height: 72px !important;
+    padding: 16px 24px !important;
+    gap: 16px !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    background: var(--bg-card) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* Table container wrapper to prevent page-level horizontal scroll */
+.table-container {
+  overflow-x: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  -webkit-overflow-scrolling: touch !important;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+/* Table elements responsiveness & styling */
+table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+}
+
+tr:hover {
+  background-color: rgba(194, 125, 95, 0.04) !important;
+}
+
+.dark tr:hover {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+th, td {
+  padding: 12px 16px !important;
+  transition: padding 0.2s ease !important;
+}
+
+@media (max-width: 768px) {
+  th, td {
+    padding: 8px 10px !important;
+    font-size: 13px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  th, td {
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* Forms & Inputs */
+input, select, textarea, .minput {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.saas-content-inner, .saas-main-pane {
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+/* Small Button Styling for Tables and Lists */
+.btn-sm,
+.table-action-btn,
+.branch-action-btn,
+.menu-card-btn {
+  height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: auto !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Theme toggle button — icon-only with dropdown */
+.theme-toggle-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.theme-toggle-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--bg-card);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  outline: none;
+  padding: 0;
+}
+.theme-toggle-btn:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+.theme-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+.theme-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+  padding: 6px;
+  z-index: 200;
+  min-width: 140px;
+  animation: themeDropIn 0.15s ease;
+}
+
+@keyframes themeDropIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.theme-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  transition: background 0.15s ease;
+}
+.theme-dropdown-item:hover {
+  background: var(--bg-secondary);
+}
+.theme-dropdown-item.active {
+  background: rgba(255, 107, 8, 0.1);
+  color: var(--color-primary);
+}
+
+.theme-dropdown-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.theme-dropdown-label {
+  line-height: 1;
+}
+

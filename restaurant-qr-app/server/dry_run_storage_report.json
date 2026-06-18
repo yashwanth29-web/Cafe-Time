@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-06-18T02:57:49.911Z",
+  "dryRun": true,
+  "expiredWorkReports": [
+    {
+      "reportId": "6a2d836aeac09168826a7a41",
+      "staffName": "jk_chef",
+      "createdAt": "2026-06-13T16:20:58.325Z",
+      "photos": [
+        "http://localhost:5000/uploads/report-1781367658184-159544597.png"
+      ],
+      "gridFsFileIds": [],
+      "gridFsFileId": null
+    },
+    {
+      "reportId": "6a2d83a6eac09168826a8071",
+      "staffName": "sai5_chef",
+      "createdAt": "2026-06-13T16:21:58.046Z",
+      "photos": [
+        "http://localhost:5000/uploads/report-1781367718029-947075926.png"
+      ],
+      "gridFsFileIds": [],
+      "gridFsFileId": null
+    }
+  ]
+}

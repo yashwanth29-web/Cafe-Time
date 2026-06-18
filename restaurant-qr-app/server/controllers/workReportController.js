@@ -12,41 +12,14 @@ const getISTDate = (date = new Date()) => {
 };
 
 /**
- * Auto-cleanup: Purges reports and deletes their files if created > 24 hours ago
+ * Auto-cleanup: Purges expired attachments of work reports via storageCleanupService
  */
 const runAutoCleanup = async () => {
   try {
-    const cutOff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
-    const expiredReports = await WorkReport.find({ createdAt: { $lt: cutOff } });
-
-    if (expiredReports.length === 0) {
-      return { success: true, count: 0 };
-    }
-
-    let deletedFiles = 0;
-    for (const report of expiredReports) {
-      if (report.photos && Array.isArray(report.photos)) {
-        for (const photoUrl of report.photos) {
-          try {
-            // photoUrl format: http://domain/uploads/report-xxxx.png
-            const filename = photoUrl.substring(photoUrl.lastIndexOf('/') + 1);
-            const filePath = path.join(__dirname, '../public/uploads', filename);
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-              deletedFiles++;
-            }
-          } catch (fileErr) {
-            console.error(`[AUTO-CLEANUP] Failed to delete image file: ${photoUrl}`, fileErr);
-          }
-        }
-      }
-      await WorkReport.findByIdAndDelete(report._id);
-    }
-
-    console.log(`[AUTO-CLEANUP] Purged ${expiredReports.length} reports and deleted ${deletedFiles} image files (24h retention policy).`);
-    return { success: true, reportsPurged: expiredReports.length, filesDeleted: deletedFiles };
+    const { cleanupExpiredWorkReports } = require('../services/storageCleanupService');
+    return await cleanupExpiredWorkReports();
   } catch (error) {
-    console.error('[AUTO-CLEANUP] Critical error in purging expired work reports:', error);
+    console.error('[AUTO-CLEANUP] Error delegating to storageCleanupService:', error);
     return { success: false, error: error.message };
   }
 };
@@ -115,6 +88,25 @@ const createReport = async (req, res) => {
     const host = req.get('host');
     const photos = req.files.map(file => `${protocol}://${host}/uploads/${file.filename}`);
 
+    // Sync to GridFS
+    const gridFsFileIds = [];
+    const gridFsFilenames = [];
+    try {
+      const { syncToGridFS } = require('../utils/gridfs');
+      for (const file of req.files) {
+        const gfsFile = await syncToGridFS(file);
+        if (gfsFile) {
+          gridFsFileIds.push(gfsFile._id);
+          gridFsFilenames.push(gfsFile.filename);
+        }
+      }
+    } catch (err) {
+      console.error('Error syncing work report photos to GridFS:', err);
+    }
+
+    const gridFsFileId = gridFsFileIds.length > 0 ? gridFsFileIds[0] : null;
+    const gridFsFilename = gridFsFilenames.length > 0 ? gridFsFilenames[0] : '';
+
     // 4. Create work report
     const newReport = await WorkReport.create({
       staffId,
@@ -124,7 +116,11 @@ const createReport = async (req, res) => {
       cafeId: staff.cafeId,
       notes: notes || '',
       photos,
-      date: getISTDate()
+      date: getISTDate(),
+      gridFsFileIds,
+      gridFsFilenames,
+      gridFsFileId,
+      gridFsFilename
     });
 
     return res.status(201).json({
