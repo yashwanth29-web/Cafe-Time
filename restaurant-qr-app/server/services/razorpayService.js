@@ -106,8 +106,26 @@ const verifyPaymentSignature = async (cafeId, orderId, paymentId, signature) => 
   }
 };
 
+/**
+ * Verifies Razorpay payment status by fetching the order directly from Razorpay
+ * @param {string} cafeId The ID of the cafe
+ * @param {string} razorpayOrderId Razorpay order ID
+ * @returns {Promise<Object>} The order details from Razorpay
+ */
+const verifyOrderOnRazorpay = async (cafeId, razorpayOrderId) => {
+  try {
+    const razorpay = await getRazorpayInstance(cafeId);
+    const order = await razorpay.orders.fetch(razorpayOrderId);
+    return order;
+  } catch (error) {
+    console.error('Error fetching order from Razorpay:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   createRazorpayOrder,
   verifyPaymentSignature,
-  getRazorpayKeyId
+  getRazorpayKeyId,
+  verifyOrderOnRazorpay
 };

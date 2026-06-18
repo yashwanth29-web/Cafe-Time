@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const { deductInventoryForOrder } = require('./inventoryController');
+const { verifyOrderOnRazorpay } = require('../services/razorpayService');
 
 // @desc    Create a new order
 // @route   POST /api/orders
@@ -65,10 +66,28 @@ const getOrders = async (req, res) => {
 const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findById(id);
+    let order = await Order.findById(id);
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
+
+    // --- LAZY VERIFICATION LOGIC ---
+    if (order.paymentStatus === 'Pending' && order.razorpayOrderId) {
+      try {
+        const rzpOrder = await verifyOrderOnRazorpay(order.cafeId, order.razorpayOrderId);
+        if (rzpOrder && rzpOrder.status === 'paid') {
+          order.paymentStatus = 'Paid';
+          if (order.status === 'Placed') {
+            order.status = 'Preparing';
+          }
+          await order.save();
+          console.log(`Lazy Verification: Auto-healed order ${order._id} to Paid`);
+        }
+      } catch (rzpError) {
+        console.error('Lazy Verification failed for order:', id, rzpError.message);
+      }
+    }
+
     return res.status(200).json({ success: true, data: order });
   } catch (error) {
     console.error('Error fetching single order:', error);
