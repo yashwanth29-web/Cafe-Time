@@ -117,7 +117,7 @@ const updateOrderStatus = async (req, res) => {
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
       updateFields,
-      { new: true, returnDocument: 'after', runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedOrder) {
@@ -154,7 +154,7 @@ const updateOrderPaymentMethod = async (req, res) => {
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
       { paymentMethod },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedOrder) {
