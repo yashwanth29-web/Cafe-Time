@@ -3232,10 +3232,10 @@ const OwnerDashboard = () =>{
  const supItems = inventoryList.filter((item) =>(item.supplier || 'Unassigned Supplier') === sup);
  const totalSupplierValue = supItems.reduce((sum, i) =>sum + (i.quantity || i.stock) * (i.costPrice || i.cost), 0);
  return (
-<div key={sup} style={{ background: '#1F140E', border: '1px solid #432E22', borderRadius: '12px', padding: '16px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #432E22', paddingBottom: '8px', marginBottom: '12px' }}>
+<div key={sup} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '12px' }}>
 <strong style={{ color: 'var(--color-text-primary)', fontSize: '1rem' }}>{sup}</strong>
-<span style={{ fontSize: '11px', background: '#6F4E37', color: 'var(--color-text-primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+<span style={{ fontSize: '11px', background: 'var(--color-primary)', color: '#ffffff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
  {supItems.length} Products
 </span>
 </div>
@@ -3247,7 +3247,7 @@ const OwnerDashboard = () =>{
 </div>
 )}
 </div>
-<div style={{ borderTop: '1px dashed #432E22', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+<div style={{ borderTop: '1px dashed var(--color-border)', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
 <span>Total Value:</span>
 <strong style={{ color: '#2ECC71' }}>₹{totalSupplierValue.toFixed(2)}</strong>
 </div>

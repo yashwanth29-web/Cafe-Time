@@ -96,4 +96,9 @@ const OrderSchema = new mongoose.Schema({
   }
 });
 
+// Indexes for scalability and query optimization
+OrderSchema.index({ cafeId: 1, createdAt: -1 });
+OrderSchema.index({ cafeId: 1, status: 1 });
+OrderSchema.index({ cafeId: 1, tableNumber: 1, status: 1 });
+
 module.exports = mongoose.model('Order', OrderSchema);
