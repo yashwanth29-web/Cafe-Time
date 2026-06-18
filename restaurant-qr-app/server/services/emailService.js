@@ -11,6 +11,18 @@ const resend = new Resend(resendApiKey);
  */
 const sendOTP = async (email, otp) => {
   try {
+    console.log(`\n======================================================`);
+    console.log(`[DEVELOPMENT/BYPASS MODE]`);
+    console.log(`To: ${email}`);
+    console.log(`OTP Code: ${otp}`);
+    console.log(`======================================================\n`);
+
+    // Check if we have a valid Resend API key (they start with 're_')
+    if (!resendApiKey || !resendApiKey.startsWith('re_')) {
+      console.log(`[Info] Skipping Resend delivery because a valid Resend API key was not found. Valid keys start with 're_'.`);
+      return { success: true, messageId: 'simulated-id-dev-mode' };
+    }
+
     const { data, error } = await resend.emails.send({
       from: 'Cypher\'s Café <onboarding@resend.dev>', // Free tier domain
       to: email,

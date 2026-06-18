@@ -3,6 +3,9 @@ const User = require('../models/User');
 const OtpVerification = require('../models/OtpVerification');
 const Cafe = require('../models/Cafe');
 const emailService = require('../services/emailService');
+const { OAuth2Client } = require('google-auth-library');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Cookie options helper
 const getCookieOptions = () => ({
@@ -318,10 +321,117 @@ const getMe = async (req, res) => {
   });
 };
 
+
+/**
+ * Google OAuth Login
+ */
+const googleLogin = async (req, res) => {
+  const { credential } = req.body;
+
+  if (!credential) {
+    return res.status(400).json({ success: false, message: 'Google credential is required' });
+  }
+
+  try {
+    // Verify the Google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { email, name } = payload;
+    
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Could not extract email from Google token' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+
+    let user;
+
+    if (isSuperAdmin) {
+      user = await User.findOne({ email: cleanEmail });
+      if (!user) {
+        user = await User.create({
+          name: name || 'Super Admin',
+          email: cleanEmail,
+          phone: 'N/A',
+          role: 'super_admin',
+          cafeId: '',
+          isActive: true
+        });
+      }
+    } else {
+      user = await User.findOne({ email: cleanEmail });
+      if (!user) {
+        // Automatically create a new account for any email
+        user = await User.create({
+          name: name || 'Demo User',
+          email: cleanEmail,
+          phone: 'N/A',
+          role: 'owner', // Default role so they can access the dashboard
+          cafeId: 'CD001', // Assign to seeded Demo Cafe
+          isActive: true
+        });
+      } else if (!user.isActive) {
+        return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
+      }
+
+      // Self-heal existing corrupted demo users who have an empty cafeId
+      if (user.role === 'owner' && !user.cafeId) {
+        user.cafeId = 'CD001';
+        await user.save();
+      }
+    }
+
+    // Update login timestamps
+    const now = new Date();
+    user.lastLogin = now;
+    user.lastSeen = now;
+    await user.save();
+
+    // Sign JWT token
+    const token = jwt.sign(
+      { id: user._id, role: user.role, cafeId: user.cafeId },
+      process.env.JWT_SECRET || 'super_secret_cafe_key_12345',
+      { expiresIn: '7d' }
+    );
+
+    // Save token in cookie
+    res.cookie('token', token, getCookieOptions());
+
+    let setupCompleted = true; // In demo mode, bypass setup wizard
+
+    return res.status(200).json({
+      success: true,
+      message: 'Logged in successfully with Google',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        cafeId: user.cafeId,
+        isActive: user.isActive,
+        lastLogin: user.lastLogin,
+        lastSeen: user.lastSeen,
+        setupCompleted
+      },
+      token
+    });
+
+  } catch (error) {
+    console.error('googleLogin controller error:', error);
+    return res.status(401).json({ success: false, message: 'Google Authentication failed' });
+  }
+};
+
 module.exports = {
   sendOTP,
   verifyOTP,
   resendOTP,
   logout,
-  getMe
+  getMe,
+  googleLogin
 };

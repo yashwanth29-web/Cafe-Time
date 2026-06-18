@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import API, { getMe, sendOtp, verifyOtp, logoutUser } from '../services/api';
+import API, { getMe, sendOtp, verifyOtp, logoutUser, loginWithGoogleApi } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -94,6 +94,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
+   * Login with Google credential
+   */
+  const loginWithGoogle = async (credential) => {
+    setError(null);
+    try {
+      const response = await loginWithGoogleApi(credential);
+      if (response.success && response.user) {
+        if (response.token) {
+          localStorage.setItem('token', response.token);
+        }
+        setUser(response.user);
+      }
+      return response;
+    } catch (err) {
+      const errMsg = err.response?.data?.message || 'Google authentication failed. Please try again.';
+      setError(errMsg);
+      throw new Error(errMsg);
+    }
+  };
+
+  /**
    * Log out the active session
    */
   const logout = async () => {
@@ -115,6 +136,7 @@ export const AuthProvider = ({ children }) => {
         error,
         initiateLogin,
         confirmOtp,
+        loginWithGoogle,
         logout,
         checkSession,
         setUser

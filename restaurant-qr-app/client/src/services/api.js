@@ -179,6 +179,11 @@ export const logoutUser = async () => {
   return response.data;
 };
 
+export const loginWithGoogleApi = async (credential) => {
+  const response = await API.post('/auth/google', { credential });
+  return response.data;
+};
+
 export const getMe = async () => {
   const response = await API.get('/auth/me');
   return response.data;

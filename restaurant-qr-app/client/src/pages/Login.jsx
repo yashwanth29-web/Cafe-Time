@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import '../styles/Auth.css';
 
@@ -7,8 +8,10 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const { initiateLogin, user } = useAuth();
+  const { initiateLogin, loginWithGoogle, user } = useAuth();
   const navigate = useNavigate();
+  
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'placeholder_client_id_please_replace_me.apps.googleusercontent.com';
 
   // If already logged in, redirect to the appropriate dashboard
   useEffect(() => {
@@ -60,8 +63,25 @@ const Login = () => {
     }
   };
 
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setLoading(true);
+      setErrorMsg('');
+      await loginWithGoogle(credentialResponse.credential);
+      // AuthContext useEffect will automatically handle the redirect once user state is set
+    } catch (err) {
+      setErrorMsg(err.message || 'Google login failed.');
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    setErrorMsg('Google Login was unsuccessful. Please try again.');
+  };
+
   return (
-    <div className="auth-wrapper">
+    <GoogleOAuthProvider clientId={googleClientId}>
+      <div className="auth-wrapper">
       <div className="auth-card">
         <div className="auth-brand">
           <img src="/logo.png" alt="Cypher's Café Logo" style={{ height: '75px', width: '75px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #6F4E37', marginBottom: '12px', display: 'inline-block' }} />
@@ -105,12 +125,30 @@ const Login = () => {
           </button>
         </form>
 
+        <div style={{ display: 'flex', alignItems: 'center', margin: '20px 0' }}>
+          <hr style={{ flex: 1, borderTop: '1px solid #D4C3B3' }} />
+          <span style={{ padding: '0 10px', color: '#A0826C', fontSize: '14px' }}>OR</span>
+          <hr style={{ flex: 1, borderTop: '1px solid #D4C3B3' }} />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            theme="outline"
+            size="large"
+            text="signin_with"
+            shape="rectangular"
+          />
+        </div>
+
         <p className="auth-info-text">
           Enter your registered email address to receive a one-time verification password (OTP). 
           For customers placing table orders, no login is required.
         </p>
       </div>
-    </div>
+      </div>
+    </GoogleOAuthProvider>
   );
 };
 
