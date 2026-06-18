@@ -445,18 +445,28 @@ const RECIPES = {
 };
 
 // Auto-update menu item availability based on ingredient stock levels
-const updateMenuItemAvailabilityFromInventory = async (cafeId) => {
+const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null) => {
   try {
     const MenuItem = require('../models/MenuItem');
-    const menuItems = await MenuItem.find();
+    
+    // Fetch inventory into memory ONCE (O(1) lookups)
+    const allInventory = await Inventory.find({ cafeId }).lean();
+    const invMap = {};
+    for (const inv of allInventory) {
+      invMap[inv.name.toLowerCase()] = inv.quantity;
+    }
+
+    const query = itemId ? { _id: itemId } : {};
+    const menuItems = await MenuItem.find(query);
     
     for (const item of menuItems) {
       if (item.recipe && item.recipe.length > 0) {
         let shouldBeAvailable = true;
         
         for (const ing of item.recipe) {
-          const invItem = await Inventory.findOne({ cafeId, name: ing.name });
-          if (!invItem || invItem.quantity <= 0) {
+          const ingName = ing.name.toLowerCase();
+          const qty = invMap[ingName] || 0;
+          if (qty <= 0) {
             shouldBeAvailable = false;
             break;
           }
@@ -465,7 +475,6 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId) => {
         if (item.available !== shouldBeAvailable) {
           item.available = shouldBeAvailable;
           await item.save();
-          console.log(`Auto-updated menu item "${item.name}" availability to ${shouldBeAvailable} based on inventory levels.`);
         }
       }
     }

@@ -91,7 +91,19 @@ const OwnerProfilePage = () => {
     setLoading(true);
     try {
       const [r, br, st] = await Promise.all([getSetupData(), getBranches(), getStaff()]);
-      if (r.success) {setCafeData(r.cafe);setPaymentConfig(r.paymentConfig);setOpsConfig(r.operationalConfig);}
+      if (r.success) {
+        setCafeData(r.cafe);
+        setPaymentConfig(r.paymentConfig);
+        setOpsConfig(r.operationalConfig);
+        if (r.cafe.gstRate !== undefined) {
+          setTaxRateState(r.cafe.gstRate);
+          localStorage.setItem('owner_tax_rate', String(r.cafe.gstRate));
+        }
+        if (r.cafe.serviceChargeRate !== undefined) {
+          setServiceChargeState(r.cafe.serviceChargeRate);
+          localStorage.setItem('owner_service_charge', String(r.cafe.serviceChargeRate));
+        }
+      }
       if (br.success) setBranches(br.branches || []);
       if (st.success) setStaffCount(st.staff?.length || 0);
     } catch {showToast('Failed to load.', false);} finally
@@ -131,7 +143,7 @@ const OwnerProfilePage = () => {
       if (activeModal === 'hours') await saveSetupData(form);else
       if (activeModal === 'payment') {
         const { taxRate: newTaxRate, serviceCharge: newServiceCharge, ...paymentFields } = form;
-        await saveSetupData({ paymentConfig: paymentFields });
+        await saveSetupData({ paymentConfig: paymentFields, taxRate: newTaxRate, serviceCharge: newServiceCharge });
         localStorage.setItem('owner_tax_rate', String(newTaxRate !== undefined ? newTaxRate : 5));
         localStorage.setItem('owner_service_charge', String(newServiceCharge !== undefined ? newServiceCharge : 0));
         setTaxRateState(parseFloat(newTaxRate !== undefined ? newTaxRate : 5));

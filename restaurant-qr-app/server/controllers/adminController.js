@@ -348,18 +348,22 @@ const saveSetupData = async (req, res) => {
 
     // 2. Save PaymentConfig (Encrypting the Razorpay Secret)
     if (paymentConfig) {
-      const encryptedSecret = encrypt(paymentConfig.razorpaySecret);
+      const updateData = {
+        razorpayKeyId: paymentConfig.razorpayKeyId,
+        upiId: paymentConfig.upiId,
+        bankHolderName: paymentConfig.bankHolderName,
+        accountNumber: paymentConfig.accountNumber,
+        ifscCode: paymentConfig.ifscCode,
+        isVerified: paymentConfig.isVerified || false
+      };
+
+      if (paymentConfig.razorpaySecret) {
+        updateData.razorpaySecretEncrypted = encrypt(paymentConfig.razorpaySecret);
+      }
+
       await PaymentConfig.findOneAndUpdate(
         { cafeId },
-        {
-          razorpayKeyId: paymentConfig.razorpayKeyId,
-          razorpaySecretEncrypted: encryptedSecret,
-          upiId: paymentConfig.upiId,
-          bankHolderName: paymentConfig.bankHolderName,
-          accountNumber: paymentConfig.accountNumber,
-          ifscCode: paymentConfig.ifscCode,
-          isVerified: paymentConfig.isVerified || false
-        },
+        updateData,
         { upsert: true, returnDocument: 'after' }
       );
     }
