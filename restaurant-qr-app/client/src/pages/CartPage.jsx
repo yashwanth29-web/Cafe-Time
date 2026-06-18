@@ -327,7 +327,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         customerEmail: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
         customerPhone: customerPhone || (isStaff ? '0000000000' : ''),
         specialInstructions,
-        cafeId: cafeId || 'CD001',
+        cafeId: user?.cafeId || cafeId || 'CD001',
         source: isStaff ? 'STAFF' : 'QR',
         staffId: isStaff && user ? user._id : undefined
       };

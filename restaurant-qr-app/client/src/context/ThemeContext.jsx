@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import API from '../services/api';
 import { useAuth } from './AuthContext';
 
 const ThemeContext = createContext();
@@ -20,9 +20,9 @@ export const ThemeProvider = ({ children }) => {
     const fetchCafeTheme = async () => {
       if (user && user.cafeId) {
         try {
-          const res = await axios.get('/api/admin/setup', { withCredentials: true });
-          if (res.data.success && res.data.cafe && res.data.cafe.uiPrimaryColor) {
-            setPrimaryColor(res.data.cafe.uiPrimaryColor);
+          const res = await API.get(`/cafe/${user.cafeId}`);
+          if (res.data.success && res.data.data && res.data.data.uiPrimaryColor) {
+            setPrimaryColor(res.data.data.uiPrimaryColor);
           }
         } catch (err) {
           console.error("Failed to fetch cafe theme:", err);
@@ -90,7 +90,7 @@ export const ThemeProvider = ({ children }) => {
     setPrimaryColor(color);
     if (user && ['admin', 'owner'].includes(user.role)) {
       try {
-        await axios.put('/api/admin/theme', { uiPrimaryColor: color }, { withCredentials: true });
+        await API.put('/admin/theme', { uiPrimaryColor: color });
       } catch (err) {
         console.error("Failed to save theme color to DB:", err);
       }

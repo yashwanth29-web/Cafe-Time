@@ -178,7 +178,7 @@ const WaiterDashboard = () =>{
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff`;
+            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`;
           }
         }}
       />
@@ -193,7 +193,7 @@ const WaiterDashboard = () =>{
           Cancel
         </button>
         <button
-          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff`}
+          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`}
           style={{
             padding: '10px 16px', borderRadius: '8px', border: 'none',
             background: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 'bold'
