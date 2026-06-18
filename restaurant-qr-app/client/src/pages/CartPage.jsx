@@ -9,8 +9,8 @@ import { useAuth } from '../context/AuthContext';
 const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isUserStaff = user && ['admin', 'owner', 'manager', 'waiter', 'cashier', 'staff'].includes(user.role);
-  const isStaff = isUserStaff || sessionStorage.getItem('orderSource') === 'staff';
+  // Only consider it a staff order if explicitly marked in session storage, allowing admins to test as customers
+  const isStaff = sessionStorage.getItem('orderSource') === 'staff';
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -546,38 +546,37 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
             <div style={{ marginTop: '24px' }}>
               <button
-              onClick={handlePlaceOrder}
-              className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone)) ? 'btn-disabled' : ''}`}
-              disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone))}
-              style={{
-                width: '100%',
-                padding: '14px 20px',
-                fontSize: '16px',
-                fontWeight: '800',
-                borderRadius: '12px',
-                border: 'none',
-                background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
-                color: 'var(--color-text-primary)',
-                cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone)) ? 'not-allowed' : 'pointer'
-              }}>
-              
-                {loading ?
-              <>
+                onClick={handlePlaceOrder}
+                className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone)) ? 'btn-disabled' : ''}`}
+                disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone))}
+                style={{
+                  width: '100%',
+                  padding: '14px 20px',
+                  fontSize: '16px',
+                  fontWeight: '800',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
+                  color: 'var(--color-text-primary)',
+                  cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone)) ? 'not-allowed' : 'pointer'
+                }}>
+                {loading ? (
+                  <>
                     <span className="spinner-rzp" style={{
-                  width: '20px',
-                  height: '20px',
-                  border: '3px solid rgba(0, 0, 0,0.3)',
-                  borderTop: '3px solid #ffffff',
-                  borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite',
-                  display: 'inline-block',
-                  marginRight: '8px'
-                }}></span>
+                      width: '20px',
+                      height: '20px',
+                      border: '3px solid rgba(0, 0, 0,0.3)',
+                      borderTop: '3px solid #ffffff',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite',
+                      display: 'inline-block',
+                      marginRight: '8px'
+                    }}></span>
                     Placing order...
-                  </> :
-
-              'Place Order'
-              }
+                  </>
+                ) : (
+                  isStaff ? 'Place Order (Staff)' : 'Place Order'
+                )}
               </button>
             </div>
           </div>
