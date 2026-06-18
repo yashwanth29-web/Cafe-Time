@@ -551,9 +551,7 @@ const uploadLogo = async (req, res) => {
     return res.status(400).json({ success: false, message: 'No logo file uploaded' });
   }
 
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const logoUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  const logoUrl = `/uploads/${req.file.filename}`;
 
   return res.status(200).json({
     success: true,

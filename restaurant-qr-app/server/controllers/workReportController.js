@@ -110,10 +110,8 @@ const createReport = async (req, res) => {
       }
     }
 
-    // 3. Construct absolute image URLs
-    const protocol = req.protocol;
-    const host = req.get('host');
-    const photos = req.files.map(file => `${protocol}://${host}/uploads/${file.filename}`);
+    // 3. Construct relative image URLs
+    const photos = req.files.map(file => `/uploads/${file.filename}`);
 
     // 4. Create work report
     const newReport = await WorkReport.create({
