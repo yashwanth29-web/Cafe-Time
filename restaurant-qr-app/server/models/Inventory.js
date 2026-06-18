@@ -90,4 +90,7 @@ InventorySchema.pre('save', function() {
   }
 });
 
+// Performance Indexes
+InventorySchema.index({ cafeId: 1, name: 1 });
+
 module.exports = mongoose.model('Inventory', InventorySchema);

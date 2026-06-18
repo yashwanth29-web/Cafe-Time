@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import {
  getOrders,
@@ -43,6 +43,7 @@ import {
 '../services/api';
 import { useAuth } from '../context/AuthContext';
 import OwnerLayout from '../components/OwnerLayout';
+import { useSocket } from '../hooks/useSocket';
 
 const AdminMenuImage = ({ item }) =>{
  const isValidUrl = (url) =>{
@@ -107,6 +108,7 @@ const AdminMenuImage = ({ item }) =>{
 const OwnerDashboard = () =>{
  const { logout, user } = useAuth();
  const navigate = useNavigate();
+ const { socket, reconnectTrigger } = useSocket();
  const location = useLocation();
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
@@ -157,6 +159,7 @@ const OwnerDashboard = () =>{
 
  // Base Data States
  const [orders, setOrders] = useState([]);
+ const [overviewFilterBranch, setOverviewFilterBranch] = useState('');
  const [ordersLoading, setOrdersLoading] = useState(true);
  const [ordersError, setOrdersError] = useState('');
  const [orderDateFilter, setOrderDateFilter] = useState(() => {
@@ -164,6 +167,7 @@ const OwnerDashboard = () =>{
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
  });
  const [orderSearchQuery, setOrderSearchQuery] = useState('');
+ const [ownerCollapsedTables, setOwnerCollapsedTables] = useState({});
  const [menuItems, setMenuItems] = useState([]);
  const [menuLoading, setMenuLoading] = useState(false);
  const [menuError, setMenuError] = useState('');
@@ -311,8 +315,8 @@ const OwnerDashboard = () =>{
  const [razorpaySecret, setRazorpaySecret] = useState('');
  const [isRazorpayVerified, setIsRazorpayVerified] = useState(false);
  const [verifyingKeys, setVerifyingKeys] = useState(false);
- const [taxRate, setTaxRate] = useState(5); // mock GST
- const [serviceCharge, setServiceCharge] = useState(2.5); // mock service charge
+ const [taxRate, setTaxRate] = useState(0);
+ const [serviceCharge, setServiceCharge] = useState(0);
  const [settingsMsg, setSettingsMsg] = useState('');
 
  // Database Inventory State
@@ -375,17 +379,17 @@ const OwnerDashboard = () =>{
  const [menuSearch, setMenuSearch] = useState('');
  const [inventorySearch, setInventorySearch] = useState('');
 
- const filteredMenuItems = menuItems.filter((item) =>
- item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
- (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
-);
+  const filteredMenuItems = useMemo(() => menuItems.filter((item) =>
+    item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+    (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
+  ), [menuItems, menuSearch]);
 
-  const filteredInventoryList = inventoryList.filter((item) =>
-  item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-  (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
-);
+  const filteredInventoryList = useMemo(() => inventoryList.filter((item) =>
+    item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+    (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
+  ), [inventoryList, inventorySearch]);
 
-  const filteredStaff = staff.filter(member => {
+  const filteredStaff = useMemo(() => staff.filter(member => {
     const query = staffSearchQuery.toLowerCase();
     const matchesSearch = !staffSearchQuery || 
       (member.name || '').toLowerCase().includes(query) ||
@@ -400,7 +404,7 @@ const OwnerDashboard = () =>{
     );
 
     return matchesSearch && matchesRole && matchesBranch && matchesStatus;
-  });
+  }), [staff, staffSearchQuery, staffFilterRole, staffFilterBranch, staffFilterStatus]);
 
  const [imageUploading, setImageUploading] = useState(false);
 
@@ -438,24 +442,28 @@ const OwnerDashboard = () =>{
  'French Fries'];
 
  // Load Setup Config
- const loadSetupConfig = async () =>{
- try {
- const res = await getSetupData();
- if (res.success) {
- if (res.operationalConfig?.tables) {
- const t = res.operationalConfig.tables.map((tbl) =>tbl.id.replace('T', ''));
- if (t.length >0) setDynamicTables(t);
- }
- if (res.paymentConfig) {
- setRazorpayKeyId(res.paymentConfig.razorpayKeyId || '');
- setRazorpaySecret(res.paymentConfig.razorpaySecret || '');
- setIsRazorpayVerified(res.paymentConfig.isVerified || false);
- }
- }
- } catch (err) {
- console.error('Error fetching tables/keys setup:', err);
- }
- };
+  const loadSetupConfig = async () =>{
+    try {
+      const res = await getSetupData();
+      if (res.success) {
+        if (res.operationalConfig?.tables) {
+          const t = res.operationalConfig.tables.map((tbl) =>tbl.id.replace('T', ''));
+          if (t.length >0) setDynamicTables(t);
+        }
+        if (res.paymentConfig) {
+          setRazorpayKeyId(res.paymentConfig.razorpayKeyId || '');
+          setRazorpaySecret(res.paymentConfig.razorpaySecret || '');
+          setIsRazorpayVerified(res.paymentConfig.isVerified || false);
+        }
+        if (res.cafe) {
+          if (res.cafe.gstRate !== undefined) setTaxRate(res.cafe.gstRate);
+          if (res.cafe.serviceChargeRate !== undefined) setServiceCharge(res.cafe.serviceChargeRate);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching tables/keys setup:', err);
+    }
+  };
 
  // Fetch Orders (Monitoring)
  const fetchOrders = async () =>{
@@ -698,7 +706,7 @@ const OwnerDashboard = () =>{
  setStaff(response.staff);
  setStaffError('');
  } else {
- setStaffError('Failed to load jail barrier.');
+ setStaffError('Failed to load staff list.');
  }
  } catch (error) {
  console.error('Error fetching staff:', error);
@@ -854,47 +862,127 @@ const OwnerDashboard = () =>{
  fetchInventoryCategories();
  }
 
-  // Live background polling for orders (real-time visibility)
+  // Live background polling for orders (recovery check)
   const pollingInterval = setInterval(() =>{
-  fetchOrders();
-  }, 10000); // Poll orders every 10 seconds
+    console.log('[POLLING] Owner Dashboard: Running 60s recovery check...');
+    fetchOrders();
+  }, 60000);
 
   // Separate interval for heavier but still useful background updates (inventory list and reviews)
   const heavyPollingInterval = setInterval(() => {
-  if (activeTab === 'inventory') {
-  const fetchInventoryListSilent = async () => {
-  try {
-  const invRes = await getInventory();
-  if (invRes.success) setInventoryList(invRes.data);
-  } catch (err) {
-  console.error('Silent inventory refresh failed:', err);
-  }
-  };
-  fetchInventoryListSilent();
-  }
-  if (activeTab === 'menu' && menuSubTab === 'reviews') {
-  const fetchReviewsSilent = async () => {
-  try {
-  const params = {};
-  if (reviewsFilterRating) params.rating = reviewsFilterRating;
-  const response = await getReviews(params);
-  if (response && response.success) {
-  setReviews(response.data || []);
-  if (response.summary) setReviewsSummary(response.summary);
-  }
-  } catch (err) {
-  console.error('Silent reviews refresh failed:', err);
-  }
-  };
-  fetchReviewsSilent();
-  }
-  }, 30000); // Poll heavier items every 30 seconds
+    if (activeTab === 'inventory') {
+      const fetchInventoryListSilent = async () => {
+        try {
+          const invRes = await getInventory();
+          if (invRes.success) setInventoryList(invRes.data);
+        } catch (err) {
+          console.error('Silent inventory refresh failed:', err);
+        }
+      };
+      fetchInventoryListSilent();
+    }
+    if (activeTab === 'menu' && menuSubTab === 'reviews') {
+      const fetchReviewsSilent = async () => {
+        try {
+          const params = {};
+          if (reviewsFilterRating) params.rating = reviewsFilterRating;
+          const response = await getReviews(params);
+          if (response && response.success) {
+            setReviews(response.data || []);
+            if (response.summary) setReviewsSummary(response.summary);
+          }
+        } catch (err) {
+          console.error('Silent reviews refresh failed:', err);
+        }
+      };
+      fetchReviewsSilent();
+    }
+  }, 60000);
 
   return () => {
-  clearInterval(pollingInterval);
-  clearInterval(heavyPollingInterval);
+    clearInterval(pollingInterval);
+    clearInterval(heavyPollingInterval);
   };
  }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating]);
+
+ // Socket Event Listeners with versioning safeguards for Owner
+ useEffect(() => {
+   if (!socket) return;
+
+   const handleOrderCreated = (newOrder) => {
+     console.log('[SOCKET] Owner received orderCreated:', newOrder);
+     if (!newOrder || !newOrder._id) return;
+     if (user?.cafeId && newOrder.cafeId !== user.cafeId) return;
+
+     setOrders(prev => {
+       if (prev.find(o => o._id === newOrder._id)) return prev;
+       return [newOrder, ...prev];
+     });
+   };
+
+   const handleOrderUpdated = (updatedOrder) => {
+     console.log('[SOCKET] Owner received orderUpdated:', updatedOrder);
+     if (!updatedOrder || !updatedOrder._id) return;
+     if (user?.cafeId && updatedOrder.cafeId !== user.cafeId) return;
+
+     setOrders(prev => {
+       return prev.map(o => {
+         if (o._id === updatedOrder._id) {
+           const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
+           const existingTime = new Date(o.updatedAt || 0).getTime();
+           if (incomingTime <= existingTime) return o;
+           return updatedOrder;
+         }
+         return o;
+       });
+     });
+   };
+
+   const handleInventoryUpdated = (updatedItems) => {
+     console.log('[SOCKET] Owner received inventoryUpdated:', updatedItems);
+     if (!Array.isArray(updatedItems)) return;
+
+     setInventoryList(prev => {
+       if (prev.length === 0) return prev;
+       return prev.map(item => {
+         const match = updatedItems.find(p => String(p._id) === String(item._id));
+         if (match) {
+           const incomingTime = new Date(match.updatedAt || 0).getTime();
+           const existingTime = new Date(item.updatedAt || 0).getTime();
+           if (incomingTime <= existingTime) return item;
+           return {
+             ...item,
+             quantity: match.quantity,
+             stock: match.quantity,
+             updatedAt: match.updatedAt
+           };
+         }
+         return item;
+       });
+     });
+   };
+
+   socket.on('orderCreated', handleOrderCreated);
+   socket.on('orderUpdated', handleOrderUpdated);
+   socket.on('paymentCompleted', handleOrderUpdated);
+   socket.on('inventoryUpdated', handleInventoryUpdated);
+
+   return () => {
+     socket.off('orderCreated', handleOrderCreated);
+     socket.off('orderUpdated', handleOrderUpdated);
+     socket.off('paymentCompleted', handleOrderUpdated);
+     socket.off('inventoryUpdated', handleInventoryUpdated);
+   };
+ }, [socket, user]);
+
+ // One-off REST sync on reconnect
+ useEffect(() => {
+   if (reconnectTrigger > 0) {
+     console.log('[SOCKET] Owner Dashboard: Reconnected. Running full REST sync.');
+     fetchOrders();
+     if (activeTab === 'inventory') fetchInventoryList();
+   }
+ }, [reconnectTrigger, activeTab]);
 
  // Register new staff
  const handleAddStaff = async (e) =>{
@@ -1310,27 +1398,29 @@ const OwnerDashboard = () =>{
  };
 
  // Save Settings Config
- const handleSaveSettings = async (e) =>{
- e.preventDefault();
- setSettingsMsg('');
- try {
- const payload = {
- paymentConfig: {
- razorpayKeyId,
- razorpaySecret,
- isVerified: isRazorpayVerified
- }
- };
- const response = await saveSetupData(payload);
- if (response.success) {
- setSettingsMsg('Configuration saved successfully!');
- setTimeout(() =>setSettingsMsg(''), 3000);
- }
- } catch (err) {
- console.error('Error saving settings:', err);
- setSettingsMsg('Server error saving details.');
- }
- };
+  const handleSaveSettings = async (e) =>{
+    e.preventDefault();
+    setSettingsMsg('');
+    try {
+      const payload = {
+        paymentConfig: {
+          razorpayKeyId,
+          razorpaySecret,
+          isVerified: isRazorpayVerified
+        },
+        gstRate: Number(taxRate),
+        serviceChargeRate: Number(serviceCharge)
+      };
+      const response = await saveSetupData(payload);
+      if (response.success) {
+        setSettingsMsg('Configuration saved successfully!');
+        setTimeout(() =>setSettingsMsg(''), 3000);
+      }
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      setSettingsMsg('Server error saving details.');
+    }
+  };
 
  // Test Razorpay Keys
  const testRazorpayConnection = async () =>{
@@ -1373,78 +1463,91 @@ const OwnerDashboard = () =>{
  return isToday ? `Today ${timeString}` : `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${timeString}`;
  };
 
- // Analytical Calculations
- const now = new Date();
- const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
- const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Analytical Calculations
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
- const completedOrders = orders.filter((o) =>o.paymentStatus === 'Paid');
+  // Filter base lists by branch if selected
+  const filteredOrdersForAnalytics = overviewFilterBranch
+    ? orders.filter(o => o.branchId && String(o.branchId) === String(overviewFilterBranch))
+    : orders;
 
- const todayOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfToday);
- const todayRevenue = todayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
+  const filteredInventoryForAnalytics = overviewFilterBranch
+    ? inventoryList.filter(item => item.branch && String(item.branch) === String(overviewFilterBranch))
+    : inventoryList;
 
- const monthlyOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfMonth);
- const monthlyRevenue = monthlyOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
+  const filteredLogsForAnalytics = overviewFilterBranch
+    ? inventoryLogs.filter(log => (log.branchId && String(log.branchId) === String(overviewFilterBranch)) || (log.branch && String(log.branch) === String(overviewFilterBranch)))
+    : inventoryLogs;
 
- const totalOrdersCount = orders.length;
+  const completedOrders = filteredOrdersForAnalytics.filter((o) =>o.paymentStatus === 'Paid');
 
- const getWeeklySalesData = () =>{
- const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
- const result = [];
- for (let i = 6; i >= 0; i--) {
- const d = new Date();
- d.setDate(d.getDate() - i);
- const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
- const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  const todayOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfToday);
+  const todayRevenue = todayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
 
- const dayOrders = completedOrders.filter((o) =>{
- const orderDate = new Date(o.createdAt);
- return orderDate >= startOfDay && orderDate< endOfDay;
- });
+  const monthlyOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfMonth);
+  const monthlyRevenue = monthlyOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
 
- const daySales = dayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
- result.push({
- day: d.toDateString() === now.toDateString() ? 'Today' : dayLabels[d.getDay()],
- sales: Math.round(daySales * 100) / 100
- });
- }
- return result;
- };
+  const totalOrdersCount = filteredOrdersForAnalytics.length;
 
- const weeklySalesData = getWeeklySalesData();
- const maxWeeklySales = Math.max(...weeklySalesData.map((d) =>d.sales), 1);
+  const getWeeklySalesData = () =>{
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const result = [];
+  for (let i = 6; i >= 0; i--) {
+  const d = new Date();
+  d.setDate(d.getDate() - i);
+  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
 
- const totalInventoryValue = inventoryList.reduce((acc, item) =>acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 0);
+  const dayOrders = completedOrders.filter((o) =>{
+  const orderDate = new Date(o.createdAt);
+  return orderDate >= startOfDay && orderDate< endOfDay;
+  });
 
- const purchaseLogs = inventoryLogs.filter((log) =>log.type === 'Purchase' || log.type === 'Initial');
- const totalInventoryCost = purchaseLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
+  const daySales = dayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
+  result.push({
+  day: d.toDateString() === now.toDateString() ? 'Today' : dayLabels[d.getDay()],
+  sales: Math.round(daySales * 100) / 100
+  });
+  }
+  return result;
+  };
 
- const deductionLogs = inventoryLogs.filter((log) =>log.type === 'Deduction');
- const totalInventoryConsumption = deductionLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
+  const weeklySalesData = getWeeklySalesData();
+  const maxWeeklySales = Math.max(...weeklySalesData.map((d) =>d.sales), 1);
 
- const lowStockAlertsCount = inventoryList.filter((item) =>item.status === 'LOW_STOCK' || item.status === 'OUT_OF_STOCK' || (item.quantity !== undefined ? item.quantity : item.stock)<= (item.reorderLevel !== undefined ? item.reorderLevel : item.minStock)).length;
+  const totalInventoryValue = filteredInventoryForAnalytics.reduce((acc, item) =>acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 0);
 
- const wastageLogs = inventoryLogs.filter((log) =>log.type === 'Wastage' || log.type === 'Damaged');
- const totalWastageCost = wastageLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
+  const purchaseLogs = filteredLogsForAnalytics.filter((log) =>log.type === 'Purchase' || log.type === 'Initial');
+  const totalInventoryCost = purchaseLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
 
- const getTopConsumedIngredients = () =>{
- const consumptionMap = {};
- inventoryLogs.
- filter((log) =>log.type === 'Deduction').
- forEach((log) =>{
- const name = log.itemName;
- const qty = Math.abs(log.quantityChanged || 0);
- consumptionMap[name] = (consumptionMap[name] || 0) + qty;
- });
+  const deductionLogs = filteredLogsForAnalytics.filter((log) =>log.type === 'Deduction');
+  const totalInventoryConsumption = deductionLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
 
- return Object.entries(consumptionMap).
- map(([name, qty]) =>{
- const item = inventoryList.find((i) =>i.name === name);
- return { name, quantity: qty, unit: item?.unit || 'g' };
- }).
- sort((a, b) =>b.quantity - a.quantity).
- slice(0, 5);
- };
+  const lowStockAlertsCount = filteredInventoryForAnalytics.filter((item) =>item.status === 'LOW_STOCK' || item.status === 'OUT_OF_STOCK' || (item.quantity !== undefined ? item.quantity : item.stock)<= (item.reorderLevel !== undefined ? item.reorderLevel : item.minStock)).length;
+
+  const wastageLogs = filteredLogsForAnalytics.filter((log) =>log.type === 'Wastage' || log.type === 'Damaged');
+  const totalWastageCost = wastageLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
+
+  const getTopConsumedIngredients = () =>{
+  const consumptionMap = {};
+  filteredLogsForAnalytics.
+  filter((log) =>log.type === 'Deduction').
+  forEach((log) =>{
+  const name = log.itemName;
+  const qty = Math.abs(log.quantityChanged || 0);
+  consumptionMap[name] = (consumptionMap[name] || 0) + qty;
+  });
+
+  return Object.entries(consumptionMap).
+  map(([name, qty]) =>{
+  const item = filteredInventoryForAnalytics.find((i) =>i.name === name);
+  return { name, quantity: qty, unit: item?.unit || 'g' };
+  }).
+  sort((a, b) =>b.quantity - a.quantity).
+  slice(0, 5);
+  };
 
  return (
 <OwnerLayout>
@@ -1712,29 +1815,69 @@ const OwnerDashboard = () =>{
  }
  }
  .orders-monitor-wrapper {
- padding: 12px;
- }
- .orders-monitor-grid {
- display: grid;
- grid-template-columns: repeat(2, 1fr);
- gap: 10px;
- }
- @media (min-width: 600px) {
- .orders-monitor-wrapper {
- padding: 25px;
- }
- .orders-monitor-grid {
- grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
- gap: 16px;
- }
- }
+  padding: 12px;
+  }
+  .orders-monitor-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  }
+  @media (min-width: 480px) {
+  .orders-monitor-grid {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  }
+  }
+  @media (min-width: 600px) {
+  .orders-monitor-wrapper {
+  padding: 25px;
+  }
+  }
  `}</style>
+
+  {/* Header with Title */}
+  <div style={{
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottom: '1px solid var(--color-border)',
+    paddingBottom: '16px',
+    marginBottom: '24px',
+    flexWrap: 'wrap',
+    gap: '12px',
+    marginTop: '12px'
+  }}>
+    <div>
+      <h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>
+        Owner Control Station
+      </h2>
+      <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+        Live insights, staff reports, multi-branch revenue tracking, and menu overrides.
+      </p>
+    </div>
+  </div>
 
  {/* Navigation Tabs removed to prevent duplicate navigation */}
 
  {/* TAB 1: BUSINESS ANALYTICS */}
  {activeTab === 'analytics' &&
 <div className="fade-in">
+  {/* Branch Selector Dropdown */}
+  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <label style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--color-text-secondary)' }}>Filter Analytics by Branch:</label>
+      <select
+        value={overviewFilterBranch}
+        onChange={(e) => setOverviewFilterBranch(e.target.value)}
+        className="form-input"
+        style={{ width: '200px', margin: 0 }}>
+        <option value="">All Branches</option>
+        {branches.map((b) => (
+          <option key={b._id} value={b.branchId}>{b.branchName}</option>
+        ))}
+      </select>
+    </div>
+  </div>
  {/* Revenue Analytics Cards */}
 <div className="analytics-grid">
 <div className="analytics-card">
@@ -2221,7 +2364,7 @@ const OwnerDashboard = () =>{
  transition: 'all 0.2s',
  fontFamily: 'inherit'
  }}>
-  Jail Barrier
+  Staff Members
 </button>
 <button
  onClick={() =>setStaffSubTab('reports')}
@@ -2289,7 +2432,7 @@ const OwnerDashboard = () =>{
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
 <div>
 <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Add New Staff</h3>
-<p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Register a new team member to the jail barrier</p>
+<p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Register a new team member to the staff roster</p>
 </div>
 <button
  onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '' });}}
@@ -2367,7 +2510,7 @@ const OwnerDashboard = () =>{
  {/* Staff Roster List Card */}
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-<h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Jail Barrier List</h4>
+<h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff List</h4>
 <button
  onClick={() =>setShowAddStaffModal(true)}
  style={{
@@ -2498,7 +2641,7 @@ const OwnerDashboard = () =>{
  {staffLoading && staff.length === 0 ?
 <div style={{ textAlign: 'center', padding: '40px 0' }}>
 <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading jail barrier...</p>
+<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading staff members...</p>
 </div>:
 
 <>
@@ -2516,10 +2659,10 @@ const OwnerDashboard = () =>{
   </div>
 ) : (
   <>
-  <div className="desktop-tablet-staff" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+  <div className="desktop-tablet-staff" style={{ width: '100%', overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-  <thead>
-  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+  <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700, backgroundColor: 'var(--bg-card)' }}>
   <th style={{ padding: '10px' }}>Emp ID</th>
   <th style={{ padding: '10px' }}>Name</th>
   <th style={{ padding: '10px' }}>Email</th>
@@ -2663,10 +2806,10 @@ const OwnerDashboard = () =>{
  No check-in logs recorded today yet.
 </div>:
 
-<div style={{ overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+<div style={{ overflow: 'auto', maxHeight: '450px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '800px' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700, backgroundColor: 'var(--bg-card)' }}>
 <th style={{ padding: '10px' }}>Staff Name</th>
 <th style={{ padding: '10px' }}>Branch</th>
 <th style={{ padding: '10px' }}>Check In</th>
@@ -2762,9 +2905,10 @@ const OwnerDashboard = () =>{
  {attendanceReports.branchReports && attendanceReports.branchReports.length >0 &&
 <div style={{ marginTop: '10px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Branch Attendance Performance Breakdown</h4>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
+<div style={{ overflow: 'auto', maxHeight: '300px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '500px' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--bg-card)' }}>
 <th style={{ padding: '8px' }}>Branch Name</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Total Check-ins</th>
 <th style={{ padding: '8px', textAlign: 'right' }}>Total Hours Logged</th>
@@ -2781,14 +2925,15 @@ const OwnerDashboard = () =>{
 </tbody>
 </table>
 </div>
+</div>
  }
 
  {/* Filtered records detail log */}
 <div style={{ marginTop: '10px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Detailed History Records ({attendanceReports.records.length})</h4>
-<div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
+<div style={{ maxHeight: '300px', overflow: 'auto', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '700px' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
 <th style={{ padding: '10px' }}>Date</th>
 <th style={{ padding: '10px' }}>Staff Name</th>
@@ -3176,10 +3321,10 @@ const OwnerDashboard = () =>{
 </div>
 
  {/* Desktop: scrollable table */}
-<div className="inv-desktop-table">
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
+<div className="inv-desktop-table" style={{ overflow: 'auto', maxHeight: '550px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '950px' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--bg-card)' }}>
 <th style={{ padding: '8px' }}>Ingredient Name</th>
 <th style={{ padding: '8px' }}>Category</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
@@ -3235,10 +3380,10 @@ const OwnerDashboard = () =>{
 
  {/* SUBTAB 2: Movement Logs */}
  {inventorySubTab === 'movements' &&
-<div style={{ overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
+<div style={{ overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '850px' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--bg-card)' }}>
 <th style={{ padding: '8px' }}>Timestamp</th>
 <th style={{ padding: '8px' }}>Ingredient</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Type</th>
@@ -3305,10 +3450,11 @@ const OwnerDashboard = () =>{
 </div>
 </div>
 
-<h4 style={{ color: 'var(--color-text-primary)', margin: '10px 0 0 0' }}>Detailed Wastage & Spoilage Log</h4>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
+<h4 style={{ color: 'var(--color-text-primary)', margin: '10px 0 10px 0' }}>Detailed Wastage & Spoilage Log</h4>
+<div style={{ overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '750px' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--bg-card)' }}>
 <th style={{ padding: '8px' }}>Date</th>
 <th style={{ padding: '8px' }}>Ingredient</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Type</th>
@@ -3336,6 +3482,7 @@ const OwnerDashboard = () =>{
 )}
 </tbody>
 </table>
+</div>
 </div>
  }
 
@@ -3379,7 +3526,7 @@ const OwnerDashboard = () =>{
  {/* TAB 5: ORDERS MONITOR (READ-ONLY) */}
  {activeTab === 'orders' &&
 <div className="fade-in">
-<div className="orders-monitor-wrapper" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', overflowX: 'auto' }}>
+<div className="orders-monitor-wrapper" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px' }}>
 
 {/* Filter Controls for Orders */}
 <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
@@ -3424,77 +3571,240 @@ const OwnerDashboard = () =>{
 </div>
 
 <div className="orders-monitor-grid">
- {orders
- .filter((order) => {
- if (!order.createdAt) return true;
- const localDate = new Date(order.createdAt);
- const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
- 
- const matchesDate = orderDateStr === orderDateFilter;
- if (!matchesDate) return false;
- 
- if (!orderSearchQuery) return true;
- 
- const q = orderSearchQuery.toLowerCase();
- return (
- (order._id && order._id.toLowerCase().includes(q)) || 
- (order.tableNumber && String(order.tableNumber).toLowerCase().includes(q)) || 
- (order.status && order.status.toLowerCase().includes(q)) ||
- (order.items && order.items.some(i => i.name && i.name.toLowerCase().includes(q)))
- );
- })
- .map((order) =>
-<div key={order._id} style={{
- background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)',
- borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
- }}>
- {/* Header: Order ID + Status */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-<span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>
- #{order._id.substring(order._id.length - 8).toUpperCase()}
-</span>
-<span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>· Table {order.tableNumber}</span>
-</div>
-<span style={{
- color: order.status === 'Placed' ? '#3498db' : order.status === 'Preparing' ? '#ff9800' : order.status === 'Ready' ? '#2ecc71' : order.status === 'Delivered' ? '#9b59b6' : order.status === 'Completed' ? '#27AE60' : '#7f8c8d',
- background: order.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
- padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800
- }}>
- {order.status}
-</span>
-</div>
+  {(() => {
+    const filteredOrders = orders.filter((order) => {
+      if (!order.createdAt) return true;
+      const localDate = new Date(order.createdAt);
+      const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+      
+      const matchesDate = orderDateStr === orderDateFilter;
+      if (!matchesDate) return false;
+      
+      if (!orderSearchQuery) return true;
+      
+      const q = orderSearchQuery.toLowerCase();
+      return (
+        (order._id && order._id.toLowerCase().includes(q)) || 
+        (order.tableNumber && String(order.tableNumber).toLowerCase().includes(q)) || 
+        (order.status && order.status.toLowerCase().includes(q)) ||
+        (order.items && order.items.some(i => i.name && i.name.toLowerCase().includes(q)))
+      );
+    });
 
- {/* Items List */}
-<div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '100px', overflowY: 'auto' }}>
- {order.items.map((i, idx) =>
-<div key={idx} style={{ display: 'flex', gap: '6px', marginBottom: idx !== order.items.length - 1 ? '4px' : 0 }}>
-<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{i.quantity}x</span>
-<span>{i.name}</span>
-</div>
-)}
-</div>
+    const groupedOrders = {};
+    filteredOrders.forEach((order) => {
+      const table = order.tableNumber || 'Takeaway';
+      if (!groupedOrders[table]) {
+        groupedOrders[table] = [];
+      }
+      groupedOrders[table].push(order);
+    });
 
- {/* Footer: Amount + Payment Status */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>
-<div style={{ display: 'flex', flexDirection: 'column' }}>
-<span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>Total Amount</span>
-<span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '16px' }}>₹{order.totalAmount.toFixed(2)}</span>
-</div>
-<span style={{
- color: order.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
- fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
- }}>
- {order.paymentStatus === 'Paid' ? ' Paid' : ' Pending'}
-</span>
-</div>
-</div>
-)}
- {orders.length === 0 &&
-<div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px' }}>
- No active orders at the moment.
-</div>
- }
+    const sortedTableKeys = Object.keys(groupedOrders).sort((a, b) => {
+      if (a === 'Takeaway') return 1;
+      if (b === 'Takeaway') return -1;
+      const numA = parseInt(a.replace(/\D/g, ''), 10);
+      const numB = parseInt(b.replace(/\D/g, ''), 10);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      return a.localeCompare(b);
+    });
+
+    if (sortedTableKeys.length === 0) {
+      return (
+        <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px' }}>
+          No active orders at the moment.
+        </div>
+      );
+    }
+
+    return sortedTableKeys.map((tableNum) => {
+      const tableOrders = groupedOrders[tableNum];
+      const activeCount = tableOrders.filter(o => ['Placed', 'Preparing', 'Ready'].includes(o.status)).length;
+      const revenue = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+      const totalOrders = tableOrders.length;
+      const avgBill = totalOrders > 0 ? revenue / totalOrders : 0;
+      
+      const itemQuantities = {};
+      tableOrders.forEach(o => {
+        o.items.forEach(item => {
+          itemQuantities[item.name] = (itemQuantities[item.name] || 0) + item.quantity;
+        });
+      });
+      const topItems = Object.entries(itemQuantities)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3);
+
+      const lastOrder = tableOrders.reduce((latest, o) => !latest || new Date(o.createdAt) > new Date(latest.createdAt) ? o : latest, null);
+      const isCollapsed = ownerCollapsedTables[tableNum] !== false; // Default to collapsed (true)
+
+      const toggleCollapse = () => {
+        setOwnerCollapsedTables(prev => ({
+          ...prev,
+          [tableNum]: !isCollapsed
+        }));
+      };
+
+      return (
+        <div 
+          key={tableNum} 
+          style={{
+            gridColumn: '1 / -1',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '16px',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          {/* Header Summary */}
+          <div 
+            onClick={toggleCollapse}
+            style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              cursor: 'pointer',
+              flexWrap: 'wrap',
+              gap: '12px',
+              userSelect: 'none'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--color-text-primary)' }}>
+                Table {tableNum}
+              </span>
+              <span style={{
+                fontSize: '12px',
+                fontWeight: 'bold',
+                background: activeCount > 0 ? 'rgba(255, 107, 8, 0.15)' : 'rgba(127, 140, 141, 0.15)',
+                color: activeCount > 0 ? 'var(--color-primary)' : '#7f8c8d',
+                padding: '2px 8px',
+                borderRadius: '6px'
+              }}>
+                {activeCount} Active Orders
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+                Last Order: <strong>{lastOrder ? new Date(lastOrder.createdAt).toLocaleTimeString() : 'N/A'}</strong>
+              </span>
+              <span style={{ fontSize: '1.2rem', color: 'var(--color-text-secondary)' }}>
+                {isCollapsed ? '▼' : '▲'}
+              </span>
+            </div>
+          </div>
+
+          {/* Metrics Row */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: '16px',
+            background: 'rgba(0,0,0,0.02)',
+            padding: '16px',
+            borderRadius: '12px',
+            border: '1px solid var(--color-border)'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Orders</span>
+              <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--color-text-primary)' }}>{totalOrders}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Revenue</span>
+              <span style={{ fontSize: '18px', fontWeight: '800', color: '#2ecc71' }}>₹{revenue.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Average Bill</span>
+              <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--color-primary)' }}>₹{avgBill.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Top Ordered Items</span>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+                {topItems.length > 0 ? topItems.map(([name, qty], idx) => (
+                  <span key={idx} style={{
+                    background: 'rgba(0,0,0,0.1)',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    color: 'var(--color-text-secondary)'
+                  }}>
+                    {name} <strong style={{ color: 'var(--color-primary)' }}>x{qty}</strong>
+                  </span>
+                )) : <span style={{ fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>No items ordered</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Expanded Orders List */}
+          {!isCollapsed && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: '16px',
+              borderTop: '1px solid var(--color-border)',
+              paddingTop: '16px',
+              marginTop: '8px'
+            }}>
+              {tableOrders.map((order) => (
+                <div key={order._id} style={{
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  {/* Header: Order ID + Status */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '14px' }}>
+                      #{order._id.substring(order._id.length - 8).toUpperCase()}
+                    </span>
+                    <span style={{
+                      color: order.status === 'Placed' ? '#3498db' : order.status === 'Preparing' ? '#ff9800' : order.status === 'Ready' ? '#2ecc71' : order.status === 'Delivered' ? '#9b59b6' : order.status === 'Completed' ? '#27AE60' : '#7f8c8d',
+                      background: order.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
+                      padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800
+                    }}>
+                      {order.status}
+                    </span>
+                  </div>
+
+                  {/* Items List */}
+                  <div style={{ background: 'rgba(0,0,0,0.03)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '100px', overflowY: 'auto' }}>
+                    {order.items.map((i, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '6px', marginBottom: idx !== order.items.length - 1 ? '4px' : 0 }}>
+                        <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{i.quantity}x</span>
+                        <span>{i.name}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Footer: Amount + Payment Status */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>Total Amount</span>
+                      <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>₹{order.totalAmount.toFixed(2)}</span>
+                    </div>
+                    <span style={{
+                      color: order.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
+                      fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
+                    }}>
+                      {order.paymentStatus === 'Paid' ? ' Paid' : ' Pending'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    });
+  })()}
 </div>
 </div>
 </div>

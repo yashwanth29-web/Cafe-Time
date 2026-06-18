@@ -1,6 +1,44 @@
 const Inventory = require('../models/Inventory');
 const InventoryLog = require('../models/InventoryLog');
 const OperationalConfig = require('../models/OperationalConfig');
+const Branch = require('../models/Branch');
+
+const emitInventoryUpdated = async (cafeId, branchId, itemsList) => {
+  try {
+    const { getIO } = require('../config/socket');
+    const io = getIO();
+    const mongoose = require('mongoose');
+    
+    let branchStr = String(branchId || 'Main');
+    
+    // Resolve database ObjectId to string code (e.g. BR002) if needed
+    if (mongoose.isValidObjectId(branchStr)) {
+      const Branch = require('../models/Branch');
+      const branchDoc = await Branch.findById(branchStr).lean();
+      if (branchDoc) {
+        branchStr = branchDoc.branchId;
+      }
+    }
+    
+    const arr = Array.isArray(itemsList) ? itemsList : [itemsList];
+    const payload = arr.map(item => ({
+      _id: String(item._id),
+      name: item.name,
+      quantity: item.quantity,
+      reorderLevel: item.reorderLevel,
+      unit: item.unit,
+      branch: item.branch,
+      updatedAt: item.updatedAt || new Date().toISOString()
+    }));
+    
+    io.to(`branch:${branchStr}`).emit('inventoryUpdated', payload);
+    io.to(`cafe:${cafeId}:owner`).emit('inventoryUpdated', payload);
+    
+    console.log(`[SOCKET] Broadcasted inventoryUpdated for ${payload.length} items to branch:${branchStr} and cafe:${cafeId}:owner`);
+  } catch (err) {
+    console.error('[SOCKET] Error emitting inventoryUpdated:', err.message);
+  }
+};
 
 // Helper to seed default inventory items for a cafe if empty (using updated fields)
 const seedDefaultInventory = async (cafeId) => {
@@ -60,30 +98,53 @@ const seedDefaultInventory = async (cafeId) => {
     { name: 'Floor Cleaner', quantity: 3000, reorderLevel: 500, unit: 'ml', costPrice: 0.10, category: 'Cleaning Supplies', supplier: 'Local Grocery', branch: 'Main' }
   ];
 
-  const itemsToCreate = defaults.map(item => ({
-    ...item,
-    cafeId
-  }));
+  const branches = await Branch.find({ cafeId });
+  const itemsToCreate = [];
+  
+  if (branches.length > 0) {
+    for (const b of branches) {
+      for (const item of defaults) {
+        itemsToCreate.push({
+          ...item,
+          cafeId,
+          branch: b.branchId
+        });
+      }
+    }
+  } else {
+    for (const item of defaults) {
+      itemsToCreate.push({
+        ...item,
+        cafeId,
+        branch: 'Main'
+      });
+    }
+  }
 
   return await Inventory.insertMany(itemsToCreate);
 };
 
-// @desc    Get inventory items
-// @route   GET /api/inventory
-// @access  Protected
 const getInventory = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    let items = await Inventory.find({ cafeId }).sort({ name: 1 });
-
-    const hasDemo = items.some(item => item.name === 'Burger Buns' || item.name === 'Chicken Patties' || item.name === 'Coffee Beans');
+    const totalItemsCount = await Inventory.countDocuments({ cafeId });
+    const hasDemo = await Inventory.exists({ cafeId, name: { $in: ['Burger Buns', 'Chicken Patties', 'Coffee Beans'] } });
 
     // Auto-seed if database contains no inventory or contains old demo data
-    if (items.length === 0 || hasDemo) {
+    if (totalItemsCount === 0 || hasDemo) {
       console.log('Clearing old demo inventory items and seeding actual Dr. Chai Cafe inventory...');
       await Inventory.deleteMany({ cafeId });
-      items = await seedDefaultInventory(cafeId);
+      await seedDefaultInventory(cafeId);
     }
+
+    // Now query the items
+    const query = { cafeId };
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user.role || '').toLowerCase());
+    if (isStaff && req.user.assignedBranch) {
+      query.branch = req.user.assignedBranch;
+    }
+
+    const items = await Inventory.find(query).sort({ name: 1 });
 
     return res.status(200).json({ success: true, count: items.length, data: items });
   } catch (error) {
@@ -137,9 +198,7 @@ const createInventoryItem = async (req, res) => {
       userEmail: req.user?.email || 'admin@cafe.com'
     });
 
-    // Auto-update menu availability
-    await updateMenuItemAvailabilityFromInventory(cafeId);
-
+    emitInventoryUpdated(cafeId, savedItem.branch || 'Main', savedItem);
     return res.status(201).json({ success: true, data: savedItem });
   } catch (error) {
     console.error('createInventoryItem error:', error);
@@ -184,6 +243,7 @@ const updateInventoryItem = async (req, res) => {
     if (status !== undefined) item.status = status;
 
     const savedItem = await item.save();
+    emitInventoryUpdated(cafeId, savedItem.branch || 'Main', savedItem);
 
     // Record adjustment log if quantity changed
     if (oldQuantity !== savedItem.quantity) {
@@ -269,6 +329,7 @@ const recordPurchase = async (req, res) => {
       item.supplier = supplier.trim();
     }
     await item.save();
+    emitInventoryUpdated(cafeId, item.branch || 'Main', item);
 
     const newLog = await InventoryLog.create({
       cafeId,
@@ -314,6 +375,7 @@ const recordWastage = async (req, res) => {
 
     item.quantity -= Number(quantityWasted);
     await item.save();
+    emitInventoryUpdated(cafeId, item.branch || 'Main', item);
 
     const newLog = await InventoryLog.create({
       cafeId,
@@ -444,18 +506,47 @@ const RECIPES = {
   ]
 };
 
-// Auto-update menu item availability based on ingredient stock levels
-const updateMenuItemAvailabilityFromInventory = async (cafeId) => {
+// Auto-update menu item availability based on ingredient stock levels (optimized with batch queries)
+const updateMenuItemAvailabilityFromInventory = async (cafeId, affectedIngredients = null) => {
   try {
     const MenuItem = require('../models/MenuItem');
-    const menuItems = await MenuItem.find();
+    
+    // Build query to fetch only relevant menu items if affected ingredients list is provided
+    const query = {};
+    if (affectedIngredients && affectedIngredients.length > 0) {
+      query['recipe.name'] = { $in: affectedIngredients };
+    }
+    
+    const menuItems = await MenuItem.find(query);
+    if (menuItems.length === 0) return;
+
+    // Collect all unique ingredient names from recipes to perform a single batch fetch
+    const ingredientNamesSet = new Set();
+    menuItems.forEach(item => {
+      if (item.recipe) {
+        item.recipe.forEach(ing => {
+          ingredientNamesSet.add(ing.name);
+        });
+      }
+    });
+
+    const ingredientNames = Array.from(ingredientNamesSet);
+    const inventoryItems = await Inventory.find({
+      cafeId,
+      name: { $in: ingredientNames }
+    }).lean();
+
+    const inventoryMap = new Map();
+    inventoryItems.forEach(inv => {
+      inventoryMap.set(inv.name, inv);
+    });
     
     for (const item of menuItems) {
       if (item.recipe && item.recipe.length > 0) {
         let shouldBeAvailable = true;
         
         for (const ing of item.recipe) {
-          const invItem = await Inventory.findOne({ cafeId, name: ing.name });
+          const invItem = inventoryMap.get(ing.name);
           if (!invItem || invItem.quantity <= 0) {
             shouldBeAvailable = false;
             break;
@@ -466,6 +557,20 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId) => {
           item.available = shouldBeAvailable;
           await item.save();
           console.log(`Auto-updated menu item "${item.name}" availability to ${shouldBeAvailable} based on inventory levels.`);
+          
+          try {
+            const { getIO } = require('../config/socket');
+            const io = getIO();
+            io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
+              _id: String(item._id),
+              name: item.name,
+              available: shouldBeAvailable,
+              updatedAt: item.updatedAt || new Date().toISOString()
+            });
+            console.log(`[SOCKET] Broadcasted menuAvailabilityUpdated for "${item.name}"`);
+          } catch (socketErr) {
+            console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', socketErr.message);
+          }
         }
       }
     }
@@ -474,69 +579,152 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId) => {
   }
 };
 
-// Auto inventory deduction helper (Runs on status change to 'Completed')
+// Auto inventory deduction helper (Runs on status change to 'Completed' - optimized batch execution)
 const deductInventoryForOrder = async (orderId, cafeId, items) => {
   try {
     const Order = require('../models/Order');
     const MenuItem = require('../models/MenuItem');
+    const mongoose = require('mongoose');
+
     const order = await Order.findById(orderId);
     if (!order || order.inventoryDeducted || !['Ready', 'Completed', 'Delivered'].includes(order.status)) {
       return;
     }
 
-    const opConfig = await OperationalConfig.findOne({ cafeId });
+    const opConfig = await OperationalConfig.findOne({ cafeId }).lean();
     const isEnabled = opConfig ? opConfig.inventoryEnabled : true;
-    if (isEnabled) {
-      for (const item of items) {
-        const itemNameLower = (item.name || '').toLowerCase();
-        const orderQty = item.quantity || 0;
-        if (orderQty <= 0) continue;
+    if (!isEnabled) return;
 
-        // Fetch dynamic recipe from database
-        const menuItem = (await MenuItem.findById(item.id)) || (await MenuItem.findOne({ name: item.name }));
-        let matchedRecipe = menuItem && menuItem.recipe && menuItem.recipe.length > 0 
-          ? menuItem.recipe 
-          : null;
+    // Batch fetch menu items for the ordered items to resolve recipes in one roundtrip
+    const itemIds = items.map(item => item.id).filter(id => mongoose.isValidObjectId(id));
+    const itemNames = items.map(item => item.name);
+    
+    const menuItems = await MenuItem.find({
+      $or: [
+        { _id: { $in: itemIds } },
+        { name: { $in: itemNames } }
+      ]
+    }).lean();
 
-        if (!matchedRecipe) {
-          // Fallback to hardcoded RECIPES mapping
-          for (const [key, ingredients] of Object.entries(RECIPES)) {
-            if (itemNameLower.includes(key)) {
-              matchedRecipe = ingredients;
-              break;
-            }
-          }
-        }
+    const menuItemMap = new Map();
+    menuItems.forEach(mi => {
+      menuItemMap.set(String(mi._id), mi);
+      menuItemMap.set(mi.name, mi);
+    });
 
-        if (matchedRecipe) {
-          for (const ing of matchedRecipe) {
-            const invItem = await Inventory.findOne({ cafeId, name: ing.name });
-            if (invItem) {
-              const deductionQty = ing.quantity * orderQty;
-              invItem.quantity = Math.max(0, invItem.quantity - deductionQty);
-              await invItem.save();
+    const ingredientDeductionList = [];
+    const ingredientNamesSet = new Set();
 
-              // Record deduction log
-              await InventoryLog.create({
-                cafeId,
-                itemId: invItem._id,
-                itemName: invItem.name,
-                type: 'Deduction',
-                quantityChanged: -deductionQty,
-                cost: (invItem.costPrice || 0) * deductionQty,
-                reason: `Sold ${orderQty} x ${item.name}`,
-                userEmail: 'system-auto-deduct'
-              });
-            }
+    for (const item of items) {
+      const itemNameLower = (item.name || '').toLowerCase();
+      const orderQty = item.quantity || 0;
+      if (orderQty <= 0) continue;
+
+      const menuItem = menuItemMap.get(String(item.id)) || menuItemMap.get(item.name);
+      let matchedRecipe = menuItem && menuItem.recipe && menuItem.recipe.length > 0 
+        ? menuItem.recipe 
+        : null;
+
+      if (!matchedRecipe) {
+        // Fallback to hardcoded RECIPES mapping
+        for (const [key, ingredients] of Object.entries(RECIPES)) {
+          if (itemNameLower.includes(key)) {
+            matchedRecipe = ingredients;
+            break;
           }
         }
       }
 
+      if (matchedRecipe) {
+        for (const ing of matchedRecipe) {
+          const qtyToDeduct = ing.quantity * orderQty;
+          ingredientNamesSet.add(ing.name);
+          ingredientDeductionList.push({
+            name: ing.name,
+            deductionQty: qtyToDeduct,
+            orderQty,
+            itemName: item.name
+          });
+        }
+      }
+    }
+
+    if (ingredientDeductionList.length === 0) {
       order.inventoryDeducted = true;
       await order.save();
-      
-      // Auto-update menu availability
-      await updateMenuItemAvailabilityFromInventory(cafeId);
+      return;
+    }
+
+    // Batch fetch current inventory stock levels
+    const ingredientNames = Array.from(ingredientNamesSet);
+    const inventoryItems = await Inventory.find({
+      cafeId,
+      name: { $in: ingredientNames }
+    });
+
+    const inventoryMap = new Map();
+    inventoryItems.forEach(inv => {
+      inventoryMap.set(inv.name, inv);
+    });
+
+    const bulkOps = [];
+    const logsToCreate = [];
+    const affectedIngredients = [];
+
+    for (const ded of ingredientDeductionList) {
+      const invItem = inventoryMap.get(ded.name);
+      if (invItem) {
+        const deductionQty = ded.deductionQty;
+        const newQty = Math.max(0, invItem.quantity - deductionQty);
+
+        let newStatus = 'IN_STOCK';
+        if (newQty <= 0) {
+          newStatus = 'OUT_OF_STOCK';
+        } else if (newQty <= invItem.reorderLevel) {
+          newStatus = 'LOW_STOCK';
+        }
+
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: invItem._id },
+            update: {
+              $set: {
+                quantity: newQty,
+                stock: newQty,
+                status: newStatus
+              }
+            }
+          }
+        });
+
+        logsToCreate.push({
+          cafeId,
+          itemId: invItem._id,
+          itemName: invItem.name,
+          type: 'Deduction',
+          quantityChanged: -deductionQty,
+          cost: (invItem.costPrice || 0) * deductionQty,
+          reason: `Sold ${ded.orderQty} x ${ded.itemName}`,
+          userEmail: 'system-auto-deduct'
+        });
+
+        affectedIngredients.push(invItem.name);
+        invItem.quantity = newQty; // update in-memory cache to handle repeated items
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await Inventory.bulkWrite(bulkOps);
+      await InventoryLog.insertMany(logsToCreate);
+      emitInventoryUpdated(cafeId, order.branchId || 'Main', inventoryItems);
+    }
+
+    order.inventoryDeducted = true;
+    await order.save();
+    
+    // Auto-update availability only for menu items containing the affected ingredients
+    if (affectedIngredients.length > 0) {
+      await updateMenuItemAvailabilityFromInventory(cafeId, affectedIngredients);
     }
   } catch (err) {
     console.error('deductInventoryForOrder helper error:', err);

@@ -15,10 +15,12 @@ import OwnerProfilePage from './pages/OwnerProfilePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { SocketProvider } from './context/SocketContext';
 import KitchenDashboard from './pages/KitchenDashboard';
 import WaiterDashboard from './pages/WaiterDashboard';
 import CashierDashboard from './pages/CashierDashboard';
 import ManagerDashboard from './pages/ManagerDashboard';
+import ManualOrderPage from './pages/ManualOrderPage';
 import './styles/App.css';
 import SaaSLayout from './components/SaaSLayout';
 import Unauthorized from './pages/Unauthorized';
@@ -31,6 +33,7 @@ function AppContent() {
   const location = useLocation();
   const tableParam = searchParams.get('table');
   const cafeIdParam = searchParams.get('cafeId');
+  const branchParam = searchParams.get('branchId') || searchParams.get('branch');
 
   // Synchronously initialize table number state from query param or session storage
   const [tableNumber, setTableNumber] = useState(() => {
@@ -40,6 +43,11 @@ function AppContent() {
   // Synchronously initialize cafe ID state from query param or session storage
   const [cafeId, setCafeId] = useState(() => {
     return cafeIdParam || sessionStorage.getItem('cafeId') || '';
+  });
+
+  // Synchronously initialize branch ID state from query param or session storage
+  const [branchId, setBranchId] = useState(() => {
+    return branchParam || sessionStorage.getItem('branchId') || '';
   });
 
   // Sync tableNumber state when search parameter changes reactively
@@ -59,6 +67,15 @@ function AppContent() {
       console.log(`Updated cafe ID from URL: ${cafeIdParam}`);
     }
   }, [cafeIdParam]);
+
+  // Sync branchId state when search parameter changes reactively
+  useEffect(() => {
+    if (branchParam) {
+      setBranchId(branchParam);
+      sessionStorage.setItem('branchId', branchParam);
+      console.log(`Updated branch ID from URL: ${branchParam}`);
+    }
+  }, [branchParam]);
 
   // Cafe Info state for branding
   const [cafeInfo, setCafeInfo] = useState(null);
@@ -138,7 +155,6 @@ function AppContent() {
 
   const totalItemCount = cart.reduce((acc, curr) => acc + curr.quantity, 0);
 
-  // Determine if we are on an administrative or auth portal page to hide customer elements
   const isAdminOrAuthRoute = 
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/owner') ||
@@ -148,6 +164,7 @@ function AppContent() {
     location.pathname.startsWith('/kitchen') ||
     location.pathname.startsWith('/cashier') ||
     location.pathname.startsWith('/waiter') ||
+    location.pathname.startsWith('/manual-order') ||
     ['/login', '/verify-otp'].includes(location.pathname);
 
   return (
@@ -168,6 +185,23 @@ function AppContent() {
                   addToCart={addToCart}
                   increaseQuantity={increaseQuantity}
                   decreaseQuantity={decreaseQuantity}
+                  branchId={branchId}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/menu" 
+            element={
+              tableNumber ? (
+                <CustomerMenu 
+                  cart={cart}
+                  addToCart={addToCart}
+                  increaseQuantity={increaseQuantity}
+                  decreaseQuantity={decreaseQuantity}
+                  branchId={branchId}
                 />
               ) : (
                 <Navigate to="/login" replace />
@@ -185,11 +219,12 @@ function AppContent() {
                 clearCart={clearCart}
                 tableNumber={tableNumber}
                 cafeId={cafeId}
+                branchId={branchId}
               />
             } 
           />
 
-          <Route path="/history" element={<OrderHistory cafeId={cafeIdParam || 'CD001'} />} />
+          <Route path="/history" element={<OrderHistory cafeId={cafeIdParam || 'CD001'} branchId={branchId} />} />
 
           {/* Auth Flow */}
           <Route path="/login" element={<Login />} />
@@ -230,6 +265,16 @@ function AppContent() {
               <ProtectedRoute allowedRoles={['admin', 'owner']}>
                 <SaaSLayout>
                   <OwnerProfilePage />
+                </SaaSLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/manual-order" 
+            element={
+              <ProtectedRoute allowedRoles={['waiter', 'staff', 'cashier']}>
+                <SaaSLayout>
+                  <ManualOrderPage />
                 </SaaSLayout>
               </ProtectedRoute>
             } 
@@ -315,9 +360,11 @@ function App() {
     <Router>
       <ThemeProvider>
         <AuthProvider>
-          <ToastProvider>
-            <AppContent />
-          </ToastProvider>
+          <SocketProvider>
+            <ToastProvider>
+              <AppContent />
+            </ToastProvider>
+          </SocketProvider>
         </AuthProvider>
       </ThemeProvider>
     </Router>

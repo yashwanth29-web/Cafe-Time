@@ -6,7 +6,7 @@ import RazorpayPayment from '../components/RazorpayPayment';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 
-const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
+const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId, branchId }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -252,7 +252,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
           });
         }
       }
-    }, 5000);
+    }, 60000);
 
     return () => clearInterval(pollInterval);
   }, [success, activeOrders, completedOrders]);
@@ -294,8 +294,10 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   };
 
   // Totals calculations
-  const subtotal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
-  const grandTotal = subtotal;
+  const subtotalVal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
+  const subtotal = subtotalVal;
+  const tax = 0;
+  const grandTotal = subtotalVal;
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
@@ -319,11 +321,15 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         tableNumber: tableNumber || 'Takeaway',
         items: itemsPayload,
         totalAmount: grandTotal,
+        subtotal: subtotal,
+        tax: tax,
+        grandTotal: grandTotal,
         customerName,
         customerEmail,
         customerPhone,
         specialInstructions,
-        cafeId: cafeId || 'CD001'
+        cafeId: cafeId || 'CD001',
+        branchId: branchId || sessionStorage.getItem('branchId') || ''
       };
 
       const response = await placeOrder(orderPayload);

@@ -1,13 +1,16 @@
 import { toast } from '../components/Toast';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getOrders, updateOrderStatus, getInventory, getCafeInfo } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 import '../styles/App.css';
+import { useSocket } from '../hooks/useSocket';
 
 const CashierDashboard = () =>{
  const { logout, user } = useAuth();
+ const navigate = useNavigate();
+ const { socket, reconnectTrigger } = useSocket();
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
  const [activeTab, setActiveTab] = useState(() =>{
@@ -43,72 +46,171 @@ const CashierDashboard = () =>{
  }
  }, [tabParam]);
 
- const fetchInventory = async (isSilent = false) =>{
- if (!isSilent) setInventoryLoading(true);
- try {
- const response = await getInventory();
- if (response && response.success) {
- setInventory(response.data);
- }
- } catch (error) {
- console.error('Error fetching inventory:', error);
- } finally {
- if (!isSilent) setInventoryLoading(false);
- }
- };
+  const fetchInventory = useCallback(async (isSilent = false) => {
+    if (!isSilent) setInventoryLoading(true);
+    try {
+      const response = await getInventory();
+      if (response && response.success) {
+        setInventory(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+    } finally {
+      if (!isSilent) setInventoryLoading(false);
+    }
+  }, []);
 
- useEffect(() =>{
- if (activeTab === 'inventory') {
- fetchInventory();
- }
- }, [activeTab]);
+  useEffect(() => {
+    if (activeTab === 'inventory') {
+      fetchInventory();
+    }
+  }, [activeTab, fetchInventory]);
 
- const [orders, setOrders] = useState([]);
- const [loading, setLoading] = useState(true);
- const [errorMsg, setErrorMsg] = useState('');
- const [selectedOrder, setSelectedOrder] = useState(null);
- const [refreshCountdown, setRefreshCountdown] = useState(5);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
- const fetchOrders = async (isSilent = false) =>{
- try {
- const response = await getOrders();
- if (response.success) {
- const cafeOrders = user?.cafeId ?
- response.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
- response.data;
- setOrders(cafeOrders);
- setErrorMsg('');
- } else {
- setErrorMsg('Failed to refresh billing orders feed.');
- }
- } catch (error) {
- console.error('Error fetching cashier orders:', error);
- setErrorMsg('Cannot connect to billing server.');
- } finally {
- if (!isSilent) setLoading(false);
- }
- };
+  const fetchOrders = useCallback(async (isSilent = false) => {
+    try {
+      const response = await getOrders();
+      if (response.success) {
+        const isStaff = ['waiter', 'chef', 'cashier', 'staff'].includes((user?.role || '').toLowerCase());
+        const staffBranchId = user?.assignedBranch || user?.branchId;
+        const cafeOrders = response.data.filter((order) => {
+          if (user?.cafeId && order.cafeId && order.cafeId !== user.cafeId) {
+            return false;
+          }
+          if (isStaff && staffBranchId && order.branchId) {
+            return String(order.branchId) === String(staffBranchId);
+          }
+          return true;
+        });
+        setOrders(cafeOrders);
+        setErrorMsg('');
+      } else {
+        setErrorMsg('Failed to refresh billing orders feed.');
+      }
+    } catch (error) {
+      console.error('Error fetching cashier orders:', error);
+      setErrorMsg('Cannot connect to billing server.');
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
+  }, [user?.cafeId, user?.role, user?.assignedBranch, user?.branchId]);
 
- useEffect(() =>{
- fetchOrders();
+  // Fetch initial orders and set up 30-second hybrid polling
+  useEffect(() => {
+    fetchOrders();
+    if (activeTab === 'inventory') fetchInventory();
 
- const pollingInterval = setInterval(() =>{
- fetchOrders(true);
- if (activeTab === 'inventory') {
- fetchInventory(true);
- }
- setRefreshCountdown(5);
- }, 5000);
+    const pollingInterval = setInterval(() => {
+      console.log('[POLLING] Cashier Dashboard: Running 60s recovery check...');
+      fetchOrders(true);
+      if (activeTab === 'inventory') {
+        fetchInventory(true);
+      }
+    }, 60000);
 
- const countdownInterval = setInterval(() =>{
- setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
- }, 1000);
+    return () => {
+      clearInterval(pollingInterval);
+    };
+  }, [fetchOrders, fetchInventory, activeTab]);
 
- return () =>{
- clearInterval(pollingInterval);
- clearInterval(countdownInterval);
- };
- }, [activeTab]);
+  // One-off REST sync on reconnect
+  useEffect(() => {
+    if (reconnectTrigger > 0) {
+      console.log('[SOCKET] Cashier Dashboard: Reconnection detected. Triggering recovery sync.');
+      fetchOrders(true);
+      fetchInventory(true);
+    }
+  }, [reconnectTrigger, fetchOrders, fetchInventory]);
+
+  // Socket Event Listeners with versioning and isolation checks
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleOrderCreated = (newOrder) => {
+      console.log('[SOCKET] Cashier received orderCreated:', newOrder);
+      if (!newOrder || !newOrder._id) return;
+
+      const staffBranchId = user?.assignedBranch || user?.branchId;
+      if (staffBranchId && String(newOrder.branchId) !== String(staffBranchId)) return;
+      if (user?.cafeId && newOrder.cafeId !== user.cafeId) return;
+
+      setOrders(prev => {
+        if (prev.find(o => o._id === newOrder._id)) return prev;
+        return [newOrder, ...prev];
+      });
+    };
+
+    const handleOrderUpdated = (updatedOrder) => {
+      console.log('[SOCKET] Cashier received orderUpdated:', updatedOrder);
+      if (!updatedOrder || !updatedOrder._id) return;
+
+      const staffBranchId = user?.assignedBranch || user?.branchId;
+      if (staffBranchId && String(updatedOrder.branchId) !== String(staffBranchId)) return;
+      if (user?.cafeId && updatedOrder.cafeId !== user.cafeId) return;
+
+      setOrders(prev => {
+        return prev.map(o => {
+          if (o._id === updatedOrder._id) {
+            const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
+            const existingTime = new Date(o.updatedAt || 0).getTime();
+            if (incomingTime <= existingTime) return o;
+            return updatedOrder;
+          }
+          return o;
+        });
+      });
+
+      setSelectedOrder(prev => {
+        if (prev && prev._id === updatedOrder._id) {
+          const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
+          const existingTime = new Date(prev.updatedAt || 0).getTime();
+          if (incomingTime <= existingTime) return prev;
+          return updatedOrder;
+        }
+        return prev;
+      });
+    };
+
+    const handleInventoryUpdated = (updatedItems) => {
+      console.log('[SOCKET] Cashier received inventoryUpdated:', updatedItems);
+      if (!Array.isArray(updatedItems)) return;
+
+      setInventory(prev => {
+        if (prev.length === 0) return prev;
+        return prev.map(item => {
+          const match = updatedItems.find(p => String(p._id) === String(item._id));
+          if (match) {
+            const incomingTime = new Date(match.updatedAt || 0).getTime();
+            const existingTime = new Date(item.updatedAt || 0).getTime();
+            if (incomingTime <= existingTime) return item;
+            return {
+              ...item,
+              quantity: match.quantity,
+              stock: match.quantity,
+              updatedAt: match.updatedAt
+            };
+          }
+          return item;
+        });
+      });
+    };
+
+    socket.on('orderCreated', handleOrderCreated);
+    socket.on('orderUpdated', handleOrderUpdated);
+    socket.on('paymentCompleted', handleOrderUpdated);
+    socket.on('inventoryUpdated', handleInventoryUpdated);
+
+    return () => {
+      socket.off('orderCreated', handleOrderCreated);
+      socket.off('orderUpdated', handleOrderUpdated);
+      socket.off('paymentCompleted', handleOrderUpdated);
+      socket.off('inventoryUpdated', handleInventoryUpdated);
+    };
+  }, [socket, user]);
 
  const handleProcessPayment = async (orderId, paymentMethod) =>{
  try {
@@ -139,8 +241,8 @@ const CashierDashboard = () =>{
  }
  };
 
- const pendingPayments = orders.filter((o) =>o.paymentStatus !== 'Paid');
- const paidPayments = orders.filter((o) =>o.paymentStatus === 'Paid');
+  const pendingPayments = useMemo(() => orders.filter((o) => o.paymentStatus !== 'Paid'), [orders]);
+  const paidPayments = useMemo(() => orders.filter((o) => o.paymentStatus === 'Paid'), [orders]);
 
  const renderPendingBills = () =>{
  return (
@@ -280,8 +382,8 @@ const CashierDashboard = () =>{
  boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
  }}>
 <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '15px', marginBottom: '15px' }}>
-<h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>{cafeInfo?.name || 'Dr. Chai Cafe'}</h2>
-<p style={{ margin: '4px 0', fontSize: '0.8rem' }}>{cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
+<h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>{selectedOrder.branchName || cafeInfo?.name || 'Dr. Chai Cafe'}</h2>
+<p style={{ margin: '4px 0', fontSize: '0.8rem' }}>{selectedOrder.branchAddress || cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
  {cafeInfo?.gstNumber &&<p style={{ margin: '2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
 <p style={{ margin: '2px 0', fontSize: '0.8rem' }}>Tel: {cafeInfo?.supportNumber || user?.phone || '+91 9876543210'}</p>
 </div>
@@ -313,9 +415,9 @@ const CashierDashboard = () =>{
 </table>
 
 <div style={{ borderTop: '1px dashed #33271c', paddingTop: '10px', textAlign: 'right', fontSize: '0.85rem' }}>
-<div>Subtotal (Tax Excl.): ₹{(selectedOrder.totalAmount / 1.05).toFixed(2)}</div>
-<div>CGST (2.5%): ₹{((selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05) / 2).toFixed(2)}</div>
-<div>SGST (2.5%): ₹{((selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05) / 2).toFixed(2)}</div>
+<div>Subtotal (Tax Excl.): ₹{(selectedOrder.subtotal !== undefined ? selectedOrder.subtotal : (selectedOrder.totalAmount / 1.05)).toFixed(2)}</div>
+<div>CGST (2.5%): ₹{((selectedOrder.tax !== undefined ? selectedOrder.tax : (selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05)) / 2).toFixed(2)}</div>
+<div>SGST (2.5%): ₹{((selectedOrder.tax !== undefined ? selectedOrder.tax : (selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05)) / 2).toFixed(2)}</div>
 <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginTop: '6px' }}>
  TOTAL AMOUNT: ₹{selectedOrder.totalAmount.toFixed(2)}
 </div>
@@ -401,7 +503,6 @@ const CashierDashboard = () =>{
 </div>
  
 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-
 </div>
 </div>
 

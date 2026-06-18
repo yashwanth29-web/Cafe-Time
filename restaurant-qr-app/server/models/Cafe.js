@@ -85,6 +85,14 @@ const CafeSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  gstRate: {
+    type: Number,
+    default: 0
+  },
+  serviceChargeRate: {
+    type: Number,
+    default: 0
+  },
   subscriptionPlan: {
     type: String,
     enum: ['Basic', 'Premium', 'Enterprise'],

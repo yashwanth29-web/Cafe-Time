@@ -345,7 +345,9 @@ const saveSetupData = async (req, res) => {
     logoUrl, address, mapsLocation, latitude, longitude, openingTime, closingTime, gstNumber, supportNumber,
     paymentConfig,
     operationalConfig,
-    staffList
+    staffList,
+    gstRate,
+    serviceChargeRate
   } = req.body;
 
   if (!cafeId) {
@@ -408,6 +410,8 @@ const saveSetupData = async (req, res) => {
     if (closingTime) cafe.closingTime = closingTime;
     if (gstNumber) cafe.gstNumber = gstNumber;
     if (supportNumber) cafe.supportNumber = supportNumber;
+    if (gstRate !== undefined) cafe.gstRate = Number(gstRate);
+    if (serviceChargeRate !== undefined) cafe.serviceChargeRate = Number(serviceChargeRate);
     cafe.setupCompleted = true; // Complete setup flag!
     await cafe.save();
 

@@ -466,7 +466,10 @@ const getOwnerReports = async (req, res) => {
       checkInTime: { $gte: startDate }
     };
 
-    if (branchId) {
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user.role || '').toLowerCase());
+    if (isStaff && req.user.assignedBranch) {
+      query.branchId = req.user.assignedBranch;
+    } else if (branchId) {
       query.branchId = branchId;
     }
 

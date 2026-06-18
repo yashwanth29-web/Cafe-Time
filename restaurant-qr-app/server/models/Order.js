@@ -69,8 +69,46 @@ const OrderSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['Online', 'Counter', 'Pending'],
+    enum: ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card'],
     default: 'Pending'
+  },
+  orderSource: {
+    type: String,
+    enum: ['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN'],
+    default: 'QR'
+  },
+  createdBy: {
+    type: String,
+    default: ''
+  },
+  createdByRole: {
+    type: String,
+    default: ''
+  },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Branch',
+    default: null
+  },
+  branchName: {
+    type: String,
+    default: ''
+  },
+  branchAddress: {
+    type: String,
+    default: ''
+  },
+  subtotal: {
+    type: Number,
+    default: 0
+  },
+  tax: {
+    type: Number,
+    default: 0
+  },
+  grandTotal: {
+    type: Number,
+    default: 0
   },
   inventoryDeducted: {
     type: Boolean,
@@ -83,7 +121,18 @@ const OrderSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
+}, {
+  timestamps: true
 });
+
+// Performance Indexes
+OrderSchema.index({ cafeId: 1, branchId: 1, createdAt: -1 });
+OrderSchema.index({ status: 1 });
+OrderSchema.index({ paymentStatus: 1 });
 
 module.exports = mongoose.model('Order', OrderSchema);

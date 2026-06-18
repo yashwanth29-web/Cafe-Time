@@ -1,6 +1,16 @@
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught Exception:', err.message, err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const express = require('express');
 const dotenv = require('dotenv');
 const path = require('path');
+const http = require('http');
+const { initializeSocket } = require('./config/socket');
 
 // Load environment variables immediately before routing imports
 dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
@@ -23,6 +33,76 @@ const cafeRoutes = require('./routes/cafeRoutes');
 
 // Create Express instance
 const app = express();
+
+// Enable compression and profiling middleware
+const compression = require('compression');
+const mongoose = require('mongoose');
+const { AsyncLocalStorage } = require('async_hooks');
+
+const requestStore = new AsyncLocalStorage();
+
+// Monkeypatch mongoose Query execution to measure DB read time
+const originalExec = mongoose.Query.prototype.exec;
+mongoose.Query.prototype.exec = async function(...args) {
+  const store = requestStore.getStore();
+  if (!store) return originalExec.apply(this, args);
+  
+  const start = process.hrtime();
+  try {
+    return await originalExec.apply(this, args);
+  } finally {
+    const diff = process.hrtime(start);
+    const ms = diff[0] * 1000 + diff[1] / 1e6;
+    store.dbTime += ms;
+  }
+};
+
+// Monkeypatch mongoose Model save execution to measure DB write time
+const originalSave = mongoose.Model.prototype.save;
+mongoose.Model.prototype.save = async function(...args) {
+  const store = requestStore.getStore();
+  if (!store) return originalSave.apply(this, args);
+  
+  const start = process.hrtime();
+  try {
+    return await originalSave.apply(this, args);
+  } finally {
+    const diff = process.hrtime(start);
+    const ms = diff[0] * 1000 + diff[1] / 1e6;
+    store.dbTime += ms;
+  }
+};
+
+// Enable Gzip Compression for API responses (excludes static assets/images)
+app.use(compression({
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+}));
+
+// API Response Profiler Middleware
+app.use((req, res, next) => {
+  const start = process.hrtime();
+  const store = { dbTime: 0 };
+  
+  requestStore.run(store, () => {
+    res.on('finish', () => {
+      const duration = process.hrtime(start);
+      const totalMs = duration[0] * 1000 + duration[1] / 1e6;
+      const dbMs = store.dbTime;
+      const controllerMs = Math.max(0, totalMs - dbMs);
+      
+      if (totalMs > 200) {
+        console.warn(`[SLOW API] ${req.method} ${req.originalUrl} - Total: ${totalMs.toFixed(2)}ms | DB: ${dbMs.toFixed(2)}ms | Controller: ${controllerMs.toFixed(2)}ms`);
+      }
+    });
+    next();
+  });
+});
+
 
 // Middlewares
 app.use(cors({
@@ -99,7 +179,13 @@ setInterval(() => {
   runAutoCleanup();
 }, 3600000);
 
+// Create HTTP Server
+const server = http.createServer(app);
+
+// Initialize Socket.IO
+initializeSocket(server);
+
 // Start Listening
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });

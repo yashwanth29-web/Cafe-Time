@@ -1,13 +1,16 @@
 import { toast } from '../components/Toast';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getOrders, getStaff, getInventory, updateInventoryItem, recordPurchase, recordWastage, getMenu, updateMenuItem, getCafeInfo } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
+import { useSocket } from '../hooks/useSocket';
 
 const ManagerDashboard = () =>{
  const { logout, user } = useAuth();
+ const navigate = useNavigate();
+ const { socket, reconnectTrigger } = useSocket();
  const [orders, setOrders] = useState([]);
  const [staffList, setStaffList] = useState([]);
  const [loading, setLoading] = useState(true);
@@ -71,29 +74,29 @@ const ManagerDashboard = () =>{
  const [menuSearch, setMenuSearch] = useState('');
  const [inventorySearch, setInventorySearch] = useState('');
 
- const filteredInventory = inventory.filter((item) =>
- item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
- (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
-);
+  const filteredInventory = useMemo(() => inventory.filter((item) =>
+    item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+    (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
+  ), [inventory, inventorySearch]);
 
- const filteredMenuItems = menuItems.filter((item) =>
- item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
- (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
-);
+  const filteredMenuItems = useMemo(() => menuItems.filter((item) =>
+    item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+    (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
+  ), [menuItems, menuSearch]);
 
- const fetchMenu = async (isSilent = false) =>{
-  if (!isSilent) setMenuLoading(true);
-  try {
-  const response = await getMenu();
-  if (response.success) {
-  setMenuItems(response.data);
-  }
-  } catch (error) {
-  console.error('Error fetching menu:', error);
-  } finally {
-  if (!isSilent) setMenuLoading(false);
-  }
-  };
+  const fetchMenu = useCallback(async (isSilent = false) => {
+    if (!isSilent) setMenuLoading(true);
+    try {
+      const response = await getMenu();
+      if (response.success) {
+        setMenuItems(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching menu:', error);
+    } finally {
+      if (!isSilent) setMenuLoading(false);
+    }
+  }, []);
 
  const handleToggleAvailability = async (item) =>{
  try {
@@ -198,23 +201,34 @@ const ManagerDashboard = () =>{
  }
  };
 
-  const fetchInitialData = async (isSilent = false) =>{
+  const fetchInitialData = useCallback(async (isSilent = false) => {
     try {
       const ordersRes = await getOrders();
       if (ordersRes.success) {
-        const cafeOrders = user?.cafeId ?
-          ordersRes.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
-          ordersRes.data;
+        const staffBranchId = user?.assignedBranch || user?.branchId;
+        const cafeOrders = ordersRes.data.filter((order) => {
+          if (user?.cafeId && order.cafeId && order.cafeId !== user.cafeId) {
+            return false;
+          }
+          if (staffBranchId && order.branchId) {
+            return String(order.branchId) === String(staffBranchId);
+          }
+          return true;
+        });
         setOrders(cafeOrders);
       }
 
       const staffRes = await getStaff();
       if (staffRes.success) {
-        setStaffList(staffRes.staff);
+        const staffBranchId = user?.assignedBranch || user?.branchId;
+        const filteredStaff = staffBranchId 
+          ? staffRes.staff.filter(member => member.assignedBranch && String(member.assignedBranch) === String(staffBranchId))
+          : staffRes.staff;
+        setStaffList(filteredStaff);
         // Initialize attendance to Present by default if not already set
         setAttendance((prev) => {
           const updated = { ...prev };
-          staffRes.staff.forEach((member) => {
+          filteredStaff.forEach((member) => {
             if (updated[member._id] === undefined) {
               updated[member._id] = 'Present';
             }
@@ -226,7 +240,11 @@ const ManagerDashboard = () =>{
       // Fetch actual inventory from backend
       const inventoryRes = await getInventory();
       if (inventoryRes.success) {
-        setInventory(inventoryRes.data);
+        const staffBranchId = user?.assignedBranch || user?.branchId;
+        const filteredInventory = staffBranchId
+          ? inventoryRes.data.filter(item => item.branch && String(item.branch) === String(staffBranchId))
+          : inventoryRes.data;
+        setInventory(filteredInventory);
       }
 
       // Fetch menu items
@@ -237,47 +255,169 @@ const ManagerDashboard = () =>{
     } finally {
       if (!isSilent) setLoading(false);
     }
-  };
+  }, [user?.cafeId, user?.role, user?.assignedBranch, user?.branchId, fetchMenu]);
 
-  const pollManagerData = async () => {
+  const pollManagerData = useCallback(async () => {
     try {
       const ordersRes = await getOrders();
       if (ordersRes.success) {
-        const cafeOrders = user?.cafeId ?
-          ordersRes.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
-          ordersRes.data;
+        const staffBranchId = user?.assignedBranch || user?.branchId;
+        const cafeOrders = ordersRes.data.filter((order) => {
+          if (user?.cafeId && order.cafeId && order.cafeId !== user.cafeId) {
+            return false;
+          }
+          if (staffBranchId && order.branchId) {
+            return String(order.branchId) === String(staffBranchId);
+          }
+          return true;
+        });
         setOrders(cafeOrders);
       }
     } catch (e) {
       console.error('Error polling manager data:', e);
     }
-  };
+  }, [user?.cafeId, user?.assignedBranch, user?.branchId]);
 
-  useEffect(() =>{
+  // Fetch initial data and set up 30-second hybrid polling
+  useEffect(() => {
     fetchInitialData();
 
-    // Poll orders every 12 seconds
-    const pollingInterval = setInterval(() =>{
+    // Poll orders every 60 seconds (recovery fallback)
+    const pollingInterval = setInterval(() => {
+      console.log('[POLLING] Manager Dashboard: Running 60s recovery check...');
       pollManagerData();
-    }, 12000);
+    }, 60000);
 
-    // Poll inventory every 30 seconds
+    // Poll inventory every 60 seconds
     const inventoryInterval = setInterval(async () => {
       try {
         const inventoryRes = await getInventory();
         if (inventoryRes.success) {
-          setInventory(inventoryRes.data);
+          const staffBranchId = user?.assignedBranch || user?.branchId;
+          const filteredInventory = staffBranchId
+            ? inventoryRes.data.filter(item => item.branch && String(item.branch) === String(staffBranchId))
+            : inventoryRes.data;
+          setInventory(filteredInventory);
         }
       } catch (e) {
         console.error('Error polling inventory data:', e);
       }
-    }, 30000);
+    }, 60000);
 
-    return () =>{
+    return () => {
       clearInterval(pollingInterval);
       clearInterval(inventoryInterval);
     };
-  }, []);
+  }, [fetchInitialData, pollManagerData, user]);
+
+  // One-off REST sync on reconnect
+  useEffect(() => {
+    if (reconnectTrigger > 0) {
+      console.log('[SOCKET] Manager Dashboard: Reconnection detected. Triggering recovery sync.');
+      fetchInitialData(true);
+    }
+  }, [reconnectTrigger, fetchInitialData]);
+
+  // Socket Event Listeners with versioning and isolation checks
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleOrderCreated = (newOrder) => {
+      console.log('[SOCKET] Manager received orderCreated:', newOrder);
+      if (!newOrder || !newOrder._id) return;
+
+      const staffBranchId = user?.assignedBranch || user?.branchId;
+      if (staffBranchId && String(newOrder.branchId) !== String(staffBranchId)) return;
+      if (user?.cafeId && newOrder.cafeId !== user.cafeId) return;
+
+      setOrders(prev => {
+        if (prev.find(o => o._id === newOrder._id)) return prev;
+        return [newOrder, ...prev];
+      });
+    };
+
+    const handleOrderUpdated = (updatedOrder) => {
+      console.log('[SOCKET] Manager received orderUpdated:', updatedOrder);
+      if (!updatedOrder || !updatedOrder._id) return;
+
+      const staffBranchId = user?.assignedBranch || user?.branchId;
+      if (staffBranchId && String(updatedOrder.branchId) !== String(staffBranchId)) return;
+      if (user?.cafeId && updatedOrder.cafeId !== user.cafeId) return;
+
+      setOrders(prev => {
+        return prev.map(o => {
+          if (o._id === updatedOrder._id) {
+            const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
+            const existingTime = new Date(o.updatedAt || 0).getTime();
+            if (incomingTime <= existingTime) return o;
+            return updatedOrder;
+          }
+          return o;
+        });
+      });
+    };
+
+    const handleInventoryUpdated = (updatedItems) => {
+      console.log('[SOCKET] Manager received inventoryUpdated:', updatedItems);
+      if (!Array.isArray(updatedItems)) return;
+
+      setInventory(prev => {
+        if (prev.length === 0) return prev;
+        return prev.map(item => {
+          const match = updatedItems.find(p => String(p._id) === String(item._id));
+          if (match) {
+            const incomingTime = new Date(match.updatedAt || 0).getTime();
+            const existingTime = new Date(item.updatedAt || 0).getTime();
+            if (incomingTime <= existingTime) return item;
+            return {
+              ...item,
+              quantity: match.quantity,
+              stock: match.quantity,
+              updatedAt: match.updatedAt
+            };
+          }
+          return item;
+        });
+      });
+    };
+
+    const handleMenuAvailabilityUpdated = (payload) => {
+      console.log('[SOCKET] Manager received menuAvailabilityUpdated:', payload);
+      if (!payload || !payload._id) return;
+
+      setMenuItems(prev => {
+        if (prev.length === 0) return prev;
+        return prev.map(item => {
+          if (String(item._id) === String(payload._id)) {
+            const incomingTime = new Date(payload.updatedAt || 0).getTime();
+            const existingTime = new Date(item.updatedAt || 0).getTime();
+            if (incomingTime <= existingTime) return item;
+            return {
+              ...item,
+              available: payload.available,
+              price: payload.price !== undefined ? payload.price : item.price,
+              updatedAt: payload.updatedAt
+            };
+          }
+          return item;
+        });
+      });
+    };
+
+    socket.on('orderCreated', handleOrderCreated);
+    socket.on('orderUpdated', handleOrderUpdated);
+    socket.on('paymentCompleted', handleOrderUpdated);
+    socket.on('inventoryUpdated', handleInventoryUpdated);
+    socket.on('menuAvailabilityUpdated', handleMenuAvailabilityUpdated);
+
+    return () => {
+      socket.off('orderCreated', handleOrderCreated);
+      socket.off('orderUpdated', handleOrderUpdated);
+      socket.off('paymentCompleted', handleOrderUpdated);
+      socket.off('inventoryUpdated', handleInventoryUpdated);
+      socket.off('menuAvailabilityUpdated', handleMenuAvailabilityUpdated);
+    };
+  }, [socket, user]);
 
  const handleAttendanceChange = (staffId, status) =>{
  setAttendance((prev) =>({ ...prev, [staffId]: status }));
@@ -318,15 +458,15 @@ const ManagerDashboard = () =>{
  flexWrap: 'wrap',
  gap: '12px'
  }}>
-<div>
-<h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>
- Manager Station
-</h2>
-<p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
- Monitor sales revenue, active cooking queue, stock alerts, and employee attendance rosters.
-</p>
-</div>
-</div>
+ <div>
+ <h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>
+  Manager Station
+ </h2>
+ <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+  Monitor sales revenue, active cooking queue, stock alerts, and employee attendance rosters.
+ </p>
+ </div>
+ </div>
 
  {errorMsg &&
 <div style={{
@@ -374,10 +514,10 @@ const ManagerDashboard = () =>{
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
 <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1.2rem' }}>Live Order Records</h3>
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-orders" style={{ display: 'none', overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
+<div className="desktop-tablet-manager-orders" style={{ display: 'none', overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem', minWidth: '750px' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', backgroundColor: 'var(--bg-card)' }}>
 <th style={{ padding: '8px' }}>Order ID</th>
 <th style={{ padding: '8px' }}>Table</th>
 <th style={{ padding: '8px' }}>Amount</th>
@@ -485,10 +625,10 @@ const ManagerDashboard = () =>{
 
 <>
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-attendance" style={{ display: 'none', overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
+<div className="desktop-tablet-manager-attendance" style={{ display: 'none', overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem', minWidth: '700px' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', backgroundColor: 'var(--bg-card)' }}>
 <th style={{ padding: '8px' }}>Staff Name</th>
 <th style={{ padding: '8px' }}>Designated Role</th>
 <th style={{ padding: '8px' }}>Contact</th>
@@ -594,10 +734,10 @@ const ManagerDashboard = () =>{
 </div>
 
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-inventory" style={{ display: 'none', overflowX: 'auto' }}>
+<div className="desktop-tablet-manager-inventory" style={{ display: 'none', overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
 <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
+<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--bg-card)' }}>
 <th style={{ padding: '8px' }}>Ingredient Name</th>
 <th style={{ padding: '8px' }}>Category</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>

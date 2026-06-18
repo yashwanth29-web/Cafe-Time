@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { confirm } from '../components/Toast';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
  checkIn,
@@ -13,6 +13,7 @@ import '../styles/App.css';
 
 const StaffDashboard = () => {
  const { logout, user } = useAuth();
+ const navigate = useNavigate();
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
 
@@ -662,10 +663,10 @@ const StaffDashboard = () => {
  No attendance logs found for the last 30 days.
  </div> :
 
- <div style={{ overflowX: 'auto' }}>
- <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
- <thead>
- <tr style={{ borderBottom: '1px solid rgba(0, 0, 0,0.08)' }}>
+ <div style={{ overflow: 'auto', maxHeight: '400px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+ <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left', minWidth: '700px' }}>
+ <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+ <tr style={{ borderBottom: '1px solid rgba(0, 0, 0,0.08)', backgroundColor: 'var(--bg-card)' }}>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Date</th>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Branch</th>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Check In</th>

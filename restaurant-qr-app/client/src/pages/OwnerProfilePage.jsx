@@ -25,8 +25,8 @@ const OwnerProfilePage = () => {
   const [verifyingKeys, setVerifyingKeys] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedQrTable, setSelectedQrTable] = useState(null);
-  const [taxRate, setTaxRateState] = useState(() => parseFloat(localStorage.getItem('owner_tax_rate') || '5'));
-  const [serviceCharge, setServiceChargeState] = useState(() => parseFloat(localStorage.getItem('owner_service_charge') || '0'));
+  const [taxRate, setTaxRateState] = useState(0);
+  const [serviceCharge, setServiceChargeState] = useState(0);
 
   const testRazorpayConnection = async (keyId, secret) => {
     if (!keyId || !secret) {
@@ -90,7 +90,13 @@ const OwnerProfilePage = () => {
     setLoading(true);
     try {
       const [r, br, st] = await Promise.all([getSetupData(), getBranches(), getStaff()]);
-      if (r.success) {setCafeData(r.cafe);setPaymentConfig(r.paymentConfig);setOpsConfig(r.operationalConfig);}
+      if (r.success) {
+        setCafeData(r.cafe);
+        setPaymentConfig(r.paymentConfig);
+        setOpsConfig(r.operationalConfig);
+        if (r.cafe?.gstRate !== undefined) setTaxRateState(parseFloat(r.cafe.gstRate));
+        if (r.cafe?.serviceChargeRate !== undefined) setServiceChargeState(parseFloat(r.cafe.serviceChargeRate));
+      }
       if (br.success) setBranches(br.branches || []);
       if (st.success) setStaffCount(st.staff?.length || 0);
     } catch {showToast('Failed to load.', false);} finally
@@ -129,10 +135,12 @@ const OwnerProfilePage = () => {
       if (activeModal === 'hours') await saveSetupData(form);else
       if (activeModal === 'payment') {
         const { taxRate: newTaxRate, serviceCharge: newServiceCharge, ...paymentFields } = form;
-        await saveSetupData({ paymentConfig: paymentFields });
-        localStorage.setItem('owner_tax_rate', String(newTaxRate !== undefined ? newTaxRate : 5));
-        localStorage.setItem('owner_service_charge', String(newServiceCharge !== undefined ? newServiceCharge : 0));
-        setTaxRateState(parseFloat(newTaxRate !== undefined ? newTaxRate : 5));
+        await saveSetupData({
+          paymentConfig: paymentFields,
+          gstRate: newTaxRate !== undefined ? Number(newTaxRate) : 0,
+          serviceChargeRate: newServiceCharge !== undefined ? Number(newServiceCharge) : 0
+        });
+        setTaxRateState(parseFloat(newTaxRate !== undefined ? newTaxRate : 0));
         setServiceChargeState(parseFloat(newServiceCharge !== undefined ? newServiceCharge : 0));
       } else
       if (activeModal === 'ops') {
@@ -684,13 +692,13 @@ const OwnerProfilePage = () => {
               </div>
               {branches.length === 0 && <p style={{ color: '#A2B9AC', fontStyle: 'italic', fontSize: '.85rem', margin: '4px 0 10px' }}>No branches added yet.</p>}
               {branches.map((b) =>
-              <div key={b._id} className="branch-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(230,213,195,.06)' }}>
-                  <div>
+              <div key={b._id} className="branch-item" style={{ padding: '12px 0', borderBottom: '1px solid rgba(230,213,195,.06)' }}>
+                  <div className="branch-info">
                     <div className="branch-name" style={{ fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '.875rem' }}>{b.branchName}</div>
                     <div className="branch-addr" style={{ fontSize: '.75rem', color: '#B4C4B9', marginTop: '2px' }}>{b.address}{b.manager ? ` · ${b.manager}` : ''}</div>
                     <span className={b.isActive ? 'badge-on' : 'badge-off'} style={{ display: 'inline-block', marginTop: '4px' }}>{b.isActive ? 'Active' : 'Inactive'}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="branch-actions">
                     <button
                     onClick={(e) => {e.stopPropagation();openEditBranchModal(b);}}
                     style={{ background: '#3E2723', color: 'var(--color-text-primary)', border: '1px solid rgba(230,213,195,.18)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>

@@ -14,6 +14,7 @@ const SaaSLayout = ({ children }) => {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const notificationRef = useRef(null);
   const bellButtonRef = useRef(null);
+  const mobileBellButtonRef = useRef(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return window.innerWidth >= 768 && window.innerWidth < 1024;
   });
@@ -82,14 +83,14 @@ const SaaSLayout = ({ children }) => {
 
   useEffect(() => {
     const handleOutsideClick = (e) => {
-      if (
-        notificationsOpen &&
-        notificationRef.current &&
-        !notificationRef.current.contains(e.target) &&
-        bellButtonRef.current &&
-        !bellButtonRef.current.contains(e.target)
-      ) {
-        setNotificationsOpen(false);
+      if (notificationsOpen) {
+        const clickedInsideDropdown = notificationRef.current && notificationRef.current.contains(e.target);
+        const clickedInsideBellDesktop = bellButtonRef.current && bellButtonRef.current.contains(e.target);
+        const clickedInsideBellMobile = mobileBellButtonRef.current && mobileBellButtonRef.current.contains(e.target);
+        
+        if (!clickedInsideDropdown && !clickedInsideBellDesktop && !clickedInsideBellMobile) {
+          setNotificationsOpen(false);
+        }
       }
       if (profileDropdownOpen && !e.target.closest('.profile-dropdown-container')) {
         setProfileDropdownOpen(false);
@@ -167,12 +168,14 @@ const SaaSLayout = ({ children }) => {
       case 'staff':
         return [
         { label: 'Live Orders', icon: '🛍️', path: '/waiter/dashboard' },
+        { label: 'Manual Orders', icon: '📝', path: '/manual-order' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }];
 
       case 'cashier':
         return [
         { label: 'Counter Billing', icon: '💳', path: '/cashier/dashboard' },
+        { label: 'Manual Orders', icon: '📝', path: '/manual-order' },
         { label: 'Receipt Logs', icon: '📝', path: '/cashier/dashboard?tab=receipts' },
         { label: 'Item Availability', icon: '📦', path: '/cashier/dashboard?tab=inventory' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
@@ -728,7 +731,7 @@ const SaaSLayout = ({ children }) => {
           </div>
 
           {/* Notification Bell */}
-          <div style={{ position: 'relative' }}>
+          <div>
             <button ref={bellButtonRef} className="mh-icon-btn" onClick={() => setNotificationsOpen(!notificationsOpen)}>
               🔔
               {lowStockAlerts.length > 0 &&
@@ -738,9 +741,10 @@ const SaaSLayout = ({ children }) => {
             {notificationsOpen &&
             <div ref={notificationRef} style={{
               position: 'absolute',
-              top: '50px',
-              right: 0,
-              width: '280px',
+              top: '55px',
+              right: '16px',
+              width: '300px',
+              maxWidth: 'calc(100vw - 32px)',
               backgroundColor: 'var(--bg-card)',
               border: '1px solid var(--border-color)',
               borderRadius: '12px',
@@ -943,7 +947,7 @@ const SaaSLayout = ({ children }) => {
             {/* Notification Bell */}
             <div style={{ position: 'relative' }}>
               <button
-                ref={bellButtonRef}
+                ref={mobileBellButtonRef}
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
                 style={{
                   background: 'rgba(0, 0, 0, 0.04)',

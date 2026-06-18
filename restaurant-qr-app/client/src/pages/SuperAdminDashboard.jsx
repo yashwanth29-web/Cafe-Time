@@ -928,10 +928,10 @@ const SuperAdminDashboard = () => {
             Real-time tracking of transaction alerts, client frontend crashes, printing failures, and server API heartbeat logs.
           </p>
 
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
+          <div style={{ overflow: 'auto', maxHeight: '500px', border: '1px solid #432E22', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem', minWidth: '900px' }}>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: '#2B1D15', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+              <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)', backgroundColor: '#2B1D15' }}>
                 <th style={{ padding: '8px' }}>Cafe Name / Code</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>Printer Status</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>Payment Gateway</th>
@@ -1030,10 +1030,10 @@ const SuperAdminDashboard = () => {
             Monitor and modify SaaS plans, suspension statuses, and renewal cycles for all cafe accounts.
           </p>
 
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
+          <div style={{ overflow: 'auto', maxHeight: '500px', border: '1px solid #432E22', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem', minWidth: '850px' }}>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: '#2B1D15', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+              <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)', backgroundColor: '#2B1D15' }}>
                 <th style={{ padding: '8px' }}>Cafe Name / ID</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>Plan</th>
                 <th style={{ padding: '8px', textAlign: 'center' }}>Billing Status</th>
@@ -1194,10 +1194,10 @@ const SuperAdminDashboard = () => {
         tickets.length === 0 ?
         <p style={{ color: '#A0826C', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>No support tickets registered.</p> :
 
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
+        <div style={{ overflow: 'auto', maxHeight: '500px', border: '1px solid #432E22', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem', minWidth: '850px' }}>
+              <thead style={{ position: 'sticky', top: 0, backgroundColor: '#2B1D15', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+                <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)', backgroundColor: '#2B1D15' }}>
                   <th style={{ padding: '8px' }}>Ticket ID / Cafe</th>
                   <th style={{ padding: '8px' }}>Details</th>
                   <th style={{ padding: '8px', textAlign: 'center' }}>Priority</th>
@@ -1343,10 +1343,10 @@ const SuperAdminDashboard = () => {
 
           <div style={{ marginTop: '24px' }}>
             <h4 style={{ color: 'var(--color-text-primary)', margin: '0 0 12px 0' }}>Cafe Sales & Bill Ledger</h4>
-            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)' }}>
+            <div style={{ overflow: 'auto', maxHeight: '500px', border: '1px solid #432E22', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem', minWidth: '750px' }}>
+              <thead style={{ position: 'sticky', top: 0, backgroundColor: '#2B1D15', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+                <tr style={{ borderBottom: '2px solid #432E22', color: 'var(--color-text-primary)', backgroundColor: '#2B1D15' }}>
                   <th style={{ padding: '8px' }}>Cafe Name</th>
                   <th style={{ padding: '8px' }}>Active Plan</th>
                   <th style={{ padding: '8px', textAlign: 'center' }}>Monthly Cost</th>

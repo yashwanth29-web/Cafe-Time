@@ -48,4 +48,8 @@ const MenuItemSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Performance Indexes
+MenuItemSchema.index({ category: 1, name: 1 });
+MenuItemSchema.index({ available: 1 });
+
 module.exports = mongoose.model('MenuItem', MenuItemSchema);

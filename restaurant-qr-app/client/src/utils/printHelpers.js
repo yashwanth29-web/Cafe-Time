@@ -6,13 +6,13 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
     return;
   }
 
-  // Inclusive GST Calculations (5% standard GST for cafes)
-  const grandTotal = order.totalAmount || 0;
-  const subtotal = grandTotal / 1.05;
-  const gstAmount = grandTotal - subtotal;
+  // Use immutable values stored on the order document
+  const grandTotal = order.grandTotal !== undefined ? order.grandTotal : (order.totalAmount || 0);
+  const subtotal = order.subtotal !== undefined ? order.subtotal : (grandTotal / 1.05);
+  const gstAmount = order.tax !== undefined ? order.tax : (grandTotal - subtotal);
 
-  const cafeName = cafe?.name || 'Dr. Chai Cafe';
-  const cafeAddress = cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const cafeName = order.branchName || cafe?.name || 'Dr. Chai Cafe';
+  const cafeAddress = order.branchAddress || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
   const cafeGST = cafe?.gstNumber || '36AAAAA1111A1Z1';
 
   const itemsHtml = order.items.map(item => `
@@ -194,7 +194,7 @@ export const printKOT = (order, user = null, cafe = null) => {
   }
 
   const cafeName = cafe?.name || 'Dr. Chai Cafe';
-  const branchName = user?.assignedBranch || cafe?.city || 'Main Branch';
+  const branchName = order.branchName || user?.assignedBranch || cafe?.city || 'Main Branch';
 
   const itemsHtml = order.items.map(item => `
     <tr>

@@ -45,8 +45,25 @@ const createMenuItem = async (req, res) => {
 
     // Fetch latest status
     const latestItem = await MenuItem.findById(savedItem._id);
+    const finalItem = latestItem || savedItem;
 
-    return res.status(201).json({ success: true, data: latestItem || savedItem });
+    // Emit socket update
+    try {
+      const { getIO } = require('../config/socket');
+      const io = getIO();
+      io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
+        _id: String(finalItem._id),
+        name: finalItem.name,
+        available: finalItem.available,
+        price: finalItem.price,
+        updatedAt: finalItem.updatedAt || new Date().toISOString()
+      });
+      console.log(`[SOCKET] Broadcasted menuAvailabilityUpdated for created item: ${finalItem.name}`);
+    } catch (err) {
+      console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', err.message);
+    }
+
+    return res.status(201).json({ success: true, data: finalItem });
   } catch (error) {
     console.error('Error creating menu item:', error);
     return res.status(500).json({ success: false, message: 'Server error while creating menu item', error: error.message });
@@ -85,8 +102,25 @@ const updateMenuItem = async (req, res) => {
 
     // Fetch the updated item again to return the latest availability status
     const latestItem = await MenuItem.findById(id);
+    const finalItem = latestItem || updatedItem;
 
-    return res.status(200).json({ success: true, data: latestItem || updatedItem });
+    // Emit socket update
+    try {
+      const { getIO } = require('../config/socket');
+      const io = getIO();
+      io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
+        _id: String(finalItem._id),
+        name: finalItem.name,
+        available: finalItem.available,
+        price: finalItem.price,
+        updatedAt: finalItem.updatedAt || new Date().toISOString()
+      });
+      console.log(`[SOCKET] Broadcasted menuAvailabilityUpdated for updated item: ${finalItem.name}`);
+    } catch (err) {
+      console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', err.message);
+    }
+
+    return res.status(200).json({ success: true, data: finalItem });
   } catch (error) {
     console.error('Error updating menu item:', error);
     return res.status(500).json({ success: false, message: 'Server error while updating menu item', error: error.message });

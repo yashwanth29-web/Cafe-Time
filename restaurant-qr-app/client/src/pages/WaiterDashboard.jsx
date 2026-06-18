@@ -1,19 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getOrders, updateOrderStatus, getCafeInfo } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
 import { useToast, confirm } from '../components/Toast';
+import { useSocket } from '../hooks/useSocket';
 
 const WaiterDashboard = () =>{
  const { user } = useAuth();
+ const navigate = useNavigate();
  const toast = useToast();
+ const { socket, reconnectTrigger } = useSocket();
  
  const [cafeInfo, setCafeInfo] = useState(null);
  const [orders, setOrders] = useState([]);
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
- const [refreshCountdown, setRefreshCountdown] = useState(5);
  const [updatingOrders, setUpdatingOrders] = useState({});
 
  useEffect(() =>{
@@ -32,89 +35,154 @@ const WaiterDashboard = () =>{
  fetchCafe();
  }, [user]);
 
- const fetchOrders = async (isSilent = false) =>{
- try {
- const response = await getOrders();
- if (response.success) {
- const cafeOrders = user?.cafeId ?
- response.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
- response.data;
- setOrders(cafeOrders);
- setErrorMsg('');
- } else {
- setErrorMsg('Failed to refresh waiter orders.');
- }
- } catch (error) {
- console.error('Error fetching waiter orders:', error);
- setErrorMsg('Server connection issues.');
- } finally {
- if (!isSilent) setLoading(false);
- }
- };
+  const fetchOrders = useCallback(async (isSilent = false) => {
+    try {
+      const response = await getOrders();
+      if (response.success) {
+        const isStaff = ['waiter', 'chef', 'cashier', 'staff'].includes((user?.role || '').toLowerCase());
+        const staffBranchId = user?.assignedBranch || user?.branchId;
+        const cafeOrders = response.data.filter((order) => {
+          if (user?.cafeId && order.cafeId && order.cafeId !== user.cafeId) {
+            return false;
+          }
+          if (isStaff && staffBranchId && order.branchId) {
+            return String(order.branchId) === String(staffBranchId);
+          }
+          return true;
+        });
+        setOrders(cafeOrders);
+        setErrorMsg('');
+      } else {
+        setErrorMsg('Failed to refresh waiter orders.');
+      }
+    } catch (error) {
+      console.error('Error fetching waiter orders:', error);
+      setErrorMsg('Server connection issues.');
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
+  }, [user?.cafeId, user?.role, user?.assignedBranch, user?.branchId]);
 
- useEffect(() =>{
- fetchOrders();
+  // Fetch initial orders and set up 30-second hybrid polling
+  useEffect(() => {
+    fetchOrders();
 
- // Poll orders every 5 seconds for waiter view
- const pollingInterval = setInterval(() =>{
- fetchOrders(true);
- }, 5000);
+    const pollingInterval = setInterval(() => {
+      console.log('[POLLING] Waiter Dashboard: Running 60s recovery check...');
+      fetchOrders(true);
+    }, 60000);
 
- const countdownInterval = setInterval(() =>{
- setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
- }, 1000);
+    return () => {
+      clearInterval(pollingInterval);
+    };
+  }, [fetchOrders]);
 
- return () =>{
- clearInterval(pollingInterval);
- clearInterval(countdownInterval);
- };
- }, []);
+  // One-off REST sync on reconnect
+  useEffect(() => {
+    if (reconnectTrigger > 0) {
+      console.log('[SOCKET] Waiter Dashboard: Reconnection detected. Triggering recovery sync.');
+      fetchOrders(true);
+    }
+  }, [reconnectTrigger, fetchOrders]);
 
- const handleStatusUpdate = async (id, newStatus) =>{
- try {
- setUpdatingOrders(prev => ({ ...prev, [id]: true }));
- const response = await updateOrderStatus(id, newStatus);
- if (response.success) {
- setOrders((prevOrders) =>
- prevOrders.map((order) =>
- order._id === id ? { ...order, status: newStatus } : order
-)
-);
- }
- } catch (error) {
- console.error('Error updating status:', error);
- toast.error('Error connecting to server.');
- } finally {
- setUpdatingOrders(prev => ({ ...prev, [id]: false }));
- }
- };
+  // Socket Event Listeners with versioning and isolation checks
+  useEffect(() => {
+    if (!socket) return;
 
- const handleMarkPaid = async (id) =>{
- if (!(await confirm('Confirm that you have received payment for this order?'))) {
- return;
- }
- try {
- setUpdatingOrders(prev => ({ ...prev, [id]: true }));
- const response = await updateOrderStatus(id, { status: 'Completed', paymentStatus: 'Paid' });
- if (response.success) {
- setOrders((prevOrders) =>
- prevOrders.map((order) =>
- order._id === id ? { ...order, status: 'Completed', paymentStatus: 'Paid' } : order
-)
-);
- toast.success('Payment marked as Completed successfully!');
- }
- } catch (error) {
- console.error('Error marking paid:', error);
- toast.error('Error updating payment status.');
- } finally {
- setUpdatingOrders(prev => ({ ...prev, [id]: false }));
- }
- };
+    const handleOrderCreated = (newOrder) => {
+      console.log('[SOCKET] Waiter received orderCreated:', newOrder);
+      if (!newOrder || !newOrder._id) return;
 
- const pendingCooking = orders.filter((o) =>o.status === 'Placed' || o.status === 'Preparing');
- const readyForService = orders.filter((o) =>o.status === 'Ready');
- const awaitingPayments = orders.filter((o) =>o.paymentStatus === 'Pending' && o.status === 'Delivered');
+      const staffBranchId = user?.assignedBranch || user?.branchId;
+      if (staffBranchId && String(newOrder.branchId) !== String(staffBranchId)) return;
+      if (user?.cafeId && newOrder.cafeId !== user.cafeId) return;
+
+      setOrders(prev => {
+        if (prev.find(o => o._id === newOrder._id)) return prev;
+        return [newOrder, ...prev];
+      });
+    };
+
+    const handleOrderUpdated = (updatedOrder) => {
+      console.log('[SOCKET] Waiter received orderUpdated:', updatedOrder);
+      if (!updatedOrder || !updatedOrder._id) return;
+
+      const staffBranchId = user?.assignedBranch || user?.branchId;
+      if (staffBranchId && String(updatedOrder.branchId) !== String(staffBranchId)) return;
+      if (user?.cafeId && updatedOrder.cafeId !== user.cafeId) return;
+
+      setOrders(prev => {
+        return prev.map(o => {
+          if (o._id === updatedOrder._id) {
+            const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
+            const existingTime = new Date(o.updatedAt || 0).getTime();
+            if (incomingTime <= existingTime) {
+              console.log('[SOCKET] Waiter: Ignored stale event for:', updatedOrder._id);
+              return o;
+            }
+            return updatedOrder;
+          }
+          return o;
+        });
+      });
+    };
+
+    socket.on('orderCreated', handleOrderCreated);
+    socket.on('orderUpdated', handleOrderUpdated);
+    socket.on('paymentCompleted', handleOrderUpdated);
+
+    return () => {
+      socket.off('orderCreated', handleOrderCreated);
+      socket.off('orderUpdated', handleOrderUpdated);
+      socket.off('paymentCompleted', handleOrderUpdated);
+    };
+  }, [socket, user]);
+
+  const handleStatusUpdate = useCallback(async (id, newStatus) => {
+    try {
+      setUpdatingOrders(prev => ({ ...prev, [id]: true }));
+      const response = await updateOrderStatus(id, newStatus);
+      if (response.success) {
+        setOrders((prevOrders) =>
+          prevOrders.map((order) =>
+            order._id === id ? { ...order, status: newStatus } : order
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error('Error connecting to server.');
+    } finally {
+      setUpdatingOrders(prev => ({ ...prev, [id]: false }));
+    }
+  }, [toast]);
+
+  const handleMarkPaid = useCallback(async (id) => {
+    if (!(await confirm('Confirm that you have received payment for this order?'))) {
+      return;
+    }
+    try {
+      setUpdatingOrders(prev => ({ ...prev, [id]: true }));
+      const response = await updateOrderStatus(id, { status: 'Completed', paymentStatus: 'Paid' });
+      if (response.success) {
+        setOrders((prevOrders) =>
+          prevOrders.map((order) =>
+            order._id === id ? { ...order, status: 'Completed', paymentStatus: 'Paid' } : order
+          )
+        );
+        toast.success('Payment marked as Completed successfully!');
+      }
+    } catch (error) {
+      console.error('Error marking paid:', error);
+      toast.error('Error updating payment status.');
+    } finally {
+      setUpdatingOrders(prev => ({ ...prev, [id]: false }));
+    }
+  }, [toast]);
+
+  const pendingCooking = useMemo(() => orders.filter((o) => o.status === 'Placed' || o.status === 'Preparing'), [orders]);
+  const readyForService = useMemo(() => orders.filter((o) => o.status === 'Ready'), [orders]);
+  const awaitingPayments = useMemo(() => orders.filter((o) => o.paymentStatus === 'Pending' && o.status === 'Delivered'), [orders]);
 
  return (
 <div className="fade-in">
@@ -129,16 +197,13 @@ const WaiterDashboard = () =>{
  flexWrap: 'wrap',
  gap: '12px'
  }}>
-<div>
+ <div>
 <h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>
  Live Order Pipeline
 </h2>
 
 </div>
  
-<div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-
-</div>
 </div>
 
  {errorMsg &&
