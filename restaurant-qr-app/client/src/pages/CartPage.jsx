@@ -298,7 +298,23 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   // Totals calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
-  const grandTotal = subtotal;
+  
+  const gstRate = cafeInfo?.gstRate || 0;
+  
+  let fixedServiceCharge = 0;
+  if (subtotal > 1000) {
+    fixedServiceCharge = 10;
+  } else if (subtotal >= 200) {
+    fixedServiceCharge = 2;
+  } else if (subtotal > 100) {
+    fixedServiceCharge = 1;
+  }
+
+  const baseGstAmount = (subtotal * gstRate) / 100;
+  const taxAmount = baseGstAmount + fixedServiceCharge;
+  const effectiveTotalRate = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
+  
+  const grandTotal = subtotal + taxAmount;
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
@@ -529,8 +545,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             </div>
             
             <div className="summary-row">
-              <span>GST & Restaurant Charges</span>
-              <span>₹0.00</span>
+              <span>GST & Restaurant Charges ({effectiveTotalRate.toFixed(1)}%)</span>
+              <span>₹{taxAmount.toFixed(2)}</span>
             </div>
 
             <div className="summary-row total">

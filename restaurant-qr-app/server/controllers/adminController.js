@@ -311,7 +311,9 @@ const saveSetupData = async (req, res) => {
     logoUrl, address, mapsLocation, openingTime, closingTime, gstNumber, supportNumber, uiPrimaryColor,
     paymentConfig,
     operationalConfig,
-    staffList
+    staffList,
+    taxRate,
+    serviceCharge
   } = req.body;
 
   if (!cafeId) {
@@ -339,6 +341,8 @@ const saveSetupData = async (req, res) => {
     if (gstNumber) cafe.gstNumber = gstNumber;
     if (supportNumber) cafe.supportNumber = supportNumber;
     if (uiPrimaryColor) cafe.uiPrimaryColor = uiPrimaryColor;
+    if (taxRate !== undefined) cafe.gstRate = taxRate;
+    if (serviceCharge !== undefined) cafe.serviceChargeRate = serviceCharge;
     cafe.setupCompleted = true; // Complete setup flag!
     await cafe.save();
 

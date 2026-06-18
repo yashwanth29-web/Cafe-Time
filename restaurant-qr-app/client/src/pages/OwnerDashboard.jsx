@@ -429,6 +429,10 @@ const OwnerDashboard = () =>{
  setRazorpaySecret(res.paymentConfig.razorpaySecret || '');
  setIsRazorpayVerified(res.paymentConfig.isVerified || false);
  }
+ if (res.cafe) {
+ setTaxRate(res.cafe.gstRate !== undefined ? res.cafe.gstRate : 5);
+ setServiceCharge(res.cafe.serviceChargeRate !== undefined ? res.cafe.serviceChargeRate : 0);
+ }
  }
  } catch (err) {
  console.error('Error fetching tables/keys setup:', err);
@@ -1294,6 +1298,8 @@ const OwnerDashboard = () =>{
  setSettingsMsg('');
  try {
  const payload = {
+ taxRate,
+ serviceCharge,
  paymentConfig: {
  razorpayKeyId,
  razorpaySecret,

@@ -488,8 +488,22 @@ const OrderHistory = ({ cafeId }) => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {completedOrders.map((order) => {
-                const sub = order.totalAmount / 1.05;
-                const gst = order.totalAmount - sub;
+                const itemsSubtotal = order.items.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
+                const gstRate = cafeInfo?.gstRate || 0;
+                
+                let fixedServiceCharge = 0;
+                if (itemsSubtotal > 1000) {
+                  fixedServiceCharge = 10;
+                } else if (itemsSubtotal >= 200) {
+                  fixedServiceCharge = 2;
+                } else if (itemsSubtotal > 100) {
+                  fixedServiceCharge = 1;
+                }
+
+                const baseGstAmount = (itemsSubtotal * gstRate) / 100;
+                const totalTax = baseGstAmount + fixedServiceCharge;
+                const effectiveTotalRate = itemsSubtotal > 0 ? (totalTax / itemsSubtotal) * 100 : 0;
+                const halfTaxRate = (effectiveTotalRate / 2).toFixed(1);
                 const hasReviewed = submittedReviews.includes(order._id);
 
                 return (
@@ -537,9 +551,13 @@ const OrderHistory = ({ cafeId }) => {
                         </table>
 
                         <div style={{ borderTop: '1px dashed #33271c', paddingTop: '8px', textAlign: 'right', fontSize: '11px' }}>
-                          <div>Subtotal (Tax Excl.): ₹{sub.toFixed(2)}</div>
-                          <div>CGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
-                          <div>SGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
+                          <div>Subtotal (Tax Excl.): ₹{itemsSubtotal.toFixed(2)}</div>
+                          {effectiveTotalRate > 0 && (
+                            <>
+                              <div>CGST ({halfTaxRate}%): ₹{(totalTax / 2).toFixed(2)}</div>
+                              <div>SGST ({halfTaxRate}%): ₹{(totalTax / 2).toFixed(2)}</div>
+                            </>
+                          )}
                           <div style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '6px' }}>
                             GRAND TOTAL: ₹{order.totalAmount.toFixed(2)}
                           </div>
