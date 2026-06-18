@@ -119,7 +119,7 @@ const OwnerProfilePage = () => {
       location: { address: cafeData?.address || '', city: cafeData?.city || '', state: cafeData?.state || '', pincode: cafeData?.pincode || '', mapsLocation: cafeData?.mapsLocation || '' },
       hours: { openingTime: cafeData?.openingTime || '', closingTime: cafeData?.closingTime || '', supportNumber: cafeData?.supportNumber || '' },
       payment: { razorpayKeyId: paymentConfig?.razorpayKeyId || '', razorpaySecret: '', upiId: paymentConfig?.upiId || '', bankHolderName: paymentConfig?.bankHolderName || '', accountNumber: paymentConfig?.accountNumber || '', ifscCode: paymentConfig?.ifscCode || '', taxRate: taxRate, serviceCharge: serviceCharge, isVerified: paymentConfig?.isVerified || false },
-      ops: { tableCount: operationalConfig?.tables?.length || 0, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
+      ops: { tableCount: operationalConfig?.tables ? operationalConfig.tables.length : 5, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
       theme: { themeMode: themeMode, uiPrimaryColor: primaryColor },
       branch: { branchName: '', address: '', manager: '' },
       qr_codes: {}
@@ -389,7 +389,7 @@ const OwnerProfilePage = () => {
     ops:
     <>
         <label className="mlabel" htmlFor="profile-table-count">Number of Tables</label>
-        <input className="minput" id="profile-table-count" name="profile-table-count" type="number" min={0} value={form.tableCount || 0} onChange={fld('tableCount')} />
+        <input className="minput" id="profile-table-count" name="profile-table-count" type="number" min={0} value={form.tableCount !== undefined ? form.tableCount : ''} onChange={fld('tableCount')} />
         <div className="mtoggle-row">
           <label className="mlabel" htmlFor="profile-kds-enabled" style={{ margin: 0 }}>Kitchen Display System</label>
           <input type="checkbox" id="profile-kds-enabled" name="profile-kds-enabled" className="mtoggle" checked={!!form.kitchenDisplayEnabled} onChange={fld('kitchenDisplayEnabled')} />
