@@ -35,6 +35,8 @@ const OrderHistory = ({ cafeId }) => {
   // Advert Advertisement state
   const [adImgIndex, setAdImgIndex] = useState(0);
   const adImages = [
+    'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80',
+    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=600&q=80',
     '/images/media__1781850985233.jpg',
     '/images/media__1781850962277.jpg'
   ];
@@ -363,6 +365,10 @@ const OrderHistory = ({ cafeId }) => {
               <img
                 src={adImages[adImgIndex]}
                 alt="Sri Hostel Luxury Co-Living"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=600&q=80';
+                }}
                 style={{
                   height: '100%',
                   width: '100%',
@@ -567,49 +573,146 @@ const OrderHistory = ({ cafeId }) => {
                   )}
 
                   {/* Interactive Progress Track */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '12px', padding: '0 4px' }}>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-primary)', boxShadow: '0 0 4px var(--color-primary)' }}></div>
-                      <span style={{ fontSize: '8.5px', fontWeight: 800, color: 'var(--color-primary)' }}>Placed</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: '16px', padding: '0 8px' }}>
+                    {/* Step 1: Placed */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ 
+                        width: '18px', 
+                        height: '18px', 
+                        borderRadius: '50%', 
+                        background: 'var(--color-primary)', 
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        boxShadow: '0 0 6px var(--color-primary)'
+                      }}>✓</div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--color-primary)' }}>Placed</span>
                     </div>
-                    <div style={{ flex: 1, height: '2px', background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: '1px' }}></div>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)' }}></div>
-                      <span style={{ fontSize: '8.5px', fontWeight: 800, color: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Preparing</span>
+                    
+                    {/* Line 1 */}
+                    <div style={{ 
+                      flex: 1, 
+                      height: '3px', 
+                      background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)', 
+                      borderRadius: '1.5px',
+                      margin: '0 4px',
+                      marginTop: '-12px'
+                    }}></div>
+                    
+                    {/* Step 2: Preparing */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ 
+                        width: '18px', 
+                        height: '18px', 
+                        borderRadius: '50%', 
+                        background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--bg-secondary)', 
+                        border: `2px solid ${orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: orderStatus !== 'Placed' ? 'white' : 'var(--color-text-secondary)',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        boxShadow: orderStatus !== 'Placed' ? '0 0 6px var(--color-primary)' : 'none'
+                      }}>
+                        {orderStatus !== 'Placed' ? '✓' : '2'}
+                      </div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Preparing</span>
                     </div>
-                    <div style={{ flex: 1, height: '2px', background: isServed ? 'var(--color-success)' : 'var(--color-border)', borderRadius: '1px' }}></div>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: isServed ? 'var(--color-success)' : 'var(--color-border)' }}></div>
-                      <span style={{ fontSize: '8.5px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>Ready</span>
+                    
+                    {/* Line 2 */}
+                    <div style={{ 
+                      flex: 1, 
+                      height: '3px', 
+                      background: isServed ? 'var(--color-success)' : 'var(--color-border)', 
+                      borderRadius: '1.5px',
+                      margin: '0 4px',
+                      marginTop: '-12px'
+                    }}></div>
+                    
+                    {/* Step 3: Ready */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ 
+                        width: '18px', 
+                        height: '18px', 
+                        borderRadius: '50%', 
+                        background: isServed ? 'var(--color-success)' : 'var(--bg-secondary)', 
+                        border: `2px solid ${isServed ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: isServed ? 'white' : 'var(--color-text-secondary)',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        boxShadow: isServed ? '0 0 6px var(--color-success)' : 'none'
+                      }}>
+                        {isServed ? '✓' : '3'}
+                      </div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>Ready</span>
                     </div>
                   </div>
 
                   {/* Order Details Card */}
-                  <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.01)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '8px 10px', borderRadius: '8px', marginBottom: '8px', fontSize: '11.5px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--color-border)', padding: '12px', borderRadius: '10px', marginBottom: '8px', fontSize: '11.5px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                       <div>
                         <span style={{ color: 'var(--color-text-secondary)', marginRight: '4px' }}>Table:</span>
-                        <span style={{ fontWeight: 800, color: 'var(--color-text-primary)' }}>{order.tableNumber}</span>
+                        <span style={{ fontWeight: 800, color: 'var(--color-text-primary)', fontSize: '13px' }}>{order.tableNumber}</span>
                       </div>
                       <div>
                         <span style={{ color: 'var(--color-text-secondary)', marginRight: '4px' }}>Total:</span>
-                        <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>₹{order.totalAmount.toFixed(2)}</span>
+                        <span style={{ fontWeight: 800, color: 'var(--color-primary)', fontSize: '13px' }}>₹{order.totalAmount.toFixed(2)}</span>
                       </div>
                       <div>
-                        <span style={{ fontWeight: 800, color: 'var(--color-warning)' }}>{order.paymentStatus}</span>
+                        <span style={{ 
+                          fontWeight: 850, 
+                          color: isPaid ? 'var(--color-success)' : '#f39c12',
+                          background: isPaid ? 'rgba(46, 204, 113, 0.1)' : 'rgba(243, 156, 18, 0.1)',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '10px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}>
+                          {order.paymentStatus}
+                        </span>
                       </div>
                     </div>
                     {order.specialInstructions && (
-                      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', borderTop: '1px solid rgba(0, 0, 0, 0.03)', paddingTop: '4px' }}>
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '6px', borderTop: '1px solid var(--color-border)', paddingTop: '6px', fontSize: '11px' }}>
                         <span style={{ color: 'var(--color-text-secondary)' }}>Note:</span>
                         <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>{order.specialInstructions}</span>
                       </div>
                     )}
-                    <div style={{ borderTop: '1px solid rgba(0, 0, 0, 0.03)', marginTop: '4px', paddingTop: '4px' }}>
-                      <span style={{ color: 'var(--color-text-secondary)', marginRight: '4px' }}>Items:</span>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                        {order.items.map((it) => `${it.name} (x${it.quantity})`).join(', ')}
-                      </span>
+                    <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '8px', paddingTop: '8px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px', display: 'block', marginBottom: '6px' }}>Items Ordered:</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {order.items.map((it, idx) => {
+                          const displayImage = it.image ? getAssetUrl(it.image) : '/images/default-food.png';
+                          return (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+                              <img
+                                src={displayImage}
+                                alt={it.name}
+                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+                                onError={(e) => { e.target.src = '/images/default-food.png'; }}
+                              />
+                              <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+                                {it.quantity}x
+                              </span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+                                {it.name}
+                              </span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginLeft: 'auto' }}>
+                                ₹{(it.price * it.quantity).toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
