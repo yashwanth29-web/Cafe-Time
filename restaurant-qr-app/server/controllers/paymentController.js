@@ -17,8 +17,8 @@ const createOrder = async (req, res) => {
     if (!items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Cart cannot be empty' });
     }
-    if (!customerName || !customerEmail || !customerPhone) {
-      return res.status(400).json({ success: false, message: 'Customer name, email, and phone are required' });
+    if (!customerName || !customerPhone) {
+      return res.status(400).json({ success: false, message: 'Customer name and phone are required' });
     }
 
     // Backend amount validation

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getOrders, updateOrderStatus, getInventory, reportShortage, getMenu } from '../services/api';
+import { getOrders, updateOrderStatus, getInventory, reportShortage, getMenu, getAssetUrl } from '../services/api';
 import OrderCard from '../components/OrderCard';
 import '../styles/App.css';
 
@@ -271,13 +271,68 @@ const KitchenDashboard = () =>{
 <div style={{ fontSize: '0.75rem', color: '#A0826C', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase' }}>
  KOT (Kitchen Order Ticket)
 </div>
- {order.items.map((item, idx) =>
-<div key={idx} style={{ display: 'flex', justifyContent: 'space-between', margin: '5px 0', color: 'var(--color-text-secondary)' }}>
-<span>
-<strong>{item.quantity}x</strong>{item.name}
-</span>
-</div>
-)}
+ {order.items.map((item, idx) => {
+    const displayImage = item.image ? getAssetUrl(item.image) : '/images/default-food.png';
+    return (
+      <div key={idx} style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        margin: '10px 0',
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        padding: '8px 12px',
+        borderRadius: '8px'
+      }}>
+        {/* Visual Image container with fallback */}
+        <div style={{
+          position: 'relative',
+          width: '70px',
+          height: '70px',
+          borderRadius: '6px',
+          overflow: 'hidden',
+          background: 'rgba(0,0,0,0.2)',
+          border: '1px solid var(--color-border)',
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <img
+            src={displayImage}
+            alt={item.name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            onError={(e) => { e.target.src = '/images/default-food.png'; }}
+          />
+        </div>
+
+        {/* Visual content: bold quantity badge + name */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{
+            background: 'var(--color-primary)',
+            color: 'var(--color-text-primary)',
+            fontSize: '1.05rem',
+            fontWeight: '900',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            boxShadow: '0 2px 5px rgba(255,107,8,0.2)',
+            display: 'inline-block',
+            minWidth: '24px',
+            textAlign: 'center'
+          }}>
+            {item.quantity}x
+          </span>
+          <span style={{
+            fontSize: '1.0rem',
+            fontWeight: '800',
+            color: 'var(--color-text-primary)'
+          }}>
+            {item.name}
+          </span>
+        </div>
+      </div>
+    );
+  })}
 </div>
 
 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px', flexWrap: 'wrap' }}>

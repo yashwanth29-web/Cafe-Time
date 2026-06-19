@@ -32,6 +32,20 @@ const OrderHistory = ({ cafeId }) => {
   const [customerEmail, setCustomerEmail] = useState(() => localStorage.getItem('customerEmail') || '');
   const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('customerPhone') || '');
 
+  // Advert Advertisement state
+  const [adImgIndex, setAdImgIndex] = useState(0);
+  const adImages = [
+    '/images/media__1781850985233.jpg',
+    '/images/media__1781850962277.jpg'
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAdImgIndex((prev) => (prev + 1) % adImages.length);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, []);
+
   // Keep contact details in localStorage for convenience on future visits
   useEffect(() => {
     if (customerName) localStorage.setItem('customerName', customerName);
@@ -292,284 +306,495 @@ const OrderHistory = ({ cafeId }) => {
   };
 
   // Dynamic Live Tracker Success / Invoice view
-  if (activeOrders.length > 0 || completedOrders.length > 0) {
+  if (activeOrders.length > 0) {
+    return (
+      <div className="main-content" style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        minHeight: 'calc(100vh - 120px)',
+        padding: '10px 16px 20px 16px',
+        boxSizing: 'border-box'
+      }}>
+        {/* Top Half: Premium Ad Banner for Sri Luxury Co-Living PG */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          justifyContent: 'center',
+          flexGrow: 1,
+          padding: '10px',
+          margin: '0 auto 16px auto',
+          width: '100%',
+          maxWidth: '440px',
+          animation: 'fadeIn 0.6s ease-out'
+        }}>
+          {/* Ad Label & Headline */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{
+              fontSize: '9px',
+              fontWeight: 800,
+              color: 'var(--color-text-secondary)',
+              background: 'rgba(0, 0, 0, 0.05)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              letterSpacing: '0.5px'
+            }}>
+              SPONSORED SPOTLIGHT
+            </span>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)' }}>
+              🏡 Co-Living PG in Nanakramguda
+            </span>
+          </div>
+
+          {/* Ad Main Card */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '16px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative'
+          }}>
+            {/* Image Slider */}
+            <div style={{ position: 'relative', height: '140px', width: '100%', overflow: 'hidden' }}>
+              <img
+                src={adImages[adImgIndex]}
+                alt="Sri Hostel Luxury Co-Living"
+                style={{
+                  height: '100%',
+                  width: '100%',
+                  objectFit: 'cover',
+                  transition: 'opacity 0.5s ease-in-out',
+                  opacity: 1
+                }}
+              />
+              
+              {/* Text Badge on image */}
+              <div style={{
+                position: 'absolute',
+                top: '10px',
+                left: '10px',
+                background: 'rgba(224, 142, 39, 0.95)',
+                color: '#fff',
+                padding: '4px 8px',
+                borderRadius: '6px',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+              }}>
+                Sri Luxury Co-Living
+              </div>
+
+              {/* Slider Dots */}
+              <div style={{
+                position: 'absolute',
+                bottom: '8px',
+                left: '0',
+                right: '0',
+                display: 'flex',
+                justifyContent: 'center',
+                gap: '4px'
+              }}>
+                {adImages.map((_, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: idx === adImgIndex ? 'var(--color-primary)' : 'rgba(255, 255, 255, 0.6)',
+                      transition: 'background 0.3s'
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Ad Content */}
+            <div style={{ padding: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                <h4 style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--color-text-primary)', margin: 0 }}>
+                  Luxury PG for Men & Women
+                </h4>
+                <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--color-success)', background: 'rgba(40,167,69,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                  Walk to Work
+                </span>
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '0 0 8px 0', lineHeight: '1.4' }}>
+                Premium co-living behind <strong>Wave Rock IT Park</strong>. AC rooms, homely food, high-speed WiFi, gym, daily housekeeping & zero brokerage!
+              </p>
+
+              {/* Cafe customer special marketing discount badge */}
+              <div style={{
+                background: 'rgba(224, 142, 39, 0.05)',
+                border: '1px dashed rgba(224, 142, 39, 0.3)',
+                borderRadius: '8px',
+                padding: '6px 8px',
+                fontSize: '11px',
+                color: 'var(--color-primary)',
+                fontWeight: 700,
+                textAlign: 'center',
+                marginBottom: '8px'
+              }}>
+                🎁 Cafe Customer Special: Mention "CYPHER10" for 10% off!
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <a href="tel:8867296567" style={{
+                  flex: 1,
+                  padding: '8px',
+                  background: 'var(--color-primary)',
+                  color: '#fff',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  textDecoration: 'none',
+                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  boxShadow: '0 2px 6px rgba(224, 142, 39, 0.2)'
+                }}>
+                  📞 Call Manager
+                </a>
+                <a
+                  href="https://wa.me/918867296567?text=Hi,%20I%20saw%20your%20co-living%20PG%20ad%20at%20Cypher's%20Cafe.%20I%20would%20like%20to%20schedule%20a%20visit!"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    background: '#25D366',
+                    color: '#fff',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    textDecoration: 'none',
+                    textAlign: 'center',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    boxShadow: '0 2px 6px rgba(37, 211, 102, 0.2)'
+                  }}
+                >
+                  💬 WhatsApp Tour
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        {/* Bottom Half: Compact Tracker Card */}
+        <div className="success-screen" style={{
+          width: '100%',
+          maxWidth: '440px',
+          padding: '16px',
+          margin: '0 auto',
+          borderRadius: '16px',
+          boxShadow: 'var(--shadow-lg)',
+          animation: 'slideUp 0.4s ease-out',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--color-border)'
+        }}>
+          <h3 style={{
+            fontSize: '15px',
+            fontWeight: 800,
+            textAlign: 'center',
+            margin: '0 0 12px 0',
+            color: 'var(--color-primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}>
+            ⏳ Active Orders Tracker
+          </h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {activeOrders.map((order) => {
+              const isServed = order.status === 'Ready' || order.status === 'Delivered' || order.status === 'Completed';
+              const isPaid = order.paymentStatus === 'Paid';
+              const orderStatus = order.status;
+
+              return (
+                <div key={order._id} style={{
+                  background: 'rgba(0, 0, 0, 0.02)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '12px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.05)'
+                }}>
+                  {/* Status Indicator */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--color-text-secondary)' }}>
+                      ID: #{order._id.slice(-6).toUpperCase()}
+                    </span>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      color: isServed ? 'var(--color-success)' : 'var(--color-primary)',
+                      background: isServed ? 'rgba(40,167,69,0.1)' : 'rgba(224,142,39,0.1)',
+                      padding: '2px 6px',
+                      borderRadius: '8px'
+                    }}>
+                      {orderStatus}
+                    </span>
+                  </div>
+
+                  {/* Visual Status Header */}
+                  {!isServed ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '10px' }}>
+                      <div className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2.5px', borderTopColor: 'var(--color-primary)' }}></div>
+                      <p style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', margin: 0, fontWeight: 600 }}>
+                        {orderStatus === 'Placed' ?
+                          'Waiting for kitchen acceptance...' :
+                          'Chefs are crafting your order!'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                      <p style={{ fontSize: '11.5px', color: 'var(--color-success)', margin: 0, fontWeight: 700 }}>
+                        🍽️ Served & Enjoy!
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Interactive Progress Track */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '12px', padding: '0 4px' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-primary)', boxShadow: '0 0 4px var(--color-primary)' }}></div>
+                      <span style={{ fontSize: '8.5px', fontWeight: 800, color: 'var(--color-primary)' }}>Placed</span>
+                    </div>
+                    <div style={{ flex: 1, height: '2px', background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: '1px' }}></div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)' }}></div>
+                      <span style={{ fontSize: '8.5px', fontWeight: 800, color: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Preparing</span>
+                    </div>
+                    <div style={{ flex: 1, height: '2px', background: isServed ? 'var(--color-success)' : 'var(--color-border)', borderRadius: '1px' }}></div>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: isServed ? 'var(--color-success)' : 'var(--color-border)' }}></div>
+                      <span style={{ fontSize: '8.5px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>Ready</span>
+                    </div>
+                  </div>
+
+                  {/* Order Details Card */}
+                  <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.01)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '8px 10px', borderRadius: '8px', marginBottom: '8px', fontSize: '11.5px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <div>
+                        <span style={{ color: 'var(--color-text-secondary)', marginRight: '4px' }}>Table:</span>
+                        <span style={{ fontWeight: 800, color: 'var(--color-text-primary)' }}>{order.tableNumber}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--color-text-secondary)', marginRight: '4px' }}>Total:</span>
+                        <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>₹{order.totalAmount.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span style={{ fontWeight: 800, color: 'var(--color-warning)' }}>{order.paymentStatus}</span>
+                      </div>
+                    </div>
+                    {order.specialInstructions && (
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', borderTop: '1px solid rgba(0, 0, 0, 0.03)', paddingTop: '4px' }}>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>Note:</span>
+                        <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>{order.specialInstructions}</span>
+                      </div>
+                    )}
+                    <div style={{ borderTop: '1px solid rgba(0, 0, 0, 0.03)', marginTop: '4px', paddingTop: '4px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', marginRight: '4px' }}>Items:</span>
+                      <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                        {order.items.map((it) => `${it.name} (x${it.quantity})`).join(', ')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Payment Options */}
+                  {isServed && !isPaid && (
+                    <div style={{ background: 'rgba(0, 0, 0, 0.02)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '8px', borderRadius: '8px' }}>
+                      {order.paymentMethod === 'Counter' ? (
+                        <div>
+                          <h4 style={{ color: 'var(--color-text-primary)', fontSize: '11px', fontWeight: '800', margin: '0 0 2px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            🏪 Counter Payment Requested
+                          </h4>
+                          <p style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: '1.3', margin: '0 0 6px 0' }}>
+                            Proceed to cashier and share <strong>Table {order.tableNumber}</strong>.
+                          </p>
+                          <button
+                            onClick={() => handleCancelCounterPayRequest(order._id)}
+                            disabled={loading}
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 6px', fontSize: '10.5px', width: '100%', cursor: loading ? 'not-allowed' : 'pointer' }}>
+                            Change to Pay Online
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <h4 style={{ color: 'var(--color-text-primary)', fontSize: '11px', fontWeight: '800', margin: '0 0 6px 0', textAlign: 'center' }}>
+                            Select Payment Method
+                          </h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <RazorpayPayment
+                              cart={order.items.map((it) => ({ item: it, quantity: it.quantity }))}
+                              tableNumber={order.tableNumber}
+                              customerDetails={{
+                                name: customerName || order.customerName || 'Customer',
+                                email: customerEmail || order.customerEmail || 'customer@example.com',
+                                phone: customerPhone || order.customerPhone || '9999999999'
+                              }}
+                              specialInstructions={order.specialInstructions}
+                              existingOrderId={order._id}
+                              cafeId={cafeId || order.cafeId || 'CD001'}
+                              buttonText="Pay Online (Razorpay)"
+                              onPaymentSuccess={(updatedOrder) => {
+                                setActiveOrders((prev) => prev.map((o) => o._id === order._id ? updatedOrder : o));
+                                triggerPaidFeedback(order._id);
+                              }}
+                              onPaymentError={(err) => {
+                                setErrorMsg(err);
+                              }}
+                            />
+                            <button
+                              onClick={() => handleCounterPayRequest(order._id)}
+                              disabled={loading}
+                              className="btn btn-secondary"
+                              style={{
+                                padding: '6px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                width: '100%',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                border: '1px solid var(--color-border)',
+                                color: 'var(--color-text-primary)',
+                                background: 'rgba(0, 0, 0, 0.03)'
+                              }}>
+                              <span>🏪</span>
+                              <span>Pay at Counter</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {errorMsg && (
+            <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)', color: 'var(--color-text-primary)', fontSize: '11px', padding: '8px', marginTop: '10px', borderRadius: '6px', textAlign: 'center' }}>
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
+          <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
+            View Menu
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (completedOrders.length > 0) {
     return (
       <div className="main-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '75vh', padding: '20px 10px' }}>
         <div className="success-screen" style={{ width: '100%', maxWidth: '440px', padding: '24px 16px', animation: 'scaleUp 0.3s ease-out' }}>
-          
-          {activeOrders.length > 0 &&
-          <>
-              <h2 className="success-title" style={{ fontSize: '20px', fontWeight: 900, textAlign: 'center', marginBottom: '16px', color: 'var(--color-primary)' }}>
-                ⏳ Active Orders Tracker
-              </h2>
+          <h2 className="success-title" style={{ fontSize: '20px', fontWeight: 900, textAlign: 'center', marginBottom: '16px', color: 'var(--color-success)' }}>
+            ✔️ Completed Invoice & Receipt
+          </h2>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '30px' }}>
-                {activeOrders.map((order) => {
-                const isServed = order.status === 'Ready' || order.status === 'Delivered' || order.status === 'Completed';
-                const isPaid = order.paymentStatus === 'Paid';
-                const orderStatus = order.status;
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {completedOrders.map((order) => {
+              const sub = order.totalAmount / 1.05;
+              const gst = order.totalAmount - sub;
+              const hasReviewed = submittedReviews.includes(order._id);
 
-                return (
-                  <div key={order._id} style={{
-                    background: 'rgba(0, 0, 0, 0.02)',
-                    border: '1px solid var(--color-border)',
+              return (
+                <div key={order._id} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Invoice Block */}
+                  <div style={{
+                    background: '#FAF6F0',
+                    color: '#33271c',
+                    border: '1px solid #E6D5C3',
                     borderRadius: '16px',
-                    padding: '16px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    padding: '20px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    fontFamily: "'Courier New', Courier, monospace"
                   }}>
-                      {/* Status Indicator */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--color-text-secondary)' }}>
-                          ID: #{order._id.slice(-6).toUpperCase()}
-                        </span>
-                        <span style={{
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        color: isServed ? 'var(--color-success)' : 'var(--color-primary)',
-                        background: isServed ? 'rgba(40,167,69,0.1)' : 'rgba(224,142,39,0.1)',
-                        padding: '4px 8px',
-                        borderRadius: '12px'
-                      }}>
-                          {orderStatus}
-                        </span>
-                      </div>
+                    <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '12px', marginBottom: '12px' }}>
+                      <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>{cafeInfo?.name || 'Dr. Chai Cafe'}</h3>
+                      <p style={{ margin: '2px 0', fontSize: '10px' }}>{cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
+                      {cafeInfo?.gstNumber && <p style={{ margin: '2px 0', fontSize: '10px', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
+                    </div>
 
-                      {/* Visual Status Header */}
-                      {!isServed ?
-                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                          <div className="spinner" style={{ width: '36px', height: '36px', borderWidth: '4px', margin: '0 auto 8px auto', borderTopColor: 'var(--color-primary)' }}></div>
-                          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0 }}>
-                            {orderStatus === 'Placed' ?
-                        'Waiting for kitchen acceptance...' :
-                        'Our chefs are crafting your fresh order!'}
-                          </p>
-                        </div> :
+                    <div style={{ fontSize: '11px', marginBottom: '12px' }}>
+                      <div><strong>Invoice #:</strong> {order._id.toUpperCase()}</div>
+                      <div><strong>Date:</strong> {new Date(order.createdAt).toLocaleString()}</div>
+                      <div><strong>Table:</strong> Table {order.tableNumber}</div>
+                      <div><strong>Customer:</strong> {order.customerName || 'Customer'}</div>
+                    </div>
 
-                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                          <p style={{ fontSize: '12px', color: 'var(--color-success)', margin: 0, fontWeight: 700 }}>
-                            🍽️ Served & Enjoy!
-                          </p>
-                        </div>
-                    }
-
-                      {/* Interactive Progress Track */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '16px', padding: '0 4px' }}>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', boxShadow: '0 0 6px var(--color-primary)' }}></div>
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--color-primary)' }}>Placed</span>
-                        </div>
-                        <div style={{ flex: 1, height: '3px', background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: '1.5px' }}></div>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)' }}></div>
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Preparing</span>
-                        </div>
-                        <div style={{ flex: 1, height: '3px', background: isServed ? 'var(--color-success)' : 'var(--color-border)', borderRadius: '1.5px' }}></div>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isServed ? 'var(--color-success)' : 'var(--color-border)' }}></div>
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>Ready</span>
-                        </div>
-                      </div>
-
-                      {/* Order Details Card */}
-                      <div style={{ backgroundColor: 'rgba(0, 0, 0,0.01)', border: '1px solid rgba(0, 0, 0,0.05)', padding: '10px', borderRadius: '8px', marginBottom: '12px', fontSize: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--color-text-secondary)' }}>Table</span>
-                          <span style={{ fontWeight: 800, color: 'var(--color-text-primary)' }}>{order.tableNumber}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--color-text-secondary)' }}>Total Amount</span>
-                          <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>₹{order.totalAmount.toFixed(2)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--color-text-secondary)' }}>Payment Status</span>
-                          <span style={{ fontWeight: 800, color: 'var(--color-warning)' }}>{order.paymentStatus}</span>
-                        </div>
-                        {order.specialInstructions &&
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px', borderTop: '1px solid rgba(0, 0, 0,0.05)', paddingTop: '4px' }}>
-                            <span style={{ color: 'var(--color-text-secondary)' }}>Instructions:</span>
-                            <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>{order.specialInstructions}</span>
-                          </div>
-                      }
-                        <div style={{ borderTop: '1px solid rgba(0, 0, 0,0.05)', marginTop: '6px', paddingTop: '6px' }}>
-                          <span style={{ color: 'var(--color-text-secondary)', display: 'block', marginBottom: '2px' }}>Items:</span>
-                          <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                            {order.items.map((it) => `${it.name} (x${it.quantity})`).join(', ')}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Payment Options */}
-                      {isServed && !isPaid &&
-                    <div style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid rgba(0, 0, 0,0.05)', padding: '10px', borderRadius: '8px' }}>
-                          {order.paymentMethod === 'Counter' ?
-                      <div>
-                              <h4 style={{ color: 'var(--color-text-primary)', fontSize: '12px', fontWeight: '800', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                🏪 Counter Payment Requested
-                              </h4>
-                              <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', lineHeight: '1.4', margin: '0 0 8px 0' }}>
-                                Proceed to cashier and share <strong>Table {order.tableNumber}</strong> or order suffix.
-                              </p>
-                              <button
-                          onClick={() => handleCancelCounterPayRequest(order._id)}
-                          disabled={loading}
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 8px', fontSize: '11px', width: '100%', cursor: loading ? 'not-allowed' : 'pointer' }}>
-                          
-                                Change to Pay Online
-                              </button>
-                            </div> :
-
-                      <div>
-                              <h4 style={{ color: 'var(--color-text-primary)', fontSize: '12px', fontWeight: '800', margin: '0 0 8px 0', textAlign: 'center' }}>
-                                Select Payment Method
-                              </h4>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <RazorpayPayment
-                            cart={order.items.map((it) => ({ item: it, quantity: it.quantity }))}
-                            tableNumber={order.tableNumber}
-                            customerDetails={{
-                              name: customerName || order.customerName || 'Customer',
-                              email: customerEmail || order.customerEmail || 'customer@example.com',
-                              phone: customerPhone || order.customerPhone || '9999999999'
-                            }}
-                            specialInstructions={order.specialInstructions}
-                            existingOrderId={order._id}
-                            cafeId={cafeId || order.cafeId || 'CD001'}
-                            buttonText="Pay Online (Razorpay)"
-                            onPaymentSuccess={(updatedOrder) => {
-                              setActiveOrders((prev) => prev.map((o) => o._id === order._id ? updatedOrder : o));
-                              triggerPaidFeedback(order._id);
-                            }}
-                            onPaymentError={(err) => {
-                              setErrorMsg(err);
-                            }} />
-                          
-                                
-                                <button
-                            onClick={() => handleCounterPayRequest(order._id)}
-                            disabled={loading}
-                            className="btn btn-secondary"
-                            style={{
-                              padding: '8px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              width: '100%',
-                              borderRadius: '6px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '4px',
-                              cursor: loading ? 'not-allowed' : 'pointer',
-                              border: '1px solid var(--color-border)',
-                              color: 'var(--color-text-primary)',
-                              background: 'rgba(0, 0, 0,0.03)'
-                            }}>
-                            
-                                  <span>🏪</span>
-                                  <span>Pay at Counter</span>
-                                </button>
-                              </div>
-                            </div>
-                      }
-                        </div>
-                    }
-                    </div>);
-
-              })}
-              </div>
-            </>
-          }
-
-          {completedOrders.length > 0 &&
-          <>
-              <h2 className="success-title" style={{ fontSize: '20px', fontWeight: 900, textAlign: 'center', marginBottom: '16px', color: 'var(--color-success)' }}>
-                ✔️ Completed Invoice & Receipt
-              </h2>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {completedOrders.map((order) => {
-                const sub = order.totalAmount / 1.05;
-                const gst = order.totalAmount - sub;
-                const hasReviewed = submittedReviews.includes(order._id);
-
-                return (
-                  <div key={order._id} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      {/* Invoice Block */}
-                      <div style={{
-                      background: '#FAF6F0',
-                      color: '#33271c',
-                      border: '1px solid #E6D5C3',
-                      borderRadius: '16px',
-                      padding: '20px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                      fontFamily: "'Courier New', Courier, monospace"
-                    }}>
-                        <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '12px', marginBottom: '12px' }}>
-                          <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>{cafeInfo?.name || 'Dr. Chai Cafe'}</h3>
-                          <p style={{ margin: '2px 0', fontSize: '10px' }}>{cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
-                          {cafeInfo?.gstNumber && <p style={{ margin: '2px 0', fontSize: '10px', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
-                        </div>
-
-                        <div style={{ fontSize: '11px', marginBottom: '12px' }}>
-                          <div><strong>Invoice #:</strong> {order._id.toUpperCase()}</div>
-                          <div><strong>Date:</strong> {new Date(order.createdAt).toLocaleString()}</div>
-                          <div><strong>Table:</strong> Table {order.tableNumber}</div>
-                          <div><strong>Customer:</strong> {order.customerName || 'Customer'}</div>
-                        </div>
-
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', marginBottom: '12px' }}>
-                          <thead>
-                            <tr style={{ borderBottom: '1px solid #33271c', borderTop: '1px solid #33271c' }}>
-                              <th style={{ padding: '4px 0', textAlign: 'left' }}>Item</th>
-                              <th style={{ padding: '4px 0', textAlign: 'center' }}>Qty</th>
-                              <th style={{ padding: '4px 0', textAlign: 'right' }}>Price</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {order.items.map((item, idx) =>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', marginBottom: '12px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #33271c', borderTop: '1px solid #33271c' }}>
+                          <th style={{ padding: '4px 0', textAlign: 'left' }}>Item</th>
+                          <th style={{ padding: '4px 0', textAlign: 'center' }}>Qty</th>
+                          <th style={{ padding: '4px 0', textAlign: 'right' }}>Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.items.map((item, idx) =>
                           <tr key={idx}>
-                                <td style={{ padding: '3px 0' }}>{item.name}</td>
-                                <td style={{ padding: '3px 0', textAlign: 'center' }}>{item.quantity}</td>
-                                <td style={{ padding: '3px 0', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
-                              </tr>
-                          )}
-                          </tbody>
-                        </table>
+                            <td style={{ padding: '3px 0' }}>{item.name}</td>
+                            <td style={{ padding: '3px 0', textAlign: 'center' }}>{item.quantity}</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
 
-                        <div style={{ borderTop: '1px dashed #33271c', paddingTop: '8px', textAlign: 'right', fontSize: '11px' }}>
-                          <div>Subtotal (Tax Excl.): ₹{sub.toFixed(2)}</div>
-                          <div>CGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
-                          <div>SGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
-                          <div style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '6px' }}>
-                            GRAND TOTAL: ₹{order.totalAmount.toFixed(2)}
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>
-                            Payment Method: <strong>{order.paymentMethod || 'Paid'}</strong>
-                          </div>
-                        </div>
-
-                        <button
-                        onClick={() => printPOSReceipt(order, null, cafeInfo)}
-                        className="btn"
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          fontSize: '12px',
-                          marginTop: '15px',
-                          color: 'var(--color-text-primary)',
-                          border: '1px solid #33271c',
-                          background: '#33271c',
-                          fontWeight: 'bold',
-                          borderRadius: '6px',
-                          cursor: 'pointer'
-                        }}>
-                        
-                          🖨️ Download & Print PDF Invoice
-                        </button>
+                    <div style={{ borderTop: '1px dashed #33271c', paddingTop: '8px', textAlign: 'right', fontSize: '11px' }}>
+                      <div>Subtotal (Tax Excl.): ₹{sub.toFixed(2)}</div>
+                      <div>CGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
+                      <div>SGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
+                      <div style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '6px' }}>
+                        GRAND TOTAL: ₹{order.totalAmount.toFixed(2)}
                       </div>
+                      <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>
+                        Payment Method: <strong>{order.paymentMethod || 'Paid'}</strong>
+                      </div>
+                    </div>
 
-                      {/* Review Block */}
-                      {!hasReviewed ?
+                    <button
+                      onClick={() => printPOSReceipt(order, null, cafeInfo)}
+                      className="btn"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        fontSize: '12px',
+                        marginTop: '15px',
+                        color: 'var(--color-text-primary)',
+                        border: '1px solid #33271c',
+                        background: '#33271c',
+                        fontWeight: 'bold',
+                        borderRadius: '6px',
+                        cursor: 'pointer'
+                      }}>
+                      🖨️ Download & Print PDF Invoice
+                    </button>
+                  </div>
+
+                  {/* Review Block */}
+                  {!hasReviewed ?
                     <div style={{
                       background: 'rgba(0, 0, 0, 0.03)',
                       border: '1px solid var(--color-border)',
@@ -577,28 +802,27 @@ const OrderHistory = ({ cafeId }) => {
                       padding: '16px',
                       fontFamily: "'Outfit', 'Inter', sans-serif"
                     }}>
-                          <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: '800', margin: '0 0 10px 0', textAlign: 'center' }}>
-                            ⭐ RATE YOUR EXPERIENCE
-                          </h4>
-                          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
-                            {[1, 2, 3, 4, 5].map((star) =>
-                        <span
-                          key={star}
-                          onClick={() => {
-                            setReviewRatings((prev) => ({ ...prev, [order._id]: star }));
-                          }}
-                          style={{
-                            fontSize: '28px',
-                            cursor: 'pointer',
-                            color: (reviewRatings[order._id] || 0) >= star ? '#d4af37' : '#555',
-                            transition: 'color 0.2s'
-                          }}>
-                          
-                                ★
-                              </span>
+                      <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: '800', margin: '0 0 10px 0', textAlign: 'center' }}>
+                        ⭐ RATE YOUR EXPERIENCE
+                      </h4>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
+                        {[1, 2, 3, 4, 5].map((star) =>
+                          <span
+                            key={star}
+                            onClick={() => {
+                              setReviewRatings((prev) => ({ ...prev, [order._id]: star }));
+                            }}
+                            style={{
+                              fontSize: '28px',
+                              cursor: 'pointer',
+                              color: (reviewRatings[order._id] || 0) >= star ? '#d4af37' : '#555',
+                              transition: 'color 0.2s'
+                            }}>
+                            ★
+                          </span>
                         )}
-                          </div>
-                          <textarea
+                      </div>
+                      <textarea
                         placeholder="Write a quick review about the taste, service, or atmosphere..."
                         value={reviewTexts[order._id] || ''}
                         onChange={(e) => {
@@ -617,8 +841,8 @@ const OrderHistory = ({ cafeId }) => {
                           resize: 'vertical',
                           marginBottom: '10px'
                         }} />
-                      
-                          <button
+
+                      <button
                         disabled={submittingReview[order._id] || !reviewRatings[order._id]}
                         onClick={async () => {
                           setSubmittingReview((prev) => ({ ...prev, [order._id]: true }));
@@ -644,10 +868,9 @@ const OrderHistory = ({ cafeId }) => {
                         }}
                         className="btn btn-primary"
                         style={{ width: '100%', padding: '10px', fontSize: '12px' }}>
-                        
-                            {submittingReview[order._id] ? 'Submitting...' : 'Submit Feedback'}
-                          </button>
-                        </div> :
+                        {submittingReview[order._id] ? 'Submitting...' : 'Submit Feedback'}
+                      </button>
+                    </div> :
 
                     <div style={{
                       background: 'rgba(39, 174, 96, 0.1)',
@@ -659,19 +882,17 @@ const OrderHistory = ({ cafeId }) => {
                       fontSize: '12px',
                       fontWeight: 'bold'
                     }}>
-                          💚 Thank you for your feedback! Review submitted.
-                        </div>
-                    }
-                    </div>);
-
-              })}
-              </div>
-            </>
-          }
+                      💚 Thank you for your feedback! Review submitted.
+                    </div>
+                  }
+                </div>
+              );
+            })}
+          </div>
 
           {errorMsg &&
-          <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)', color: 'var(--color-text-primary)', fontSize: '12px', padding: '10px', marginTop: '16px', borderRadius: '8px', textAlign: 'center' }}>
-              ⚠️∩╕Å {errorMsg}
+            <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)', color: 'var(--color-text-primary)', fontSize: '12px', padding: '10px', marginTop: '16px', borderRadius: '8px', textAlign: 'center' }}>
+              ⚠️ {errorMsg}
             </div>
           }
 
@@ -679,8 +900,8 @@ const OrderHistory = ({ cafeId }) => {
             View Menu
           </Link>
         </div>
-      </div>);
-
+      </div>
+    );
   }
 
 

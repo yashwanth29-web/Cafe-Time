@@ -16,6 +16,10 @@ const OrderItemSchema = new mongoose.Schema({
   quantity: {
     type: Number,
     required: true
+  },
+  image: {
+    type: String,
+    default: '/images/default-food.png'
   }
 });
 

@@ -1401,10 +1401,7 @@ const OwnerDashboard = () =>{
  const deductionLogs = inventoryLogs.filter((log) =>log.type === 'Deduction');
  const totalInventoryConsumption = deductionLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
 
- const lowStockAlertsCount = inventoryList.filter((item) =>item.status === 'LOW_STOCK' || item.status === 'OUT_OF_STOCK' || (item.quantity !== undefined ? item.quantity : item.stock)<= (item.reorderLevel !== undefined ? item.reorderLevel : item.minStock)).length;
 
- const wastageLogs = inventoryLogs.filter((log) =>log.type === 'Wastage' || log.type === 'Damaged');
- const totalWastageCost = wastageLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
 
  const getTopConsumedIngredients = () =>{
  const consumptionMap = {};
@@ -1751,20 +1748,6 @@ const OwnerDashboard = () =>{
 <h4>Inventory Consumption</h4>
 <span className="val" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</span>
 <span className="sub">Cost of sold ingredients</span>
-</div>
-<div className="analytics-card">
-<h4>Wastage & Spoiled Cost</h4>
-<span className="val" style={{ color: '#e74c3c' }}>₹{totalWastageCost.toFixed(2)}</span>
-<span className="sub">Spoiled & damaged items</span>
-</div>
-<div className="analytics-card">
-<h4>Low Stock Alerts</h4>
-<span className="val" style={{ color: lowStockAlertsCount >0 ? '#e74c3c' : '#2ecc71' }}>
- {lowStockAlertsCount} items
-</span>
-<span className="sub" style={{ color: lowStockAlertsCount >0 ? '#e74c3c' : '#2ecc71' }}>
- {lowStockAlertsCount >0 ? ' Stock replenishment needed' : ' All items in stock'}
-</span>
 </div>
 </div>
 
@@ -3326,15 +3309,28 @@ const OwnerDashboard = () =>{
 </span>
 </div>
 
- {/* Items List */}
-<div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '100px', overflowY: 'auto' }}>
- {order.items.map((i, idx) =>
-<div key={idx} style={{ display: 'flex', gap: '6px', marginBottom: idx !== order.items.length - 1 ? '4px' : 0 }}>
-<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{i.quantity}x</span>
-<span>{i.name}</span>
-</div>
-)}
-</div>
+      {/* Items List */}
+      <div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {order.items.map((i, idx) => {
+          const displayImage = i.image ? getAssetUrl(i.image) : '/images/default-food.png';
+          return (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+              <img
+                src={displayImage}
+                alt={i.name}
+                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+                onError={(e) => { e.target.src = '/images/default-food.png'; }}
+              />
+              <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+                {i.quantity}x
+              </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+                {i.name}
+              </span>
+            </div>
+          );
+        })}
+      </div>
 
  {/* Footer: Amount + Payment Status */}
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>

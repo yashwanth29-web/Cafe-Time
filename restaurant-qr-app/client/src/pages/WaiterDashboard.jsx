@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getOrders, updateOrderStatus, getCafeInfo } from '../services/api';
+import { getOrders, updateOrderStatus, getCafeInfo, getAssetUrl } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
 
@@ -280,9 +280,27 @@ const WaiterDashboard = () =>{
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '4px' }}>
  Order #{order._id.substring(order._id.length - 4).toUpperCase()} | Total:<strong style={{ color: '#2ecc71' }}>₹{order.totalAmount}</strong>
 </span>
-<span style={{ fontSize: '0.8rem', color: 'var(--color-text-primary)', display: 'block', marginTop: '2px' }}>
- {order.items.map((it) =>`${it.quantity}x ${it.name}`).join(', ')}
-</span>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+  {order.items.map((it, idx) => {
+    const displayImage = it.image ? getAssetUrl(it.image) : '/images/default-food.png';
+    return (
+      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+        <img
+          src={displayImage}
+          alt={it.name}
+          style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+          onError={(e) => { e.target.src = '/images/default-food.png'; }}
+        />
+        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+          {it.quantity}x
+        </span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+          {it.name}
+        </span>
+      </div>
+    );
+  })}
+</div>
 </div>
 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
 <button
@@ -367,6 +385,27 @@ const WaiterDashboard = () =>{
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '3px' }}>
  Order #{order._id.substring(order._id.length - 4).toUpperCase()} | {order.items.length} items
 </span>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+  {order.items.map((it, idx) => {
+    const displayImage = it.image ? getAssetUrl(it.image) : '/images/default-food.png';
+    return (
+      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+        <img
+          src={displayImage}
+          alt={it.name}
+          style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+          onError={(e) => { e.target.src = '/images/default-food.png'; }}
+        />
+        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+          {it.quantity}x
+        </span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+          {it.name}
+        </span>
+      </div>
+    );
+  })}
+</div>
 </div>
 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
 <button
@@ -468,6 +507,27 @@ const WaiterDashboard = () =>{
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '3px' }}>
  Order #{order._id.substring(order._id.length - 4).toUpperCase()} | Status: {order.status === 'Placed' ? 'Placed' : 'Preparing...'}
 </span>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+  {order.items.map((it, idx) => {
+    const displayImage = it.image ? getAssetUrl(it.image) : '/images/default-food.png';
+    return (
+      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+        <img
+          src={displayImage}
+          alt={it.name}
+          style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+          onError={(e) => { e.target.src = '/images/default-food.png'; }}
+        />
+        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+          {it.quantity}x
+        </span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+          {it.name}
+        </span>
+      </div>
+    );
+  })}
+</div>
 </div>
 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
 <button

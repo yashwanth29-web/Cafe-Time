@@ -26,6 +26,7 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
   printWindow.document.write(`
     <html>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Invoice - ${order._id.toUpperCase()}</title>
         <style>
           @page { size: auto; margin: 5mm; }
@@ -37,21 +38,70 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
             padding: 10px;
             font-size: 12px;
             line-height: 1.4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
           }
           .invoice-box {
+            width: 100%;
             max-width: 80mm;
-            margin: 0 auto;
             padding: 5px;
+            box-sizing: border-box;
           }
-          /* A4 scale support */
+          /* Control panel for screen preview */
+          .no-print {
+            background: #f1f1f1;
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid #ccc;
+            margin-bottom: 15px;
+            width: 100%;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+          }
+          .print-btn {
+            background: #27ae60;
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            max-width: 320px;
+            display: inline-block;
+            min-height: 44px;
+          }
+          .print-btn:hover { background: #2196f3; }
+          
           @media screen and (min-width: 600px) {
+            body {
+              padding: 20px;
+            }
             .invoice-box {
               max-width: 100mm;
               border: 1px solid #ccc;
               padding: 20px;
               border-radius: 5px;
               margin-top: 20px;
+              box-shadow: 0 4px 10px rgba(0,0,0,0.05);
             }
+            .no-print {
+              border-radius: 6px;
+              max-width: 100mm;
+              border: 1px solid #ccc;
+            }
+            .print-btn {
+              width: auto;
+            }
+          }
+          
+          @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; display: block; }
+            .invoice-box { border: none; max-width: 100%; padding: 0; box-shadow: none; margin: 0; }
           }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
@@ -68,31 +118,6 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
           .totals td { padding: 2px 0; }
           .footer { border-top: 1px dashed #000; padding-top: 8px; margin-top: 12px; font-size: 10px; }
           .footer p { margin: 3px 0; }
-          
-          /* Control panel for screen preview */
-          .no-print {
-            background: #f1f1f1;
-            padding: 10px;
-            text-align: center;
-            border-bottom: 1px solid #ccc;
-            margin-bottom: 15px;
-          }
-          .print-btn {
-            background: #27ae60;
-            color: #fff;
-            border: none;
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-          }
-          .print-btn:hover { background: #2196f3; }
-          @media print {
-            .no-print { display: none; }
-            body { padding: 0; }
-            .invoice-box { border: none; max-width: 100%; padding: 0; }
-          }
         </style>
       </head>
       <body>
@@ -205,6 +230,7 @@ export const printKOT = (order, user = null, cafe = null) => {
   printWindow.document.write(`
     <html>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>KOT - ${order._id.slice(-6).toUpperCase()}</title>
         <style>
           @page { size: auto; margin: 5mm; }
@@ -215,17 +241,66 @@ export const printKOT = (order, user = null, cafe = null) => {
             margin: 0; 
             padding: 10px;
             font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
           }
           .kot-box {
+            width: 100%;
             max-width: 80mm;
-            margin: 0 auto;
+            box-sizing: border-box;
           }
+          /* Control panel for screen preview */
+          .no-print {
+            background: #f1f1f1;
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid #ccc;
+            margin-bottom: 15px;
+            width: 100%;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+          }
+          .print-btn {
+            background: #000;
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            max-width: 320px;
+            display: inline-block;
+            min-height: 44px;
+          }
+          
           @media screen and (min-width: 600px) {
+            body {
+              padding: 20px;
+            }
             .kot-box {
               max-width: 90mm;
               border: 2px solid #000;
               padding: 15px;
+              margin-top: 20px;
             }
+            .no-print {
+              border-radius: 6px;
+              max-width: 90mm;
+              border: 1px solid #ccc;
+            }
+            .print-btn {
+              width: auto;
+            }
+          }
+          
+          @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; display: block; }
+            .kot-box { border: none; max-width: 100%; padding: 0; margin: 0; }
           }
           .text-center { text-align: center; }
           .bold { font-weight: bold; }
@@ -242,28 +317,6 @@ export const printKOT = (order, user = null, cafe = null) => {
             padding: 8px;
             margin-top: 10px;
             font-size: 12px;
-          }
-          .no-print {
-            background: #f1f1f1;
-            padding: 10px;
-            text-align: center;
-            border-bottom: 1px solid #ccc;
-            margin-bottom: 15px;
-          }
-          .print-btn {
-            background: #000;
-            color: #fff;
-            border: none;
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-          }
-          @media print {
-            .no-print { display: none; }
-            body { padding: 0; }
-            .kot-box { border: none; max-width: 100%; padding: 0; }
           }
         </style>
       </head>

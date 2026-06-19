@@ -48,8 +48,8 @@ const RazorpayPayment = ({
     }
 
     const { name, email, phone } = customerDetails;
-    if (!name || !email || !phone) {
-      alert('Please fill in your name, email, and contact number before proceeding.');
+    if (!name || !phone) {
+      alert('Please fill in your name and contact number before proceeding.');
       return;
     }
 
@@ -72,7 +72,7 @@ const RazorpayPayment = ({
           })),
           tableNumber: tableNumber || 'Takeaway',
           customerName: name,
-          customerEmail: email,
+          customerEmail: email || 'customer@example.com',
           customerPhone: phone,
           cafeId: cafeId || 'CD001',
           specialInstructions: specialInstructions
@@ -129,7 +129,7 @@ const RazorpayPayment = ({
         },
         prefill: {
           name: name,
-          email: email,
+          email: email || 'customer@example.com',
           contact: phone
         },
         readonly: {

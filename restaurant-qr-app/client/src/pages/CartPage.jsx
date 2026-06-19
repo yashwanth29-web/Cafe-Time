@@ -9,8 +9,7 @@ import { useAuth } from '../context/AuthContext';
 const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isUserStaff = user && ['admin', 'owner', 'manager', 'waiter', 'cashier', 'staff'].includes(user.role);
-  const isStaff = isUserStaff || sessionStorage.getItem('orderSource') === 'staff';
+  const isStaff = sessionStorage.getItem('orderSource') === 'staff';
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -303,8 +302,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
     
-    if (!isStaff && (!customerName || !customerEmail || !customerPhone)) {
-      alert('Please fill out your contact details before placing your order.');
+    if (!isStaff && (!customerName || !customerPhone)) {
+      alert('Please fill out your name and contact number before placing your order.');
       return;
     }
 
@@ -316,7 +315,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         id: cartItem.item.id || cartItem.item._id,
         name: cartItem.item.name,
         price: cartItem.item.price,
-        quantity: cartItem.quantity
+        quantity: cartItem.quantity,
+        image: cartItem.item.image || '/images/default-food.png'
       }));
 
       const orderPayload = {
@@ -418,15 +418,13 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                   <h4 style={{ fontSize: '13px', fontWeight: '800', margin: '0', color: 'var(--color-text-primary)', letterSpacing: '0.5px' }}>
                     👤 CONTACT INFORMATION
                   </h4>
-                  {(customerName || customerEmail || customerPhone) &&
+                  {(customerName || customerPhone) &&
                 <button
                   type="button"
                   onClick={() => {
                     setCustomerName('');
-                    setCustomerEmail('');
                     setCustomerPhone('');
                     localStorage.removeItem('customerName');
-                    localStorage.removeItem('customerEmail');
                     localStorage.removeItem('customerPhone');
                   }}
                   style={{
@@ -450,25 +448,6 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                   placeholder="Full Name"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
-                    background: 'rgba(0,0,0,0.15)',
-                    color: 'var(--color-text-primary)',
-                    outline: 'none',
-                    fontSize: '13px'
-                  }} />
-                
-                </div>
-
-                <div>
-                  <input
-                  type="email"
-                  placeholder="Email Address"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -547,8 +526,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             <div style={{ marginTop: '24px' }}>
               <button
               onClick={handlePlaceOrder}
-              className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone)) ? 'btn-disabled' : ''}`}
-              disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone))}
+              className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone)) ? 'btn-disabled' : ''}`}
+              disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone))}
               style={{
                 width: '100%',
                 padding: '14px 20px',
@@ -558,7 +537,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 border: 'none',
                 background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
                 color: 'var(--color-text-primary)',
-                cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerEmail || !customerPhone)) ? 'not-allowed' : 'pointer'
+                cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone)) ? 'not-allowed' : 'pointer'
               }}>
               
                 {loading ?

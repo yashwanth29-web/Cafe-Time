@@ -45,8 +45,10 @@ function AppContent() {
   useEffect(() => {
     if (sourceParam) {
       sessionStorage.setItem('orderSource', sourceParam);
+    } else if (tableParam || cafeIdParam) {
+      sessionStorage.removeItem('orderSource');
     }
-  }, [sourceParam]);
+  }, [sourceParam, tableParam, cafeIdParam]);
 
   // Sync tableNumber state when search parameter changes reactively
   useEffect(() => {
