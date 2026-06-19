@@ -41,7 +41,7 @@ const createMenuItem = async (req, res) => {
 
     // Auto-update availability based on inventory
     const cafeId = (req.user && req.user.cafeId) || 'CD001';
-    await updateMenuItemAvailabilityFromInventory(cafeId);
+    await updateMenuItemAvailabilityFromInventory(cafeId, savedItem._id);
 
     // Fetch latest status
     const latestItem = await MenuItem.findById(savedItem._id);
@@ -72,7 +72,7 @@ const updateMenuItem = async (req, res) => {
     const updatedItem = await MenuItem.findByIdAndUpdate(
       id,
       updateData,
-      { new: true, returnDocument: 'after', runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedItem) {
@@ -81,7 +81,7 @@ const updateMenuItem = async (req, res) => {
 
     // Auto-update availability based on inventory
     const cafeId = (req.user && req.user.cafeId) || 'CD001';
-    await updateMenuItemAvailabilityFromInventory(cafeId);
+    await updateMenuItemAvailabilityFromInventory(cafeId, id);
 
     // Fetch the updated item again to return the latest availability status
     const latestItem = await MenuItem.findById(id);

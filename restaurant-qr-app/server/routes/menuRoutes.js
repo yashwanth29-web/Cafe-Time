@@ -34,9 +34,7 @@ router.post('/upload-image', protect, restrictTo('admin', 'owner', 'manager'), u
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image file uploaded' });
   }
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  const imageUrl = `/uploads/${req.file.filename}`;
   return res.status(200).json({
     success: true,
     imageUrl

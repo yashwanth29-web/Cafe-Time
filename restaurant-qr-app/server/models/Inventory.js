@@ -90,4 +90,8 @@ InventorySchema.pre('save', function() {
   }
 });
 
+InventorySchema.index({ cafeId: 1, name: 1 });
+InventorySchema.index({ cafeId: 1, category: 1 });
+InventorySchema.index({ cafeId: 1, branch: 1, status: 1 });
+
 module.exports = mongoose.model('Inventory', InventorySchema);

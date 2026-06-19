@@ -79,7 +79,7 @@ const createOrder = async (req, res) => {
     // Create order on Razorpay
     let razorpayOrder;
     try {
-      razorpayOrder = await razorpayService.createRazorpayOrder(calculatedTotal);
+      razorpayOrder = await razorpayService.createRazorpayOrder(savedOrder.cafeId, calculatedTotal);
     } catch (err) {
       // If Razorpay creation fails, mark order as Failed in DB and throw
       savedOrder.paymentStatus = 'Failed';
@@ -90,6 +90,8 @@ const createOrder = async (req, res) => {
     // Update the DB order with the Razorpay order ID
     savedOrder.razorpayOrderId = razorpayOrder.id;
     await savedOrder.save();
+    
+    const dynamicKeyId = await razorpayService.getRazorpayKeyId(savedOrder.cafeId);
 
     return res.status(201).json({
       success: true,
@@ -97,7 +99,7 @@ const createOrder = async (req, res) => {
       razorpayOrderId: razorpayOrder.id,
       amount: razorpayOrder.amount, // in paise
       currency: razorpayOrder.currency,
-      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder'
+      keyId: dynamicKeyId
     });
 
   } catch (error) {
@@ -125,14 +127,14 @@ const verifyPayment = async (req, res) => {
       });
     }
 
-    // Cryptographically verify signature
-    const isValid = razorpayService.verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
-
     // Find our database order
     const order = await Order.findById(appOrderId);
     if (!order) {
       return res.status(404).json({ success: false, message: 'Pending order not found in database' });
     }
+
+    // Cryptographically verify signature dynamically for this cafe
+    const isValid = await razorpayService.verifyPaymentSignature(order.cafeId, razorpayOrderId, razorpayPaymentId, razorpaySignature);
 
     if (!isValid) {
       order.paymentStatus = 'Failed';
@@ -202,7 +204,7 @@ const payExistingOrder = async (req, res) => {
     // Call Razorpay API to generate order
     let razorpayOrder;
     try {
-      razorpayOrder = await razorpayService.createRazorpayOrder(order.totalAmount);
+      razorpayOrder = await razorpayService.createRazorpayOrder(order.cafeId, order.totalAmount);
     } catch (err) {
       order.paymentStatus = 'Failed';
       await order.save();
@@ -212,6 +214,8 @@ const payExistingOrder = async (req, res) => {
     // Update Order with Razorpay Order ID
     order.razorpayOrderId = razorpayOrder.id;
     await order.save();
+    
+    const dynamicKeyId = await razorpayService.getRazorpayKeyId(order.cafeId);
 
     return res.status(200).json({
       success: true,
@@ -219,7 +223,7 @@ const payExistingOrder = async (req, res) => {
       razorpayOrderId: razorpayOrder.id,
       amount: razorpayOrder.amount, // in paise
       currency: razorpayOrder.currency,
-      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder'
+      keyId: dynamicKeyId
     });
 
   } catch (error) {

@@ -66,5 +66,7 @@ const AttendanceSchema = new mongoose.Schema({
 
 // Compound index to prevent duplicate attendance on the same day for a staff member
 AttendanceSchema.index({ staffId: 1, date: 1 }, { unique: true });
+AttendanceSchema.index({ cafeId: 1, date: -1 });
+AttendanceSchema.index({ cafeId: 1, branchId: 1, date: -1 });
 
 module.exports = mongoose.model('Attendance', AttendanceSchema);

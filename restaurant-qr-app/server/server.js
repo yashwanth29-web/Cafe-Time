@@ -86,6 +86,10 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// Global Error Handling Middleware
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
+
 // Configure Port
 const PORT = process.env.PORT || 5000;
 

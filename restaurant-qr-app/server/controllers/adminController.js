@@ -311,7 +311,9 @@ const saveSetupData = async (req, res) => {
     logoUrl, address, mapsLocation, openingTime, closingTime, gstNumber, supportNumber, uiPrimaryColor,
     paymentConfig,
     operationalConfig,
-    staffList
+    staffList,
+    taxRate,
+    serviceCharge
   } = req.body;
 
   if (!cafeId) {
@@ -339,23 +341,29 @@ const saveSetupData = async (req, res) => {
     if (gstNumber) cafe.gstNumber = gstNumber;
     if (supportNumber) cafe.supportNumber = supportNumber;
     if (uiPrimaryColor) cafe.uiPrimaryColor = uiPrimaryColor;
+    if (taxRate !== undefined) cafe.gstRate = taxRate;
+    if (serviceCharge !== undefined) cafe.serviceChargeRate = serviceCharge;
     cafe.setupCompleted = true; // Complete setup flag!
     await cafe.save();
 
     // 2. Save PaymentConfig (Encrypting the Razorpay Secret)
     if (paymentConfig) {
-      const encryptedSecret = encrypt(paymentConfig.razorpaySecret);
+      const updateData = {
+        razorpayKeyId: paymentConfig.razorpayKeyId,
+        upiId: paymentConfig.upiId,
+        bankHolderName: paymentConfig.bankHolderName,
+        accountNumber: paymentConfig.accountNumber,
+        ifscCode: paymentConfig.ifscCode,
+        isVerified: paymentConfig.isVerified || false
+      };
+
+      if (paymentConfig.razorpaySecret) {
+        updateData.razorpaySecretEncrypted = encrypt(paymentConfig.razorpaySecret);
+      }
+
       await PaymentConfig.findOneAndUpdate(
         { cafeId },
-        {
-          razorpayKeyId: paymentConfig.razorpayKeyId,
-          razorpaySecretEncrypted: encryptedSecret,
-          upiId: paymentConfig.upiId,
-          bankHolderName: paymentConfig.bankHolderName,
-          accountNumber: paymentConfig.accountNumber,
-          ifscCode: paymentConfig.ifscCode,
-          isVerified: paymentConfig.isVerified || false
-        },
+        updateData,
         { upsert: true, returnDocument: 'after' }
       );
     }
@@ -543,9 +551,7 @@ const uploadLogo = async (req, res) => {
     return res.status(400).json({ success: false, message: 'No logo file uploaded' });
   }
 
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const logoUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  const logoUrl = `/uploads/${req.file.filename}`;
 
   return res.status(200).json({
     success: true,

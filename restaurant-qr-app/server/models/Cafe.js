@@ -77,6 +77,14 @@ const CafeSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  gstRate: {
+    type: Number,
+    default: 0
+  },
+  serviceChargeRate: {
+    type: Number,
+    default: 0
+  },
   supportNumber: {
     type: String,
     default: ''

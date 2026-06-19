@@ -91,7 +91,19 @@ const OwnerProfilePage = () => {
     setLoading(true);
     try {
       const [r, br, st] = await Promise.all([getSetupData(), getBranches(), getStaff()]);
-      if (r.success) {setCafeData(r.cafe);setPaymentConfig(r.paymentConfig);setOpsConfig(r.operationalConfig);}
+      if (r.success) {
+        setCafeData(r.cafe);
+        setPaymentConfig(r.paymentConfig);
+        setOpsConfig(r.operationalConfig);
+        if (r.cafe.gstRate !== undefined) {
+          setTaxRateState(r.cafe.gstRate);
+          localStorage.setItem('owner_tax_rate', String(r.cafe.gstRate));
+        }
+        if (r.cafe.serviceChargeRate !== undefined) {
+          setServiceChargeState(r.cafe.serviceChargeRate);
+          localStorage.setItem('owner_service_charge', String(r.cafe.serviceChargeRate));
+        }
+      }
       if (br.success) setBranches(br.branches || []);
       if (st.success) setStaffCount(st.staff?.length || 0);
     } catch {showToast('Failed to load.', false);} finally
@@ -107,7 +119,7 @@ const OwnerProfilePage = () => {
       location: { address: cafeData?.address || '', city: cafeData?.city || '', state: cafeData?.state || '', pincode: cafeData?.pincode || '', mapsLocation: cafeData?.mapsLocation || '' },
       hours: { openingTime: cafeData?.openingTime || '', closingTime: cafeData?.closingTime || '', supportNumber: cafeData?.supportNumber || '' },
       payment: { razorpayKeyId: paymentConfig?.razorpayKeyId || '', razorpaySecret: '', upiId: paymentConfig?.upiId || '', bankHolderName: paymentConfig?.bankHolderName || '', accountNumber: paymentConfig?.accountNumber || '', ifscCode: paymentConfig?.ifscCode || '', taxRate: taxRate, serviceCharge: serviceCharge, isVerified: paymentConfig?.isVerified || false },
-      ops: { tableCount: operationalConfig?.tables?.length || 0, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
+      ops: { tableCount: operationalConfig?.tables ? operationalConfig.tables.length : 5, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
       theme: { themeMode: themeMode, uiPrimaryColor: primaryColor },
       branch: { branchName: '', address: '', manager: '' },
       qr_codes: {}
@@ -131,7 +143,7 @@ const OwnerProfilePage = () => {
       if (activeModal === 'hours') await saveSetupData(form);else
       if (activeModal === 'payment') {
         const { taxRate: newTaxRate, serviceCharge: newServiceCharge, ...paymentFields } = form;
-        await saveSetupData({ paymentConfig: paymentFields });
+        await saveSetupData({ paymentConfig: paymentFields, taxRate: newTaxRate, serviceCharge: newServiceCharge });
         localStorage.setItem('owner_tax_rate', String(newTaxRate !== undefined ? newTaxRate : 5));
         localStorage.setItem('owner_service_charge', String(newServiceCharge !== undefined ? newServiceCharge : 0));
         setTaxRateState(parseFloat(newTaxRate !== undefined ? newTaxRate : 5));
@@ -377,7 +389,7 @@ const OwnerProfilePage = () => {
     ops:
     <>
         <label className="mlabel" htmlFor="profile-table-count">Number of Tables</label>
-        <input className="minput" id="profile-table-count" name="profile-table-count" type="number" min={0} value={form.tableCount || 0} onChange={fld('tableCount')} />
+        <input className="minput" id="profile-table-count" name="profile-table-count" type="number" min={0} value={form.tableCount !== undefined ? form.tableCount : ''} onChange={fld('tableCount')} />
         <div className="mtoggle-row">
           <label className="mlabel" htmlFor="profile-kds-enabled" style={{ margin: 0 }}>Kitchen Display System</label>
           <input type="checkbox" id="profile-kds-enabled" name="profile-kds-enabled" className="mtoggle" checked={!!form.kitchenDisplayEnabled} onChange={fld('kitchenDisplayEnabled')} />
