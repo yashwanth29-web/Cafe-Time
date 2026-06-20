@@ -65,16 +65,15 @@ const CashierDashboard = () =>{
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
  const [selectedOrder, setSelectedOrder] = useState(null);
- const [refreshCountdown, setRefreshCountdown] = useState(5);
+ const [refreshCountdown, setRefreshCountdown] = useState(12);
 
  const fetchOrders = async () =>{
  try {
- const response = await getOrders();
+ const today = new Date();
+ const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+ const response = await getOrders({ date: todayStr, cafeId: user?.cafeId });
  if (response.success) {
- const cafeOrders = user?.cafeId ?
- response.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
- response.data;
- setOrders(cafeOrders);
+ setOrders(response.data);
  setErrorMsg('');
  } else {
  setErrorMsg('Failed to refresh billing orders feed.');
@@ -92,18 +91,18 @@ const CashierDashboard = () =>{
 
  const pollingInterval = setInterval(() =>{
  fetchOrders();
- setRefreshCountdown(5);
- }, 5000);
+ setRefreshCountdown(12);
+ }, 12000);
 
  const countdownInterval = setInterval(() =>{
- setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
+ setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
  }, 1000);
 
  return () =>{
  clearInterval(pollingInterval);
  clearInterval(countdownInterval);
  };
- }, []);
+ }, [user]);
 
  const handleProcessPayment = async (orderId, paymentMethod) =>{
  try {

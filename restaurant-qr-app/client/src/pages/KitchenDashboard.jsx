@@ -10,7 +10,7 @@ const KitchenDashboard = () =>{
  const [orders, setOrders] = useState([]);
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
- const [refreshCountdown, setRefreshCountdown] = useState(5);
+ const [refreshCountdown, setRefreshCountdown] = useState(12);
  const [soundEnabled, setSoundEnabled] = useState(true);
  const [previousActiveCount, setPreviousActiveCount] = useState(0);
 
@@ -142,57 +142,46 @@ const KitchenDashboard = () =>{
  };
 
  const fetchOrders = async () =>{
- try {
- const response = await getOrders();
- if (response.success) {
- // Filter by cafeId if bound, fallback to allow undefined/null cafeIds
- const cafeOrders = user?.cafeId ?
- response.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
- response.data;
+  try {
+  const response = await getOrders({ active: true, cafeId: user?.cafeId });
+  if (response.success) {
+  setOrders(response.data);
 
- setOrders(cafeOrders);
+  // Alert sound check for new active orders
+  const currentActiveCount = response.data.filter((o) =>o.status === 'Placed' || o.status === 'Preparing').length;
+  if (currentActiveCount >previousActiveCount) {
+  playNotificationSound();
+  }
+  setPreviousActiveCount(currentActiveCount);
+  setErrorMsg('');
+  } else {
+  setErrorMsg('Failed to refresh kitchen orders feed.');
+  }
+  } catch (error) {
+  console.error('Error fetching kitchen orders:', error);
+  setErrorMsg('Cannot connect to live orders server.');
+  } finally {
+  setLoading(false);
+  }
+  };
 
- // Alert sound check for new active orders
- const currentActiveCount = cafeOrders.filter((o) =>o.status === 'Placed' || o.status === 'Preparing').length;
- if (currentActiveCount >previousActiveCount) {
- playNotificationSound();
- }
- setPreviousActiveCount(currentActiveCount);
- setErrorMsg('');
- } else {
- setErrorMsg('Failed to refresh kitchen orders feed.');
- }
- } catch (error) {
- console.error('Error fetching kitchen orders:', error);
- setErrorMsg('Cannot connect to live orders server.');
- } finally {
- setLoading(false);
- }
- };
+  useEffect(() =>{
+  fetchOrders();
 
- useEffect(() =>{
- fetchOrders();
+  const pollingInterval = setInterval(() =>{
+  fetchOrders();
+  setRefreshCountdown(12);
+  }, 12000);
 
- const pollingInterval = setInterval(() =>{
- fetchOrders();
- if (activeTab === 'inventory') {
- fetchInventory();
- }
- if (activeTab === 'menu') {
- fetchMenu();
- }
- setRefreshCountdown(5);
- }, 5000);
+  const countdownInterval = setInterval(() =>{
+  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
+  }, 1000);
 
- const countdownInterval = setInterval(() =>{
- setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
- }, 1000);
-
- return () =>{
- clearInterval(pollingInterval);
- clearInterval(countdownInterval);
- };
- }, [previousActiveCount]);
+  return () =>{
+  clearInterval(pollingInterval);
+  clearInterval(countdownInterval);
+  };
+  }, [previousActiveCount, user]);
 
  const handleStatusUpdate = async (id, newStatus) =>{
  try {

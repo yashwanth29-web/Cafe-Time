@@ -70,11 +70,9 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
     };
 
     fetchMenuAndCategories(true);
-    const interval = setInterval(() => fetchMenuAndCategories(false), 3000);
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
     };
   }, []);
 

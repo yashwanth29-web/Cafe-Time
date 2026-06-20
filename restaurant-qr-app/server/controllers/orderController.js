@@ -52,7 +52,35 @@ const createOrder = async (req, res) => {
 // @access  Public (Owner Dashboard)
 const getOrders = async (req, res) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 });
+    const filterQuery = {};
+
+    // 1. Cafe ID filter
+    const cafeId = req.query.cafeId || (req.user && req.user.cafeId);
+    if (cafeId) {
+      filterQuery.cafeId = cafeId;
+    }
+
+    // 2. Active orders filter (status != Completed)
+    if (req.query.active === 'true') {
+      filterQuery.status = { $ne: 'Completed' };
+    }
+
+    // 3. Specific Date filter (YYYY-MM-DD)
+    if (req.query.date) {
+      const parts = req.query.date.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1; // JS months are 0-indexed
+        const day = parseInt(parts[2], 10);
+        
+        const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
+        const endOfDay = new Date(year, month, day + 1, 0, 0, 0, 0);
+        
+        filterQuery.createdAt = { $gte: startOfDay, $lt: endOfDay };
+      }
+    }
+
+    const orders = await Order.find(filterQuery).sort({ createdAt: -1 });
     return res.status(200).json({ success: true, count: orders.length, data: orders });
   } catch (error) {
     console.error('Error fetching orders:', error);

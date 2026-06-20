@@ -1,12 +1,18 @@
 const MenuItem = require('../models/MenuItem');
 const { updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
+const menuCache = require('../utils/menuCache');
 
 // @desc    Get all menu items
 // @route   GET /api/menu
 // @access  Public
 const getMenuItems = async (req, res) => {
   try {
+    const cached = menuCache.getMenu();
+    if (cached) {
+      return res.status(200).json({ success: true, count: cached.length, data: cached });
+    }
     const menuItems = await MenuItem.find().sort({ category: 1, name: 1 });
+    menuCache.setMenu(menuItems);
     return res.status(200).json({ success: true, count: menuItems.length, data: menuItems });
   } catch (error) {
     console.error('Error fetching menu items:', error);
@@ -45,6 +51,9 @@ const createMenuItem = async (req, res) => {
 
     // Fetch latest status
     const latestItem = await MenuItem.findById(savedItem._id);
+
+    // Clear menu cache since a new item was added
+    menuCache.clearMenu();
 
     return res.status(201).json({ success: true, data: latestItem || savedItem });
   } catch (error) {
@@ -86,6 +95,9 @@ const updateMenuItem = async (req, res) => {
     // Fetch the updated item again to return the latest availability status
     const latestItem = await MenuItem.findById(id);
 
+    // Clear menu cache since an item was updated
+    menuCache.clearMenu();
+
     return res.status(200).json({ success: true, data: latestItem || updatedItem });
   } catch (error) {
     console.error('Error updating menu item:', error);
@@ -104,6 +116,9 @@ const deleteMenuItem = async (req, res) => {
     if (!deletedItem) {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
+
+    // Clear menu cache since an item was deleted
+    menuCache.clearMenu();
 
     return res.status(200).json({ success: true, message: 'Menu item deleted successfully' });
   } catch (error) {

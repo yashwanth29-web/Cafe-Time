@@ -60,8 +60,8 @@ API.interceptors.request.use(
 );
 
 
-export const getOrders = async () => {
-  const response = await API.get('/orders');
+export const getOrders = async (params) => {
+  const response = await API.get('/orders', { params });
   return response.data;
 };
 

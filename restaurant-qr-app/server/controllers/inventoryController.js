@@ -1,6 +1,7 @@
 const Inventory = require('../models/Inventory');
 const InventoryLog = require('../models/InventoryLog');
 const OperationalConfig = require('../models/OperationalConfig');
+const menuCache = require('../utils/menuCache');
 
 // Helper to seed default inventory items for a cafe if empty (using updated fields)
 const seedDefaultInventory = async (cafeId) => {
@@ -478,6 +479,9 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null) =>
         }
       }
     }
+    
+    // Clear menu cache since availability status might have changed
+    menuCache.clearMenu();
   } catch (err) {
     console.error('Error auto-updating menu item availability:', err);
   }

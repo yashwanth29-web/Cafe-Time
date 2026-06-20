@@ -1,5 +1,6 @@
 const Category = require('../models/Category');
 const MenuItem = require('../models/MenuItem');
+const menuCache = require('../utils/menuCache');
 
 const DEFAULT_CATEGORIES = [
   'Signature Chai',
@@ -25,11 +26,18 @@ const seedDefaultCategories = async (cafeId) => {
 const getCategories = async (req, res) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
+    const cached = menuCache.getCategories(cafeId);
+    if (cached) {
+      return res.status(200).json({ success: true, count: cached.length, data: cached });
+    }
+    
     let categories = await Category.find({ cafeId }).sort({ displayOrder: 1, name: 1 });
 
     if (categories.length === 0) {
       categories = await seedDefaultCategories(cafeId);
     }
+
+    menuCache.setCategories(cafeId, categories);
 
     return res.status(200).json({ success: true, count: categories.length, data: categories });
   } catch (error) {
@@ -62,6 +70,10 @@ const createCategory = async (req, res) => {
     });
 
     const savedCategory = await newCategory.save();
+    
+    // Clear category cache for this cafe
+    menuCache.clearCategories(cafeId);
+
     return res.status(201).json({ success: true, data: savedCategory });
   } catch (error) {
     console.error('Error creating category:', error);
@@ -105,6 +117,10 @@ const updateCategory = async (req, res) => {
       { category: newName }
     );
 
+    // Invalidate caches
+    menuCache.clearCategories(cafeId);
+    menuCache.clearMenu(); // Category name change cascades to MenuItem categories
+
     return res.status(200).json({ success: true, data: updatedCategory });
   } catch (error) {
     console.error('Error updating category:', error);
@@ -136,6 +152,10 @@ const deleteCategory = async (req, res) => {
       { category: categoryName },
       { category: 'Uncategorized' }
     );
+    // Invalidate caches
+    menuCache.clearCategories(cafeId);
+    menuCache.clearMenu(); // Deleting a category updates MenuItems to Uncategorized
+
     return res.status(200).json({ success: true, message: 'Category deleted successfully, items moved to Uncategorized' });
   } catch (error) {
     console.error('Error deleting category:', error);
@@ -163,6 +183,9 @@ const reorderCategories = async (req, res) => {
     }));
 
     await Category.bulkWrite(bulkOps);
+
+    // Invalidate categories cache (reordering displayOrder doesn't affect menu items)
+    menuCache.clearCategories(cafeId);
 
     return res.status(200).json({ success: true, message: 'Categories reordered successfully' });
   } catch (error) {

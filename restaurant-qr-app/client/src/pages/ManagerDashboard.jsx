@@ -180,53 +180,52 @@ const ManagerDashboard = () =>{
  }
  };
 
- const fetchInitialData = async () =>{
- try {
- const ordersRes = await getOrders();
- if (ordersRes.success) {
- const cafeOrders = user?.cafeId ?
- ordersRes.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
- ordersRes.data;
- setOrders(cafeOrders);
- }
+  const fetchInitialData = async () =>{
+  try {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const ordersRes = await getOrders({ date: todayStr, cafeId: user?.cafeId });
+  if (ordersRes.success) {
+  setOrders(ordersRes.data);
+  }
 
- const staffRes = await getStaff();
- if (staffRes.success) {
- setStaffList(staffRes.staff);
- // Initialize attendance to Present by default
- const initialAttendance = {};
- staffRes.staff.forEach((member) =>{
- initialAttendance[member._id] = 'Present';
- });
- setAttendance(initialAttendance);
- }
+  const staffRes = await getStaff();
+  if (staffRes.success) {
+  setStaffList(staffRes.staff);
+  // Initialize attendance to Present by default
+  const initialAttendance = {};
+  staffRes.staff.forEach((member) =>{
+  initialAttendance[member._id] = 'Present';
+  });
+  setAttendance(initialAttendance);
+  }
 
- // Fetch actual inventory from backend
- const inventoryRes = await getInventory();
- if (inventoryRes.success) {
- setInventory(inventoryRes.data);
- }
+  // Fetch actual inventory from backend
+  const inventoryRes = await getInventory();
+  if (inventoryRes.success) {
+  setInventory(inventoryRes.data);
+  }
 
- // Fetch menu items
- await fetchMenu();
- } catch (e) {
- console.error('Error fetching manager dashboard data:', e);
- setErrorMsg('Could not fetch operational data from backend.');
- } finally {
- setLoading(false);
- }
- };
+  // Fetch menu items
+  await fetchMenu();
+  } catch (e) {
+  console.error('Error fetching manager dashboard data:', e);
+  setErrorMsg('Could not fetch operational data from backend.');
+  } finally {
+  setLoading(false);
+  }
+  };
 
- useEffect(() =>{
- fetchInitialData();
+  useEffect(() =>{
+  fetchInitialData();
 
- // Polling every 5 seconds for real-time updates
- const pollingInterval = setInterval(() =>{
- fetchInitialData();
- }, 5000);
+  // Polling every 15 seconds for updates
+  const pollingInterval = setInterval(() =>{
+  fetchInitialData();
+  }, 15000);
 
- return () =>clearInterval(pollingInterval);
- }, []);
+  return () =>clearInterval(pollingInterval);
+  }, [user]);
 
  const handleAttendanceChange = (staffId, status) =>{
  setAttendance((prev) =>({ ...prev, [staffId]: status }));

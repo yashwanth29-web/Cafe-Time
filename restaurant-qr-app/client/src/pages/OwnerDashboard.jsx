@@ -442,12 +442,9 @@ const OwnerDashboard = () =>{
  // Fetch Orders (Monitoring)
  const fetchOrders = async () =>{
  try {
- const response = await getOrders();
+ const response = await getOrders({ date: orderDateFilter, cafeId: user?.cafeId });
  if (response.success) {
- const cafeOrders = user?.cafeId ?
- response.data.filter((order) =>order.cafeId === user.cafeId) :
- response.data;
- setOrders(cafeOrders);
+ setOrders(response.data);
  setOrdersError('');
  } else {
  setOrdersError('Failed to refresh orders.');
@@ -830,7 +827,7 @@ const OwnerDashboard = () =>{
  fetchInventoryCategories();
  }
 
- // Live background polling every 5 seconds for menu, categories, orders & inventory levels
+ // Live background polling every 15 seconds for menu, categories, orders & inventory levels
  const pollingInterval = setInterval(() =>{
  fetchOrders();
  if (activeTab !== 'menu') {
@@ -874,10 +871,10 @@ const OwnerDashboard = () =>{
  };
  fetchReviewsSilent();
  }
- }, 5000);
+ }, 15000);
 
  return () =>clearInterval(pollingInterval);
- }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating]);
+ }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating, orderDateFilter, user]);
 
  // Register new staff
  const handleAddStaff = async (e) =>{

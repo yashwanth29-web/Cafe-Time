@@ -11,7 +11,7 @@ const WaiterDashboard = () =>{
  const [orders, setOrders] = useState([]);
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
- const [refreshCountdown, setRefreshCountdown] = useState(5);
+ const [refreshCountdown, setRefreshCountdown] = useState(12);
 
  const [showTakeOrderModal, setShowTakeOrderModal] = useState(false);
  const [takeOrderTable, setTakeOrderTable] = useState('');
@@ -34,12 +34,9 @@ const WaiterDashboard = () =>{
 
  const fetchOrders = async () =>{
  try {
- const response = await getOrders();
+ const response = await getOrders({ active: true, cafeId: user?.cafeId });
  if (response.success) {
- const cafeOrders = user?.cafeId ?
- response.data.filter((order) =>!order.cafeId || order.cafeId === user.cafeId) :
- response.data;
- setOrders(cafeOrders);
+ setOrders(response.data);
  setErrorMsg('');
  } else {
  setErrorMsg('Failed to refresh waiter orders.');
@@ -57,18 +54,18 @@ const WaiterDashboard = () =>{
 
  const pollingInterval = setInterval(() =>{
  fetchOrders();
- setRefreshCountdown(5);
- }, 5000);
+ setRefreshCountdown(12);
+ }, 12000);
 
  const countdownInterval = setInterval(() =>{
- setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
+ setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
  }, 1000);
 
  return () =>{
  clearInterval(pollingInterval);
  clearInterval(countdownInterval);
  };
- }, []);
+ }, [user]);
 
  const handleStatusUpdate = async (id, newStatus) =>{
  try {
