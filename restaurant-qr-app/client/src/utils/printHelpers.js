@@ -1,8 +1,15 @@
 export const printPOSReceipt = (order, user = null, cafe = null) => {
-  const printWindow = window.open('', '_blank', 'width=450,height=700');
-  if (!printWindow) {
-    alert('Popup blocker prevented printing receipt. Please allow popups.');
-    return;
+  let iframe = document.getElementById('receipt-print-iframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'receipt-print-iframe';
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    document.body.appendChild(iframe);
   }
 
   // Inclusive GST Calculations (5% standard GST for cafes)
@@ -23,7 +30,9 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
     </tr>
   `).join('');
 
-  printWindow.document.write(`
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(`
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -48,61 +57,6 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
             padding: 5px;
             box-sizing: border-box;
           }
-          /* Control panel for screen preview */
-          .no-print {
-            background: #f1f1f1;
-            padding: 12px;
-            text-align: center;
-            border-bottom: 1px solid #ccc;
-            margin-bottom: 15px;
-            width: 100%;
-            box-sizing: border-box;
-            display: flex;
-            justify-content: center;
-          }
-          .print-btn {
-            background: #27ae60;
-            color: #fff;
-            border: none;
-            padding: 12px 24px;
-            font-size: 15px;
-            font-weight: bold;
-            border-radius: 6px;
-            cursor: pointer;
-            width: 100%;
-            max-width: 320px;
-            display: inline-block;
-            min-height: 44px;
-          }
-          .print-btn:hover { background: #2196f3; }
-          
-          @media screen and (min-width: 600px) {
-            body {
-              padding: 20px;
-            }
-            .invoice-box {
-              max-width: 100mm;
-              border: 1px solid #ccc;
-              padding: 20px;
-              border-radius: 5px;
-              margin-top: 20px;
-              box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-            }
-            .no-print {
-              border-radius: 6px;
-              max-width: 100mm;
-              border: 1px solid #ccc;
-            }
-            .print-btn {
-              width: auto;
-            }
-          }
-          
-          @media print {
-            .no-print { display: none !important; }
-            body { padding: 0; display: block; }
-            .invoice-box { border: none; max-width: 100%; padding: 0; box-shadow: none; margin: 0; }
-          }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
           .bold { font-weight: bold; }
@@ -121,9 +75,6 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
         </style>
       </head>
       <body>
-        <div class="no-print">
-          <button class="print-btn" onclick="window.print()">🖨️ Print / Download PDF</button>
-        </div>
         <div class="invoice-box">
           <div class="header text-center">
             <h2>${cafeName}</h2>
@@ -207,14 +158,26 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
       </body>
     </html>
   `);
-  printWindow.document.close();
+  iframeDoc.close();
+
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }, 300);
 };
 
 export const printKOT = (order, user = null, cafe = null) => {
-  const printWindow = window.open('', '_blank', 'width=450,height=600');
-  if (!printWindow) {
-    alert('Popup blocker prevented printing KOT. Please allow popups.');
-    return;
+  let iframe = document.getElementById('kot-print-iframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'kot-print-iframe';
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    document.body.appendChild(iframe);
   }
 
   const cafeName = cafe?.name || 'Dr. Chai Cafe';
@@ -227,7 +190,9 @@ export const printKOT = (order, user = null, cafe = null) => {
     </tr>
   `).join('');
 
-  printWindow.document.write(`
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(`
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -250,58 +215,6 @@ export const printKOT = (order, user = null, cafe = null) => {
             max-width: 80mm;
             box-sizing: border-box;
           }
-          /* Control panel for screen preview */
-          .no-print {
-            background: #f1f1f1;
-            padding: 12px;
-            text-align: center;
-            border-bottom: 1px solid #ccc;
-            margin-bottom: 15px;
-            width: 100%;
-            box-sizing: border-box;
-            display: flex;
-            justify-content: center;
-          }
-          .print-btn {
-            background: #000;
-            color: #fff;
-            border: none;
-            padding: 12px 24px;
-            font-size: 15px;
-            font-weight: bold;
-            border-radius: 6px;
-            cursor: pointer;
-            width: 100%;
-            max-width: 320px;
-            display: inline-block;
-            min-height: 44px;
-          }
-          
-          @media screen and (min-width: 600px) {
-            body {
-              padding: 20px;
-            }
-            .kot-box {
-              max-width: 90mm;
-              border: 2px solid #000;
-              padding: 15px;
-              margin-top: 20px;
-            }
-            .no-print {
-              border-radius: 6px;
-              max-width: 90mm;
-              border: 1px solid #ccc;
-            }
-            .print-btn {
-              width: auto;
-            }
-          }
-          
-          @media print {
-            .no-print { display: none !important; }
-            body { padding: 0; display: block; }
-            .kot-box { border: none; max-width: 100%; padding: 0; margin: 0; }
-          }
           .text-center { text-align: center; }
           .bold { font-weight: bold; }
           .header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 6px; }
@@ -321,9 +234,6 @@ export const printKOT = (order, user = null, cafe = null) => {
         </style>
       </head>
       <body>
-        <div class="no-print">
-          <button class="print-btn" onclick="window.print()">🖨️ Print KOT</button>
-        </div>
         <div class="kot-box">
           <div class="header text-center">
             <h2>KITCHEN ORDER TICKET (KOT)</h2>
@@ -376,5 +286,10 @@ export const printKOT = (order, user = null, cafe = null) => {
       </body>
     </html>
   `);
-  printWindow.document.close();
+  iframeDoc.close();
+
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }, 300);
 };
