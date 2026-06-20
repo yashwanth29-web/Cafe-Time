@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
       (response) => response,
       (error) => {
         if (error.response && error.response.status === 401) {
-          const isPublicPath = ['/', '/login', '/verify-otp', '/payment-demo'].includes(window.location.pathname);
+          const isPublicPath = ['/', '/login', '/payment-demo'].includes(window.location.pathname);
           const isMeEndpoint = error.config?.url?.includes('/auth/me');
 
           if (!isPublicPath && !isMeEndpoint) {

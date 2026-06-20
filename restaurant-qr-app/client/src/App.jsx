@@ -7,7 +7,6 @@ import OrderHistory from './pages/OrderHistory';
 import OwnerDashboard from './pages/OwnerDashboard';
 import PaymentDemo from './pages/PaymentDemo';
 import Login from './pages/Login';
-import VerifyOtp from './pages/VerifyOtp';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import StaffDashboard from './pages/StaffDashboard';
 import OwnerSetup from './pages/OwnerSetup';
@@ -128,7 +127,7 @@ function AppContent() {
     location.pathname.startsWith('/kitchen') ||
     location.pathname.startsWith('/waiter') ||
     location.pathname.startsWith('/cashier') ||
-    ['/login', '/verify-otp'].includes(location.pathname);
+    location.pathname === '/login';
 
   return (
     <div className={`app-container${isAdminOrAuthRoute ? ' admin-no-padding' : ''}`}>
@@ -171,9 +170,7 @@ function AppContent() {
 
           <Route path="/history" element={<OrderHistory cafeId={cafeIdParam || 'CD001'} />} />
 
-          {/* Auth Flow */}
           <Route path="/login" element={<Login />} />
-          <Route path="/verify-otp" element={<VerifyOtp />} />
 
            {/* Role Protected Admin Dashboards */}
           <Route 

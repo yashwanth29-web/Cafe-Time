@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import '../styles/Auth.css';
 
 const Login = () => {
-  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const { initiateLogin, loginWithGoogle, user } = useAuth();
+  const { loginWithGoogle, user } = useAuth();
   const navigate = useNavigate();
   
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'placeholder_client_id_please_replace_me.apps.googleusercontent.com';
@@ -35,33 +34,6 @@ const Login = () => {
       }
     }
   }, [user, navigate]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-
-    if (!email) {
-      setErrorMsg('Please enter your email address');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setErrorMsg('Please enter a valid email address');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      await initiateLogin(email);
-      // Success: redirect to OTP verification screen with email as parameter
-      navigate(`/verify-otp?email=${encodeURIComponent(email.trim().toLowerCase())}`);
-    } catch (err) {
-      setErrorMsg(err.message || 'Login attempt failed. Please check your credentials.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
@@ -97,53 +69,26 @@ const Login = () => {
           </div>
         )}
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <div className="auth-input-group">
-            <label htmlFor="email">Email Address</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              className="auth-input"
-              placeholder="name@cafe.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-              autoFocus
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div className="spinner" style={{ margin: '0 auto 15px auto' }} />
+            <p style={{ color: 'var(--color-text-secondary)' }}>Authenticating with Google...</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 40px 0' }}>
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={handleGoogleError}
+              theme="outline"
+              size="large"
+              text="signin_with"
+              shape="rectangular"
             />
           </div>
-
-          <button type="submit" className="auth-button" disabled={loading}>
-            {loading ? (
-              <>
-                <div className="spinner" />
-                Sending OTP...
-              </>
-            ) : (
-              'Send OTP Code'
-            )}
-          </button>
-        </form>
-
-        <div style={{ display: 'flex', alignItems: 'center', margin: '20px 0' }}>
-          <hr style={{ flex: 1, borderTop: '1px solid #D4C3B3' }} />
-          <span style={{ padding: '0 10px', color: '#A0826C', fontSize: '14px' }}>OR</span>
-          <hr style={{ flex: 1, borderTop: '1px solid #D4C3B3' }} />
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={handleGoogleError}
-            theme="outline"
-            size="large"
-            text="signin_with"
-            shape="rectangular"
-          />
-        </div>
+        )}
 
         <p className="auth-info-text">
-          Enter your registered email address to receive a one-time verification password (OTP). 
+          Sign in using your registered Google workspace or personal email account.
           For customers placing table orders, no login is required.
         </p>
       </div>
