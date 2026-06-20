@@ -525,24 +525,38 @@ const SaaSLayout = ({ children }) => {
               }}>
                   {user.email}
                 </div>
-                {['admin', 'owner'].includes(userRole) &&
-              <button
-                onClick={() => {navigate('/owner/dashboard');setProfileDropdownOpen(false);}}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 16px',
-                  textAlign: 'left',
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--color-text-secondary)',
-                  fontSize: '13.5px',
-                  cursor: 'pointer'
-                }}>
-                
-                    👤 Cafe Panel
-                  </button>
-              }
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setProfileDropdownOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '10px 16px',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#EF4444',
+                    fontSize: '13.5px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    transition: 'background-color 0.2s, padding-left 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                    e.currentTarget.style.paddingLeft = '20px';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.paddingLeft = '16px';
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>🚪</span>
+                  <span>Log Out</span>
+                </button>
               </div>
             }
           </div>
@@ -863,24 +877,38 @@ const SaaSLayout = ({ children }) => {
                 }}>
                     {user.email}
                   </div>
-                  {userRole === 'admin' || userRole === 'owner' ?
-                <button
-                  onClick={() => {navigate('/owner/dashboard');setProfileDropdownOpen(false);}}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '8px 16px',
-                    textAlign: 'left',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--color-text-secondary)',
-                    fontSize: '13.5px',
-                    cursor: 'pointer'
-                  }}>
-                  
-                      👤 Cafe Panel
-                    </button> :
-                null}
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setProfileDropdownOpen(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      width: '100%',
+                      padding: '10px 16px',
+                      textAlign: 'left',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#EF4444',
+                      fontSize: '13.5px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      transition: 'background-color 0.2s, padding-left 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                      e.currentTarget.style.paddingLeft = '20px';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.paddingLeft = '16px';
+                    }}
+                  >
+                    <span style={{ fontSize: '16px' }}>🚪</span>
+                    <span>Log Out</span>
+                  </button>
                 </div>
               }
             </div>
