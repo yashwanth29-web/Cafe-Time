@@ -30,11 +30,15 @@ const sendOTP = async (req, res) => {
   try {
     const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
 
-    // In this demo mode, we allow ANY email to generate an OTP.
-    // If not super admin, check if user exists (to check if deactivated), but don't block if they don't exist.
     if (!isSuperAdmin) {
       const user = await User.findOne({ email: cleanEmail });
-      if (user && !user.isActive) {
+      if (!user) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
+        });
+      }
+      if (!user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
       }
     }
@@ -148,14 +152,9 @@ const verifyOTP = async (req, res) => {
     } else {
       user = await User.findOne({ email: cleanEmail });
       if (!user) {
-        // Automatically create a new account for any email
-        user = await User.create({
-          name: 'Demo User',
-          email: cleanEmail,
-          phone: 'N/A',
-          role: 'owner', // Default role so they can access the dashboard
-          cafeId: 'CD001', // Assign to seeded Demo Cafe
-          isActive: true
+        return res.status(400).json({ 
+          success: false, 
+          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
         });
       } else if (!user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
@@ -223,6 +222,20 @@ const resendOTP = async (req, res) => {
   const cleanEmail = email.trim().toLowerCase();
 
   try {
+    const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+    if (!isSuperAdmin) {
+      const user = await User.findOne({ email: cleanEmail });
+      if (!user) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
+        });
+      }
+      if (!user.isActive) {
+        return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
+      }
+    }
+
     const otpRecord = await OtpVerification.findOne({ email: cleanEmail });
     
     // Check if they exceed the resend count limit (max 3 resends)
@@ -365,14 +378,9 @@ const googleLogin = async (req, res) => {
     } else {
       user = await User.findOne({ email: cleanEmail });
       if (!user) {
-        // Automatically create a new account for any email
-        user = await User.create({
-          name: name || 'Demo User',
-          email: cleanEmail,
-          phone: 'N/A',
-          role: 'owner', // Default role so they can access the dashboard
-          cafeId: 'CD001', // Assign to seeded Demo Cafe
-          isActive: true
+        return res.status(400).json({ 
+          success: false, 
+          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
         });
       } else if (!user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
