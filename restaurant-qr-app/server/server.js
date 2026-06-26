@@ -77,13 +77,14 @@ app.get('/api/health', (req, res) => {
 
 // Serve Static Assets in Production
 const clientDistPath = path.join(__dirname, '../client/dist');
-if (process.env.NODE_ENV === 'production' && fs.existsSync(clientDistPath)) {
+const indexPath = path.join(clientDistPath, 'index.html');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(indexPath)) {
   // Set static folder
   app.use(express.static(clientDistPath));
 
   // Direct all other unmatched requests to index.html (React Router)
   app.use((req, res) => {
-    res.sendFile(path.resolve(clientDistPath, 'index.html'));
+    res.sendFile(indexPath);
   });
 } else {
   // Catch-all route for backend-only deployment
