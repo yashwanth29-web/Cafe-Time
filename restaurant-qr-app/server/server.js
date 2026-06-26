@@ -76,13 +76,19 @@ app.get('/api/health', (req, res) => {
 });
 
 // Serve Static Assets in Production
-if (process.env.NODE_ENV === 'production') {
+const clientDistPath = path.join(__dirname, '../client/dist');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(clientDistPath)) {
   // Set static folder
-  app.use(express.static(path.join(__dirname, '../client/dist')));
+  app.use(express.static(clientDistPath));
 
   // Direct all other unmatched requests to index.html (React Router)
   app.use((req, res) => {
-    res.sendFile(path.resolve(__dirname, '../client', 'dist', 'index.html'));
+    res.sendFile(path.resolve(clientDistPath, 'index.html'));
+  });
+} else {
+  // Catch-all route for backend-only deployment
+  app.get('/', (req, res) => {
+    res.status(200).json({ success: true, message: 'Cafe-Time Backend API is running successfully' });
   });
 }
 
