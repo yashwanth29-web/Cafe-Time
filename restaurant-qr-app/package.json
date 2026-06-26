@@ -4,6 +4,7 @@
   "description": "Root package runner for restaurant-qr-app",
   "scripts": {
     "install:all": "npm install --prefix client && npm install --prefix server",
+    "build": "npm run install:all && npm run build --prefix client",
     "client": "npm run dev --prefix client",
     "server": "nodemon server/server.js",
     "dev": "concurrently \"npm run client\" \"nodemon server/server.js\""
