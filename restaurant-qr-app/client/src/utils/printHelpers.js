@@ -12,10 +12,11 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
     document.body.appendChild(iframe);
   }
 
-  // Inclusive GST Calculations (5% standard GST for cafes)
-  const grandTotal = order.totalAmount || 0;
-  const subtotal = grandTotal / 1.05;
-  const gstAmount = grandTotal - subtotal;
+  const gstRate = cafe?.gstRate || 0;
+  const platformCharge = cafe?.serviceChargeRate || 0;
+  const itemsSubtotal = order.items.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
+  const gstAmount = itemsSubtotal * (gstRate / 100);
+  const grandTotal = order.totalAmount || (itemsSubtotal + gstAmount + platformCharge);
 
   const cafeName = cafe?.name || 'Dr. Chai Cafe';
   const cafeAddress = cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
@@ -126,17 +127,25 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
 
           <table class="totals" style="width: 100%;">
             <tr>
-              <td>Subtotal (Tax Excl.):</td>
-              <td class="text-right">₹${subtotal.toFixed(2)}</td>
+              <td>Subtotal:</td>
+              <td class="text-right">₹${itemsSubtotal.toFixed(2)}</td>
             </tr>
+            ${gstRate > 0 ? `
             <tr>
-              <td>CGST (2.5%):</td>
+              <td>CGST (${(gstRate / 2).toFixed(1)}%):</td>
               <td class="text-right">₹${(gstAmount / 2).toFixed(2)}</td>
             </tr>
             <tr>
-              <td>SGST (2.5%):</td>
+              <td>SGST (${(gstRate / 2).toFixed(1)}%):</td>
               <td class="text-right">₹${(gstAmount / 2).toFixed(2)}</td>
             </tr>
+            ` : ''}
+            ${platformCharge > 0 ? `
+            <tr>
+              <td>Platform Charge:</td>
+              <td class="text-right">₹${platformCharge.toFixed(2)}</td>
+            </tr>
+            ` : ''}
             <tr class="bold" style="font-size: 13px;">
               <td style="border-top: 1px dashed #000; padding-top: 4px;">GRAND TOTAL:</td>
               <td class="text-right" style="border-top: 1px dashed #000; padding-top: 4px;">₹${grandTotal.toFixed(2)}</td>

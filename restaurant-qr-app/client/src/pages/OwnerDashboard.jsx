@@ -3458,7 +3458,7 @@ const OwnerDashboard = () =>{
 <input type="number" id="settings-tax-rate" name="settings-tax-rate" className="form-input" value={taxRate} onChange={(e) =>setTaxRate(parseFloat(e.target.value))} />
 </div>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="settings-service-charge" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Service Charge (%)</label>
+<label htmlFor="settings-service-charge" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Platform Charge (Flat ₹)</label>
 <input type="number" id="settings-service-charge" name="settings-service-charge" className="form-input" value={serviceCharge} onChange={(e) =>setServiceCharge(parseFloat(e.target.value))} />
 </div>
 </div>

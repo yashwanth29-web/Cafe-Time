@@ -61,12 +61,19 @@ const createOrder = async (req, res) => {
       });
     }
 
+    // Fetch Cafe first to get tax rates and platform charge rates
+    const cafe = await Cafe.findOne({ cafeId: cafeId || 'CD001' });
+    const gstRate = cafe?.gstRate || 0;
+    const platformCharge = cafe?.serviceChargeRate || 0;
+    const gstAmount = calculatedTotal * (gstRate / 100);
+    const finalTotal = calculatedTotal + gstAmount + platformCharge;
+
     // Create a new Order in DB with 'Pending' payment status
     const newOrder = new Order({
       cafeId: cafeId || 'CD001',
       tableNumber: tableNumber || 'Takeaway',
       items: validatedItems,
-      totalAmount: calculatedTotal,
+      totalAmount: finalTotal,
       customerName,
       customerEmail,
       customerPhone,
@@ -79,16 +86,12 @@ const createOrder = async (req, res) => {
 
     // Fetch Cafe UPI ID and Merchant Name
     let upiId = '9346540919@ybl'; // Default fallback UPI ID
-    let merchantName = "Cypher's Cafe";
+    let merchantName = (cafe && cafe.name) || "Cypher's Cafe";
 
     try {
       const config = await PaymentConfig.findOne({ cafeId: savedOrder.cafeId });
       if (config && config.upiId) {
         upiId = config.upiId;
-      }
-      const cafe = await Cafe.findOne({ cafeId: savedOrder.cafeId });
-      if (cafe && cafe.name) {
-        merchantName = cafe.name;
       }
     } catch (dbErr) {
       console.warn(`Database lookup failed for cafe configs. Using default UPI ID. Error: ${dbErr.message}`);

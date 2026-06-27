@@ -297,7 +297,10 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   // Totals calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
-  const grandTotal = subtotal;
+  const gstRate = cafeInfo?.gstRate || 0;
+  const platformCharge = cafeInfo?.serviceChargeRate || 0;
+  const gstAmount = subtotal * (gstRate / 100);
+  const grandTotal = subtotal + gstAmount + platformCharge;
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
@@ -507,10 +510,19 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
               <span>₹{subtotal.toFixed(2)}</span>
             </div>
             
-            <div className="summary-row">
-              <span>GST & Restaurant Charges</span>
-              <span>₹0.00</span>
-            </div>
+            {gstRate > 0 && (
+              <div className="summary-row">
+                <span>GST ({gstRate}%)</span>
+                <span>₹{gstAmount.toFixed(2)}</span>
+              </div>
+            )}
+
+            {platformCharge > 0 && (
+              <div className="summary-row">
+                <span>Platform Charge</span>
+                <span>₹{platformCharge.toFixed(2)}</span>
+              </div>
+            )}
 
             <div className="summary-row total">
               <span>Grand Total</span>

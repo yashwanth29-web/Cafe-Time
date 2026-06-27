@@ -624,8 +624,10 @@ const OrderHistory = ({ cafeId }) => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {completedOrders.map((order) => {
-              const sub = order.totalAmount / 1.05;
-              const gst = order.totalAmount - sub;
+              const itemsSubtotal = order.items.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
+              const gstRate = cafeInfo?.gstRate || 0;
+              const platformCharge = cafeInfo?.serviceChargeRate || 0;
+              const gstAmount = itemsSubtotal * (gstRate / 100);
               const hasReviewed = submittedReviews.includes(order._id);
 
               return (
@@ -673,9 +675,9 @@ const OrderHistory = ({ cafeId }) => {
                     </table>
 
                     <div style={{ borderTop: '1px dashed #33271c', paddingTop: '8px', textAlign: 'right', fontSize: '11px' }}>
-                      <div>Subtotal (Tax Excl.): ₹{sub.toFixed(2)}</div>
-                      <div>CGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
-                      <div>SGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
+                      <div>Subtotal: ₹{itemsSubtotal.toFixed(2)}</div>
+                      {gstRate > 0 && <div>GST ({gstRate}%): ₹{gstAmount.toFixed(2)}</div>}
+                      {platformCharge > 0 && <div>Platform Charge: ₹{platformCharge.toFixed(2)}</div>}
                       <div style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '6px' }}>
                         GRAND TOTAL: ₹{order.totalAmount.toFixed(2)}
                       </div>
@@ -683,24 +685,6 @@ const OrderHistory = ({ cafeId }) => {
                         Payment Method: <strong>{order.paymentMethod || 'Paid'}</strong>
                       </div>
                     </div>
-
-                    <button
-                      onClick={() => printPOSReceipt(order, null, cafeInfo)}
-                      className="btn"
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        fontSize: '12px',
-                        marginTop: '15px',
-                        color: '#ffffff',
-                        border: '1px solid #33271c',
-                        background: '#33271c',
-                        fontWeight: 'bold',
-                        borderRadius: '6px',
-                        cursor: 'pointer'
-                      }}>
-                      🖨️ Download & Print PDF Invoice
-                    </button>
                   </div>
 
                   {/* Review Block */}
