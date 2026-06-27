@@ -2,7 +2,8 @@ const Order = require('../models/Order');
 const { deductInventoryForOrder } = require('./inventoryController');
 const Payment = require('../models/Payment');
 const MenuItem = require('../models/MenuItem');
-const razorpayService = require('../services/razorpayService');
+const PaymentConfig = require('../models/PaymentConfig');
+const Cafe = require('../models/Cafe');
 const mongoose = require('mongoose');
 
 /**
@@ -76,30 +77,35 @@ const createOrder = async (req, res) => {
 
     const savedOrder = await newOrder.save();
 
-    // Create order on Razorpay
-    let razorpayOrder;
+    // Fetch Cafe UPI ID and Merchant Name
+    let upiId = '9346540919@ybl'; // Default fallback UPI ID
+    let merchantName = "Cypher's Cafe";
+
     try {
-      razorpayOrder = await razorpayService.createRazorpayOrder(savedOrder.cafeId, calculatedTotal);
-    } catch (err) {
-      // If Razorpay creation fails, mark order as Failed in DB and throw
-      savedOrder.paymentStatus = 'Failed';
-      await savedOrder.save();
-      throw new Error(`Razorpay Order creation failed: ${err.message}`);
+      const config = await PaymentConfig.findOne({ cafeId: savedOrder.cafeId });
+      if (config && config.upiId) {
+        upiId = config.upiId;
+      }
+      const cafe = await Cafe.findOne({ cafeId: savedOrder.cafeId });
+      if (cafe && cafe.name) {
+        merchantName = cafe.name;
+      }
+    } catch (dbErr) {
+      console.warn(`Database lookup failed for cafe configs. Using default UPI ID. Error: ${dbErr.message}`);
     }
 
-    // Update the DB order with the Razorpay order ID
-    savedOrder.razorpayOrderId = razorpayOrder.id;
+    // Set order's placeholder order ID
+    savedOrder.razorpayOrderId = `UPI-${savedOrder._id}`;
     await savedOrder.save();
-    
-    const dynamicKeyId = await razorpayService.getRazorpayKeyId(savedOrder.cafeId);
 
     return res.status(201).json({
       success: true,
       appOrderId: savedOrder._id,
-      razorpayOrderId: razorpayOrder.id,
-      amount: razorpayOrder.amount, // in paise
-      currency: razorpayOrder.currency,
-      keyId: dynamicKeyId
+      razorpayOrderId: savedOrder.razorpayOrderId,
+      amount: calculatedTotal, // Amount in rupees for UPI
+      currency: 'INR',
+      upiId: upiId,
+      merchantName: merchantName
     });
 
   } catch (error) {
@@ -118,12 +124,12 @@ const createOrder = async (req, res) => {
  */
 const verifyPayment = async (req, res) => {
   try {
-    const { appOrderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    const { appOrderId, razorpayOrderId, razorpayPaymentId } = req.body;
 
-    if (!appOrderId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    if (!appOrderId || !razorpayPaymentId) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required validation payload parameters'
+        message: 'Missing required validation payload parameters (appOrderId or transaction ID)'
       });
     }
 
@@ -133,22 +139,11 @@ const verifyPayment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Pending order not found in database' });
     }
 
-    // Cryptographically verify signature dynamically for this cafe
-    const isValid = await razorpayService.verifyPaymentSignature(order.cafeId, razorpayOrderId, razorpayPaymentId, razorpaySignature);
-
-    if (!isValid) {
-      order.paymentStatus = 'Failed';
-      await order.save();
-      return res.status(400).json({
-        success: false,
-        message: 'Payment verification failed. Cryptographic signature signature mismatch.'
-      });
-    }
-
     // Complete Order state updates
     order.paymentStatus = 'Paid';
     order.status = 'Completed';
-    order.razorpayPaymentId = razorpayPaymentId;
+    order.razorpayPaymentId = razorpayPaymentId; // save UPI Transaction ID (UTR) here
+    order.paymentMethod = 'Online';
     const updatedOrder = await order.save();
 
     // Auto deduct inventory stock
@@ -157,7 +152,7 @@ const verifyPayment = async (req, res) => {
     // Create separate Payment record log for bookkeeping
     const paymentRecord = new Payment({
       paymentId: razorpayPaymentId,
-      orderId: razorpayOrderId,
+      orderId: razorpayOrderId || order.razorpayOrderId || `UPI-${order._id}`,
       appOrderId: updatedOrder._id,
       amount: updatedOrder.totalAmount,
       status: 'success'
@@ -166,7 +161,7 @@ const verifyPayment = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Payment verified successfully and order finalized',
+      message: 'UPI Payment verification details submitted and order finalized',
       data: updatedOrder
     });
 
@@ -201,29 +196,37 @@ const payExistingOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Order is already paid' });
     }
 
-    // Call Razorpay API to generate order
-    let razorpayOrder;
+    // Fetch Cafe UPI ID and Merchant Name
+    let upiId = '9346540919@ybl'; // Default fallback UPI ID
+    let merchantName = "Cypher's Cafe";
+
     try {
-      razorpayOrder = await razorpayService.createRazorpayOrder(order.cafeId, order.totalAmount);
-    } catch (err) {
-      order.paymentStatus = 'Failed';
-      await order.save();
-      throw new Error(`Razorpay Order creation failed: ${err.message}`);
+      const config = await PaymentConfig.findOne({ cafeId: order.cafeId });
+      if (config && config.upiId) {
+        upiId = config.upiId;
+      }
+      const cafe = await Cafe.findOne({ cafeId: order.cafeId });
+      if (cafe && cafe.name) {
+        merchantName = cafe.name;
+      }
+    } catch (dbErr) {
+      console.warn(`Database lookup failed for cafe configs. Using default UPI ID. Error: ${dbErr.message}`);
     }
 
-    // Update Order with Razorpay Order ID
-    order.razorpayOrderId = razorpayOrder.id;
-    await order.save();
-    
-    const dynamicKeyId = await razorpayService.getRazorpayKeyId(order.cafeId);
+    // Update Order with local order ID if not present
+    if (!order.razorpayOrderId) {
+      order.razorpayOrderId = `UPI-${order._id}`;
+      await order.save();
+    }
 
     return res.status(200).json({
       success: true,
       appOrderId: order._id,
-      razorpayOrderId: razorpayOrder.id,
-      amount: razorpayOrder.amount, // in paise
-      currency: razorpayOrder.currency,
-      keyId: dynamicKeyId
+      razorpayOrderId: order.razorpayOrderId,
+      amount: order.totalAmount, // Amount in rupees for UPI
+      currency: 'INR',
+      upiId: upiId,
+      merchantName: merchantName
     });
 
   } catch (error) {

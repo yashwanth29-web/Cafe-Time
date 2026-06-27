@@ -228,32 +228,10 @@ const deleteStaff = async (req, res) => {
  * Test and verify Razorpay keys for a Cafe
  */
 const verifyRazorpay = async (req, res) => {
-  const { keyId, secret } = req.body;
-
-  if (!keyId || !secret) {
-    return res.status(400).json({ success: false, message: 'Key ID and Secret Key are required.' });
-  }
-
-  try {
-    const rzp = new Razorpay({
-      key_id: keyId,
-      key_secret: secret
-    });
-
-    // Attempt to list orders (limit 1) to test if key/secret are valid
-    await rzp.orders.all({ count: 1 });
-
-    return res.status(200).json({
-      success: true,
-      message: 'Razorpay keys verified successfully.'
-    });
-  } catch (error) {
-    console.error('verifyRazorpay error:', error);
-    return res.status(400).json({
-      success: false,
-      message: `Razorpay verification failed: ${error.message || 'Check key and secret credentials'}`
-    });
-  }
+  return res.status(200).json({
+    success: true,
+    message: 'UPI Payment mode active. Razorpay connection bypassed.'
+  });
 };
 
 /**

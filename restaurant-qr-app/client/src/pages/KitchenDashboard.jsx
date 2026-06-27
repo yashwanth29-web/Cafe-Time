@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getOrders, updateOrderStatus, getInventory, reportShortage, getMenu, getAssetUrl } from '../services/api';
@@ -12,7 +12,7 @@ const KitchenDashboard = () =>{
  const [errorMsg, setErrorMsg] = useState('');
  const [refreshCountdown, setRefreshCountdown] = useState(12);
  const [soundEnabled, setSoundEnabled] = useState(true);
- const [previousActiveCount, setPreviousActiveCount] = useState(0);
+ const seenOrderIdsRef = useRef(new Set());
 
  // Tab & Inventory state
  const [searchParams] = useSearchParams();
@@ -141,29 +141,70 @@ const KitchenDashboard = () =>{
  }
  };
 
- const fetchOrders = async () =>{
-  try {
-  const response = await getOrders({ active: true, cafeId: user?.cafeId });
-  if (response.success) {
-  setOrders(response.data);
-
-  // Alert sound check for new active orders
-  const currentActiveCount = response.data.filter((o) =>o.status === 'Placed' || o.status === 'Preparing').length;
-  if (currentActiveCount >previousActiveCount) {
-  playNotificationSound();
-  }
-  setPreviousActiveCount(currentActiveCount);
-  setErrorMsg('');
-  } else {
-  setErrorMsg('Failed to refresh kitchen orders feed.');
-  }
-  } catch (error) {
-  console.error('Error fetching kitchen orders:', error);
-  setErrorMsg('Cannot connect to live orders server.');
-  } finally {
-  setLoading(false);
-  }
+ const speakNewOrder = (order) => {
+    if (!soundEnabled) return;
+    if (!('speechSynthesis' in window)) return;
+    
+    try {
+      const tableInfo = order.tableNumber && order.tableNumber !== 'Takeaway' && order.tableNumber !== 'Walk-in' 
+        ? `for Table ${order.tableNumber}` 
+        : 'for Takeaway';
+        
+      const itemDescriptions = order.items
+        .map((it) => `${it.quantity} ${it.name}`)
+        .join(', ');
+        
+      const text = `New order received ${tableInfo}. Items: ${itemDescriptions}.`;
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      
+      const voices = window.speechSynthesis.getVoices();
+      const englishVoice = voices.find(voice => voice.lang.startsWith('en'));
+      if (englishVoice) {
+        utterance.voice = englishVoice;
+      }
+      
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech synthesis failed:', err);
+    }
   };
+
+  const fetchOrders = async () =>{
+   try {
+   const response = await getOrders({ active: true, cafeId: user?.cafeId });
+   if (response.success) {
+   setOrders(response.data);
+ 
+   const currentActiveOrders = response.data.filter((o) => o.status === 'Placed' || o.status === 'Preparing');
+   
+   if (seenOrderIdsRef.current.size === 0) {
+     // First load: just populate seen list without speaking
+     currentActiveOrders.forEach((o) => seenOrderIdsRef.current.add(o._id));
+   } else {
+     // Subsequent loads: find new orders
+     const newOrders = currentActiveOrders.filter((o) => !seenOrderIdsRef.current.has(o._id));
+     
+     if (newOrders.length > 0) {
+       playNotificationSound();
+       newOrders.forEach((order) => {
+         speakNewOrder(order);
+         seenOrderIdsRef.current.add(order._id);
+       });
+     }
+   }
+   setErrorMsg('');
+   } else {
+   setErrorMsg('Failed to refresh kitchen orders feed.');
+   }
+   } catch (error) {
+   console.error('Error fetching kitchen orders:', error);
+   setErrorMsg('Cannot connect to live orders server.');
+   } finally {
+   setLoading(false);
+   }
+   };
 
   useEffect(() =>{
   fetchOrders();
@@ -181,7 +222,7 @@ const KitchenDashboard = () =>{
   clearInterval(pollingInterval);
   clearInterval(countdownInterval);
   };
-  }, [previousActiveCount, user]);
+  }, [user]);
 
  const handleStatusUpdate = async (id, newStatus) =>{
  try {

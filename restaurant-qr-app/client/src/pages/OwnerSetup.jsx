@@ -226,13 +226,13 @@ const OwnerSetup = () => {
         gstNumber,
         supportNumber: supportNumber || user.phone,
         paymentConfig: {
-          razorpayKeyId,
-          razorpaySecret,
+          razorpayKeyId: '',
+          razorpaySecret: '',
           upiId,
           bankHolderName,
           accountNumber,
           ifscCode,
-          isVerified: isRazorpayVerified
+          isVerified: true
         },
         operationalConfig: {
           tables: tablesList,
@@ -266,14 +266,9 @@ const OwnerSetup = () => {
       }
     }
     if (step === 2) {
-      if (!razorpayKeyId || !razorpaySecret) {
-        setErrorMsg('Razorpay Keys are required to enable ordering payments.');
+      if (!upiId) {
+        setErrorMsg('UPI ID is required to accept online payments.');
         return;
-      }
-      if (!isRazorpayVerified) {
-        if (!window.confirm('You have not verified your Razorpay credentials. Proceed anyway?')) {
-          return;
-        }
       }
     }
     setStep((prev) => prev + 1);
@@ -837,61 +832,15 @@ const OwnerSetup = () => {
         {step === 2 &&
         <div className="fade-in">
             <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
-              Step 2: Payment Integration (Owner Razorpay Keys)
+              Step 2: Payment Setup (UPI Details)
             </h2>
             <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '20px', lineHeight: '1.5' }}>
-              Customers pay directly into your business bank account. Fill out your credentials to verify connection. Secret keys are encrypted.
+              Customers pay directly into your business bank account via UPI. Fill out your details below to accept payments.
             </p>
 
             <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="razorpay-key-id">Razorpay Key ID</label>
-                <input
-                type="text"
-                id="razorpay-key-id"
-                name="razorpay-key-id"
-                value={razorpayKeyId}
-                onChange={(e) => setRazorpayKeyId(e.target.value)}
-                placeholder="rzp_test_..."
-                disabled={loading} />
-              
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="razorpay-secret-key">Razorpay Secret Key</label>
-                <input
-                type="password"
-                id="razorpay-secret-key"
-                name="razorpay-secret-key"
-                value={razorpaySecret}
-                onChange={(e) => setRazorpaySecret(e.target.value)}
-                placeholder="••••••••••••••••••••"
-                disabled={loading} />
-              
-              </div>
-
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <div className="mobile-full-width" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(0, 0, 0,0.02)', padding: '15px', borderRadius: '8px', border: '1px dashed #6F4E37' }}>
-                  <div>
-                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: isRazorpayVerified ? '#2ECC71' : '#E6D5C3' }}>
-                      Status: {isRazorpayVerified ? 'Payment Verified & Configured ✅' : 'Verification Required'}
-                    </span>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#A0826C' }}>Test your connection keys before saving.</p>
-                  </div>
-                  <button
-                  type="button"
-                  onClick={testRazorpayConnection}
-                  disabled={verifyingKeys || loading}
-                  className="wizard-button btn-primary"
-                  style={{ background: isRazorpayVerified ? '#27AE60' : '#6F4E37' }}>
-                  
-                    {verifyingKeys ? 'Testing Connection...' : 'Test Razorpay Connection'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="upi-id">UPI ID (Optional)</label>
+                <label htmlFor="upi-id">UPI ID *</label>
                 <input
                 type="text"
                 id="upi-id"
@@ -899,8 +848,8 @@ const OwnerSetup = () => {
                 value={upiId}
                 onChange={(e) => setUpiId(e.target.value)}
                 placeholder="owner@okaxis"
-                disabled={loading} />
-              
+                disabled={loading}
+                required />
               </div>
 
               <div className="form-group">
@@ -913,7 +862,6 @@ const OwnerSetup = () => {
                 onChange={(e) => setBankHolderName(e.target.value)}
                 placeholder="John Doe Enterprise"
                 disabled={loading} />
-              
               </div>
 
               <div className="form-group">
@@ -926,10 +874,9 @@ const OwnerSetup = () => {
                 onChange={(e) => setAccountNumber(e.target.value)}
                 placeholder="1002998877665"
                 disabled={loading} />
-              
               </div>
 
-              <div className="form-group">
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
                 <label htmlFor="ifsc-code">IFSC Code</label>
                 <input
                 type="text"
@@ -939,7 +886,6 @@ const OwnerSetup = () => {
                 onChange={(e) => setIfscCode(e.target.value)}
                 placeholder="HDFC0000123"
                 disabled={loading} />
-              
               </div>
             </div>
           </div>
@@ -1227,7 +1173,7 @@ const OwnerSetup = () => {
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Dining Tables:</strong> {tablesList.length} Tables Registered</p>
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Hardware Printing:</strong> {printerEnabled ? 'Enabled' : 'Disabled'}</p>
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Kitchen Display:</strong> {kitchenDisplayEnabled ? 'Enabled' : 'Disabled'}</p>
-              <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Payment Gateway:</strong> {isRazorpayVerified ? 'Verified & Configured Key' : 'Unverified key (Fallback)'}</p>
+              <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>UPI ID:</strong> {upiId || 'Not Configured'}</p>
               <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Staff accounts:</strong> {tempStaffList.length} Users queued for registration</p>
             </div>
 

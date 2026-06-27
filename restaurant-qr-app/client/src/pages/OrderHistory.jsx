@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import RazorpayPayment from '../components/RazorpayPayment';
+import UpiPayment from '../components/UpiPayment';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 
@@ -548,7 +548,7 @@ const OrderHistory = ({ cafeId }) => {
                             Select Payment Method
                           </h4>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <RazorpayPayment
+                            <UpiPayment
                               cart={order.items.map((it) => ({ item: it, quantity: it.quantity }))}
                               tableNumber={order.tableNumber}
                               customerDetails={{
@@ -559,7 +559,7 @@ const OrderHistory = ({ cafeId }) => {
                               specialInstructions={order.specialInstructions}
                               existingOrderId={order._id}
                               cafeId={cafeId || order.cafeId || 'CD001'}
-                              buttonText="Pay Online (Razorpay)"
+                              buttonText="Pay Online (UPI)"
                               onPaymentSuccess={(updatedOrder) => {
                                 setActiveOrders((prev) => prev.map((o) => o._id === order._id ? updatedOrder : o));
                                 triggerPaidFeedback(order._id);
