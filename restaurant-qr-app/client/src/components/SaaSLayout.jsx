@@ -590,12 +590,21 @@ const SaaSLayout = ({ children }) => {
           overflow: 'hidden'
         }}>
           {/* Logo and Name */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            justifyContent: sidebarCollapsed ? 'center' : 'flex-start'
-          }}>
+          <div 
+            onClick={() => {
+              const navItems = getNavItems();
+              const homePath = navItems.length > 0 ? navItems[0].path : '/';
+              navigate(homePath);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+              cursor: 'pointer'
+            }}
+            title="Go to Dashboard Home"
+          >
             <div style={{
               width: '36px',
               height: '36px',
