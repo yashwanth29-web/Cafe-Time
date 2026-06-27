@@ -128,14 +128,13 @@ const UpiPayment = ({
     return 'other';
   };
 
-  // Helper to generate UPI link for specific apps with restaurant MCC (5812)
+  // Helper to generate UPI link for specific apps (Clean P2P transfer parameters)
   const getAppUpiLink = (appName) => {
     if (!paymentData) return '';
-    const { upiId, merchantName, amount, appOrderId } = paymentData;
+    const { upiId, merchantName, amount } = paymentData;
     const encodedName = encodeURIComponent(merchantName || 'Cafe');
-    const tn = `Order_${appOrderId}`;
     const os = getDeviceOS();
-    const baseParams = `pa=${upiId}&pn=${encodedName}&am=${amount}&cu=INR&tn=${tn}&mcc=5812`;
+    const baseParams = `pa=${upiId}&pn=${encodedName}&am=${amount}&cu=INR`;
 
     if (os === 'android') {
       let pkg = '';
@@ -161,7 +160,7 @@ const UpiPayment = ({
   const upiUrl = paymentData
     ? `upi://pay?pa=${paymentData.upiId}&pn=${encodeURIComponent(
         paymentData.merchantName || 'Cafe'
-      )}&am=${paymentData.amount}&cu=INR&tn=Order_${paymentData.appOrderId}&mcc=5812`
+      )}&am=${paymentData.amount}&cu=INR`
     : '';
 
   // QR Code URL using public server API
