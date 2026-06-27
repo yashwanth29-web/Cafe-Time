@@ -79,24 +79,17 @@ const UpiPayment = ({
   };
 
   const handleSubmitTxn = async (e) => {
-    e.preventDefault();
-    if (!upiTxnId.trim()) {
-      alert('Please enter your 12-digit UPI Transaction ID (UTR).');
-      return;
-    }
-    if (upiTxnId.trim().length < 6) {
-      alert('Please enter a valid Transaction ID.');
-      return;
-    }
+    if (e) e.preventDefault();
 
     setSubmitting(true);
-    setProcessingStatus('Verifying transaction...');
+    setProcessingStatus('Confirming payment...');
 
     try {
+      const placeholderUtr = `UPI_PAID_${Date.now()}`;
       const verificationPayload = {
         appOrderId: paymentData.appOrderId,
         razorpayOrderId: paymentData.razorpayOrderId,
-        razorpayPaymentId: upiTxnId.trim()
+        razorpayPaymentId: placeholderUtr
       };
 
       const verificationResult = await verifyPayment(verificationPayload);
@@ -107,12 +100,12 @@ const UpiPayment = ({
           onPaymentSuccess(verificationResult.data);
         }
       } else {
-        throw new Error(verificationResult.message || 'Payment verification failed.');
+        throw new Error(verificationResult.message || 'Payment confirmation failed.');
       }
     } catch (verifyError) {
-      console.error('Verification failed:', verifyError);
-      const errMsg = verifyError.response?.data?.message || verifyError.message || 'Verification failed';
-      alert(`Verification Error: ${errMsg}`);
+      console.error('Confirmation failed:', verifyError);
+      const errMsg = verifyError.response?.data?.message || verifyError.message || 'Confirmation failed';
+      alert(`Confirmation Error: ${errMsg}`);
       if (onPaymentError) onPaymentError(errMsg);
     } finally {
       setSubmitting(false);
@@ -323,34 +316,8 @@ const UpiPayment = ({
 
             {/* UTR Reference ID Form */}
             <form onSubmit={handleSubmitTxn}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                <label
-                  htmlFor="upi-utr"
-                  style={{ fontSize: '12px', color: '#A0826C', fontWeight: 'bold', textTransform: 'uppercase' }}
-                >
-                  Enter UPI Transaction ID (12-digit UTR) *
-                </label>
-                <input
-                  id="upi-utr"
-                  type="text"
-                  placeholder="e.g. 345678901234"
-                  value={upiTxnId}
-                  onChange={(e) => setUpiTxnId(e.target.value.replace(/[^0-9a-zA-Z]/g, ''))}
-                  disabled={submitting}
-                  style={{
-                    backgroundColor: 'rgba(0,0,0,0.3)',
-                    border: '1px solid #6F4E37',
-                    borderRadius: '10px',
-                    padding: '12px',
-                    color: '#F5EBE6',
-                    fontSize: '14px',
-                    outline: 'none',
-                    textAlign: 'center',
-                    fontFamily: 'monospace',
-                    letterSpacing: '1px'
-                  }}
-                  required
-                />
+              <div style={{ textAlign: 'center', marginBottom: '16px', color: '#A0826C', fontSize: '12px', fontWeight: 'bold' }}>
+                Scan the QR code above with any UPI app, complete the transfer, and click the button below to confirm.
               </div>
 
               <button
@@ -385,10 +352,10 @@ const UpiPayment = ({
                         display: 'inline-block'
                       }}
                     ></span>
-                    <span>Submitting UTR...</span>
+                    <span>Confirming Payment...</span>
                   </>
                 ) : (
-                  'Confirm & Submit UTR'
+                  '✔️ Done Payment (I Have Paid)'
                 )}
               </button>
             </form>
