@@ -120,41 +120,7 @@ const UpiPayment = ({
     }
   };
 
-  // Helper to detect OS
-  const getDeviceOS = () => {
-    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-    if (/android/i.test(userAgent)) return 'android';
-    if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) return 'ios';
-    return 'other';
-  };
 
-  // Helper to generate UPI link for specific apps (Clean P2P transfer parameters)
-  const getAppUpiLink = (appName) => {
-    if (!paymentData) return '';
-    const { upiId, merchantName, amount } = paymentData;
-    const encodedName = encodeURIComponent(merchantName || 'Cafe');
-    const os = getDeviceOS();
-    const baseParams = `pa=${upiId}&pn=${encodedName}&am=${amount}&cu=INR`;
-
-    if (os === 'android') {
-      let pkg = '';
-      if (appName === 'gpay') pkg = 'com.google.android.apps.nitas';
-      else if (appName === 'phonepe') pkg = 'com.phonepe.app';
-      else if (appName === 'paytm') pkg = 'net.one97.paytm';
-      
-      if (pkg) {
-        return `intent://pay?${baseParams}#Intent;scheme=upi;package=${pkg};end`;
-      }
-      return `upi://pay?${baseParams}`;
-    } else if (os === 'ios') {
-      if (appName === 'gpay') return `gpay://upi/pay?${baseParams}`;
-      if (appName === 'phonepe') return `phonepe://pay?${baseParams}`;
-      if (appName === 'paytm') return `paytmmp://pay?${baseParams}`;
-      return `upi://pay?${baseParams}`;
-    } else {
-      return `upi://pay?${baseParams}`;
-    }
-  };
 
   // Generate default UPI URL for QR code
   const upiUrl = paymentData
@@ -353,98 +319,7 @@ const UpiPayment = ({
               </div>
             </div>
 
-            {/* Direct UPI App Launchers (Mobile only) */}
-            <div style={{ marginBottom: '20px' }}>
-              <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#A0826C', fontWeight: 'bold', textTransform: 'uppercase', textAlign: 'center', letterSpacing: '0.5px' }}>
-                🚀 Direct Pay via UPI Apps
-              </p>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                <a
-                  href={getAppUpiLink('gpay')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    background: '#1a73e8',
-                    borderRadius: '10px',
-                    padding: '10px',
-                    color: '#ffffff',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    textDecoration: 'none',
-                    textAlign: 'center',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  <span>🔵</span> G-Pay
-                </a>
-                <a
-                  href={getAppUpiLink('phonepe')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    background: '#5f259f',
-                    borderRadius: '10px',
-                    padding: '10px',
-                    color: '#ffffff',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    textDecoration: 'none',
-                    textAlign: 'center',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  <span>🟣</span> PhonePe
-                </a>
-              </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <a
-                  href={getAppUpiLink('paytm')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    background: '#00baf2',
-                    borderRadius: '10px',
-                    padding: '10px',
-                    color: '#ffffff',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    textDecoration: 'none',
-                    textAlign: 'center',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  <span>🩵</span> Paytm
-                </a>
-                <a
-                  href={getAppUpiLink('other')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    background: '#5C4331',
-                    borderRadius: '10px',
-                    padding: '10px',
-                    color: '#ffffff',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    textDecoration: 'none',
-                    textAlign: 'center',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  <span>📱</span> Others
-                </a>
-              </div>
-            </div>
+
 
             {/* UTR Reference ID Form */}
             <form onSubmit={handleSubmitTxn}>

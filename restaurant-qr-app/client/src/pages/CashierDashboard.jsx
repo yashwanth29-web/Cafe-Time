@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { getOrders, updateOrderStatus, getInventory, getCafeInfo } from '../services/api';
@@ -7,6 +7,7 @@ import '../styles/App.css';
 
 const CashierDashboard = () =>{
  const { logout, user } = useAuth();
+ const seenPaidOrderIdsRef = useRef(new Set());
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
  const [activeTab, setActiveTab] = useState(() =>{
@@ -67,6 +68,49 @@ const CashierDashboard = () =>{
  const [selectedOrder, setSelectedOrder] = useState(null);
  const [refreshCountdown, setRefreshCountdown] = useState(12);
 
+  const playNotificationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(587.33, audioContext.currentTime); // D5
+      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.15);
+      setTimeout(() => {
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880.00, audioContext.currentTime); // A5
+        gain2.gain.setValueAtTime(0.2, audioContext.currentTime);
+        osc2.start();
+        osc2.stop(audioContext.currentTime + 0.2);
+      }, 150);
+    } catch (e) {
+      console.log('Audio error:', e);
+    }
+  };
+
+  const speakPaymentReceived = (order) => {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      const tableInfo = order.tableNumber && order.tableNumber !== 'Takeaway' && order.tableNumber !== 'Walk-in'
+        ? `for Table ${order.tableNumber}`
+        : 'for Takeaway';
+      const text = `Payment received ${tableInfo}. Amount: ${Math.round(order.totalAmount)} rupees.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech synthesis failed:', err);
+    }
+  };
+
  const fetchOrders = async () =>{
  try {
  const today = new Date();
@@ -74,6 +118,22 @@ const CashierDashboard = () =>{
  const response = await getOrders({ date: todayStr, cafeId: user?.cafeId });
  if (response.success) {
  setOrders(response.data);
+ 
+  // Track paid status transition
+  const paidOrders = response.data.filter((o) => o.paymentStatus === 'Paid');
+  if (seenPaidOrderIdsRef.current.size === 0) {
+    paidOrders.forEach((o) => seenPaidOrderIdsRef.current.add(o._id));
+  } else {
+    const newPaidOrders = paidOrders.filter((o) => !seenPaidOrderIdsRef.current.has(o._id));
+    if (newPaidOrders.length > 0) {
+      playNotificationSound();
+      newPaidOrders.forEach((order) => {
+        speakPaymentReceived(order);
+        seenPaidOrderIdsRef.current.add(order._id);
+      });
+    }
+  }
+
  setErrorMsg('');
  } else {
  setErrorMsg('Failed to refresh billing orders feed.');
