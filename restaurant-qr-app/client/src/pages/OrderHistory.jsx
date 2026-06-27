@@ -692,7 +692,7 @@ const OrderHistory = ({ cafeId }) => {
                         padding: '10px',
                         fontSize: '12px',
                         marginTop: '15px',
-                        color: 'var(--color-text-primary)',
+                        color: '#ffffff',
                         border: '1px solid #33271c',
                         background: '#33271c',
                         fontWeight: 'bold',

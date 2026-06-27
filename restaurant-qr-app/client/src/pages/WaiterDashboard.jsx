@@ -305,7 +305,7 @@ const WaiterDashboard = () =>{
  className="touch-btn"
  style={{
  background: '#2980B9',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 12px',
  borderRadius: '8px',
  fontSize: '12px',
@@ -321,7 +321,7 @@ const WaiterDashboard = () =>{
  className="touch-btn"
  style={{
  background: '#27AE60',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 16px',
  borderRadius: '8px',
  fontSize: '12.5px',
@@ -330,7 +330,7 @@ const WaiterDashboard = () =>{
  border: 'none',
  minHeight: '44px'
  }}>
- Mark Paid
+  Mark Paid
 </button>
 </div>
 </div>
@@ -410,7 +410,7 @@ const WaiterDashboard = () =>{
  className="touch-btn"
  style={{
  background: '#34495E',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 12px',
  borderRadius: '8px',
  fontSize: '12px',
@@ -427,7 +427,7 @@ const WaiterDashboard = () =>{
  className="touch-btn"
  style={{
  background: '#2980B9',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 12px',
  borderRadius: '8px',
  fontSize: '12px',
@@ -444,7 +444,7 @@ const WaiterDashboard = () =>{
  className="touch-btn"
  style={{
  background: '#27AE60',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 16px',
  borderRadius: '8px',
  fontSize: '12.5px',

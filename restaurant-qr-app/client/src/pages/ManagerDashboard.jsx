@@ -367,8 +367,8 @@ const ManagerDashboard = () =>{
 </td>
 <td style={{ padding: '10px 8px' }}>
 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-<button onClick={() =>printKOT(order, user, cafeInfo)} style={{ background: '#34495E', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
-<button onClick={() =>printPOSReceipt(order, user, cafeInfo)} style={{ background: '#2980B9', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
+<button onClick={() =>printKOT(order, user, cafeInfo)} style={{ background: '#34495E', color: '#ffffff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
+<button onClick={() =>printPOSReceipt(order, user, cafeInfo)} style={{ background: '#2980B9', color: '#ffffff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
 </div>
 </td>
 </tr>
@@ -413,8 +413,8 @@ const ManagerDashboard = () =>{
 </div>
 </div>
 <div style={{ display: 'flex', gap: '8px', borderTop: '1px dashed var(--color-border)', paddingTop: '10px' }}>
-<button onClick={() =>printKOT(order, user, cafeInfo)} style={{ flex: 1, background: '#34495E', color: 'var(--color-text-primary)', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> KOT</button>
-<button onClick={() =>printPOSReceipt(order, user, cafeInfo)} style={{ flex: 1, background: '#2980B9', color: 'var(--color-text-primary)', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> POS Bill</button>
+<button onClick={() =>printKOT(order, user, cafeInfo)} style={{ flex: 1, background: '#34495E', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> KOT</button>
+<button onClick={() =>printPOSReceipt(order, user, cafeInfo)} style={{ flex: 1, background: '#2980B9', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> POS Bill</button>
 </div>
 </div>
 )}
