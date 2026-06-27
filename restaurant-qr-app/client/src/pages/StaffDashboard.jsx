@@ -173,16 +173,25 @@ const StaffDashboard = () => {
  setActionLoading(false);
  switch (error.code) {
  case error.PERMISSION_DENIED:
- setErrorMsg('GPS location access denied. Please grant location permissions in your browser to check in.');
+ setErrorMsg(
+   <div>
+     <strong>GPS Location Blocked:</strong> Please allow location access to check in.
+     <div style={{ marginTop: '8px', fontSize: '0.75rem', opacity: 0.85, lineHeight: '1.4' }}>
+       👉 <strong>Chrome (Mobile/Desktop):</strong> Tap the lock or settings icon next to the address bar, reset/allow "Location".
+       <br />
+       👉 <strong>Safari (iPhone):</strong> Open iOS Settings &gt; Privacy &gt; Location Services &gt; Safari, and select "While Using the App".
+     </div>
+   </div>
+ );
  break;
  case error.POSITION_UNAVAILABLE:
- setErrorMsg('GPS location information is unavailable. Try turning on device location services.');
+ setErrorMsg('GPS location is unavailable. Please check if location services/GPS are enabled on your device and you have network connectivity.');
  break;
  case error.TIMEOUT:
- setErrorMsg('GPS request timed out. Please try again.');
+ setErrorMsg('GPS request timed out while getting location lock. Please try again in an area with a clear view of the sky or connect to local Wi-Fi.');
  break;
  default:
- setErrorMsg('An unknown location error occurred.');
+ setErrorMsg('An unknown location error occurred. Please try again or check device location permission settings.');
  }
  },
  { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }

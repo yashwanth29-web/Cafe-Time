@@ -3,6 +3,21 @@ const User = require('../models/User');
 const Branch = require('../models/Branch');
 const Cafe = require('../models/Cafe');
 
+// Helper: Parse latitude and longitude from raw string or Google Maps URL
+const parseCoords = (locationStr) => {
+  if (!locationStr) return { lat: 0, lng: 0 };
+  const regex = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/;
+  const match = locationStr.match(regex);
+  if (match) {
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return { lat, lng };
+    }
+  }
+  return { lat: 0, lng: 0 };
+};
+
 // Helper: Get IST Date String (YYYY-MM-DD)
 const getISTDate = (date = new Date()) => {
   const tzOffset = 5.5 * 60 * 60 * 1000;
@@ -51,14 +66,15 @@ const checkIn = async (req, res) => {
       branch = await Branch.findOne({ branchId: 'default', cafeId: staff.cafeId });
       if (!branch) {
         const cafe = await Cafe.findOne({ cafeId: staff.cafeId });
+        const { lat, lng } = parseCoords(cafe?.mapsLocation);
         branch = await Branch.create({
           branchId: 'default',
           branchName: 'Primary Location',
           cafeId: staff.cafeId,
           address: (cafe && cafe.address) || 'Default Address',
           manager: 'Owner',
-          latitude: 0,
-          longitude: 0,
+          latitude: lat,
+          longitude: lng,
           allowedRadius: 30,
           isActive: true
         });

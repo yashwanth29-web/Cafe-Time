@@ -8,6 +8,21 @@ const emailService = require('../services/emailService');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Razorpay = require('razorpay');
 
+// Helper: Parse latitude and longitude from raw string or Google Maps URL
+const parseCoords = (locationStr) => {
+  if (!locationStr) return { lat: 0, lng: 0 };
+  const regex = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/;
+  const match = locationStr.match(regex);
+  if (match) {
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return { lat, lng };
+    }
+  }
+  return { lat: 0, lng: 0 };
+};
+
 /**
  * Register a new Staff member bound to the Owner's cafe
  */
@@ -313,7 +328,23 @@ const saveSetupData = async (req, res) => {
     if (pincode) cafe.pincode = pincode;
     if (logoUrl) cafe.logoUrl = logoUrl;
     if (address) cafe.address = address;
-    if (mapsLocation) cafe.mapsLocation = mapsLocation;
+    if (mapsLocation) {
+      cafe.mapsLocation = mapsLocation;
+      const { lat, lng } = parseCoords(mapsLocation);
+      if (lat !== 0 && lng !== 0) {
+        await Branch.findOneAndUpdate(
+          { branchId: 'default', cafeId },
+          { 
+            latitude: lat, 
+            longitude: lng, 
+            address: address || cafe.address || 'Default Address', 
+            branchName: 'Primary Location',
+            isActive: true 
+          },
+          { upsert: true }
+        );
+      }
+    }
     if (openingTime) cafe.openingTime = openingTime;
     if (closingTime) cafe.closingTime = closingTime;
     if (gstNumber) cafe.gstNumber = gstNumber;
