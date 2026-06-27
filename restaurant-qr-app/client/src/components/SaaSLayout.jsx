@@ -369,7 +369,11 @@ const SaaSLayout = ({ children }) => {
       {/* Sidebar Drawer for tablet */}
       <aside className={`sidebar-drawer ${mobileDrawerOpen ? 'open' : ''}`}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #2d2d2d' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div 
+            onClick={() => { navigate('/'); setMobileDrawerOpen(false); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+            title="Go to Home"
+          >
             <div className="mh-logo">☕</div>
             <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>Cypher's Café</span>
           </div>
@@ -449,8 +453,14 @@ const SaaSLayout = ({ children }) => {
           <button className="hamburger-btn" onClick={() => setMobileDrawerOpen(true)}>
             ☰
           </button>
-          <div className="mh-logo">☕</div>
-          <span className="mh-name">Cypher's Café</span>
+          <div 
+            onClick={() => navigate('/')}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+            title="Go to Home"
+          >
+            <div className="mh-logo">☕</div>
+            <span className="mh-name">Cypher's Café</span>
+          </div>
         </div>
         <div className="mh-actions">
           {/* Notification Bell */}
@@ -589,13 +599,8 @@ const SaaSLayout = ({ children }) => {
           minHeight: '70px',
           overflow: 'hidden'
         }}>
-          {/* Logo and Name */}
           <div 
-            onClick={() => {
-              const navItems = getNavItems();
-              const homePath = navItems.length > 0 ? navItems[0].path : '/';
-              navigate(homePath);
-            }}
+            onClick={() => navigate('/')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -603,7 +608,7 @@ const SaaSLayout = ({ children }) => {
               justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
               cursor: 'pointer'
             }}
-            title="Go to Dashboard Home"
+            title="Go to Home"
           >
             <div style={{
               width: '36px',

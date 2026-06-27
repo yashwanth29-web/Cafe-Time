@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import '../styles/Auth.css';
@@ -56,9 +56,7 @@ const Login = () => {
       <div className="auth-wrapper">
       <div className="auth-card">
         <div className="auth-brand">
-          <Link to="/">
-            <img src="/logo.png" alt="Cypher's Café Logo" style={{ height: '75px', width: '75px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #6F4E37', marginBottom: '12px', display: 'inline-block', cursor: 'pointer' }} />
-          </Link>
+          <img src="/logo.png" alt="Cypher's Café Logo" style={{ height: '75px', width: '75px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #6F4E37', marginBottom: '12px', display: 'inline-block' }} />
           <h1>Cypher's Café</h1>
           <p>Login Portal</p>
         </div>
