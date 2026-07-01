@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getInventory } from '../services/api';
+import { getInventory, getNotifications, markNotificationRead } from '../services/api';
 
 const SaaSLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -15,8 +15,77 @@ const SaaSLayout = ({ children }) => {
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await getNotifications();
+      if (res && res.success) {
+        setNotifications(res.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch notifications:', err);
+    }
+  };
+
+  const handleMarkAsRead = async (id) => {
+    try {
+      await markNotificationRead(id);
+      fetchNotifications();
+    } catch (err) {
+      console.error('Failed to mark read:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchNotifications();
+      const interval = setInterval(fetchNotifications, 20000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  const renderNotificationList = () => {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', maxHeight: '250px', overflowY: 'auto' }}>
+        {lowStockAlerts.map((item, idx) => (
+          <div key={`stock-${idx}`} style={{ padding: '8px 0', borderBottom: '1px solid #2D2D2D', color: '#F39C12' }}>
+            ⚠️ <strong>{item.name}</strong> inventory running low ({item.quantity !== undefined ? item.quantity : item.stock} {item.unit} left).
+          </div>
+        ))}
+        {notifications.map((n, idx) => (
+          <div 
+            key={`db-notif-${n._id || idx}`}
+            onClick={() => !n.isRead && handleMarkAsRead(n._id)}
+            style={{ 
+              padding: '8px 0', 
+              borderBottom: '1px solid #2D2D2D', 
+              color: n.isRead ? '#888' : '#FFF',
+              cursor: n.isRead ? 'default' : 'pointer',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <div style={{ paddingRight: '4px' }}>
+              <strong>{n.title}</strong>
+              <div style={{ marginTop: '2px', opacity: 0.9 }}>{n.message}</div>
+              <span style={{ fontSize: '9px', opacity: 0.6, display: 'block', marginTop: '4px' }}>{new Date(n.createdAt).toLocaleTimeString()}</span>
+            </div>
+            {!n.isRead && <span style={{ minWidth: '8px', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--color-primary)', marginLeft: '8px' }} />}
+          </div>
+        ))}
+        {lowStockAlerts.length === 0 && notifications.length === 0 && (
+          <div style={{ padding: '12px 0', color: '#bbb', textAlign: 'center' }}>
+            🟢 No alerts or updates.
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const userRole = (user?.role || '').toLowerCase();
+  const unreadCount = lowStockAlerts.length + notifications.filter(n => !n.isRead).length;
 
   useEffect(() => {
     const handleResize = () => {
@@ -79,6 +148,7 @@ const SaaSLayout = ({ children }) => {
         { label: 'Business Stats', icon: '📈', path: '/owner/dashboard' },
         { label: 'Menu & Reviews', icon: '🍽️', path: '/owner/dashboard?tab=menu' },
         { label: 'Staff & Reports', icon: '👥', path: '/owner/dashboard?tab=staff' },
+        { label: 'Staff Payroll', icon: '💵', path: '/owner/payroll' },
         { label: 'Inventory', icon: '📦', path: '/owner/dashboard?tab=inventory' },
         { label: 'Monitor Orders', icon: '👁️', path: '/owner/dashboard?tab=orders' }];
 
@@ -87,6 +157,7 @@ const SaaSLayout = ({ children }) => {
         { label: 'Operational Stats', icon: '💼', path: '/manager/dashboard' },
         { label: 'Order Log', icon: '📋', path: '/manager/dashboard?tab=orders' },
         { label: 'Staff Attendance', icon: '👥', path: '/manager/dashboard?tab=attendance' },
+        { label: 'Staff Payroll', icon: '💵', path: '/owner/payroll' },
         { label: 'Ingredient Stock', icon: '📦', path: '/manager/dashboard?tab=inventory' },
         { label: 'Cafe Menu', icon: '📋', path: '/manager/dashboard?tab=menu' }];
 
@@ -97,14 +168,16 @@ const SaaSLayout = ({ children }) => {
         { label: 'Ingredient Stock', icon: '📦', path: '/kitchen/dashboard?tab=inventory' },
         { label: 'Cafe Menu & Recipes', icon: '📋', path: '/kitchen/dashboard?tab=menu' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }];
+        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
+        { label: 'My Payroll', icon: '💵', path: '/employee/payroll' }];
 
       case 'waiter':
       case 'staff':
         return [
         { label: 'Live Orders', icon: '🛍️', path: '/waiter/dashboard' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }];
+        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
+        { label: 'My Payroll', icon: '💵', path: '/employee/payroll' }];
 
       case 'cashier':
         return [
@@ -112,7 +185,8 @@ const SaaSLayout = ({ children }) => {
         { label: 'Receipt Logs', icon: '📝', path: '/cashier/dashboard?tab=receipts' },
         { label: 'Item Availability', icon: '📦', path: '/cashier/dashboard?tab=inventory' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }];
+        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
+        { label: 'My Payroll', icon: '💵', path: '/employee/payroll' }];
 
       default:
         return [];
@@ -467,8 +541,8 @@ const SaaSLayout = ({ children }) => {
           <div style={{ position: 'relative' }}>
             <button className="mh-icon-btn" onClick={() => setNotificationsOpen(!notificationsOpen)}>
               🔔
-              {lowStockAlerts.length > 0 &&
-              <span className="bnav-badge" style={{ top: '-4px', right: '-4px' }}>{lowStockAlerts.length}</span>
+              {unreadCount > 0 &&
+              <span className="bnav-badge" style={{ top: '-4px', right: '-4px' }}>{unreadCount}</span>
               }
             </button>
             {notificationsOpen &&
@@ -487,24 +561,7 @@ const SaaSLayout = ({ children }) => {
                 <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: 'var(--color-text-primary)' }}>
                   Notifications & Alerts
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', maxHeight: '200px', overflowY: 'auto' }}>
-                  {lowStockAlerts.length === 0 ?
-                <>
-                      <div style={{ padding: '6px 0', borderBottom: '1px solid #2d2d2d', color: '#bbb' }}>
-                        🟢 System active and monitoring heartbeat.
-                      </div>
-                      <div style={{ padding: '6px 0', color: '#bbb' }}>
-                        📋 Chef Dashboard synced with Kitchen Queue.
-                      </div>
-                    </> :
-
-                lowStockAlerts.map((item, idx) =>
-                <div key={idx} style={{ padding: '8px 0', borderBottom: idx < lowStockAlerts.length - 1 ? '1px solid #2d2d2d' : 'none', color: '#F39C12' }}>
-                        ⚠️ <strong>{item.name}</strong> inventory running low ({item.quantity !== undefined ? item.quantity : item.stock} {item.unit} left, min {item.reorderLevel !== undefined ? item.reorderLevel : item.minStock} {item.unit}).
-                      </div>
-                )
-                }
-                </div>
+                {renderNotificationList()}
               </div>
             }
           </div>
@@ -773,7 +830,7 @@ const SaaSLayout = ({ children }) => {
                 }}>
                 
                 🔔
-                {lowStockAlerts.length > 0 &&
+                {unreadCount > 0 &&
                 <span style={{
                   position: 'absolute',
                   top: '-2px',
@@ -789,7 +846,7 @@ const SaaSLayout = ({ children }) => {
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                    {lowStockAlerts.length}
+                    {unreadCount}
                   </span>
                 }
               </button>
@@ -810,24 +867,7 @@ const SaaSLayout = ({ children }) => {
                   <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: 'var(--color-text-primary)' }}>
                     Notifications & Alerts
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', maxHeight: '250px', overflowY: 'auto' }}>
-                    {lowStockAlerts.length === 0 ?
-                  <>
-                        <div style={{ padding: '6px 0', borderBottom: '1px solid #2d2d2d', color: '#bbb' }}>
-                          🟢 System active and monitoring heartbeat.
-                        </div>
-                        <div style={{ padding: '6px 0', color: '#bbb' }}>
-                          📋 Chef Dashboard synced with Kitchen Queue.
-                        </div>
-                      </> :
-
-                  lowStockAlerts.map((item, idx) =>
-                  <div key={idx} style={{ padding: '8px 0', borderBottom: idx < lowStockAlerts.length - 1 ? '1px solid #2d2d2d' : 'none', color: '#F39C12' }}>
-                          ⚠️ <strong>{item.name}</strong> inventory running low ({item.quantity !== undefined ? item.quantity : item.stock} {item.unit} left, min {item.reorderLevel !== undefined ? item.reorderLevel : item.minStock} {item.unit}).
-                        </div>
-                  )
-                  }
-                  </div>
+                  {renderNotificationList()}
                 </div>
               }
             </div>

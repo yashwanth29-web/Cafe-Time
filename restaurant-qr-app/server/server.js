@@ -20,6 +20,8 @@ const attendanceRoutes = require('./routes/attendanceRoutes');
 const workReportRoutes = require('./routes/workReportRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const cafeRoutes = require('./routes/cafeRoutes');
+const payrollRoutes = require('./routes/payrollRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 // Create Express instance
 const app = express();
@@ -68,6 +70,8 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/work-reports', workReportRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/cafe', cafeRoutes);
+app.use('/api/payroll', payrollRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 
 // Health check endpoint

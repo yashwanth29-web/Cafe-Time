@@ -18,6 +18,8 @@ import KitchenDashboard from './pages/KitchenDashboard';
 import WaiterDashboard from './pages/WaiterDashboard';
 import CashierDashboard from './pages/CashierDashboard';
 import ManagerDashboard from './pages/ManagerDashboard';
+import OwnerPayrollPage from './pages/OwnerPayrollPage';
+import EmployeePayrollPage from './pages/EmployeePayrollPage';
 import './styles/App.css';
 import SaaSLayout from './components/SaaSLayout';
 import Unauthorized from './pages/Unauthorized';
@@ -207,6 +209,26 @@ function AppContent() {
               <ProtectedRoute allowedRoles={['admin', 'owner']}>
                 <SaaSLayout>
                   <OwnerProfilePage />
+                </SaaSLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/owner/payroll" 
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager']}>
+                <SaaSLayout>
+                  <OwnerPayrollPage />
+                </SaaSLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/employee/payroll" 
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'chef', 'cashier', 'staff']}>
+                <SaaSLayout>
+                  <EmployeePayrollPage />
                 </SaaSLayout>
               </ProtectedRoute>
             } 

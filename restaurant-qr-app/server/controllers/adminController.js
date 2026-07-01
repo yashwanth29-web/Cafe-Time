@@ -27,7 +27,10 @@ const parseCoords = (locationStr) => {
  * Register a new Staff member bound to the Owner's cafe
  */
 const createStaff = async (req, res) => {
-  const { name, email, phone, staffRole, assignedBranch, isActive } = req.body;
+  const { 
+    name, email, phone, staffRole, assignedBranch, isActive,
+    salaryType, dailyRate, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
+  } = req.body;
   const cafeId = req.user.cafeId;
 
   if (!name || !phone || !staffRole) {
@@ -79,7 +82,15 @@ const createStaff = async (req, res) => {
       employeeId,
       assignedBranch: assignedBranch || '',
       cafeId,
-      isActive: isActive !== undefined ? isActive : true
+      isActive: isActive !== undefined ? isActive : true,
+      salaryType: salaryType || 'DAILY',
+      dailyRate: dailyRate !== undefined ? Number(dailyRate) : 0,
+      hourlyRate: hourlyRate !== undefined ? Number(hourlyRate) : 0,
+      weeklyRate: weeklyRate !== undefined ? Number(weeklyRate) : 0,
+      monthlyRate: monthlyRate !== undefined ? Number(monthlyRate) : 0,
+      weeklyOff: weeklyOff || 'Sunday',
+      joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
+      salaryStatus: salaryStatus || 'ACTIVE'
     });
 
     if (cleanEmail) {
@@ -155,7 +166,10 @@ const getStaff = async (req, res) => {
  */
 const updateStaff = async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, staffRole, assignedBranch, isActive } = req.body;
+  const { 
+    name, email, phone, staffRole, assignedBranch, isActive,
+    salaryType, dailyRate, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
+  } = req.body;
   const cafeId = req.user.cafeId;
 
   if (!cafeId) {
@@ -198,6 +212,14 @@ const updateStaff = async (req, res) => {
     if (isActive !== undefined) {
       staffMember.isActive = isActive;
     }
+    if (salaryType) staffMember.salaryType = salaryType;
+    if (dailyRate !== undefined) staffMember.dailyRate = Number(dailyRate);
+    if (hourlyRate !== undefined) staffMember.hourlyRate = Number(hourlyRate);
+    if (weeklyRate !== undefined) staffMember.weeklyRate = Number(weeklyRate);
+    if (monthlyRate !== undefined) staffMember.monthlyRate = Number(monthlyRate);
+    if (weeklyOff) staffMember.weeklyOff = weeklyOff;
+    if (joiningDate) staffMember.joiningDate = new Date(joiningDate);
+    if (salaryStatus) staffMember.salaryStatus = salaryStatus;
 
     await staffMember.save();
 

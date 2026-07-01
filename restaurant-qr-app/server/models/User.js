@@ -44,6 +44,40 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  salaryType: {
+    type: String,
+    enum: ['DAILY', 'HOURLY', 'WEEKLY', 'MONTHLY'],
+    default: 'DAILY'
+  },
+  dailyRate: {
+    type: Number,
+    default: 0
+  },
+  hourlyRate: {
+    type: Number,
+    default: 0
+  },
+  weeklyRate: {
+    type: Number,
+    default: 0
+  },
+  monthlyRate: {
+    type: Number,
+    default: 0
+  },
+  weeklyOff: {
+    type: String,
+    default: 'Sunday'
+  },
+  joiningDate: {
+    type: Date,
+    default: Date.now
+  },
+  salaryStatus: {
+    type: String,
+    enum: ['ACTIVE', 'INACTIVE'],
+    default: 'ACTIVE'
+  },
   lastLogin: {
     type: Date
   },

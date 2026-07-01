@@ -158,6 +158,7 @@ const OwnerDashboard = () =>{
  const [orders, setOrders] = useState([]);
  const [ordersLoading, setOrdersLoading] = useState(true);
  const [ordersError, setOrdersError] = useState('');
+ const seenPaidOrderIdsRef = useRef(new Set());
  const [orderDateFilter, setOrderDateFilter] = useState(() => {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -1810,37 +1811,6 @@ const OwnerDashboard = () =>{
 <span className="val" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</span>
 <span className="sub">Cost of sold ingredients</span>
 </div>
-</div>
-
-<div className="card-deck">
- {/* Premium Sales Graphics */}
-<div className="chart-card">
-<h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.1rem', margin: '0 0 20px 0', fontWeight: 700 }}>
- Weekly Sales Performance (Last 7 Days)
-</h3>
- 
- {/* Micro SVG Flexbox chart */}
-<div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '180px', padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
- {weeklySalesData.map((d, index) =>{
- const percent = d.sales / maxWeeklySales * 100;
- return (
-<div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '12%' }}>
-<span style={{ fontSize: '10px', color: 'var(--color-text-primary)', fontWeight: 'bold', marginBottom: '6px' }}>₹{d.sales}</span>
-<div style={{
- width: '100%',
- height: `${percent}%`,
- background: 'linear-gradient(to top, #6F4E37, #C69B7B)',
- borderRadius: '4px 4px 0 0',
- transition: 'height 0.3s ease'
- }} />
-<span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '8px', fontWeight: 'bold' }}>{d.day}</span>
-</div>);
-
- })}
-</div>
-</div>
-
-
 </div>
 
  {/* Best / Worst Selling items */}

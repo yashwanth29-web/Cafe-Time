@@ -374,8 +374,75 @@ export const checkIn = async (attendanceData) => {
   return response.data;
 };
 
-export const checkOut = async () => {
-  const response = await API.post('/attendance/check-out');
+export const checkOut = async (attendanceData) => {
+  const response = await API.post('/attendance/check-out', attendanceData);
+  return response.data;
+};
+
+export const startExtraWork = async (attendanceData) => {
+  const response = await API.post('/attendance/extra-work/start', attendanceData);
+  return response.data;
+};
+
+export const stopExtraWork = async (attendanceData) => {
+  const response = await API.post('/attendance/extra-work/stop', attendanceData);
+  return response.data;
+};
+
+// Payroll APIs
+export const generatePayroll = async (weekStart, weekEnd) => {
+  const response = await API.post('/payroll/generate', { weekStart, weekEnd });
+  return response.data;
+};
+
+export const getPayrollList = async (params) => {
+  const response = await API.get('/payroll', { params });
+  return response.data;
+};
+
+export const getPayrollDetails = async (id) => {
+  const response = await API.get(`/payroll/${id}`);
+  return response.data;
+};
+
+export const getCurrentEmployeePayroll = async () => {
+  const response = await API.get('/payroll/current');
+  return response.data;
+};
+
+export const updatePayroll = async (id, payrollData) => {
+  const response = await API.patch(`/payroll/${id}`, payrollData);
+  return response.data;
+};
+
+export const payPayroll = async (id, paymentData) => {
+  const response = await API.patch(`/payroll/${id}/pay`, paymentData);
+  return response.data;
+};
+
+export const deletePayroll = async (id) => {
+  const response = await API.delete(`/payroll/${id}`);
+  return response.data;
+};
+
+export const getPayrollHistory = async () => {
+  const response = await API.get('/payroll/history');
+  return response.data;
+};
+
+export const getPayrollReport = async (params) => {
+  const response = await API.get('/payroll/report', { params });
+  return response.data;
+};
+
+// In-app Notifications APIs
+export const getNotifications = async () => {
+  const response = await API.get('/notifications');
+  return response.data;
+};
+
+export const markNotificationRead = async (id) => {
+  const response = await API.patch(`/notifications/${id}/read`);
   return response.data;
 };
 

@@ -4,7 +4,6 @@ const BranchSchema = new mongoose.Schema({
   branchId: {
     type: String,
     required: true,
-    unique: true,
     trim: true
   },
   branchName: {
@@ -47,5 +46,7 @@ const BranchSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+BranchSchema.index({ branchId: 1, cafeId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Branch', BranchSchema);

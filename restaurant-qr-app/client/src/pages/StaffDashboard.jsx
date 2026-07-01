@@ -6,7 +6,9 @@ import {
  checkOut,
  getTodayAttendanceStatus,
  getStaffAttendanceHistory,
- submitWorkReport } from
+ submitWorkReport,
+ startExtraWork,
+ stopExtraWork } from
 '../services/api';
 import '../styles/App.css';
 
@@ -198,31 +200,181 @@ const StaffDashboard = () => {
  );
  };
 
- // Perform Check-Out
- const handleCheckOut = async () => {
- if (!window.confirm('Are you sure you want to check out from your shift?')) {
- return;
- }
+  // Perform Check-Out with GPS location checks
+  const handleCheckOut = () => {
+    if (!window.confirm('Are you sure you want to check out from your shift?')) {
+      return;
+    }
 
- setActionLoading(true);
- setErrorMsg('');
- setSuccessMsg('');
+    setErrorMsg('');
+    setSuccessMsg('');
 
- try {
- const res = await checkOut();
- if (res.success) {
- setSuccessMsg(res.message || 'Check-out registered successfully!');
- fetchData();
- } else {
- setErrorMsg(res.message || 'Check-out request failed.');
- }
- } catch (err) {
- console.error('Check-out error:', err);
- setErrorMsg(err.response?.data?.message || 'Server error processing check-out.');
- } finally {
- setActionLoading(false);
- }
- };
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setActionLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoords({ latitude, longitude });
+
+        try {
+          const res = await checkOut({ latitude, longitude });
+          if (res.success) {
+            setSuccessMsg(res.message || 'Check-out registered successfully!');
+            fetchData();
+          } else {
+            setErrorMsg(res.message || 'Check-out request failed.');
+          }
+        } catch (err) {
+          console.error('Check-out error:', err);
+          setErrorMsg(err.response?.data?.message || 'Check-out request failed. Are you within the cafe geofence?');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      (error) => {
+        console.error('Checkout location error:', error);
+        setActionLoading(false);
+        setErrorMsg('GPS location is required to check out. Please allow location access.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  // Start Extra Work (Overtime)
+  const handleStartExtraWork = () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setActionLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoords({ latitude, longitude });
+
+        try {
+          const res = await startExtraWork({ latitude, longitude });
+          if (res.success) {
+            setSuccessMsg(res.message || 'Extra work session started successfully!');
+            fetchData();
+          } else {
+            setErrorMsg(res.message || 'Failed to start extra work.');
+          }
+        } catch (err) {
+          console.error('Start extra work error:', err);
+          setErrorMsg(err.response?.data?.message || 'Failed to start extra work. Are you within the cafe geofence?');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      (error) => {
+        console.error('Extra work location error:', error);
+        setActionLoading(false);
+        setErrorMsg('GPS location is required to start extra work. Please allow location access.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  // Stop Extra Work (Overtime)
+  const handleStopExtraWork = () => {
+    if (!window.confirm('Are you sure you want to stop your extra work session?')) {
+      return;
+    }
+
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setActionLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoords({ latitude, longitude });
+
+        try {
+          const res = await stopExtraWork({ latitude, longitude });
+          if (res.success) {
+            setSuccessMsg(res.message || 'Extra work session stopped successfully!');
+            fetchData();
+          } else {
+            setErrorMsg(res.message || 'Failed to stop extra work.');
+          }
+        } catch (err) {
+          console.error('Stop extra work error:', err);
+          setErrorMsg(err.response?.data?.message || 'Failed to stop extra work. Are you within the cafe geofence?');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      (error) => {
+        console.error('Extra work location error:', error);
+        setActionLoading(false);
+        setErrorMsg('GPS location is required to stop extra work. Please allow location access.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  // Calculate dynamic estimated earnings for today
+  const getTodayEarnings = () => {
+    if (!todayStatus?.checkedIn || !user) return 0;
+    
+    const att = todayStatus.attendance;
+    const sType = user.salaryType || 'DAILY';
+    
+    // Get total regular working duration so far
+    let durationMin = att?.totalDuration || 0;
+    if (todayStatus.checkedIn && !todayStatus.checkedOut) {
+      const checkInDate = new Date(att.checkInTime);
+      const diffMs = Date.now() - checkInDate.getTime();
+      durationMin = Math.max(0, Math.floor(diffMs / 60000));
+    }
+    
+    const overtimeHours = att?.overtimeHours || 0;
+    let earnings = 0;
+
+    if (sType === 'DAILY') {
+      if (durationMin >= 480) { // Completed day
+        earnings = user.dailyRate || 0;
+      } else if (durationMin >= 240) { // Half day
+        earnings = (user.dailyRate || 0) * 0.5;
+      } else {
+        earnings = 0;
+      }
+      const otRate = user.hourlyRate || ((user.dailyRate || 0) / 8);
+      earnings += overtimeHours * otRate;
+    } else if (sType === 'HOURLY') {
+      const activeHours = durationMin / 60;
+      earnings = activeHours * (user.hourlyRate || 0);
+      earnings += overtimeHours * (user.hourlyRate || 0);
+    } else if (sType === 'WEEKLY') {
+      earnings = (user.weeklyRate || 0) / 6; // Pro-rated for 6 working days
+      const otRate = user.hourlyRate || ((user.weeklyRate || 0) / 40);
+      earnings += overtimeHours * otRate;
+    } else if (sType === 'MONTHLY') {
+      earnings = (user.monthlyRate || 0) / 26; // Pro-rated for 26 working days
+      const otRate = user.hourlyRate || ((user.monthlyRate || 0) / 160);
+      earnings += overtimeHours * otRate;
+    }
+    
+    return Number(earnings.toFixed(2));
+  };
 
  // File Upload Handlers for Daily Work Report
  const handleFileChange = (e) => {
@@ -645,6 +797,117 @@ const StaffDashboard = () => {
  }
  </div>
  </div>
+
+ {/* Today's Estimated Earnings Card */}
+ <div style={{
+    background: 'var(--bg-card, #1A1A1A)',
+    border: '1px solid var(--color-border)',
+    padding: '24px',
+    borderRadius: '16px',
+    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between'
+  }}>
+    <div>
+      <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '10px' }}>
+        Today's Work & Earnings
+      </h3>
+      
+      <div style={{ textAlign: 'center', margin: '15px 0' }}>
+        <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Estimated Earnings Today
+        </span>
+        <strong style={{ fontSize: '2.4rem', color: 'var(--color-primary, #ff6b08)', display: 'block', margin: '8px 0' }}>
+          ₹{getTodayEarnings()}
+        </strong>
+        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+          Salary Type: <strong style={{ textTransform: 'capitalize' }}>{(user?.salaryType || 'DAILY').toLowerCase()}</strong>
+          {user?.salaryType === 'DAILY' && ` (₹${user.dailyRate}/day)`}
+          {user?.salaryType === 'HOURLY' && ` (₹${user.hourlyRate}/hour)`}
+          {user?.salaryType === 'WEEKLY' && ` (₹${user.weeklyRate}/week)`}
+          {user?.salaryType === 'MONTHLY' && ` (₹${user.monthlyRate}/month)`}
+        </span>
+      </div>
+
+      {todayStatus?.attendance && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', marginTop: '16px', borderTop: '1px dashed rgba(255, 255, 255, 0.1)', paddingTop: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Hours Worked:</span>
+            <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+              {todayStatus.attendance.workingHours || (todayStatus.attendance.totalDuration ? (todayStatus.attendance.totalDuration / 60).toFixed(2) : '0.00')} hrs
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Overtime Hours:</span>
+            <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+              {todayStatus.attendance.overtimeHours || 0} hrs
+            </span>
+          </div>
+          {todayStatus.attendance.isExtraWorkActive && (
+            <div style={{ color: '#10B981', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '4px', textAlign: 'center' }}>
+              ⚡ Extra Work Session in Progress
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+
+    {/* Overtime/Extra Work Controls */}
+    {todayStatus?.checkedIn && todayStatus?.checkedOut && (
+      <div style={{ marginTop: '16px' }}>
+        {!todayStatus.attendance?.isExtraWorkActive ? (
+          <button
+            onClick={handleStartExtraWork}
+            disabled={actionLoading}
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '12px',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)',
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            ➕ Start Extra Work (Overtime)
+          </button>
+        ) : (
+          <button
+            onClick={handleStopExtraWork}
+            disabled={actionLoading}
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '12px',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 4px 10px rgba(239, 68, 68, 0.2)',
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            ⏹️ Stop Extra Work
+          </button>
+        )}
+      </div>
+    )}
+  </div>
 
  {/* Attendance Analytics Card */}
  <div style={{
