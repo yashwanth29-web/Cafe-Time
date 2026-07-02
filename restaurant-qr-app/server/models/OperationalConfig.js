@@ -4,8 +4,12 @@ const OperationalConfigSchema = new mongoose.Schema({
   cafeId: {
     type: String,
     required: true,
-    unique: true,
     trim: true
+  },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
   },
   tables: [
     {
@@ -30,5 +34,7 @@ const OperationalConfigSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+OperationalConfigSchema.index({ cafeId: 1, branchId: 1 }, { unique: true });
 
 module.exports = mongoose.model('OperationalConfig', OperationalConfigSchema);

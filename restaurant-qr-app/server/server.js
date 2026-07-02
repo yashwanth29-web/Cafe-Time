@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const dotenv = require('dotenv');
 const path = require('path');
 
@@ -10,7 +11,6 @@ const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
 const orderRoutes = require('./routes/orderRoutes');
 const menuRoutes = require('./routes/menuRoutes');
-const paymentRoutes = require('./routes/paymentRoutes');
 const authRoutes = require('./routes/authRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
 const adminRoutes = require('./routes/adminRoutes');
@@ -20,7 +20,6 @@ const attendanceRoutes = require('./routes/attendanceRoutes');
 const workReportRoutes = require('./routes/workReportRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const cafeRoutes = require('./routes/cafeRoutes');
-const payrollRoutes = require('./routes/payrollRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 
 // Create Express instance
@@ -44,7 +43,10 @@ app.use(cookieParser());
 app.use(express.json()); // Body parser
 
 // Connect to Database
-connectDB();
+connectDB().then(() => {
+  const migrateData = require('./utils/migrate');
+  migrateData();
+});
 
 const fs = require('fs');
 
@@ -57,10 +59,13 @@ if (!fs.existsSync(uploadsDir)) {
 // Serve upload static assets
 app.use('/uploads', express.static(uploadsDir));
 
+// Attach branch context globally for all /api endpoints
+const { attachCafeAndBranch } = require('./middleware/branchMiddleware');
+app.use('/api', attachCafeAndBranch);
+
 // Mount Routes
 app.use('/api/orders', orderRoutes);
 app.use('/api/menu', menuRoutes);
-app.use('/api/payment', paymentRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/superadmin', superAdminRoutes);
 app.use('/api/admin', adminRoutes);
@@ -70,7 +75,6 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/work-reports', workReportRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/cafe', cafeRoutes);
-app.use('/api/payroll', payrollRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 
@@ -111,7 +115,12 @@ setInterval(() => {
   runAutoCleanup();
 }, 3600000);
 
+// Create HTTP server and initialize Socket.io
+const server = http.createServer(app);
+const socket = require('./socket');
+socket.init(server);
+
 // Start Listening
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });

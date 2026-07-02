@@ -24,13 +24,13 @@ const sendOTP = async (email, otp) => {
     }
 
     const { data, error } = await resend.emails.send({
-      from: 'Cypher\'s Café <onboarding@resend.dev>', // Free tier domain
+      from: 'Dr. Chai Cafe\'s Café <onboarding@resend.dev>', // Free tier domain
       to: email,
       subject: 'Your Cafe Access Verification Code',
       html: `
         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background-color: #FAF6F0; border-radius: 12px; border: 1px solid #E6D5C3; color: #4A3E3D;">
           <div style="text-align: center; margin-bottom: 25px;">
-            <h2 style="color: #6F4E37; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.5px;">Cypher's Café</h2>
+            <h2 style="color: #6F4E37; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.5px;">Dr. Chai Cafe</h2>
             <p style="color: #A0826C; margin: 5px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;">Staff & Owner Access</p>
           </div>
           
@@ -45,7 +45,7 @@ const sendOTP = async (email, otp) => {
           </div>
           
           <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #A0826C;">
-            <p style="margin: 0;">&copy; ${new Date().getFullYear()} Cypher's Café. All rights reserved.</p>
+            <p style="margin: 0;">&copy; ${new Date().getFullYear()} Dr. Chai Cafe. All rights reserved.</p>
           </div>
         </div>
       `
@@ -81,13 +81,13 @@ const sendWelcomeEmail = async (email, name, role, details) => {
     : '';
 
   const mailOptions = {
-    from: `"Cypher's Café" <${process.env.SMTP_EMAIL}>`,
+    from: `"Dr. Chai Cafe" <${process.env.SMTP_EMAIL}>`,
     to: email,
-    subject: 'Welcome to Cypher\'s Café - Account Registered',
+    subject: 'Welcome to Dr. Chai Cafe\'s Café - Account Registered',
     html: `
       <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background-color: #FAF6F0; border-radius: 12px; border: 1px solid #E6D5C3; color: #4A3E3D;">
         <div style="text-align: center; margin-bottom: 25px;">
-          <h2 style="color: #6F4E37; margin: 0; font-size: 28px; font-weight: 700;">Cypher's Café</h2>
+          <h2 style="color: #6F4E37; margin: 0; font-size: 28px; font-weight: 700;">Dr. Chai Cafe</h2>
           <p style="color: #A0826C; margin: 5px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;">Account Registered</p>
         </div>
         
@@ -110,7 +110,7 @@ const sendWelcomeEmail = async (email, name, role, details) => {
         </div>
         
         <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #A0826C;">
-          <p style="margin: 0;">&copy; ${new Date().getFullYear()} Cypher's Café. All rights reserved.</p>
+          <p style="margin: 0;">&copy; ${new Date().getFullYear()} Dr. Chai Cafe. All rights reserved.</p>
         </div>
       </div>
     `

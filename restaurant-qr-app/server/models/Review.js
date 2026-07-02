@@ -6,6 +6,11 @@ const ReviewSchema = new mongoose.Schema({
     required: true,
     default: 'CD001'
   },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
+  },
   orderId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Order',

@@ -237,7 +237,7 @@ const deleteInventoryItem = async (req, res) => {
 const getInventoryLogs = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    const logs = await InventoryLog.find({ cafeId }).sort({ createdAt: -1 });
+    const logs = await InventoryLog.find({ cafeId }).sort({ createdAt: -1 }).limit(200).lean();
     return res.status(200).json({ success: true, count: logs.length, data: logs });
   } catch (error) {
     console.error('getInventoryLogs error:', error);

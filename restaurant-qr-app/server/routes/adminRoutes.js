@@ -9,7 +9,6 @@ const {
   getStaff, 
   updateStaff,
   deleteStaff,
-  verifyRazorpay, 
   getSetupData, 
   saveSetupData, 
   updateOwnerProfile,
@@ -19,7 +18,7 @@ const {
   deleteBranch,
   getStaffSummary,
   uploadLogo,
-  updateCafeTheme 
+  updateCafeTheme
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -67,7 +66,6 @@ router.put('/profile/owner', restrictTo('admin', 'owner'), updateOwnerProfile);
 // Onboarding Setup routes
 router.get('/setup', restrictTo('admin', 'owner'), getSetupData);
 router.post('/setup', restrictTo('admin', 'owner'), saveSetupData);
-router.post('/verify-razorpay', restrictTo('admin', 'owner'), verifyRazorpay);
 router.post('/upload-logo', restrictTo('admin', 'owner'), upload.single('logo'), uploadLogo);
 router.put('/theme', restrictTo('admin', 'owner'), updateCafeTheme);
 

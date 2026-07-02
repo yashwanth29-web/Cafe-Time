@@ -35,7 +35,7 @@ const createMockReqRes = (body) => {
 };
 
 const runTests = async () => {
-  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/coffeedaycafe';
+  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/Dr. Chai Cafe';
   await mongoose.connect(uri);
   console.log('Connected to Database');
 

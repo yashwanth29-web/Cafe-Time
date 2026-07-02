@@ -50,4 +50,8 @@ const WorkReportSchema = new mongoose.Schema({
 WorkReportSchema.index({ cafeId: 1, date: -1 });
 WorkReportSchema.index({ cafeId: 1, branchId: 1, date: -1 });
 
+
+// Optimize queries bounded by branch
+WorkReportSchema.index({ cafeId: 1, branchId: 1 });
+
 module.exports = mongoose.model('WorkReport', WorkReportSchema);

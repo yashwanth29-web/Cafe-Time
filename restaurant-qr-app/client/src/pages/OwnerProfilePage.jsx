@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import OwnerLayout from '../components/OwnerLayout';
-import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff, verifyRazorpayKeys } from '../services/api';
+import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff } from '../services/api';
 
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
@@ -23,34 +23,10 @@ const OwnerProfilePage = () => {
   const [form, setForm] = useState({});
   const [editingBranchId, setEditingBranchId] = useState(null);
 
-  const [verifyingKeys, setVerifyingKeys] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedQrTable, setSelectedQrTable] = useState(null);
   const [taxRate, setTaxRateState] = useState(() => parseFloat(localStorage.getItem('owner_tax_rate') || '5'));
   const [serviceCharge, setServiceChargeState] = useState(() => parseFloat(localStorage.getItem('owner_service_charge') || '0'));
-
-  const testRazorpayConnection = async (keyId, secret) => {
-    if (!keyId || !secret) {
-      showToast('Key ID and Secret are required to test.', false);
-      return;
-    }
-    setVerifyingKeys(true);
-    try {
-      const res = await verifyRazorpayKeys(keyId, secret);
-      if (res.success) {
-        showToast('Razorpay connection verified successfully!');
-        setForm((f) => ({ ...f, isVerified: true }));
-      } else {
-        showToast('Verification failed. Check credentials.', false);
-        setForm((f) => ({ ...f, isVerified: false }));
-      }
-    } catch (err) {
-      showToast('Verification failed: Bad credentials.', false);
-      setForm((f) => ({ ...f, isVerified: false }));
-    } finally {
-      setVerifyingKeys(false);
-    }
-  };
 
   const handleCopyUrl = (table) => {
     const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}`;
@@ -117,8 +93,8 @@ const OwnerProfilePage = () => {
       owner: { name: user?.name || '', phone: user?.phone || '' },
       cafe: { name: cafeData?.name || '', businessType: cafeData?.businessType || 'Cafe', branchCount: cafeData?.branchCount || 1, gstNumber: cafeData?.gstNumber || '' },
       location: { address: cafeData?.address || '', city: cafeData?.city || '', state: cafeData?.state || '', pincode: cafeData?.pincode || '', mapsLocation: cafeData?.mapsLocation || '' },
-      hours: { openingTime: cafeData?.openingTime || '', closingTime: cafeData?.closingTime || '', supportNumber: cafeData?.supportNumber || '' },
-      payment: { razorpayKeyId: paymentConfig?.razorpayKeyId || '', razorpaySecret: '', upiId: paymentConfig?.upiId || '', bankHolderName: paymentConfig?.bankHolderName || '', accountNumber: paymentConfig?.accountNumber || '', ifscCode: paymentConfig?.ifscCode || '', taxRate: taxRate, serviceCharge: serviceCharge, isVerified: paymentConfig?.isVerified || false },
+      hours: { openingTime: cafeData?.openingTime || '', closingTime: cafeData?.closingTime || '', supportNumber: cafeData?.supportNumber || '', requiredDailyHours: cafeData?.requiredDailyHours || 8 },
+      payment: { upiId: paymentConfig?.upiId || '', bankHolderName: paymentConfig?.bankHolderName || '', accountNumber: paymentConfig?.accountNumber || '', ifscCode: paymentConfig?.ifscCode || '', taxRate: taxRate, serviceCharge: serviceCharge },
       ops: { tableCount: operationalConfig?.tables ? operationalConfig.tables.length : 5, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
       theme: { themeMode: themeMode, uiPrimaryColor: primaryColor },
       branch: { branchName: '', address: '', manager: '' },
@@ -299,6 +275,8 @@ const OwnerProfilePage = () => {
         <input className="minput" id="profile-closing-time" name="profile-closing-time" type="time" value={form.closingTime || ''} onChange={fld('closingTime')} />
         <label className="mlabel" htmlFor="profile-support-phone">Support Phone Number</label>
         <input className="minput" id="profile-support-phone" name="profile-support-phone" type="tel" value={form.supportNumber || ''} onChange={fld('supportNumber')} placeholder="+91 XXXXXXXXXX" />
+        <label className="mlabel" htmlFor="profile-required-hours">Required Daily Hours</label>
+        <input className="minput" id="profile-required-hours" name="profile-required-hours" type="number" min={1} max={24} value={form.requiredDailyHours !== undefined ? form.requiredDailyHours : 8} onChange={fld('requiredDailyHours')} placeholder="e.g. 8" />
       </>,
 
     payment:

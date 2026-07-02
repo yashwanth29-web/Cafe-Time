@@ -87,4 +87,8 @@ AttendanceSchema.index({ staffId: 1, date: 1 }, { unique: true });
 AttendanceSchema.index({ cafeId: 1, date: -1 });
 AttendanceSchema.index({ cafeId: 1, branchId: 1, date: -1 });
 
+
+// Optimize queries bounded by branch
+AttendanceSchema.index({ cafeId: 1, branchId: 1 });
+
 module.exports = mongoose.model('Attendance', AttendanceSchema);

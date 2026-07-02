@@ -135,7 +135,7 @@ const getStaff = async (req, res) => {
       query._id = { $ne: req.user._id };
     }
 
-    const staff = await User.find(query).sort({ createdAt: -1 });
+    const staff = await User.find(query).select('-password').sort({ createdAt: -1 }).lean();
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -149,7 +149,7 @@ const getStaff = async (req, res) => {
       });
       
       return {
-        ...s.toObject(),
+        ...s,
         ordersHandledToday: ordersCount
       };
     }));

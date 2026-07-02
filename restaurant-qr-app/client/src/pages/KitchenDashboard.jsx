@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getOrders, updateOrderStatus, getInventory, reportShortage, getMenu, getAssetUrl } from '../services/api';
+import socket, { connectSocket } from '../socket';
 import OrderCard from '../components/OrderCard';
 import '../styles/App.css';
 
@@ -137,7 +138,7 @@ const KitchenDashboard = () =>{
  osc2.stop(audioContext.currentTime + 0.2);
  }, 150);
  } catch (e) {
- console.log('Audio error:', e);
+ 
  }
  };
 
@@ -206,22 +207,40 @@ const KitchenDashboard = () =>{
    }
    };
 
-  useEffect(() =>{
-  fetchOrders();
+  useEffect(() => {
+    fetchOrders();
 
-  const pollingInterval = setInterval(() =>{
-  fetchOrders();
-  setRefreshCountdown(12);
-  }, 12000);
+    if (user && user.cafeId) {
+      connectSocket(user.cafeId, user.assignedBranch);
 
-  const countdownInterval = setInterval(() =>{
-  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
-  }, 1000);
+      const handleOrderCreated = (newOrder) => {
+        setOrders((prev) => {
+          if (prev.some((o) => o._id === newOrder._id)) return prev;
+          
+          playNotificationSound();
+          speakNewOrder(newOrder);
+          seenOrderIdsRef.current.add(newOrder._id);
+          
+          return [newOrder, ...prev];
+        });
+      };
 
-  return () =>{
-  clearInterval(pollingInterval);
-  clearInterval(countdownInterval);
-  };
+      const handleOrderUpdated = (updatedOrder) => {
+        setOrders((prev) =>
+          prev.map((order) =>
+            order._id === updatedOrder._id ? updatedOrder : order
+          ).filter(order => order.status === 'Placed' || order.status === 'Preparing' || order.status === 'Ready')
+        );
+      };
+
+      socket.on('order_created', handleOrderCreated);
+      socket.on('order_updated', handleOrderUpdated);
+
+      return () => {
+        socket.off('order_created', handleOrderCreated);
+        socket.off('order_updated', handleOrderUpdated);
+      };
+    }
   }, [user]);
 
  const handleStatusUpdate = async (id, newStatus) =>{

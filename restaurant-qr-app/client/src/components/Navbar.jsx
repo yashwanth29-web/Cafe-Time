@@ -5,8 +5,8 @@ const Navbar = ({ tableNumber, cartItemCount }) => {
   return (
     <nav className="navbar">
       <Link to="/" className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <img src="/logo.png" alt="Cypher's Café Logo" style={{ height: '40px', width: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #6F4E37' }} />
-        <span className="nav-brand-text">Cypher's Café</span>
+        <img src="/logo.svg" alt="Dr. Chai Cafe Logo" style={{ height: '40px', width: '40px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #6F4E37' }} />
+        <span className="nav-brand-text">Dr. Chai Cafe</span>
       </Link>
       <div className="nav-right">
         {tableNumber && (

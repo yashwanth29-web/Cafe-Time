@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const { deductInventoryForOrder } = require('./inventoryController');
+const socket = require('../socket');
 
 // @desc    Create a new order
 // @route   POST /api/orders
@@ -38,6 +39,12 @@ const createOrder = async (req, res) => {
     
     // Auto deduct inventory stock
     await deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items);
+
+    // Emit real-time socket event to all dashboards
+    const io = socket.getIO();
+    if (io) {
+      io.to(`cafe_${savedOrder.cafeId}`).emit('order_created', savedOrder);
+    }
 
     return res.status(201).json({ success: true, data: savedOrder });
   } catch (error) {
@@ -79,7 +86,7 @@ const getOrders = async (req, res) => {
       }
     }
 
-    const orders = await Order.find(filterQuery).sort({ createdAt: -1 });
+    const orders = await Order.find(filterQuery).sort({ createdAt: -1 }).limit(200).lean();
     return res.status(200).json({ success: true, count: orders.length, data: orders });
   } catch (error) {
     console.error('Error fetching orders:', error);
@@ -93,7 +100,7 @@ const getOrders = async (req, res) => {
 const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    let order = await Order.findById(id);
+    let order = await Order.findById(id).lean();
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
@@ -157,9 +164,18 @@ const updateOrderStatus = async (req, res) => {
       await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
       // Fetch latest document status
       const latestOrder = await Order.findById(id);
+      
+      const io = socket.getIO();
+      if (io) {
+        io.to(`cafe_${updatedOrder.cafeId}`).emit('order_updated', latestOrder || updatedOrder);
+      }
       return res.status(200).json({ success: true, data: latestOrder || updatedOrder });
     }
 
+    const io = socket.getIO();
+    if (io) {
+      io.to(`cafe_${updatedOrder.cafeId}`).emit('order_updated', updatedOrder);
+    }
     return res.status(200).json({ success: true, data: updatedOrder });
   } catch (error) {
     console.error('Error updating order status:', error);
@@ -182,12 +198,17 @@ const updateOrderPaymentMethod = async (req, res) => {
 
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
-      { paymentMethod },
-      { returnDocument: 'after', runValidators: true }
+      { paymentMethod, paymentStatus: 'Paid' },
+      { new: true, runValidators: true }
     );
 
     if (!updatedOrder) {
       return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const io = socket.getIO();
+    if (io) {
+      io.to(`cafe_${updatedOrder.cafeId}`).emit('order_updated', updatedOrder);
     }
 
     return res.status(200).json({ success: true, data: updatedOrder });

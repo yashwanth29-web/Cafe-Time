@@ -10,7 +10,7 @@ const Branch = require('./models/Branch');
 const Attendance = require('./models/Attendance');
 
 const inspect = async () => {
-  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/coffeedaycafe';
+  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/Dr. Chai Cafe';
   console.log('Connecting to database:', uri);
   await mongoose.connect(uri);
   console.log('Connected!');

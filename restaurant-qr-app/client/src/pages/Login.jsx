@@ -16,7 +16,7 @@ const Login = () => {
   useEffect(() => {
     if (user) {
       const userRole = (user.role || '').toLowerCase();
-      console.log('User already logged in. Redirecting role:', userRole);
+      
       if (userRole === 'super_admin') {
         navigate('/super-admin/dashboard', { replace: true });
       } else if (userRole === 'admin' || userRole === 'owner') {
@@ -56,8 +56,8 @@ const Login = () => {
       <div className="auth-wrapper">
       <div className="auth-card">
         <div className="auth-brand">
-          <img src="/logo.png" alt="Cypher's Café Logo" style={{ height: '75px', width: '75px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #6F4E37', marginBottom: '12px', display: 'inline-block' }} />
-          <h1>Cypher's Café</h1>
+          <img src="/logo.svg" alt="Dr. Chai Cafe Logo" style={{ height: '75px', width: '75px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #6F4E37', marginBottom: '12px', display: 'inline-block' }} />
+          <h1>Dr. Chai Cafe</h1>
           <p>Login Portal</p>
         </div>
 

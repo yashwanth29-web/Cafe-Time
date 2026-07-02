@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import UpiPayment from '../components/UpiPayment';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 
@@ -103,7 +102,7 @@ const OrderHistory = ({ cafeId }) => {
   const speakThankYou = () => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cafeNameStr = cafeInfo?.name || 'CoffeeDay Cafe';
+      const cafeNameStr = cafeInfo?.name || 'Dr. Chai Cafe';
       const text = `Payment successful. Thank you for visiting ${cafeNameStr}! Have a wonderful day.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.95;
@@ -525,74 +524,15 @@ const OrderHistory = ({ cafeId }) => {
 
                   {/* Payment Options */}
                   {isServed && !isPaid && (
-                    <div style={{ background: 'rgba(0, 0, 0, 0.02)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '8px', borderRadius: '8px' }}>
-                      {order.paymentMethod === 'Counter' ? (
-                        <div>
-                          <h4 style={{ color: 'var(--color-text-primary)', fontSize: '11px', fontWeight: '800', margin: '0 0 2px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            🏪 Counter Payment Requested
-                          </h4>
-                          <p style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: '1.3', margin: '0 0 6px 0' }}>
-                            Proceed to cashier and share <strong>Table {order.tableNumber}</strong>.
-                          </p>
-                          <button
-                            onClick={() => handleCancelCounterPayRequest(order._id)}
-                            disabled={loading}
-                            className="btn btn-secondary"
-                            style={{ padding: '4px 6px', fontSize: '10.5px', width: '100%', cursor: loading ? 'not-allowed' : 'pointer' }}>
-                            Change to Pay Online
-                          </button>
-                        </div>
-                      ) : (
-                        <div>
-                          <h4 style={{ color: 'var(--color-text-primary)', fontSize: '11px', fontWeight: '800', margin: '0 0 6px 0', textAlign: 'center' }}>
-                            Select Payment Method
-                          </h4>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <UpiPayment
-                              cart={order.items.map((it) => ({ item: it, quantity: it.quantity }))}
-                              tableNumber={order.tableNumber}
-                              customerDetails={{
-                                name: customerName || order.customerName || 'Customer',
-                                email: customerEmail || order.customerEmail || 'customer@example.com',
-                                phone: customerPhone || order.customerPhone || '9999999999'
-                              }}
-                              specialInstructions={order.specialInstructions}
-                              existingOrderId={order._id}
-                              cafeId={cafeId || order.cafeId || 'CD001'}
-                              buttonText="Pay Online (UPI)"
-                              onPaymentSuccess={(updatedOrder) => {
-                                setActiveOrders((prev) => prev.map((o) => o._id === order._id ? updatedOrder : o));
-                                triggerPaidFeedback(order._id);
-                              }}
-                              onPaymentError={(err) => {
-                                setErrorMsg(err);
-                              }}
-                            />
-                            <button
-                              onClick={() => handleCounterPayRequest(order._id)}
-                              disabled={loading}
-                              className="btn btn-secondary"
-                              style={{
-                                padding: '6px',
-                                fontSize: '11px',
-                                fontWeight: '700',
-                                width: '100%',
-                                borderRadius: '6px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '4px',
-                                cursor: loading ? 'not-allowed' : 'pointer',
-                                border: '1px solid var(--color-border)',
-                                color: 'var(--color-text-primary)',
-                                background: 'rgba(0, 0, 0, 0.03)'
-                              }}>
-                              <span>🏪</span>
-                              <span>Pay at Counter</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                    <div style={{ background: 'rgba(0, 0, 0, 0.02)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '10px', borderRadius: '8px' }}>
+                      <div>
+                        <h4 style={{ color: 'var(--color-text-primary)', fontSize: '11px', fontWeight: '800', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          💵 Cash Payment at Counter
+                        </h4>
+                        <p style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: '1.3', margin: '0' }}>
+                          Please proceed to the cashier counter to complete your payment with cash. Share your <strong>Table {order.tableNumber}</strong>.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>

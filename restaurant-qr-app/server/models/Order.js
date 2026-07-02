@@ -29,6 +29,11 @@ const OrderSchema = new mongoose.Schema({
     required: true,
     default: 'CD001'
   },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
+  },
   tableNumber: {
     type: String,
     required: true
@@ -101,8 +106,12 @@ const OrderSchema = new mongoose.Schema({
 });
 
 // Indexes for scalability and query optimization
-OrderSchema.index({ cafeId: 1, createdAt: -1 });
-OrderSchema.index({ cafeId: 1, status: 1 });
-OrderSchema.index({ cafeId: 1, tableNumber: 1, status: 1 });
+OrderSchema.index({ cafeId: 1, branchId: 1, createdAt: -1 });
+OrderSchema.index({ cafeId: 1, branchId: 1, status: 1 });
+OrderSchema.index({ cafeId: 1, branchId: 1, tableNumber: 1, status: 1 });
+
+
+// Optimize queries bounded by branch
+OrderItemSchema.index({ cafeId: 1, branchId: 1 });
 
 module.exports = mongoose.model('Order', OrderSchema);

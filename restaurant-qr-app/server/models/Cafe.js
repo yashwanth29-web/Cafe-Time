@@ -103,10 +103,14 @@ const CafeSchema = new mongoose.Schema({
     type: Date,
     default: () => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
   },
+  requiredDailyHours: {
+    type: Number,
+    default: 8
+  },
   createdAt: {
     type: Date,
     default: Date.now
   }
 });
 
-module.exports = mongoose.model('Cafe', CafeSchema);
+module.exports = mongoose.model('Cafe', CafeSchema, 'cafes');

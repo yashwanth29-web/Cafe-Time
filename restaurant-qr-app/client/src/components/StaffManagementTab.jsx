@@ -248,53 +248,13 @@ const StaffManagementTab = () => {
 
               {/* Salary Configuration Fields */}
               <div style={{ borderTop: '1px solid var(--color-border)', pt: '12px', mt: '12px', mb: '16px' }}>
-                <h4 style={{ margin: '12px 0 10px 0', color: 'var(--color-primary)', fontSize: '0.95rem' }}>Salary & Payroll Configuration</h4>
+                <h4 style={{ margin: '12px 0 10px 0', color: 'var(--color-primary)', fontSize: '0.95rem' }}>Salary & Wage Configuration</h4>
                 
                 <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Salary Type *</label>
-                  <select value={form.salaryType} onChange={fld('salaryType')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}>
-                    <option value="DAILY">Daily Pay (rate per day completed)</option>
-                    <option value="HOURLY">Hourly Pay (rate per active hours)</option>
-                    <option value="WEEKLY">Weekly Salaried (fixed weekly amount)</option>
-                    <option value="MONTHLY">Monthly Salaried (fixed monthly amount)</option>
-                  </select>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Daily Wage (₹) *</label>
+                  <input type="number" required min="0" value={form.dailyRate} onChange={fld('dailyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
                 </div>
-
-                {form.salaryType === 'DAILY' && (
-                  <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Daily Rate (₹) *</label>
-                    <input type="number" required min="0" value={form.dailyRate} onChange={fld('dailyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
-                  </div>
-                )}
-
-                {form.salaryType === 'HOURLY' && (
-                  <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Hourly Rate (₹) *</label>
-                    <input type="number" required min="0" value={form.hourlyRate} onChange={fld('hourlyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
-                  </div>
-                )}
-
-                {form.salaryType === 'WEEKLY' && (
-                  <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Weekly Rate (₹) *</label>
-                    <input type="number" required min="0" value={form.weeklyRate} onChange={fld('weeklyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
-                  </div>
-                )}
-
-                {form.salaryType === 'MONTHLY' && (
-                  <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Monthly Rate (₹) *</label>
-                    <input type="number" required min="0" value={form.monthlyRate} onChange={fld('monthlyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
-                  </div>
-                )}
-
-                {/* Overtime Rate Configuration */}
-                {(form.salaryType === 'DAILY' || form.salaryType === 'WEEKLY' || form.salaryType === 'MONTHLY') && (
-                  <div style={{ marginBottom: '12px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Overtime Hourly Rate (₹) - Optional</label>
-                    <input type="number" min="0" value={form.hourlyRate} onChange={fld('hourlyRate')} placeholder="Leave 0 to use auto prorated rate" style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
-                  </div>
-                )}
+              </div>
 
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
                   <div style={{ flex: 1 }}>

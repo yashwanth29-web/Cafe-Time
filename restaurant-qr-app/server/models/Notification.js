@@ -6,6 +6,16 @@ const NotificationSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  cafeId: {
+    type: String,
+    required: true,
+    default: 'CD001'
+  },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
+  },
   title: {
     type: String,
     required: true

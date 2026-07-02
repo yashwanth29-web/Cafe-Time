@@ -1,28 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import CustomerMenu from './pages/CustomerMenu';
-import CartPage from './pages/CartPage';
-import OrderHistory from './pages/OrderHistory';
-import OwnerDashboard from './pages/OwnerDashboard';
-import PaymentDemo from './pages/PaymentDemo';
-import Login from './pages/Login';
-import SuperAdminDashboard from './pages/SuperAdminDashboard';
-import StaffDashboard from './pages/StaffDashboard';
-import OwnerSetup from './pages/OwnerSetup';
-import OwnerProfilePage from './pages/OwnerProfilePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
-import KitchenDashboard from './pages/KitchenDashboard';
-import WaiterDashboard from './pages/WaiterDashboard';
-import CashierDashboard from './pages/CashierDashboard';
-import ManagerDashboard from './pages/ManagerDashboard';
-import OwnerPayrollPage from './pages/OwnerPayrollPage';
-import EmployeePayrollPage from './pages/EmployeePayrollPage';
+import { BranchProvider } from './context/BranchContext';
 import './styles/App.css';
 import SaaSLayout from './components/SaaSLayout';
-import Unauthorized from './pages/Unauthorized';
+
+const CustomerMenu = React.lazy(() => import('./pages/CustomerMenu'));
+const CartPage = React.lazy(() => import('./pages/CartPage'));
+const OrderHistory = React.lazy(() => import('./pages/OrderHistory'));
+const OwnerDashboard = React.lazy(() => import('./pages/OwnerDashboard'));
+const Login = React.lazy(() => import('./pages/Login'));
+const SuperAdminDashboard = React.lazy(() => import('./pages/SuperAdminDashboard'));
+const StaffDashboard = React.lazy(() => import('./pages/StaffDashboard'));
+const OwnerSetup = React.lazy(() => import('./pages/OwnerSetup'));
+const OwnerProfilePage = React.lazy(() => import('./pages/OwnerProfilePage'));
+const KitchenDashboard = React.lazy(() => import('./pages/KitchenDashboard'));
+const WaiterDashboard = React.lazy(() => import('./pages/WaiterDashboard'));
+const CashierDashboard = React.lazy(() => import('./pages/CashierDashboard'));
+const ManagerDashboard = React.lazy(() => import('./pages/ManagerDashboard'));
+const EmployeePayrollPage = React.lazy(() => import('./pages/EmployeePayrollPage'));
+const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
 
 function AppContent() {
   const [cart, setCart] = useState([]);
@@ -56,7 +56,7 @@ function AppContent() {
     if (tableParam) {
       setTableNumber(tableParam);
       sessionStorage.setItem('tableNumber', tableParam);
-      console.log(`Updated table number from URL: ${tableParam}`);
+      
     }
   }, [tableParam]);
 
@@ -65,12 +65,12 @@ function AppContent() {
     if (cafeIdParam) {
       setCafeId(cafeIdParam);
       sessionStorage.setItem('cafeId', cafeIdParam);
-      console.log(`Updated cafe ID from URL: ${cafeIdParam}`);
+      
     }
   }, [cafeIdParam]);
 
   // Cart operations
-  const addToCart = (item) => {
+  const addToCart = useCallback((item) => {
     setCart((prevCart) => {
       const existing = prevCart.find((cartItem) => cartItem.item.id === item.id);
       if (existing) {
@@ -82,9 +82,9 @@ function AppContent() {
       }
       return [...prevCart, { item, quantity: 1 }];
     });
-  };
+  }, []);
 
-  const increaseQuantity = (id) => {
+  const increaseQuantity = useCallback((id) => {
     setCart((prevCart) =>
       prevCart.map((cartItem) =>
         cartItem.item.id === id
@@ -92,9 +92,9 @@ function AppContent() {
           : cartItem
       )
     );
-  };
+  }, []);
 
-  const decreaseQuantity = (id) => {
+  const decreaseQuantity = useCallback((id) => {
     setCart((prevCart) => {
       const existing = prevCart.find((cartItem) => cartItem.item.id === id);
       if (existing && existing.quantity === 1) {
@@ -107,17 +107,17 @@ function AppContent() {
           : cartItem
       );
     });
-  };
+  }, []);
 
-  const removeFromCart = (id) => {
+  const removeFromCart = useCallback((id) => {
     setCart((prevCart) => prevCart.filter((cartItem) => cartItem.item.id !== id));
-  };
+  }, []);
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setCart([]);
-  };
+  }, []);
 
-  const totalItemCount = cart.reduce((acc, curr) => acc + curr.quantity, 0);
+  const totalItemCount = useMemo(() => cart.reduce((acc, curr) => acc + curr.quantity, 0), [cart]);
 
   // Determine if we are on an administrative or auth portal page to hide customer elements
   const isAdminOrAuthRoute = 
@@ -138,8 +138,9 @@ function AppContent() {
       )}
       
       <main className={`main-content${isAdminOrAuthRoute ? ' admin-full-width' : ''}`}>
-        <Routes>
-          {/* Customer / Ordering Flow */}
+        <Suspense fallback={<div className="app-loading-screen" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#e67e22', fontSize: '1.2rem'}}>Loading Dr. Chai Cafe...</div>}>
+          <Routes>
+            {/* Customer / Ordering Flow */}
           <Route 
             path="/" 
             element={
@@ -216,11 +217,7 @@ function AppContent() {
           <Route 
             path="/owner/payroll" 
             element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager']}>
-                <SaaSLayout>
-                  <OwnerPayrollPage />
-                </SaaSLayout>
-              </ProtectedRoute>
+              <Navigate to="/owner/dashboard?tab=staff&sub=salary" replace />
             } 
           />
           <Route 
@@ -296,14 +293,11 @@ function AppContent() {
 
           {/* Legacy & Demo routes */}
           <Route 
-            path="/payment-demo" 
-            element={<PaymentDemo />} 
-          />
-          <Route 
             path="/dashboard" 
             element={<Navigate to="/admin" replace />} 
           />
-        </Routes>
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );
@@ -314,7 +308,9 @@ function App() {
     <Router>
       <AuthProvider>
         <ThemeProvider>
-          <AppContent />
+          <BranchProvider>
+            <AppContent />
+          </BranchProvider>
         </ThemeProvider>
       </AuthProvider>
     </Router>

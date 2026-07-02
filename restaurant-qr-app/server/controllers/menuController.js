@@ -1,6 +1,7 @@
 const MenuItem = require('../models/MenuItem');
 const { updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
 const menuCache = require('../utils/menuCache');
+const socket = require('../socket');
 
 // @desc    Get all menu items
 // @route   GET /api/menu
@@ -11,7 +12,7 @@ const getMenuItems = async (req, res) => {
     if (cached) {
       return res.status(200).json({ success: true, count: cached.length, data: cached });
     }
-    const menuItems = await MenuItem.find().sort({ category: 1, name: 1 });
+    const menuItems = await MenuItem.find().select('-__v -createdAt -updatedAt').sort({ category: 1, name: 1 }).lean();
     menuCache.setMenu(menuItems);
     return res.status(200).json({ success: true, count: menuItems.length, data: menuItems });
   } catch (error) {
@@ -25,7 +26,7 @@ const getMenuItems = async (req, res) => {
 // @access  Public (Owner Dashboard)
 const createMenuItem = async (req, res) => {
   try {
-    const { name, price, category, description, available, image, recipe, preparationTime } = req.body;
+    const { name, price, originalPrice, category, description, available, isCombo, image, recipe, preparationTime } = req.body;
 
     // Simple validation
     if (!name || price === undefined || !category || !description) {
@@ -35,9 +36,11 @@ const createMenuItem = async (req, res) => {
     const newMenuItem = new MenuItem({
       name,
       price: parseFloat(price),
+      originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
       category,
       description,
       available: available !== undefined ? available : true,
+      isCombo: isCombo !== undefined ? isCombo : false,
       image: image || '/images/default-food.png',
       recipe: recipe || [],
       preparationTime: preparationTime ? parseInt(preparationTime) : 10
@@ -54,6 +57,11 @@ const createMenuItem = async (req, res) => {
 
     // Clear menu cache since a new item was added
     menuCache.clearMenu();
+
+    const io = socket.getIO();
+    if (io) {
+      io.to(`cafe_${cafeId}`).emit('menu_updated', latestItem || savedItem);
+    }
 
     return res.status(201).json({ success: true, data: latestItem || savedItem });
   } catch (error) {
@@ -72,6 +80,10 @@ const updateMenuItem = async (req, res) => {
 
     if (updateData.price !== undefined) {
       updateData.price = parseFloat(updateData.price);
+    }
+    
+    if (updateData.originalPrice !== undefined) {
+      updateData.originalPrice = updateData.originalPrice ? parseFloat(updateData.originalPrice) : null;
     }
 
     if (updateData.preparationTime !== undefined) {
@@ -97,6 +109,11 @@ const updateMenuItem = async (req, res) => {
 
     // Clear menu cache since an item was updated
     menuCache.clearMenu();
+
+    const io = socket.getIO();
+    if (io) {
+      io.to(`cafe_${cafeId}`).emit('menu_updated', latestItem || updatedItem);
+    }
 
     return res.status(200).json({ success: true, data: latestItem || updatedItem });
   } catch (error) {

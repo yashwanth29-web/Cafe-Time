@@ -6,6 +6,11 @@ const InventoryLogSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
+  },
   itemId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Inventory',
@@ -42,5 +47,9 @@ const InventoryLogSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+
+// Optimize queries bounded by branch
+InventoryLogSchema.index({ cafeId: 1, branchId: 1 });
 
 module.exports = mongoose.model('InventoryLog', InventoryLogSchema);

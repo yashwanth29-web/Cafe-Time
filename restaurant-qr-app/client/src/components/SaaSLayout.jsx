@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getInventory, getNotifications, markNotificationRead } from '../services/api';
+import BranchSwitcher from './BranchSwitcher';
 
 const SaaSLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -148,7 +149,6 @@ const SaaSLayout = ({ children }) => {
         { label: 'Business Stats', icon: '📈', path: '/owner/dashboard' },
         { label: 'Menu & Reviews', icon: '🍽️', path: '/owner/dashboard?tab=menu' },
         { label: 'Staff & Reports', icon: '👥', path: '/owner/dashboard?tab=staff' },
-        { label: 'Staff Payroll', icon: '💵', path: '/owner/payroll' },
         { label: 'Inventory', icon: '📦', path: '/owner/dashboard?tab=inventory' },
         { label: 'Monitor Orders', icon: '👁️', path: '/owner/dashboard?tab=orders' }];
 
@@ -157,7 +157,6 @@ const SaaSLayout = ({ children }) => {
         { label: 'Operational Stats', icon: '💼', path: '/manager/dashboard' },
         { label: 'Order Log', icon: '📋', path: '/manager/dashboard?tab=orders' },
         { label: 'Staff Attendance', icon: '👥', path: '/manager/dashboard?tab=attendance' },
-        { label: 'Staff Payroll', icon: '💵', path: '/owner/payroll' },
         { label: 'Ingredient Stock', icon: '📦', path: '/manager/dashboard?tab=inventory' },
         { label: 'Cafe Menu', icon: '📋', path: '/manager/dashboard?tab=menu' }];
 
@@ -169,7 +168,7 @@ const SaaSLayout = ({ children }) => {
         { label: 'Cafe Menu & Recipes', icon: '📋', path: '/kitchen/dashboard?tab=menu' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
-        { label: 'My Payroll', icon: '💵', path: '/employee/payroll' }];
+        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
 
       case 'waiter':
       case 'staff':
@@ -177,7 +176,7 @@ const SaaSLayout = ({ children }) => {
         { label: 'Live Orders', icon: '🛍️', path: '/waiter/dashboard' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
-        { label: 'My Payroll', icon: '💵', path: '/employee/payroll' }];
+        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
 
       case 'cashier':
         return [
@@ -186,7 +185,7 @@ const SaaSLayout = ({ children }) => {
         { label: 'Item Availability', icon: '📦', path: '/cashier/dashboard?tab=inventory' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
-        { label: 'My Payroll', icon: '💵', path: '/employee/payroll' }];
+        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
 
       default:
         return [];
@@ -449,7 +448,7 @@ const SaaSLayout = ({ children }) => {
             title="Go to Home"
           >
             <div className="mh-logo">☕</div>
-            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>Cypher's Café</span>
+            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>Dr. Chai Cafe</span>
           </div>
           <button className="drawer-close-btn" onClick={() => setMobileDrawerOpen(false)}>×</button>
         </div>
@@ -533,7 +532,7 @@ const SaaSLayout = ({ children }) => {
             title="Go to Home"
           >
             <div className="mh-logo">☕</div>
-            <span className="mh-name">Cypher's Café</span>
+            <span className="mh-name">Dr. Chai Cafe</span>
           </div>
         </div>
         <div className="mh-actions">
@@ -688,7 +687,7 @@ const SaaSLayout = ({ children }) => {
             </div>
             {!sidebarCollapsed &&
             <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
-                Cypher's Café
+                Dr. Chai Cafe
               </span>
             }
           </div>
@@ -724,6 +723,19 @@ const SaaSLayout = ({ children }) => {
             {sidebarCollapsed ? '▶' : '◀'}
           </button>
         </div>
+
+        {/* Branch Switcher in Sidebar (owner/admin only) */}
+        {['admin', 'owner'].includes(userRole) && (
+          <div style={{
+            padding: sidebarCollapsed ? '8px 6px' : '10px 12px',
+            borderBottom: '1px solid #2d2d2d',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: sidebarCollapsed ? 'center' : 'flex-start'
+          }}>
+            <BranchSwitcher collapsed={sidebarCollapsed} />
+          </div>
+        )}
 
         {/* Navigation Items (Scrollable) */}
         <nav style={{
@@ -787,24 +799,29 @@ const SaaSLayout = ({ children }) => {
           top: 0,
           flexShrink: 0
         }}>
-          {/* Left: Branch Indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{
-              background: 'rgba(46, 204, 113, 0.12)',
-              color: '#2ecc71',
-              padding: '6px 12px',
-              borderRadius: '20px',
-              fontSize: '12.5px',
-              fontWeight: 800,
-              letterSpacing: '0.5px'
-            }}>
-              ● LIVE
-            </span>
-            {user.cafeId &&
-            <span style={{ fontSize: '13.5px', color: '#A0826C', fontWeight: 600 }}>
-                Cafe ID: <strong style={{ color: 'var(--color-text-primary)' }}>{user.cafeId}</strong>
-              </span>
-            }
+          {/* Left: Branch Switcher + Live Indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {['admin', 'owner'].includes(userRole) && <BranchSwitcher collapsed={false} />}
+            {!['admin', 'owner'].includes(userRole) && (
+              <>
+                <span style={{
+                  background: 'rgba(46, 204, 113, 0.12)',
+                  color: '#2ecc71',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  fontSize: '12.5px',
+                  fontWeight: 800,
+                  letterSpacing: '0.5px'
+                }}>
+                  ● LIVE
+                </span>
+                {user.cafeId && (
+                  <span style={{ fontSize: '13.5px', color: '#A0826C', fontWeight: 600 }}>
+                    Cafe ID: <strong style={{ color: 'var(--color-text-primary)' }}>{user.cafeId}</strong>
+                  </span>
+                )}
+              </>
+            )}
           </div>
 
           {/* Right: Actions */}

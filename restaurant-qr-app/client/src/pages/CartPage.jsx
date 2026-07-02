@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CartItem from '../components/CartItem';
-import RazorpayPayment from '../components/RazorpayPayment';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 import { useAuth } from '../context/AuthContext';
+import socket, { connectSocket } from '../socket';
 
 const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
   const navigate = useNavigate();
@@ -105,7 +105,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   const speakThankYou = () => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cafeNameStr = cafeInfo?.name || 'CoffeeDay Cafe';
+      const cafeNameStr = cafeInfo?.name || 'Dr. Chai Cafe';
       const text = `Payment successful. Thank you for visiting ${cafeNameStr}! Have a wonderful day.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.95;
@@ -188,76 +188,51 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
     fetchActiveOrders();
   }, []);
 
-  // Poll order status if order was successfully placed
+  // Real-time order status updates via Socket.IO
   useEffect(() => {
-    if (!success || activeOrders.length === 0 && completedOrders.length === 0) return;
+    if (!success || (activeOrders.length === 0 && completedOrders.length === 0)) return;
+    
+    // Auto-connect to cafe room
+    connectSocket(cafeId);
 
-    const pollInterval = setInterval(async () => {
+    const handleOrderUpdated = (updatedOrder) => {
+      // Check if this updated order belongs to this customer's session
       const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-      if (activeIds.length === 0 && activeOrders.length === 0) {
-        return;
-      }
-
-      let changed = false;
-      const updatedList = [];
-      const newlyCompleted = [];
-      let updatedIds = [...activeIds];
       const currentCompIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
-      let updatedCompIds = [...currentCompIds];
-
-      for (const order of activeOrders) {
-        try {
-          const res = await getOrderById(order._id);
-          if (res.success) {
-            if (res.data.paymentStatus === 'Paid' || res.data.status === 'Completed') {
-              updatedIds = updatedIds.filter((x) => x !== order._id);
-              if (!updatedCompIds.includes(order._id)) updatedCompIds.push(order._id);
-              newlyCompleted.push(res.data);
-              changed = true;
-              triggerPaidFeedback(order._id);
-              // Clear customer details on completion
-              localStorage.removeItem('customerName');
-              localStorage.removeItem('customerEmail');
-              localStorage.removeItem('customerPhone');
-            } else {
-              updatedList.push(res.data);
-              if (
-              res.data.status !== order.status ||
-              res.data.paymentStatus !== order.paymentStatus ||
-              res.data.paymentMethod !== order.paymentMethod)
-              {
-                changed = true;
-              }
-            }
-          } else {
-            updatedList.push(order);
+      
+      if (activeIds.includes(updatedOrder._id) || currentCompIds.includes(updatedOrder._id)) {
+        if (updatedOrder.paymentStatus === 'Paid' || updatedOrder.status === 'Completed') {
+          // Move from active to completed
+          const newActiveIds = activeIds.filter((x) => x !== updatedOrder._id);
+          sessionStorage.setItem('activeOrderIds', JSON.stringify(newActiveIds));
+          
+          if (!currentCompIds.includes(updatedOrder._id)) {
+            sessionStorage.setItem('completedOrderIds', JSON.stringify([...currentCompIds, updatedOrder._id]));
           }
-        } catch (error) {
-          console.error('Error polling order:', order._id, error);
-          updatedList.push(order);
-        }
-      }
+          
+          triggerPaidFeedback(updatedOrder._id);
+          localStorage.removeItem('customerName');
+          localStorage.removeItem('customerEmail');
+          localStorage.removeItem('customerPhone');
 
-      if (changed || newlyCompleted.length > 0) {
-        sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
-        sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
-        if (updatedList.length > 0) {
-          setActiveOrders(updatedList);
-        } else {
-          setActiveOrders([]);
-        }
-        if (newlyCompleted.length > 0) {
-          setCompletedOrders((prev) => {
-            const ids = prev.map((o) => o._id);
-            const filteredNew = newlyCompleted.filter((o) => !ids.includes(o._id));
-            return [...prev, ...filteredNew];
+          setActiveOrders(prev => prev.filter(o => o._id !== updatedOrder._id));
+          setCompletedOrders(prev => {
+            if (prev.some(o => o._id === updatedOrder._id)) return prev;
+            return [...prev, updatedOrder];
           });
+        } else {
+          // Just update active order status
+          setActiveOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
         }
       }
-    }, 5000);
+    };
 
-    return () => clearInterval(pollInterval);
-  }, [success, activeOrders, completedOrders]);
+    socket.on('order_updated', handleOrderUpdated);
+
+    return () => {
+      socket.off('order_updated', handleOrderUpdated);
+    };
+  }, [success, activeOrders.length, completedOrders.length, cafeId]);
 
   const handleCounterPayRequest = async (orderId) => {
     setLoading(true);

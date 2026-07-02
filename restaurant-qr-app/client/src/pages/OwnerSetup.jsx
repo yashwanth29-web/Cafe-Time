@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getSetupData, saveSetupData, verifyRazorpayKeys, uploadLogo } from '../services/api';
+import { getSetupData, saveSetupData, uploadLogo } from '../services/api';
 
 const OwnerSetup = () => {
   const { user, checkSession } = useAuth();
@@ -16,7 +16,7 @@ const OwnerSetup = () => {
   // Step 1: Cafe Profile States
   const [cafeName, setCafeName] = useState('');
   const [logoFile, setLogoFile] = useState(null);
-  const [logoPreview, setLogoPreview] = useState('/logo.png');
+  const [logoPreview, setLogoPreview] = useState('/logo.svg');
   const [logoUrl, setLogoUrl] = useState('');
   const [address, setAddress] = useState('');
   const [mapsLocation, setMapsLocation] = useState('40.7128,-74.0060'); // Default GPS coordinates
@@ -26,14 +26,10 @@ const OwnerSetup = () => {
   const [supportNumber, setSupportNumber] = useState('');
 
   // Step 2: Payment Setup States
-  const [razorpayKeyId, setRazorpayKeyId] = useState('');
-  const [razorpaySecret, setRazorpaySecret] = useState('');
   const [upiId, setUpiId] = useState('');
   const [bankHolderName, setBankHolderName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [ifscCode, setIfscCode] = useState('');
-  const [isRazorpayVerified, setIsRazorpayVerified] = useState(false);
-  const [verifyingKeys, setVerifyingKeys] = useState(false);
 
   // Step 3: Operational Setup States
   const [tableCount, setTableCount] = useState(5);
@@ -74,13 +70,10 @@ const OwnerSetup = () => {
             setSupportNumber(cafe.supportNumber || '');
           }
           if (paymentConfig) {
-            setRazorpayKeyId(paymentConfig.razorpayKeyId || '');
-            setRazorpaySecret(paymentConfig.razorpaySecret || '');
             setUpiId(paymentConfig.upiId || '');
             setBankHolderName(paymentConfig.bankHolderName || '');
             setAccountNumber(paymentConfig.accountNumber || '');
             setIfscCode(paymentConfig.ifscCode || '');
-            setIsRazorpayVerified(paymentConfig.isVerified || false);
           }
           if (operationalConfig) {
             setPrinterEnabled(operationalConfig.printerEnabled || false);
@@ -151,29 +144,6 @@ const OwnerSetup = () => {
       setErrorMsg('Logo file upload failed. Max file size is 2MB.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Verify Razorpay Connection
-  const testRazorpayConnection = async () => {
-    if (!razorpayKeyId || !razorpaySecret) {
-      setErrorMsg('Razorpay Key ID and Secret Key are required to verify connection.');
-      return;
-    }
-    setErrorMsg('');
-    setSuccessMsg('');
-    setVerifyingKeys(true);
-    try {
-      const res = await verifyRazorpayKeys(razorpayKeyId, razorpaySecret);
-      if (res.success) {
-        setIsRazorpayVerified(true);
-        setSuccessMsg('Razorpay connection verified successfully! Payment Configured.');
-      }
-    } catch (err) {
-      setIsRazorpayVerified(false);
-      setErrorMsg(err.response?.data?.message || 'Verification failed. Please check credentials.');
-    } finally {
-      setVerifyingKeys(false);
     }
   };
 
@@ -569,7 +539,7 @@ const OwnerSetup = () => {
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: '30px' }}>
         <h1 style={{ color: '#5C4331', margin: 0, fontSize: '2.5rem', fontWeight: 800 }}>
-          Welcome to Cypher's Café
+          Welcome to Dr. Chai Cafe
         </h1>
         <p style={{ color: '#A0826C', marginTop: '5px', fontSize: '1.1rem', fontWeight: 500 }}>
           Complete the 5-step operational wizard to launch your portal dashboard

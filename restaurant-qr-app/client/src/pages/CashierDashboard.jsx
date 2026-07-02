@@ -92,7 +92,7 @@ const CashierDashboard = () =>{
         osc2.stop(audioContext.currentTime + 0.2);
       }, 150);
     } catch (e) {
-      console.log('Audio error:', e);
+      
     }
   };
 

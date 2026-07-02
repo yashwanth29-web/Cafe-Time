@@ -1,6 +1,16 @@
 const mongoose = require('mongoose');
 
 const MenuItemSchema = new mongoose.Schema({
+  cafeId: {
+    type: String,
+    required: true,
+    default: 'CD001'
+  },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
+  },
   name: {
     type: String,
     required: true,
@@ -14,6 +24,10 @@ const MenuItemSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  originalPrice: {
+    type: Number,
+    required: false
+  },
   category: {
     type: String,
     required: true,
@@ -22,6 +36,10 @@ const MenuItemSchema = new mongoose.Schema({
   available: {
     type: Boolean,
     default: true
+  },
+  isCombo: {
+    type: Boolean,
+    default: false
   },
   description: {
     type: String,
@@ -47,5 +65,11 @@ const MenuItemSchema = new mongoose.Schema({
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
+
+MenuItemSchema.index({ cafeId: 1, branchId: 1, category: 1 });
+MenuItemSchema.index({ cafeId: 1, branchId: 1, name: 1 });
+
+// Optimize queries bounded by branch
+MenuItemSchema.index({ cafeId: 1, branchId: 1 });
 
 module.exports = mongoose.model('MenuItem', MenuItemSchema);

@@ -21,7 +21,7 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (err) {
       if (err.response?.status !== 401) {
-        console.log('Session validation failed:', err.message);
+        
       }
       localStorage.removeItem('token');
       setUser(null);
@@ -155,4 +155,4 @@ export const useAuth = () => {
   return context;
 };
 
-export default AuthContext;
+

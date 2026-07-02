@@ -10,12 +10,17 @@ const InventoryCategorySchema = new mongoose.Schema({
     type: String,
     required: true,
     default: 'CD001'
+  },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
   }
 }, {
   timestamps: true
 });
 
-// Unique index for category per cafe
-InventoryCategorySchema.index({ name: 1, cafeId: 1 }, { unique: true });
+// Unique index for category per branch
+InventoryCategorySchema.index({ name: 1, cafeId: 1, branchId: 1 }, { unique: true });
 
 module.exports = mongoose.model('InventoryCategory', InventoryCategorySchema);

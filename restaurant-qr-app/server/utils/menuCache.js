@@ -1,42 +1,50 @@
-let menuCache = null;
-let categoryCache = {}; // Keyed by cafeId since categories are branch/cafe specific
+let menuCache = {}; // Keyed by branchId
+let categoryCache = {}; // Keyed by cafeId_branchId since categories are branch specific
 
 module.exports = {
-  getMenu: () => {
-    if (menuCache) {
-      console.log('[CACHE] Menu hit: serving from memory cache');
+  getMenu: (branchId) => {
+    const key = branchId || 'default';
+    if (menuCache[key]) {
+      console.log(`[CACHE] Menu hit for branch ${key}: serving from memory cache`);
     }
-    return menuCache;
+    return menuCache[key];
   },
   
-  setMenu: (data) => {
-    console.log('[CACHE] Menu populated in memory');
-    menuCache = data;
+  setMenu: (branchId, data) => {
+    const key = branchId || 'default';
+    console.log(`[CACHE] Menu populated in memory for branch ${key}`);
+    menuCache[key] = data;
   },
   
-  clearMenu: () => {
-    console.log('[CACHE] Menu cache invalidated/cleared');
-    menuCache = null;
+  clearMenu: (branchId) => {
+    if (branchId) {
+      console.log(`[CACHE] Menu cache invalidated/cleared for branch ${branchId}`);
+      delete menuCache[branchId];
+    } else {
+      console.log('[CACHE] All Menu caches invalidated');
+      menuCache = {};
+    }
   },
   
-  getCategories: (cafeId) => {
-    const key = cafeId || 'CD001';
+  getCategories: (cafeId, branchId) => {
+    const key = `${cafeId || 'CD001'}_${branchId || 'default'}`;
     if (categoryCache[key]) {
-      console.log(`[CACHE] Category hit for cafe ${key}: serving from memory cache`);
+      console.log(`[CACHE] Category hit for ${key}: serving from memory cache`);
     }
     return categoryCache[key];
   },
   
-  setCategories: (cafeId, data) => {
-    const key = cafeId || 'CD001';
-    console.log(`[CACHE] Category cache populated for cafe ${key}`);
+  setCategories: (cafeId, branchId, data) => {
+    const key = `${cafeId || 'CD001'}_${branchId || 'default'}`;
+    console.log(`[CACHE] Category cache populated for ${key}`);
     categoryCache[key] = data;
   },
   
-  clearCategories: (cafeId) => {
-    if (cafeId) {
-      console.log(`[CACHE] Category cache invalidated for cafe ${cafeId}`);
-      delete categoryCache[cafeId];
+  clearCategories: (cafeId, branchId) => {
+    if (cafeId && branchId) {
+      const key = `${cafeId}_${branchId}`;
+      console.log(`[CACHE] Category cache invalidated for ${key}`);
+      delete categoryCache[key];
     } else {
       console.log('[CACHE] All Category caches invalidated');
       categoryCache = {};
@@ -45,7 +53,7 @@ module.exports = {
   
   clearAll: () => {
     console.log('[CACHE] All caches (menu and categories) cleared');
-    menuCache = null;
+    menuCache = {};
     categoryCache = {};
   }
 };

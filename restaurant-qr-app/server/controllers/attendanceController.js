@@ -113,7 +113,7 @@ const checkIn = async (req, res) => {
 
     // 4. Auto-close previous days' open sessions
     const todayStr = getISTDate();
-    const openSessions = await Attendance.find({ staffId, checkOutTime: { $exists: false } });
+    const openSessions = await Attendance.find({ staffId, checkOutTime: { $exists: false } }).lean();
     for (const session of openSessions) {
       if (session.date !== todayStr) {
         const autoCheckOutTime = new Date(session.checkInTime.getTime() + 8 * 60 * 60 * 1000);
@@ -341,7 +341,7 @@ const getOwnerTodayDashboard = async (req, res) => {
       isActive: true
     });
 
-    const todayRecords = await Attendance.find({ cafeId, date: todayStr });
+    const todayRecords = await Attendance.find({ cafeId, date: todayStr }).lean();
 
     // Fetch Cafe to get openingTime and check if shift has started
     const cafe = await Cafe.findOne({ cafeId });
@@ -423,7 +423,7 @@ const getOwnerReports = async (req, res) => {
       query.branchId = branchId;
     }
 
-    const records = await Attendance.find(query).sort({ checkInTime: -1 });
+    const records = await Attendance.find(query).sort({ checkInTime: -1 }).lean();
     const staffCount = await User.countDocuments({
       cafeId,
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier'] },

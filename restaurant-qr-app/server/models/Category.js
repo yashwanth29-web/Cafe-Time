@@ -11,6 +11,11 @@ const CategorySchema = new mongoose.Schema({
     required: true,
     default: 'CD001'
   },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
+  },
   displayOrder: {
     type: Number,
     required: true,
@@ -20,7 +25,7 @@ const CategorySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Compound index to ensure unique category name per cafe
-CategorySchema.index({ name: 1, cafeId: 1 }, { unique: true });
+// Compound index to ensure unique category name per branch
+CategorySchema.index({ name: 1, cafeId: 1, branchId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Category', CategorySchema);
