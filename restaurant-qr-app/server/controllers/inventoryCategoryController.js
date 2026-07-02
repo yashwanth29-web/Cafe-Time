@@ -12,10 +12,11 @@ const DEFAULT_INVENTORY_CATEGORIES = [
   'Cleaning Supplies'
 ];
 
-const seedDefaultInventoryCategories = async (cafeId) => {
+const seedDefaultInventoryCategories = async (cafeId, branchId = 'default') => {
   const categoriesToCreate = DEFAULT_INVENTORY_CATEGORIES.map(name => ({
     name,
-    cafeId
+    cafeId,
+    branchId
   }));
   return await InventoryCategory.insertMany(categoriesToCreate);
 };
@@ -29,7 +30,8 @@ const getInventoryCategories = async (req, res) => {
     let categories = await InventoryCategory.find({ cafeId }).sort({ name: 1 });
 
     if (categories.length === 0) {
-      categories = await seedDefaultInventoryCategories(cafeId);
+      const branchId = req.branchId || 'default';
+      categories = await seedDefaultInventoryCategories(cafeId, branchId);
     }
 
     return res.status(200).json({ success: true, count: categories.length, data: categories });

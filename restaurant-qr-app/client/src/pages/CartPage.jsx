@@ -193,7 +193,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
     if (!success || (activeOrders.length === 0 && completedOrders.length === 0)) return;
     
     // Auto-connect to cafe room
-    connectSocket(cafeId);
+    connectSocket(cafeId, localStorage.getItem('activeBranchId') || 'default');
 
     const handleOrderUpdated = (updatedOrder) => {
       // Check if this updated order belongs to this customer's session

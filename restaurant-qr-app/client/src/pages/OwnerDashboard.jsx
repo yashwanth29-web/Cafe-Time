@@ -903,27 +903,48 @@ const OwnerDashboard = () =>{
   }
 
   return undefined;
- }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating, orderDateFilter, user]);
+ }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating, orderDateFilter, user, activeBranchId]);
 
- // ── Branch switch listener ──
- // When the user picks a different branch via the BranchSwitcher, refresh all branch-specific data
- useEffect(() => {
-   const unsubscribe = onBranchSwitch((newBranchId) => {
-     // Fetch data relevant to the currently active tab
-     fetchOrders();
-     fetchMenu();
-     fetchInventoryList();
-     fetchCategories();
-     fetchInventoryCategories();
-     if (activeTab === 'staff') {
-       fetchStaffList();
-       if (staffSubTab === 'attendance') fetchAttendanceToday();
-       if (staffSubTab === 'reports') fetchWorkReports();
-     }
-     if (activeTab === 'menu' && menuSubTab === 'reviews') fetchReviewsData();
-   });
-   return unsubscribe;
- }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab]);
+  // ── Branch switch listener ──
+  // When the user picks a different branch via the BranchSwitcher, refresh all branch-specific data
+  useEffect(() => {
+    const unsubscribe = onBranchSwitch((newBranchId) => {
+      // Immediately reset all branch-specific states to prevent screen flash of previous branch data
+      setOrders([]);
+      setOrdersLoading(true);
+      setMenuItems([]);
+      setMenuLoading(true);
+      setInventoryList([]);
+      setInventoryLogs([]);
+      setInventoryLoading(true);
+      setCategories([]);
+      setCategoryLoading(true);
+      setInventoryCategories([]);
+      setInvCategoryLoading(true);
+      setStaff([]);
+      setStaffLoading(true);
+      setAttendanceRecords([]);
+      setAttendanceLoading(true);
+      setAttendanceReports(null);
+      setWorkReports([]);
+      setReportsLoading(true);
+
+      // Fetch data relevant to the currently active tab
+      fetchOrders();
+      fetchMenu();
+      fetchInventoryList();
+      fetchCategories();
+      fetchInventoryCategories();
+      loadSetupConfig();
+      if (activeTab === 'staff') {
+        fetchStaffList();
+        if (staffSubTab === 'attendance') fetchAttendanceToday();
+        if (staffSubTab === 'reports') fetchWorkReports();
+      }
+      if (activeTab === 'menu' && menuSubTab === 'reviews') fetchReviewsData();
+    });
+    return unsubscribe;
+  }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab]);
 
  // Register new staff
  const handleAddStaff = async (e) =>{
@@ -1178,10 +1199,10 @@ const exportStaffToCSV = () => {
  const handleToggleAvailability = async (item) =>{
  const updatedStatus = !item.available;
  try {
- const response = await updateMenuItem(item.id, { available: updatedStatus });
+ const response = await updateMenuItem(item._id, { available: updatedStatus });
  if (response.success) {
  setMenuItems((prevItems) =>
- prevItems.map((m) =>m.id === item.id ? { ...m, available: updatedStatus } : m)
+ prevItems.map((m) =>m._id === item._id ? { ...m, available: updatedStatus } : m)
 );
  }
  } catch (error) {
@@ -1195,7 +1216,7 @@ const exportStaffToCSV = () => {
  try {
  const response = await deleteMenuItem(id);
  if (response.success) {
- setMenuItems((prevItems) =>prevItems.filter((item) =>item.id !== id));
+ setMenuItems((prevItems) =>prevItems.filter((item) =>item._id !== id));
  }
  } catch (error) {
  console.error('Error deleting item:', error);
@@ -1239,10 +1260,10 @@ const exportStaffToCSV = () => {
  return;
  }
  try {
- const response = await updateMenuItem(editingItem.id, editingItem);
+ const response = await updateMenuItem(editingItem._id, editingItem);
  if (response.success) {
  setMenuItems((prevItems) =>
- prevItems.map((m) =>m.id === editingItem.id ? response.data : m)
+ prevItems.map((m) =>m._id === editingItem._id ? response.data : m)
 );
  setShowEditModal(false);
  setEditingItem(null);
@@ -1427,7 +1448,7 @@ const exportStaffToCSV = () => {
 
  // Copy table URL
  const handleCopyUrl = (table) =>{
- const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}`;
+  const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
  navigator.clipboard.writeText(url);
  setCopiedLink(true);
  setTimeout(() =>setCopiedLink(false), 2000);
@@ -1971,7 +1992,7 @@ const exportStaffToCSV = () => {
 
 <div className="menu-grid-admin">
  {filteredMenuItems.map((item) =>
-<div key={item.id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
+<div key={item._id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
 <AdminMenuImage item={item} />
 <div className="admin-menu-info">
 <div className="admin-menu-title">{item.name}</div>
@@ -1980,7 +2001,7 @@ const exportStaffToCSV = () => {
 <span className="admin-menu-price">₹{parseFloat(item.price).toFixed(2)}</span>
 <div className="menu-card-actions">
   <button onClick={() =>{setEditingItem({ ...item });setShowEditModal(true);}} className="btn btn-secondary menu-card-btn">✏️<span className="btn-text"> Edit</span></button>
-  <button onClick={() =>handleDeleteMenuItem(item.id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
+  <button onClick={() =>handleDeleteMenuItem(item._id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
 </div>
 </div>
 </div>
@@ -3839,13 +3860,13 @@ const exportStaffToCSV = () => {
 </h4>
 <div style={{ background: 'white', padding: '10px', borderRadius: '8px', marginBottom: '12px' }}>
 <img
- src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`)}`}
+ src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`)}`}
  alt={`Table ${selectedQrTable} QR Code`}
  style={{ width: '150px', height: '150px', display: 'block' }} />
  
 </div>
 <div style={{ display: 'flex', gap: '10px' }}>
-<a href={`/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', textDecoration: 'none', width: 'auto' }}>
+<a href={`/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', textDecoration: 'none', width: 'auto' }}>
  Open Menu Tab
 </a>
 <button onClick={() =>handleCopyUrl(selectedQrTable)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', width: 'auto' }}>

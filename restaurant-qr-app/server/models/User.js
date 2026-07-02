@@ -88,7 +88,7 @@ const UserSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { bypassBranchFilter: true });
 
 
 // Optimize queries bounded by branch

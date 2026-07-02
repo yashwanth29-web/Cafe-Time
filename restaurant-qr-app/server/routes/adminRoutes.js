@@ -55,7 +55,7 @@ router.delete('/staff/:id', restrictTo('admin', 'owner'), deleteStaff);
 router.get('/staff-summary', restrictTo('admin', 'owner', 'manager'), getStaffSummary);
 
 // Branches Management Routes
-router.get('/branches', restrictTo('admin', 'owner'), getBranches);
+router.get('/branches', restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), getBranches);
 router.post('/branches', restrictTo('admin', 'owner'), createBranch);
 router.put('/branches/:id', restrictTo('admin', 'owner'), updateBranch);
 router.delete('/branches/:id', restrictTo('admin', 'owner'), deleteBranch);

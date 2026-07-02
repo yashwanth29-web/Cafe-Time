@@ -111,6 +111,6 @@ const CafeSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { bypassBranchFilter: true });
 
 module.exports = mongoose.model('Cafe', CafeSchema, 'cafes');

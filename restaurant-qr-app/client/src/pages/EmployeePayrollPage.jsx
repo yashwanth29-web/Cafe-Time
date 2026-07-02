@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useBranch } from '../context/BranchContext';
 import { getCurrentEmployeePayroll } from '../services/api';
 
 const EmployeePayrollPage = () => {
+  const { activeBranchId } = useBranch();
   const [salaryData, setSalaryData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -25,8 +27,10 @@ const EmployeePayrollPage = () => {
   };
 
   useEffect(() => {
+    setSalaryData(null);
+    setLoading(true);
     fetchSalaryInfo();
-  }, []);
+  }, [activeBranchId]);
 
   return (
     <div style={{ padding: '20px', maxWidth: '1000px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>

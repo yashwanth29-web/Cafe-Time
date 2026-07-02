@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import {
  checkIn,
  checkOut,
@@ -14,6 +15,7 @@ import '../styles/App.css';
 
 const StaffDashboard = () => {
  const { logout, user } = useAuth();
+ const { activeBranchId } = useBranch();
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
 
@@ -86,12 +88,17 @@ const StaffDashboard = () => {
  }
  };
 
- useEffect(() => {
- fetchData();
- return () => {
- if (timerRef.current) clearInterval(timerRef.current);
- };
- }, []);
+  useEffect(() => {
+    // Immediately clear data states to prevent screen flash of previous branch data
+    setTodayStatus(null);
+    setHistoryData([]);
+    setLoading(true);
+
+    fetchData();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [activeBranchId]);
 
  // Update live shift duration timer
  useEffect(() => {

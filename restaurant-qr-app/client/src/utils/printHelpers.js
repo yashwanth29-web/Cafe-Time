@@ -1,4 +1,4 @@
-export const printPOSReceipt = (order, user = null, cafe = null) => {
+export const printPOSReceipt = (order, user = null, cafe = null, branch = null) => {
   let iframe = document.getElementById('receipt-print-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');
@@ -19,7 +19,10 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
   const grandTotal = order.totalAmount || (itemsSubtotal + gstAmount + platformCharge);
 
   const cafeName = cafe?.name || 'Dr. Chai Cafe';
-  const cafeAddress = cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const displayBranchName = branch?.branchName || 'Main Branch';
+  const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
+  const logoUrl = cafe?.logoUrl || (cafe?.logo ? `http://localhost:5000/uploads/${cafe.logo}` : '');
   const cafeGST = cafe?.gstNumber || '36AAAAA1111A1Z1';
 
   const itemsHtml = order.items.map(item => `
@@ -78,8 +81,11 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
       <body>
         <div class="invoice-box">
           <div class="header text-center">
-            <h2>${cafeName}</h2>
-            <p>${cafeAddress}</p>
+            ${logoUrl ? `<div style="margin-bottom: 8px;"><img src="${logoUrl}" style="max-height: 45px; border-radius: 50%; object-fit: cover;" /></div>` : ''}
+            <h2 style="font-size: 14px; margin-bottom: 2px;">${cafeName}</h2>
+            <h3 style="font-size: 12px; margin: 0 0 4px 0; font-weight: normal;">${displayBranchName}</h3>
+            <p>${displayAddress}</p>
+            ${displayContact ? `<p>Contact: ${displayContact}</p>` : ''}
             <p class="bold">GSTIN: ${cafeGST}</p>
           </div>
 
@@ -175,7 +181,7 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
   }, 300);
 };
 
-export const printKOT = (order, user = null, cafe = null) => {
+export const printKOT = (order, user = null, cafe = null, branch = null) => {
   let iframe = document.getElementById('kot-print-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');
@@ -190,7 +196,10 @@ export const printKOT = (order, user = null, cafe = null) => {
   }
 
   const cafeName = cafe?.name || 'Dr. Chai Cafe';
-  const branchName = user?.assignedBranch || cafe?.city || 'Main Branch';
+  const displayBranchName = branch?.branchName || 'Main Branch';
+  const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
+  const logoUrl = cafe?.logoUrl || (cafe?.logo ? `http://localhost:5000/uploads/${cafe.logo}` : '');
 
   const itemsHtml = order.items.map(item => `
     <tr>
@@ -246,8 +255,11 @@ export const printKOT = (order, user = null, cafe = null) => {
         <div class="kot-box">
           <div class="header text-center">
             <h2>KITCHEN ORDER TICKET (KOT)</h2>
-            <p class="bold" style="font-size: 14px;">${cafeName}</p>
-            <p>${branchName ? `Branch: ${branchName}` : ''}</p>
+            <p class="bold" style="font-size: 14px; margin: 4px 0 2px 0;">${cafeName}</p>
+            <p class="bold" style="font-size: 12px; margin: 0 0 4px 0;">${displayBranchName}</p>
+            <p style="font-size: 9px; color: #555; margin: 2px 0;">${displayAddress}</p>
+            ${displayContact ? `<p style="font-size: 9px; color: #555; margin: 2px 0;">Contact: ${displayContact}</p>` : ''}
+            ${logoUrl ? `<div style="margin-top: 6px;"><img src="${logoUrl}" style="max-height: 35px; border-radius: 50%; object-fit: cover;" /></div>` : ''}
           </div>
 
           <table class="meta-table">

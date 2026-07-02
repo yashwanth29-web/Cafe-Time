@@ -334,14 +334,16 @@ const getOwnerTodayDashboard = async (req, res) => {
   }
 
   try {
+    const activeBranch = req.branchId || 'default';
     // Get all active staff members
     const staffList = await User.find({
       cafeId,
+      assignedBranch: activeBranch,
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] },
       isActive: true
     });
 
-    const todayRecords = await Attendance.find({ cafeId, date: todayStr }).lean();
+    const todayRecords = await Attendance.find({ cafeId, branchId: activeBranch, date: todayStr }).lean();
 
     // Fetch Cafe to get openingTime and check if shift has started
     const cafe = await Cafe.findOne({ cafeId });
@@ -414,18 +416,17 @@ const getOwnerReports = async (req, res) => {
       startDate.setDate(startDate.getDate() - 1);
     }
 
+    const activeBranch = branchId || req.branchId || 'default';
     const query = {
       cafeId,
+      branchId: activeBranch,
       checkInTime: { $gte: startDate }
     };
-
-    if (branchId) {
-      query.branchId = branchId;
-    }
 
     const records = await Attendance.find(query).sort({ checkInTime: -1 }).lean();
     const staffCount = await User.countDocuments({
       cafeId,
+      assignedBranch: activeBranch,
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier'] },
       isActive: true
     });

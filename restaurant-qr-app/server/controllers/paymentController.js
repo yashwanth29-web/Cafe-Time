@@ -89,7 +89,7 @@ const createOrder = async (req, res) => {
     let merchantName = (cafe && cafe.name) || "Cypher's Cafe";
 
     try {
-      const config = await PaymentConfig.findOne({ cafeId: savedOrder.cafeId });
+      const config = await PaymentConfig.findOne({ cafeId: savedOrder.cafeId, branchId: savedOrder.branchId || 'default' });
       if (config && config.upiId) {
         upiId = config.upiId;
       }
@@ -204,7 +204,7 @@ const payExistingOrder = async (req, res) => {
     let merchantName = "Cypher's Cafe";
 
     try {
-      const config = await PaymentConfig.findOne({ cafeId: order.cafeId });
+      const config = await PaymentConfig.findOne({ cafeId: order.cafeId, branchId: order.branchId || 'default' });
       if (config && config.upiId) {
         upiId = config.upiId;
       }

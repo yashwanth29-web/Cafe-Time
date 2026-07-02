@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import { getOrders, updateOrderStatus, getInventory, reportShortage, getMenu, getAssetUrl } from '../services/api';
 import socket, { connectSocket } from '../socket';
 import OrderCard from '../components/OrderCard';
@@ -8,6 +9,7 @@ import '../styles/App.css';
 
 const KitchenDashboard = () =>{
  const { logout, user } = useAuth();
+ const { activeBranchId } = useBranch();
  const [orders, setOrders] = useState([]);
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
@@ -98,14 +100,16 @@ const KitchenDashboard = () =>{
  }
  };
 
- useEffect(() =>{
- if (activeTab === 'inventory') {
- fetchInventory();
- }
- if (activeTab === 'menu') {
- fetchMenu();
- }
- }, [activeTab]);
+  useEffect(() =>{
+  setInventory([]);
+  setMenuItems([]);
+  if (activeTab === 'inventory') {
+  fetchInventory();
+  }
+  if (activeTab === 'menu') {
+  fetchMenu();
+  }
+  }, [activeTab, activeBranchId]);
 
  // Play notification sound for new orders
  const playNotificationSound = () =>{
@@ -208,10 +212,14 @@ const KitchenDashboard = () =>{
    };
 
   useEffect(() => {
+    // Immediately clear data states to prevent screen flash of previous branch data
+    setOrders([]);
+    setLoading(true);
+
     fetchOrders();
 
     if (user && user.cafeId) {
-      connectSocket(user.cafeId, user.assignedBranch);
+      connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);
 
       const handleOrderCreated = (newOrder) => {
         setOrders((prev) => {
@@ -241,7 +249,7 @@ const KitchenDashboard = () =>{
         socket.off('order_updated', handleOrderUpdated);
       };
     }
-  }, [user]);
+  }, [user, activeBranchId]);
 
  const handleStatusUpdate = async (id, newStatus) =>{
  try {

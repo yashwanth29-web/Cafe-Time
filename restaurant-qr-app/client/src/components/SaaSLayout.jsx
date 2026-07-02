@@ -3,9 +3,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getInventory, getNotifications, markNotificationRead } from '../services/api';
 import BranchSwitcher from './BranchSwitcher';
+import { useBranch } from '../context/BranchContext';
 
 const SaaSLayout = ({ children }) => {
   const { user, logout } = useAuth();
+  const { activeBranchId } = useBranch();
   const navigate = useNavigate();
   const location = useLocation();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
@@ -39,12 +41,14 @@ const SaaSLayout = ({ children }) => {
   };
 
   useEffect(() => {
-    if (user) {
+    if (user && activeBranchId) {
       fetchNotifications();
       const interval = setInterval(fetchNotifications, 20000);
       return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user, activeBranchId]);
+
+
 
   const renderNotificationList = () => {
     return (
@@ -128,6 +132,38 @@ const SaaSLayout = ({ children }) => {
   }, [user, userRole]);
 
   if (!user) return <>{children}</>;
+
+  if (activeBranchId === null) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        fontFamily: "'Outfit', sans-serif",
+        color: '#6F4E37',
+        backgroundColor: '#121212'
+      }}>
+        <div style={{
+          border: '4px solid #333',
+          borderTop: '4px solid #e67e22',
+          borderRadius: '50%',
+          width: '40px',
+          height: '40px',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '15px'
+        }} />
+        <p style={{ fontWeight: '500' }}>Initializing branch context...</p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   // Role based navigation configuration
   const getNavItems = () => {
@@ -532,9 +568,16 @@ const SaaSLayout = ({ children }) => {
             title="Go to Home"
           >
             <div className="mh-logo">☕</div>
-            <span className="mh-name">Dr. Chai Cafe</span>
+            <span className="mh-name">Dr. Chai</span>
           </div>
         </div>
+
+        {['admin', 'owner'].includes(userRole) && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <BranchSwitcher collapsed={true} />
+          </div>
+        )}
+
         <div className="mh-actions">
           {/* Notification Bell */}
           <div style={{ position: 'relative' }}>

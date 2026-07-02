@@ -35,8 +35,11 @@ const BranchAvatar = ({ branch, size = 32 }) => {
 };
 
 /* ─── Single Branch Row ─────────────────────────────────────────────────── */
-const BranchRow = ({ branch, isActive, onSelect, showManager = true }) => {
+const BranchRow = ({ branch, isActive, onSelect }) => {
   const [hovered, setHovered] = useState(false);
+  const statusCol = statusColor(branch.isActive);
+  const statusLbl = statusLabel(branch.isActive);
+
   return (
     <button
       onClick={() => onSelect(branch.branchId)}
@@ -44,84 +47,91 @@ const BranchRow = ({ branch, isActive, onSelect, showManager = true }) => {
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
+        flexDirection: 'column',
+        gap: '8px',
         width: '100%',
-        padding: '10px 14px',
-        borderRadius: '10px',
-        border: isActive ? '1px solid rgba(var(--color-primary-rgb, 143,168,155), 0.4)' : '1px solid transparent',
+        padding: '12px 14px',
+        borderRadius: '12px',
+        border: isActive ? '1px solid var(--color-primary)' : '1px solid rgba(255,255,255,0.08)',
         background: isActive
-          ? 'rgba(143, 168, 155, 0.1)'
-          : hovered ? 'rgba(255,255,255,0.04)' : 'transparent',
+          ? 'rgba(143, 168, 155, 0.12)'
+          : hovered ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
         cursor: 'pointer',
         textAlign: 'left',
-        transition: 'all 0.15s ease',
-        position: 'relative'
+        transition: 'all 0.2s ease',
+        position: 'relative',
+        marginBottom: '8px'
       }}
     >
-      <BranchAvatar branch={branch} size={36} />
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          <BranchAvatar branch={branch} size={28} />
           <span style={{
             fontSize: '13.5px',
-            fontWeight: isActive ? 800 : 600,
+            fontWeight: 800,
             color: isActive ? 'var(--color-primary)' : 'var(--color-text-primary)',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            maxWidth: '150px'
+            maxWidth: '160px'
           }}>
             {branch.branchName || 'Branch'}
           </span>
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{
             fontSize: '9px',
             fontWeight: 700,
-            padding: '2px 7px',
-            borderRadius: '10px',
-            background: statusColor(branch.isActive) + '22',
-            color: statusColor(branch.isActive),
+            padding: '2px 6px',
+            borderRadius: '6px',
+            background: statusCol + '22',
+            color: statusCol,
             letterSpacing: '0.5px'
           }}>
-            {statusLabel(branch.isActive)}
+            {statusLbl}
           </span>
+          {isActive && (
+            <span style={{
+              padding: '2px 6px',
+              borderRadius: '6px',
+              fontSize: '9px',
+              fontWeight: 800,
+              background: 'var(--color-primary)',
+              color: '#fff'
+            }}>
+              ACTIVE
+            </span>
+          )}
         </div>
-
-        {branch.address && (
-          <div style={{
-            fontSize: '11px',
-            color: 'var(--color-text-secondary)',
-            marginTop: '2px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}>
-            📍 {branch.address}
-          </div>
-        )}
-        {showManager && branch.manager && (
-          <div style={{ fontSize: '11px', color: '#A0826C', marginTop: '1px' }}>
-            👤 {branch.manager}
-          </div>
-        )}
       </div>
 
-      {isActive && (
-        <span style={{
-          width: '20px',
-          height: '20px',
-          borderRadius: '50%',
-          background: 'var(--color-primary)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-          fontSize: '11px',
-          color: '#fff'
-        }}>
-          ✓
-        </span>
+      {branch.address && (
+        <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span>📍</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {branch.address}
+          </span>
+        </div>
       )}
+
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        borderTop: '1px dashed rgba(255,255,255,0.06)',
+        paddingTop: '6px',
+        marginTop: '2px'
+      }}>
+        <span style={{ fontSize: '11px', color: '#A0826C', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span>👤</span>
+          <span>{branch.manager || 'No Manager'}</span>
+        </span>
+        <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', fontFamily: 'monospace', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: '4px' }}>
+          CODE: {branch.branchId}
+        </span>
+      </div>
     </button>
   );
 };
@@ -212,11 +222,12 @@ const BranchSwitcher = ({ collapsed = false }) => {
       <button
         onClick={() => setOpen(o => !o)}
         title={activeBranch ? `Branch: ${activeBranch.branchName}` : 'Select Branch'}
+        className={collapsed ? "branch-switcher-trigger-collapsed" : "branch-switcher-trigger"}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: collapsed ? '0' : '10px',
-          padding: collapsed ? '6px' : '6px 12px 6px 8px',
+          padding: collapsed ? '4px' : '6px 12px 6px 8px',
           borderRadius: '10px',
           border: open ? '1px solid var(--color-primary)' : '1px solid rgba(255,255,255,0.1)',
           background: open ? 'rgba(143, 168, 155, 0.1)' : 'rgba(255,255,255,0.04)',
@@ -227,10 +238,10 @@ const BranchSwitcher = ({ collapsed = false }) => {
         }}
       >
         {activeBranch ? (
-          <BranchAvatar branch={activeBranch} size={30} />
+          <BranchAvatar branch={activeBranch} size={28} />
         ) : (
           <div style={{
-            width: 30, height: 30, borderRadius: '8px',
+            width: 28, height: 28, borderRadius: '8px',
             background: 'rgba(255,255,255,0.08)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '14px'
@@ -248,10 +259,10 @@ const BranchSwitcher = ({ collapsed = false }) => {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 maxWidth: '130px'
-              }}>
+              }} className="branch-name-label">
                 {activeBranch?.branchName || 'Select Branch'}
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }} className="branch-count-label">
                 {switching ? 'Switching...' : branches.length === 1 ? '1 Branch' : `${branches.length} Branches`}
               </span>
             </div>
@@ -270,19 +281,20 @@ const BranchSwitcher = ({ collapsed = false }) => {
       {collapsed && activeBranch && (
         <span style={{
           position: 'absolute',
-          bottom: '4px',
-          right: '4px',
+          bottom: '2px',
+          right: '2px',
           width: '8px',
           height: '8px',
           borderRadius: '50%',
           background: '#2ecc71',
-          border: '1.5px solid var(--bg-secondary)'
+          border: '1.5px solid var(--bg-secondary)',
+          zIndex: 10
         }} />
       )}
 
       {/* ── Dropdown Panel ── */}
       {open && (
-        <div style={{
+        <div className="branch-dropdown-panel" style={{
           position: 'absolute',
           top: 'calc(100% + 8px)',
           left: 0,
@@ -301,6 +313,62 @@ const BranchSwitcher = ({ collapsed = false }) => {
             @keyframes branch-dropdown-in {
               from { opacity: 0; transform: translateY(-8px) scale(0.97); }
               to   { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            .branch-switcher-trigger-collapsed {
+              width: 36px !important;
+              height: 36px !important;
+              border-radius: 8px !important;
+              padding: 0 !important;
+              display: flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              border: 1px solid rgba(255,255,255,0.12) !important;
+              background: rgba(255,255,255,0.04) !important;
+              cursor: pointer;
+              transition: all 0.2s ease;
+            }
+            .branch-switcher-trigger-collapsed:hover {
+              background: rgba(255,255,255,0.08) !important;
+              border-color: var(--color-primary) !important;
+            }
+            @media (max-width: 480px) {
+              .branch-dropdown-panel {
+                position: fixed !important;
+                top: 70px !important;
+                left: 10px !important;
+                right: 10px !important;
+                width: auto !important;
+                max-width: none !important;
+                transform: none !important;
+                max-height: calc(100vh - 160px) !important;
+              }
+              .branch-count-label {
+                display: none !important;
+              }
+              .branch-name-label {
+                max-width: 80px !important;
+                font-size: 11px !important;
+              }
+              .branch-switcher-trigger {
+                padding: 8px 10px 8px 6px !important;
+                height: 44px !important;
+                max-width: 140px !important;
+              }
+            }
+            @media (min-width: 481px) and (max-width: 1024px) {
+              .branch-dropdown-panel {
+                right: -60px !important;
+                left: auto !important;
+              }
+              .branch-name-label {
+                max-width: 120px !important;
+                font-size: 12px !important;
+              }
+              .branch-switcher-trigger {
+                padding: 8px 12px 8px 8px !important;
+                height: 44px !important;
+                max-width: 200px !important;
+              }
             }
           `}</style>
 
@@ -322,43 +390,17 @@ const BranchSwitcher = ({ collapsed = false }) => {
 
           {/* Current branch info card */}
           {activeBranch && (
-            <div style={{
-              padding: '10px 12px',
-              borderRadius: '10px',
-              background: 'rgba(143,168,155,0.08)',
-              border: '1px solid rgba(143,168,155,0.2)',
-              marginBottom: '10px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <BranchAvatar branch={activeBranch} size={38} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-primary)' }}>
-                  {activeBranch.branchName}
-                </div>
-                {activeBranch.address && (
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {activeBranch.address}
-                  </div>
-                )}
-                {activeBranch.manager && (
-                  <div style={{ fontSize: '10px', color: '#A0826C', marginTop: '1px' }}>
-                    Manager: {activeBranch.manager}
-                  </div>
-                )}
+            <>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.8px', textTransform: 'uppercase', padding: '2px 4px', marginBottom: '6px' }}>
+                Current Branch
               </div>
-              <span style={{
-                padding: '3px 8px',
-                borderRadius: '8px',
-                fontSize: '10px',
-                fontWeight: 700,
-                background: '#2ecc7122',
-                color: '#2ecc71'
-              }}>
-                Current
-              </span>
-            </div>
+              <BranchRow
+                branch={activeBranch}
+                isActive={true}
+                onSelect={handleSelect}
+              />
+              <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '12px 0' }} />
+            </>
           )}
 
           {/* Search */}
@@ -394,24 +436,7 @@ const BranchSwitcher = ({ collapsed = false }) => {
             </div>
           )}
 
-          {/* Recently used */}
-          {!q && recentBranches.length > 0 && (
-            <>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.8px', textTransform: 'uppercase', padding: '2px 4px', marginBottom: '4px' }}>
-                Recent
-              </div>
-              {recentBranches.map(b => (
-                <BranchRow
-                  key={b.branchId}
-                  branch={b}
-                  isActive={b.branchId === activeBranchId}
-                  onSelect={handleSelect}
-                  showManager={false}
-                />
-              ))}
-              <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
-            </>
-          )}
+
 
           {/* All Branches */}
           <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.8px', textTransform: 'uppercase', padding: '2px 4px', marginBottom: '4px' }}>

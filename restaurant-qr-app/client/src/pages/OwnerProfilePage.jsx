@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useBranch } from '../context/BranchContext';
 import OwnerLayout from '../components/OwnerLayout';
 import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff } from '../services/api';
 
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
   const { themeMode, setThemeMode, primaryColor, updatePrimaryColor } = useTheme();
+  const { activeBranchId } = useBranch();
   const navigate = useNavigate();
 
   const [cafeData, setCafeData] = useState(null);
@@ -29,7 +31,7 @@ const OwnerProfilePage = () => {
   const [serviceCharge, setServiceChargeState] = useState(() => parseFloat(localStorage.getItem('owner_service_charge') || '0'));
 
   const handleCopyUrl = (table) => {
-    const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}`;
+    const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -320,7 +322,7 @@ const OwnerProfilePage = () => {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', padding: '20px', background: 'rgba(0, 0, 0,0.02)', border: '1px dashed rgba(230,213,195,0.2)', borderRadius: '12px', marginTop: '10px' }}>
             <div style={{ background: '#fff', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>
               <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`)}`}
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`)}`}
             alt={`Table ${selectedQrTable} QR Code`}
             style={{ display: 'block', width: '150px', height: '150px' }} />
           
@@ -335,7 +337,7 @@ const OwnerProfilePage = () => {
                 {copiedLink ? '✓ Copied' : '🔗 Copy Link'}
               </button>
               <a
-            href={`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`}
+            href={`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`}
             target="_blank"
             rel="noreferrer"
             className="mbtn-cancel"
@@ -484,6 +486,14 @@ const OwnerProfilePage = () => {
         .btn-setup { background:#8FA89B; color:#121815; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:.8rem; cursor:pointer; white-space:nowrap; font-family:inherit; }
         .btn-setup:hover { background:#A2B9AC; }
 
+        /* grid container */
+        .card-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 20px;
+          margin-bottom: 24px;
+        }
+
         /* section card */
         .sec-card {
           background:rgba(28,36,32,.75);
@@ -576,6 +586,10 @@ const OwnerProfilePage = () => {
         @keyframes spin { to{transform:rotate(360deg)} }
 
         @media(max-width:767px) {
+          .card-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+          }
           .moverlay { align-items:flex-end; padding:0; }
           .mcard {
             width:100% !important; max-width:100% !important;

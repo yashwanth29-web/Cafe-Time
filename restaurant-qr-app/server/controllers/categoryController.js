@@ -12,10 +12,11 @@ const DEFAULT_CATEGORIES = [
 ];
 
 // Seed default categories if none exist
-const seedDefaultCategories = async (cafeId) => {
+const seedDefaultCategories = async (cafeId, branchId = 'default') => {
   const categoriesToCreate = DEFAULT_CATEGORIES.map(name => ({
     name,
-    cafeId
+    cafeId,
+    branchId
   }));
   return await Category.insertMany(categoriesToCreate);
 };
@@ -26,7 +27,7 @@ const seedDefaultCategories = async (cafeId) => {
 const getCategories = async (req, res) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
-    const cached = menuCache.getCategories(cafeId);
+    const cached = menuCache.getCategories();
     if (cached) {
       return res.status(200).json({ success: true, count: cached.length, data: cached });
     }
@@ -34,10 +35,11 @@ const getCategories = async (req, res) => {
     let categories = await Category.find({ cafeId }).sort({ displayOrder: 1, name: 1 });
 
     if (categories.length === 0) {
-      categories = await seedDefaultCategories(cafeId);
+      const branchId = req.branchId || 'default';
+      categories = await seedDefaultCategories(cafeId, branchId);
     }
 
-    menuCache.setCategories(cafeId, categories);
+    menuCache.setCategories(categories);
 
     return res.status(200).json({ success: true, count: categories.length, data: categories });
   } catch (error) {
@@ -72,7 +74,7 @@ const createCategory = async (req, res) => {
     const savedCategory = await newCategory.save();
     
     // Clear category cache for this cafe
-    menuCache.clearCategories(cafeId);
+    menuCache.clearCategories();
 
     return res.status(201).json({ success: true, data: savedCategory });
   } catch (error) {
@@ -118,7 +120,7 @@ const updateCategory = async (req, res) => {
     );
 
     // Invalidate caches
-    menuCache.clearCategories(cafeId);
+    menuCache.clearCategories();
     menuCache.clearMenu(); // Category name change cascades to MenuItem categories
 
     return res.status(200).json({ success: true, data: updatedCategory });
@@ -153,7 +155,7 @@ const deleteCategory = async (req, res) => {
       { category: 'Uncategorized' }
     );
     // Invalidate caches
-    menuCache.clearCategories(cafeId);
+    menuCache.clearCategories();
     menuCache.clearMenu(); // Deleting a category updates MenuItems to Uncategorized
 
     return res.status(200).json({ success: true, message: 'Category deleted successfully, items moved to Uncategorized' });
@@ -185,7 +187,7 @@ const reorderCategories = async (req, res) => {
     await Category.bulkWrite(bulkOps);
 
     // Invalidate categories cache (reordering displayOrder doesn't affect menu items)
-    menuCache.clearCategories(cafeId);
+    menuCache.clearCategories();
 
     return res.status(200).json({ success: true, message: 'Categories reordered successfully' });
   } catch (error) {

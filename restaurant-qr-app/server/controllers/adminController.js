@@ -64,6 +64,14 @@ const createStaff = async (req, res) => {
       targetRole = sRoleLower;
     }
 
+    const activeBranch = req.branchId || 'default';
+    if (assignedBranch && assignedBranch !== activeBranch) {
+      return res.status(400).json({
+        success: false,
+        message: `You can only create staff members for the currently selected branch: ${activeBranch}`
+      });
+    }
+
     // Auto-generate unique Employee ID
     let employeeId;
     let exists = true;
@@ -80,7 +88,7 @@ const createStaff = async (req, res) => {
       role: targetRole,
       staffRole: staffRole.trim(),
       employeeId,
-      assignedBranch: assignedBranch || '',
+      assignedBranch: assignedBranch || req.branchId || 'default',
       cafeId,
       isActive: isActive !== undefined ? isActive : true,
       salaryType: salaryType || 'DAILY',
@@ -133,6 +141,8 @@ const getStaff = async (req, res) => {
         query.assignedBranch = req.user.assignedBranch;
       }
       query._id = { $ne: req.user._id };
+    } else {
+      query.assignedBranch = req.branchId || 'default';
     }
 
     const staff = await User.find(query).select('-password').sort({ createdAt: -1 }).lean();
@@ -239,6 +249,21 @@ const updateStaff = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
     }
 
+    const activeBranch = req.branchId || 'default';
+    if (staffMember.assignedBranch !== activeBranch) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized. This employee belongs to a different branch.'
+      });
+    }
+
+    if (assignedBranch !== undefined && assignedBranch !== activeBranch) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot move an employee to another branch.'
+      });
+    }
+
     if (name) staffMember.name = name.trim();
     if (email !== undefined) {
       if (email && email.trim() !== '') {
@@ -303,10 +328,20 @@ const deleteStaff = async (req, res) => {
   }
 
   try {
-    const staffMember = await User.findOneAndDelete({ _id: id, cafeId });
+    const staffMember = await User.findOne({ _id: id, cafeId });
     if (!staffMember) {
       return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
     }
+
+    const activeBranch = req.branchId || 'default';
+    if (staffMember.assignedBranch !== activeBranch) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized. This employee belongs to a different branch.'
+      });
+    }
+
+    await User.deleteOne({ _id: id });
 
     return res.status(200).json({
       success: true,
@@ -554,7 +589,12 @@ const getBranches = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
   try {
-    const branches = await Branch.find({ cafeId }).sort({ createdAt: -1 });
+    const role = (req.user.role || '').toLowerCase();
+    const query = { cafeId };
+    if (['manager', 'chef', 'waiter', 'cashier', 'staff'].includes(role)) {
+      query.branchId = req.user.assignedBranch || 'default';
+    }
+    const branches = await Branch.find(query).sort({ createdAt: -1 });
     return res.status(200).json({ success: true, branches });
   } catch (error) {
     console.error('getBranches error:', error);
@@ -599,9 +639,11 @@ const getStaffSummary = async (req, res) => {
   if (!cafeId) {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
+  const activeBranchId = req.branchId || 'default';
   try {
     const staffMembers = await User.find({
       cafeId,
+      assignedBranch: activeBranchId,
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] }
     });
 

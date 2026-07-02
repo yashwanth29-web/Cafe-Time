@@ -4,7 +4,7 @@ import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { BranchProvider } from './context/BranchContext';
+import { BranchProvider, useBranch } from './context/BranchContext';
 import './styles/App.css';
 import SaaSLayout from './components/SaaSLayout';
 
@@ -28,9 +28,11 @@ function AppContent() {
   const [cart, setCart] = useState([]);
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const { activeBranchId, switchBranch } = useBranch();
   const tableParam = searchParams.get('table');
   const cafeIdParam = searchParams.get('cafeId');
   const sourceParam = searchParams.get('source');
+  const branchIdParam = searchParams.get('branchId');
 
   // Synchronously initialize table number state from query param or session storage
   const [tableNumber, setTableNumber] = useState(() => {
@@ -68,6 +70,13 @@ function AppContent() {
       
     }
   }, [cafeIdParam]);
+
+  // Sync branchId state when search parameter changes reactively
+  useEffect(() => {
+    if (branchIdParam && branchIdParam !== activeBranchId) {
+      switchBranch(branchIdParam);
+    }
+  }, [branchIdParam, activeBranchId, switchBranch]);
 
   // Cart operations
   const addToCart = useCallback((item) => {

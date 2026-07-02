@@ -43,7 +43,7 @@ const createOrder = async (req, res) => {
     // Emit real-time socket event to all dashboards
     const io = socket.getIO();
     if (io) {
-      io.to(`cafe_${savedOrder.cafeId}`).emit('order_created', savedOrder);
+      io.to(`branch_${savedOrder.cafeId}_${savedOrder.branchId || 'default'}`).emit('order_created', savedOrder);
     }
 
     return res.status(201).json({ success: true, data: savedOrder });
@@ -65,6 +65,9 @@ const getOrders = async (req, res) => {
     if (cafeId) {
       filterQuery.cafeId = cafeId;
     }
+
+    const branchId = req.branchId || 'default';
+    filterQuery.branchId = branchId;
 
     // 2. Active orders filter (status != Completed)
     if (req.query.active === 'true') {
@@ -167,14 +170,14 @@ const updateOrderStatus = async (req, res) => {
       
       const io = socket.getIO();
       if (io) {
-        io.to(`cafe_${updatedOrder.cafeId}`).emit('order_updated', latestOrder || updatedOrder);
+        io.to(`branch_${updatedOrder.cafeId}_${updatedOrder.branchId || 'default'}`).emit('order_updated', latestOrder || updatedOrder);
       }
       return res.status(200).json({ success: true, data: latestOrder || updatedOrder });
     }
 
     const io = socket.getIO();
     if (io) {
-      io.to(`cafe_${updatedOrder.cafeId}`).emit('order_updated', updatedOrder);
+      io.to(`branch_${updatedOrder.cafeId}_${updatedOrder.branchId || 'default'}`).emit('order_updated', updatedOrder);
     }
     return res.status(200).json({ success: true, data: updatedOrder });
   } catch (error) {
@@ -208,7 +211,7 @@ const updateOrderPaymentMethod = async (req, res) => {
 
     const io = socket.getIO();
     if (io) {
-      io.to(`cafe_${updatedOrder.cafeId}`).emit('order_updated', updatedOrder);
+      io.to(`branch_${updatedOrder.cafeId}_${updatedOrder.branchId || 'default'}`).emit('order_updated', updatedOrder);
     }
 
     return res.status(200).json({ success: true, data: updatedOrder });

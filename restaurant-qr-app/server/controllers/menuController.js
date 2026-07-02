@@ -60,7 +60,8 @@ const createMenuItem = async (req, res) => {
 
     const io = socket.getIO();
     if (io) {
-      io.to(`cafe_${cafeId}`).emit('menu_updated', latestItem || savedItem);
+      const branchId = req.branchId || 'default';
+      io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || savedItem);
     }
 
     return res.status(201).json({ success: true, data: latestItem || savedItem });
@@ -112,7 +113,8 @@ const updateMenuItem = async (req, res) => {
 
     const io = socket.getIO();
     if (io) {
-      io.to(`cafe_${cafeId}`).emit('menu_updated', latestItem || updatedItem);
+      const branchId = req.branchId || 'default';
+      io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || updatedItem);
     }
 
     return res.status(200).json({ success: true, data: latestItem || updatedItem });

@@ -41,6 +41,6 @@ const SupportTicketSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { bypassBranchFilter: true });
 
 module.exports = mongoose.model('SupportTicket', SupportTicketSchema);
