@@ -274,7 +274,6 @@ const StaffManagementTab = () => {
                     <input type="date" required value={form.joiningDate} onChange={fld('joiningDate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
                   </div>
                 </div>
-              </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="button" onClick={() => setActiveModal(null)} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
