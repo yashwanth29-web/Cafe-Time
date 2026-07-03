@@ -140,6 +140,20 @@ const getStaff = async (req, res) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(now.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+
+    const Attendance = require('../models/Attendance');
+    const attendancesThisWeek = await Attendance.find({
+      cafeId,
+      createdAt: { $gte: monday }
+    }).lean();
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
     const staffWithOrders = await Promise.all(staff.map(async (s) => {
       const ordersCount = await Order.countDocuments({
         cafeId,
@@ -148,9 +162,52 @@ const getStaff = async (req, res) => {
         createdAt: { $gte: todayStart }
       });
       
+      const sAttendances = attendancesThisWeek.filter(a => a.staffId.toString() === s._id.toString());
+      const weeklyBreakdown = {
+        'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0, 'Friday': 0, 'Saturday': 0, 'Sunday': 0
+      };
+      let currentWeekSalary = 0;
+
+      sAttendances.forEach(att => {
+        const attDate = new Date(att.date || att.createdAt);
+        const dayName = dayNames[attDate.getDay()];
+        
+        let durationMin = att.totalDuration || 0;
+        if (!att.checkOutTime && att.checkInTime) {
+          durationMin = Math.max(0, Math.floor((Date.now() - new Date(att.checkInTime).getTime()) / 60000));
+        }
+
+        const overtimeHours = att.overtimeHours || 0;
+        let earnings = 0;
+        const sType = s.salaryType || 'DAILY';
+
+        if (sType === 'DAILY') {
+          if (durationMin >= 480) { earnings = s.dailyRate || 0; }
+          else if (durationMin >= 240) { earnings = (s.dailyRate || 0) * 0.5; }
+          const otRate = s.hourlyRate || ((s.dailyRate || 0) / 8);
+          earnings += overtimeHours * otRate;
+        } else if (sType === 'HOURLY') {
+          earnings = (durationMin / 60) * (s.hourlyRate || 0) + (overtimeHours * (s.hourlyRate || 0));
+        } else if (sType === 'WEEKLY') {
+          earnings = (s.weeklyRate || 0) / 6;
+          const otRate = s.hourlyRate || ((s.weeklyRate || 0) / 40);
+          earnings += overtimeHours * otRate;
+        } else if (sType === 'MONTHLY') {
+          earnings = (s.monthlyRate || 0) / 26;
+          const otRate = s.hourlyRate || ((s.monthlyRate || 0) / 160);
+          earnings += overtimeHours * otRate;
+        }
+
+        earnings = Number(earnings.toFixed(2));
+        weeklyBreakdown[dayName] = earnings;
+        currentWeekSalary += earnings;
+      });
+
       return {
         ...s,
-        ordersHandledToday: ordersCount
+        ordersHandledToday: ordersCount,
+        weeklyBreakdown,
+        currentWeekSalary: Number(currentWeekSalary.toFixed(2))
       };
     }));
     

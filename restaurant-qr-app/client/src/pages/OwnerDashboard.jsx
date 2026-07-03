@@ -1012,6 +1012,45 @@ const OwnerDashboard = () =>{
     }
   };
 
+const exportStaffToCSV = () => {
+  if (!staff || staff.length === 0) {
+    alert("No staff data to export.");
+    return;
+  }
+  const headers = ['Employee ID', 'Name', 'Role', 'Email', 'Phone', 'Branch', 'Salary Type', 'Daily Wage', 'Weekly Wage', 'Monthly Wage', 'Current Week Salary', 'Orders Today', 'Status', 'Joined Date'];
+  const csvRows = [headers.join(',')];
+  staff.forEach(member => {
+    const branchName = branches.find(b => b.branchId === member.assignedBranch)?.branchName || 'Unassigned';
+    const row = [
+      member.employeeId || 'N/A',
+      `"${member.name || ''}"`,
+      member.staffRole || '',
+      member.email || '',
+      member.phone || '',
+      `"${branchName}"`,
+      member.salaryType || 'DAILY',
+      member.dailyRate || 0,
+      member.weeklyRate || 0,
+      member.monthlyRate || 0,
+      member.currentWeekSalary || 0,
+      member.ordersHandledToday || 0,
+      member.isActive ? 'Active' : 'Inactive',
+      new Date(member.createdAt).toLocaleDateString()
+    ];
+    csvRows.push(row.join(','));
+  });
+  const csvData = csvRows.join('\n');
+  const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Staff_Roster_${new Date().toISOString().split('T')[0]}.csv`;
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
  const handleDeleteStaff = async (id) =>{
  if (!window.confirm('Are you sure you want to remove this staff member?')) {
  return;
@@ -2350,6 +2389,23 @@ const OwnerDashboard = () =>{
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff Roster List</h4>
+<div style={{ display: 'flex', gap: '10px' }}>
+<button
+ onClick={exportStaffToCSV}
+ style={{
+ display: 'flex', alignItems: 'center', gap: '8px',
+ background: '#2ecc71', color: 'white',
+ border: 'none', borderRadius: '10px',
+ padding: '8px 16px', fontSize: '13px', fontWeight: 700,
+ cursor: 'pointer', fontFamily: 'inherit',
+ boxShadow: '0 4px 16px rgba(46, 204, 113, 0.4)',
+ transition: 'all 0.2s ease'
+ }}
+ onMouseEnter={(e) =>{e.currentTarget.style.transform = 'translateY(-1px)';e.currentTarget.style.boxShadow = '0 6px 20px rgba(46, 204, 113, 0.5)';}}
+ onMouseLeave={(e) =>{e.currentTarget.style.transform = 'translateY(0)';e.currentTarget.style.boxShadow = '0 4px 16px rgba(46, 204, 113, 0.4)';}}>
+ <span style={{ fontSize: '16px' }}>📥</span>
+ <span>Export CSV</span>
+</button>
 <button
  onClick={() =>setShowAddStaffModal(true)}
  style={{
@@ -2367,6 +2423,7 @@ const OwnerDashboard = () =>{
 <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
 <span>Add Staff</span>
 </button>
+</div>
 </div>
  {staffLoading && staff.length === 0 ?
 <div style={{ textAlign: 'center', padding: '40px 0' }}>
