@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const StaffManagementTab = () => {
@@ -19,7 +19,7 @@ const StaffManagementTab = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const loadStaff = async () => {
+  const loadStaff = useCallback(async () => {
     setLoading(true);
     try {
       const res = await axios.get('/api/admin/staff', { withCredentials: true });
@@ -27,14 +27,17 @@ const StaffManagementTab = () => {
         setStaffList(res.data.staff);
       }
     } catch (err) {
+      console.error('Error loading staff:', err);
       showToast('Failed to load staff list', false);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadStaff();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleOpenAdd = () => {
@@ -80,6 +83,7 @@ const StaffManagementTab = () => {
       setActiveModal(null);
       loadStaff();
     } catch (err) {
+      console.error('Error saving staff:', err);
       showToast(err.response?.data?.message || 'Error saving staff', false);
     }
   };
@@ -89,6 +93,7 @@ const StaffManagementTab = () => {
       await axios.put(`/api/admin/staff/${staff._id}`, { isActive: !staff.isActive }, { withCredentials: true });
       loadStaff();
     } catch (err) {
+      console.error('Error updating status:', err);
       showToast('Failed to update status', false);
     }
   };
@@ -100,6 +105,7 @@ const StaffManagementTab = () => {
       showToast('Staff deleted successfully');
       loadStaff();
     } catch (err) {
+      console.error('Error deleting staff:', err);
       showToast('Failed to delete staff', false);
     }
   };
