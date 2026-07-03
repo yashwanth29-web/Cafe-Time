@@ -253,7 +253,7 @@ const StaffManagementTab = () => {
               </div>
 
               {/* Salary Configuration Fields */}
-              <div style={{ borderTop: '1px solid var(--color-border)', pt: '12px', mt: '12px', mb: '16px' }}>
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', marginTop: '12px', marginBottom: '16px' }}>
                 <h4 style={{ margin: '12px 0 10px 0', color: 'var(--color-primary)', fontSize: '0.95rem' }}>Salary & Wage Configuration</h4>
                 
                 <div style={{ marginBottom: '12px' }}>

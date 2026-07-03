@@ -41,8 +41,9 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
 
         let menuData = [];
         if (menuRes && menuRes.success) {
-          setMenuItems(menuRes.data);
-          menuData = menuRes.data;
+          const mappedData = menuRes.data.map(item => ({ ...item, id: item._id || item.id }));
+          setMenuItems(mappedData);
+          menuData = mappedData;
           setErrorMsg('');
         } else if (isFirst) {
           setErrorMsg('Failed to load menu items.');

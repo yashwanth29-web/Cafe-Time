@@ -532,7 +532,8 @@ const OwnerDashboard = () =>{
  try {
  const response = await getMenu();
  if (response.success) {
- setMenuItems(response.data);
+ const mappedData = response.data.map(item => ({ ...item, id: item._id || item.id }));
+ setMenuItems(mappedData);
  setMenuError('');
  } else {
  setMenuError('Failed to load cafe menu.');
@@ -1224,8 +1225,9 @@ const OwnerDashboard = () =>{
 );
 
  if (invRes.success) {
- setInventoryList(invRes.data);
- setInventoryError('');
+  const mappedInv = invRes.data.map(item => ({ ...item, id: item._id || item.id }));
+  setInventoryList(mappedInv);
+  setInventoryError('');
  } else {
  setInventoryError('Failed to load inventory.');
  }
@@ -4326,11 +4328,11 @@ const OwnerDashboard = () =>{
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="add-inv-stock" className="form-label">Initial Stock *</label>
-<input type="number" id="add-inv-stock" name="add-inv-stock" required value={newInventoryItem.stock} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, stock: Number(e.target.value), quantity: Number(e.target.value) })} className="form-input" />
+<input type="number" id="add-inv-stock" name="add-inv-stock" required value={newInventoryItem.stock ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, stock: e.target.value === '' ? '' : Number(e.target.value), quantity: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="add-inv-minstock" className="form-label">Safety Minimum *</label>
-<input type="number" id="add-inv-minstock" name="add-inv-minstock" required value={newInventoryItem.minStock} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, minStock: Number(e.target.value), reorderLevel: Number(e.target.value) })} className="form-input" />
+<input type="number" id="add-inv-minstock" name="add-inv-minstock" required value={newInventoryItem.minStock ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, minStock: e.target.value === '' ? '' : Number(e.target.value), reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
@@ -4340,13 +4342,13 @@ const OwnerDashboard = () =>{
 </div>
 <div className="form-group">
 <label htmlFor="add-inv-cost" className="form-label">Cost per Unit (₹) *</label>
-<input type="number" step="0.001" id="add-inv-cost" name="add-inv-cost" required value={newInventoryItem.cost} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, cost: Number(e.target.value), costPrice: Number(e.target.value) })} className="form-input" />
+<input type="number" step="0.001" id="add-inv-cost" name="add-inv-cost" required value={newInventoryItem.cost ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, cost: e.target.value === '' ? '' : Number(e.target.value), costPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="add-inv-sellingprice" className="form-label">Selling Price (₹) *</label>
-<input type="number" step="0.01" id="add-inv-sellingprice" name="add-inv-sellingprice" required value={newInventoryItem.sellingPrice} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, sellingPrice: Number(e.target.value) })} className="form-input" />
+<input type="number" step="0.01" id="add-inv-sellingprice" name="add-inv-sellingprice" required value={newInventoryItem.sellingPrice ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, sellingPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="add-inv-category" className="form-label">Category *</label>
@@ -4390,27 +4392,27 @@ const OwnerDashboard = () =>{
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="edit-inv-stock" className="form-label">Current Stock *</label>
-<input type="number" id="edit-inv-stock" name="edit-inv-stock" required value={editingInventoryItem.stock} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, stock: Number(e.target.value), quantity: Number(e.target.value) })} className="form-input" />
+<input type="number" id="edit-inv-stock" name="edit-inv-stock" required value={editingInventoryItem.quantity ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, quantity: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-minstock" className="form-label">Safety Minimum *</label>
-<input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.minStock} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, minStock: Number(e.target.value), reorderLevel: Number(e.target.value) })} className="form-input" />
+<input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.reorderLevel ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="edit-inv-unit" className="form-label">Unit of Measurement *</label>
-<input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
+<input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-cost" className="form-label">Cost per Unit (₹) *</label>
-<input type="number" step="0.001" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.cost} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, cost: Number(e.target.value), costPrice: Number(e.target.value) })} className="form-input" />
+<input type="number" step="0.001" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="edit-inv-sellingprice" className="form-label">Selling Price (₹) *</label>
-<input type="number" step="0.01" id="edit-inv-sellingprice" name="edit-inv-sellingprice" required value={editingInventoryItem.sellingPrice || 0} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, sellingPrice: Number(e.target.value) })} className="form-input" />
+<input type="number" step="0.01" id="edit-inv-sellingprice" name="edit-inv-sellingprice" required value={editingInventoryItem.sellingPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, sellingPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-category" className="form-label">Category *</label>
