@@ -45,7 +45,7 @@ const BranchSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { bypassBranchFilter: true });
 
 BranchSchema.index({ branchId: 1, cafeId: 1 }, { unique: true });
 

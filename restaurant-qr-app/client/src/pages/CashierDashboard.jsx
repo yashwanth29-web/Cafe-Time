@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import { useSearchParams } from 'react-router-dom';
 import { getOrders, updateOrderStatus, getInventory, getCafeInfo } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
@@ -7,6 +8,8 @@ import '../styles/App.css';
 
 const CashierDashboard = () =>{
  const { logout, user } = useAuth();
+ const { activeBranchId, branches } = useBranch();
+ const currentBranch = branches?.find(b => b.branchId === activeBranchId) || null;
  const seenPaidOrderIdsRef = useRef(new Set());
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
@@ -115,7 +118,7 @@ const CashierDashboard = () =>{
  try {
  const today = new Date();
  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
- const response = await getOrders({ date: todayStr, cafeId: user?.cafeId });
+ const response = await getOrders({ date: todayStr, cafeId: user?.cafeId, branchId: activeBranchId });
  if (response.success) {
  setOrders(response.data);
  
@@ -146,23 +149,27 @@ const CashierDashboard = () =>{
  }
  };
 
- useEffect(() =>{
- fetchOrders();
+  useEffect(() =>{
+  // Immediately clear data states to prevent screen flash of previous branch data
+  setOrders([]);
+  setLoading(true);
 
- const pollingInterval = setInterval(() =>{
- fetchOrders();
- setRefreshCountdown(12);
- }, 12000);
+  fetchOrders();
 
- const countdownInterval = setInterval(() =>{
- setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
- }, 1000);
+  const pollingInterval = setInterval(() =>{
+  fetchOrders();
+  setRefreshCountdown(12);
+  }, 12000);
 
- return () =>{
- clearInterval(pollingInterval);
- clearInterval(countdownInterval);
- };
- }, [user]);
+  const countdownInterval = setInterval(() =>{
+  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
+  }, 1000);
+
+  return () =>{
+  clearInterval(pollingInterval);
+  clearInterval(countdownInterval);
+  };
+  }, [user, activeBranchId]);
 
  const handleProcessPayment = async (orderId, paymentMethod) =>{
  try {
@@ -407,7 +414,7 @@ const CashierDashboard = () =>{
  }
  
 <button
- onClick={() =>printPOSReceipt(selectedOrder, user, cafeInfo)}
+ onClick={() =>printPOSReceipt(selectedOrder, user, cafeInfo, currentBranch)}
  className="btn btn-secondary touch-btn"
  style={{ width: '100%', padding: '12px', fontSize: '13px', minHeight: '44px' }}>
  

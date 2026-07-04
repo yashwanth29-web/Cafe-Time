@@ -67,7 +67,8 @@ const listPayroll = async (req, res) => {
   const userId = req.user._id;
 
   try {
-    const query = {};
+    const activeBranch = req.branchId || 'default';
+    const query = { branchId: activeBranch };
 
     // Enforce role authorization filters
     if (userRole === 'admin' || userRole === 'owner' || userRole === 'manager') {
@@ -108,9 +109,10 @@ const getPayrollDetails = async (req, res) => {
   const userId = req.user._id;
 
   try {
-    const payroll = await Payroll.findById(id);
+    const activeBranch = req.branchId || 'default';
+    const payroll = await Payroll.findOne({ _id: id, branchId: activeBranch });
     if (!payroll) {
-      return res.status(404).json({ success: false, message: 'Payroll record not found' });
+      return res.status(404).json({ success: false, message: 'Payroll record not found in this branch' });
     }
 
     // Check ownership scope
@@ -139,7 +141,8 @@ const getCurrentEmployeePayroll = async (req, res) => {
   const userId = req.user._id;
 
   try {
-    const payrolls = await Payroll.find({ employeeId: userId }).sort({ weekEnd: -1 });
+    const activeBranch = req.branchId || 'default';
+    const payrolls = await Payroll.find({ employeeId: userId, branchId: activeBranch }).sort({ weekEnd: -1 });
     return res.status(200).json({ success: true, data: payrolls });
   } catch (error) {
     console.error('getCurrentEmployeePayroll error:', error);
@@ -160,9 +163,10 @@ const updatePayroll = async (req, res) => {
   const cafeId = req.user.cafeId;
 
   try {
-    const payroll = await Payroll.findOne({ _id: id, cafeId });
+    const activeBranch = req.branchId || 'default';
+    const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
     if (!payroll) {
-      return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to your cafe' });
+      return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
     }
 
     if (payroll.paymentStatus !== 'Pending') {
@@ -251,9 +255,10 @@ const payPayroll = async (req, res) => {
   }
 
   try {
-    const payroll = await Payroll.findOne({ _id: id, cafeId });
+    const activeBranch = req.branchId || 'default';
+    const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
     if (!payroll) {
-      return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to your cafe' });
+      return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
     }
 
     if (payroll.paymentStatus === 'Paid') {
@@ -295,9 +300,10 @@ const deletePayroll = async (req, res) => {
   const cafeId = req.user.cafeId;
 
   try {
-    const payroll = await Payroll.findOne({ _id: id, cafeId });
+    const activeBranch = req.branchId || 'default';
+    const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
     if (!payroll) {
-      return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to your cafe' });
+      return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
     }
 
     if (payroll.paymentStatus !== 'Pending') {
@@ -326,7 +332,8 @@ const getPayrollHistory = async (req, res) => {
   const userId = req.user._id;
 
   try {
-    const query = { paymentStatus: 'Paid' };
+    const activeBranch = req.branchId || 'default';
+    const query = { paymentStatus: 'Paid', branchId: activeBranch };
 
     if (userRole === 'admin' || userRole === 'owner' || userRole === 'manager') {
       if (!cafeId) {
@@ -357,8 +364,9 @@ const getPayrollReport = async (req, res) => {
   }
 
   try {
+    const activeBranch = req.branchId || 'default';
     // 1. Total expenses vs pending
-    const allRecords = await Payroll.find({ cafeId });
+    const allRecords = await Payroll.find({ cafeId, branchId: activeBranch });
 
     let totalPaid = 0;
     let totalPending = 0;
@@ -376,7 +384,7 @@ const getPayrollReport = async (req, res) => {
     });
 
     // 2. Highest paid employee
-    const highestPaid = await Payroll.findOne({ cafeId }).sort({ netSalary: -1 }).limit(1);
+    const highestPaid = await Payroll.findOne({ cafeId, branchId: activeBranch }).sort({ netSalary: -1 }).limit(1);
 
     // 3. Branch wise expenses breakdown
     const branchBreakdown = {};

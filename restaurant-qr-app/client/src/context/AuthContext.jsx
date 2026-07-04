@@ -144,6 +144,8 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout request failed:', err);
     } finally {
       localStorage.removeItem('token');
+      localStorage.removeItem('activeBranchId');
+      localStorage.removeItem('recentBranches');
       setUser(null);
     }
   };

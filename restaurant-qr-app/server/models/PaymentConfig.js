@@ -4,7 +4,12 @@ const PaymentConfigSchema = new mongoose.Schema({
   cafeId: {
     type: String,
     required: true,
-    unique: true,
+    trim: true
+  },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default',
     trim: true
   },
   razorpayKeyId: {
@@ -44,5 +49,7 @@ const PaymentConfigSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+PaymentConfigSchema.index({ cafeId: 1, branchId: 1 }, { unique: true });
 
 module.exports = mongoose.model('PaymentConfig', PaymentConfigSchema);

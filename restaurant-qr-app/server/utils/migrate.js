@@ -10,6 +10,7 @@ const Notification = require('../models/Notification');
 const OperationalConfig = require('../models/OperationalConfig');
 const Review = require('../models/Review');
 const User = require('../models/User');
+const PaymentConfig = require('../models/PaymentConfig');
 
 const migrateData = async () => {
   try {
@@ -29,6 +30,11 @@ const migrateData = async () => {
     try {
       await OperationalConfig.collection.dropIndex('cafeId_1');
       console.log('Dropped OperationalConfig unique index cafeId_1');
+    } catch (e) {}
+
+    try {
+      await PaymentConfig.collection.dropIndex('cafeId_1');
+      console.log('Dropped PaymentConfig unique index cafeId_1');
     } catch (e) {}
 
     // Drop old Inventory compound indexes that may conflict
@@ -165,6 +171,15 @@ const migrateData = async () => {
       );
       console.log(`Migrated Review: ${reviewResult.modifiedCount} records updated.`);
     } catch (e) { console.warn('Review migration skipped:', e.message); }
+
+    // PaymentConfig
+    try {
+      const paymentConfigResult = await PaymentConfig.updateMany(
+        { branchId: { $exists: false } },
+        { $set: { cafeId: 'CD001', branchId: 'default' } }
+      );
+      console.log(`Migrated PaymentConfig: ${paymentConfigResult.modifiedCount} records updated.`);
+    } catch (e) { console.warn('PaymentConfig migration skipped:', e.message); }
 
     // User (Assigned branch for staff)
     try {

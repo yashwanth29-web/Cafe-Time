@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
+import { useBranch } from '../context/BranchContext';
 import { getOrders, getStaff, getInventory, updateInventoryItem, recordPurchase, recordWastage, getMenu, updateMenuItem, getCafeInfo } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
 
 const ManagerDashboard = () =>{
  const { logout, user } = useAuth();
+  const { activeBranchId, branches } = useBranch();
+  const currentBranch = branches?.find(b => b.branchId === activeBranchId) || null;
  const [orders, setOrders] = useState([]);
  const [staffList, setStaffList] = useState([]);
  const [loading, setLoading] = useState(true);
@@ -217,6 +220,13 @@ const ManagerDashboard = () =>{
   };
 
   useEffect(() =>{
+  // Immediately clear data states to prevent screen flash of previous branch data
+  setOrders([]);
+  setStaffList([]);
+  setInventory([]);
+  setMenuItems([]);
+  setLoading(true);
+
   fetchInitialData();
 
   // Polling every 15 seconds for updates
@@ -225,7 +235,7 @@ const ManagerDashboard = () =>{
   }, 15000);
 
   return () =>clearInterval(pollingInterval);
-  }, [user]);
+  }, [user, activeBranchId]);
 
  const handleAttendanceChange = (staffId, status) =>{
  setAttendance((prev) =>({ ...prev, [staffId]: status }));
@@ -367,8 +377,8 @@ const ManagerDashboard = () =>{
 </td>
 <td style={{ padding: '10px 8px' }}>
 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-<button onClick={() =>printKOT(order, user, cafeInfo)} style={{ background: '#34495E', color: '#ffffff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
-<button onClick={() =>printPOSReceipt(order, user, cafeInfo)} style={{ background: '#2980B9', color: '#ffffff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
+<button onClick={() =>printKOT(order, user, cafeInfo, currentBranch)} style={{ background: '#34495E', color: '#ffffff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
+<button onClick={() =>printPOSReceipt(order, user, cafeInfo, currentBranch)} style={{ background: '#2980B9', color: '#ffffff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
 </div>
 </td>
 </tr>
@@ -413,8 +423,8 @@ const ManagerDashboard = () =>{
 </div>
 </div>
 <div style={{ display: 'flex', gap: '8px', borderTop: '1px dashed var(--color-border)', paddingTop: '10px' }}>
-<button onClick={() =>printKOT(order, user, cafeInfo)} style={{ flex: 1, background: '#34495E', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> KOT</button>
-<button onClick={() =>printPOSReceipt(order, user, cafeInfo)} style={{ flex: 1, background: '#2980B9', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> POS Bill</button>
+<button onClick={() =>printKOT(order, user, cafeInfo, currentBranch)} style={{ flex: 1, background: '#34495E', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> KOT</button>
+<button onClick={() =>printPOSReceipt(order, user, cafeInfo, currentBranch)} style={{ flex: 1, background: '#2980B9', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> POS Bill</button>
 </div>
 </div>
 )}

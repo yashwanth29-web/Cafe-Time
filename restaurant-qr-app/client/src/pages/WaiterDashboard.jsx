@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import { getOrders, updateOrderStatus, getCafeInfo, getAssetUrl } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { QRCodeSVG } from 'qrcode.react';
@@ -7,6 +8,8 @@ import '../styles/App.css';
 
 const WaiterDashboard = () =>{
  const { user } = useAuth();
+ const { activeBranchId, branches } = useBranch();
+ const currentBranch = branches?.find(b => b.branchId === activeBranchId) || null;
  const seenPaidOrderIdsRef = useRef(new Set());
  
  const [cafeInfo, setCafeInfo] = useState(null);
@@ -111,23 +114,27 @@ const WaiterDashboard = () =>{
  }
  };
 
- useEffect(() =>{
- fetchOrders();
+  useEffect(() =>{
+  // Immediately clear data states to prevent screen flash of previous branch data
+  setOrders([]);
+  setLoading(true);
 
- const pollingInterval = setInterval(() =>{
- fetchOrders();
- setRefreshCountdown(12);
- }, 12000);
+  fetchOrders();
 
- const countdownInterval = setInterval(() =>{
- setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
- }, 1000);
+  const pollingInterval = setInterval(() =>{
+  fetchOrders();
+  setRefreshCountdown(12);
+  }, 12000);
 
- return () =>{
- clearInterval(pollingInterval);
- clearInterval(countdownInterval);
- };
- }, [user]);
+  const countdownInterval = setInterval(() =>{
+  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
+  }, 1000);
+
+  return () =>{
+  clearInterval(pollingInterval);
+  clearInterval(countdownInterval);
+  };
+  }, [user, activeBranchId]);
 
  const handleStatusUpdate = async (id, newStatus) =>{
  try {
@@ -415,7 +422,7 @@ const WaiterDashboard = () =>{
 </div>
 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
 <button
- onClick={() =>printPOSReceipt(order, user, cafeInfo)}
+ onClick={() =>printPOSReceipt(order, user, cafeInfo, currentBranch)}
  className="touch-btn"
  style={{
  background: '#2980B9',
@@ -536,7 +543,7 @@ const WaiterDashboard = () =>{
 </div>
 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
 <button
- onClick={() =>printKOT(order, user, cafeInfo)}
+ onClick={() =>printKOT(order, user, cafeInfo, currentBranch)}
  className="touch-btn"
  style={{
  background: '#34495E',
@@ -553,7 +560,7 @@ const WaiterDashboard = () =>{
   KOT
 </button>
 <button
- onClick={() =>printPOSReceipt(order, user, cafeInfo)}
+ onClick={() =>printPOSReceipt(order, user, cafeInfo, currentBranch)}
  className="touch-btn"
  style={{
  background: '#2980B9',
@@ -658,7 +665,7 @@ const WaiterDashboard = () =>{
 </div>
 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
 <button
- onClick={() =>printKOT(order, user, cafeInfo)}
+ onClick={() =>printKOT(order, user, cafeInfo, currentBranch)}
  className="touch-btn"
  style={{
  background: '#34495E',

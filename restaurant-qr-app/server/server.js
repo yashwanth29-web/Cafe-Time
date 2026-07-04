@@ -3,8 +3,13 @@ const http = require('http');
 const dotenv = require('dotenv');
 const path = require('path');
 
+// Trigger nodemon restart 4
 // Load environment variables immediately before routing imports
 dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
+
+const mongoose = require('mongoose');
+const multiBranchPlugin = require('./utils/multiBranchPlugin');
+mongoose.plugin(multiBranchPlugin);
 
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -21,6 +26,7 @@ const workReportRoutes = require('./routes/workReportRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const cafeRoutes = require('./routes/cafeRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const payrollRoutes = require('./routes/payrollRoutes');
 
 // Create Express instance
 const app = express();
@@ -37,7 +43,7 @@ app.use(cors({
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization", "x-branch-id", "x-cafe-id"]
 }));
 app.use(cookieParser());
 app.use(express.json()); // Body parser
@@ -76,6 +82,7 @@ app.use('/api/work-reports', workReportRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/cafe', cafeRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/payroll', payrollRoutes);
 
 
 // Health check endpoint

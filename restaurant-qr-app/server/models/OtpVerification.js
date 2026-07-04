@@ -24,6 +24,6 @@ const OtpVerificationSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { bypassBranchFilter: true });
 
 module.exports = mongoose.model('OtpVerification', OtpVerificationSchema);
