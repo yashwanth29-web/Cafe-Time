@@ -544,7 +544,7 @@ const StaffDashboard = () => {
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`;
+            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${user?.assignedBranch || 'default'}`;
           }
         }}
       />
@@ -559,7 +559,7 @@ const StaffDashboard = () => {
           Cancel
         </button>
         <button
-          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`}
+          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${user?.assignedBranch || 'default'}`}
           style={{
             padding: '10px 16px', borderRadius: '8px', border: 'none',
             background: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 'bold'

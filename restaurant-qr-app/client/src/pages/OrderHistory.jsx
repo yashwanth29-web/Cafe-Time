@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
+import { QRCodeSVG } from 'qrcode.react';
 
 const OrderHistory = ({ cafeId }) => {
   const navigate = useNavigate();
@@ -524,15 +525,33 @@ const OrderHistory = ({ cafeId }) => {
 
                   {/* Payment Options */}
                   {isServed && !isPaid && (
-                    <div style={{ background: 'rgba(0, 0, 0, 0.02)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '10px', borderRadius: '8px' }}>
-                      <div>
-                        <h4 style={{ color: 'var(--color-text-primary)', fontSize: '11px', fontWeight: '800', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          💵 Cash Payment at Counter
-                        </h4>
-                        <p style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: '1.3', margin: '0' }}>
-                          Please proceed to the cashier counter to complete your payment with cash. Share your <strong>Table {order.tableNumber}</strong>.
+                    <div style={{ background: 'rgba(0, 0, 0, 0.02)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '12px', borderRadius: '8px', textAlign: 'center' }}>
+                      <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: '800', margin: '0 0 10px 0' }}>
+                        ⏳ Payment Pending
+                      </h4>
+                      {cafeInfo?.upiId ? (
+                        <>
+                          <div style={{ background: 'white', padding: '12px', borderRadius: '8px', display: 'inline-block', marginBottom: '12px', border: '1px solid var(--color-border)' }}>
+                            <QRCodeSVG value={`upi://pay?pa=${cafeInfo.upiId}&pn=${encodeURIComponent(cafeInfo?.name || 'Cafe')}&am=${Math.round(order.totalAmount)}`} size={150} />
+                          </div>
+                          <a
+                            href={`upi://pay?pa=${cafeInfo.upiId}&pn=${encodeURIComponent(cafeInfo?.name || 'Cafe')}&am=${Math.round(order.totalAmount)}`}
+                            style={{
+                              display: 'block', background: '#8E44AD', color: 'white', textDecoration: 'none',
+                              padding: '12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px'
+                            }}
+                          >
+                            Pay ₹{Math.round(order.totalAmount)} via UPI App
+                          </a>
+                          <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '10px', marginBottom: '0' }}>
+                            Show the success screen to a waiter, or pay with cash.
+                          </p>
+                        </>
+                      ) : (
+                        <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '0' }}>
+                          A waiter will assist you with the payment shortly.
                         </p>
-                      </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -28,9 +28,10 @@ const parseCoords = (locationStr) => {
  */
 const createStaff = async (req, res) => {
   const { 
-    name, email, phone, staffRole, assignedBranch, isActive,
+    name, email, phone, staffRole, isActive,
     salaryType, dailyRate, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
   } = req.body;
+  const assignedBranch = req.body.assignedBranch || req.body.branchId || '';
   const cafeId = req.user.cafeId;
 
   if (!name || !phone || !staffRole) {
@@ -128,10 +129,12 @@ const getStaff = async (req, res) => {
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] } 
     };
 
+    const branchId = req.query.branchId || (req.user.role === 'manager' ? req.user.assignedBranch : null);
+    if (branchId && branchId !== 'default') {
+      query.assignedBranch = branchId;
+    }
+
     if (req.user.role === 'manager') {
-      if (req.user.assignedBranch) {
-        query.assignedBranch = req.user.assignedBranch;
-      }
       query._id = { $ne: req.user._id };
     }
 
@@ -554,7 +557,16 @@ const getBranches = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
   try {
-    const branches = await Branch.find({ cafeId }).sort({ createdAt: -1 });
+    const branches = await Branch.find({ cafeId }).sort({ createdAt: -1 }).lean();
+    
+    // Inject the default Main Branch
+    branches.unshift({
+      branchId: 'default',
+      branchName: 'Main Branch',
+      cafeId: cafeId,
+      address: 'Main Location'
+    });
+
     return res.status(200).json({ success: true, branches });
   } catch (error) {
     console.error('getBranches error:', error);

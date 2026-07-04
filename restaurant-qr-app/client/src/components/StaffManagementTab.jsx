@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { useBranch } from '../context/BranchContext';
 
 const StaffManagementTab = () => {
+  const { branches } = useBranch();
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -112,6 +114,12 @@ const StaffManagementTab = () => {
 
   const fld = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
 
+  const getBranchName = (branchId) => {
+    if (!branchId || branchId === 'default') return 'Main Branch';
+    const b = branches?.find(x => x.branchId === branchId);
+    return b ? b.branchName : branchId;
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       {toast && (
@@ -168,6 +176,9 @@ const StaffManagementTab = () => {
                     }}>
                       {staff.staffRole || staff.role}
                     </span>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-primary)', marginTop: '6px', fontWeight: 'bold' }}>
+                      📍 {getBranchName(staff.assignedBranch)}
+                    </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
                       Joined {new Date(staff.createdAt).toLocaleDateString()}
                     </div>

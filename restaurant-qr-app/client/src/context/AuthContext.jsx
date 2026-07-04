@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import API, { getMe, sendOtp, verifyOtp, logoutUser, loginWithGoogleApi } from '../services/api';
+import API, { getMe, sendOtp, verifyOtp, logoutUser, loginWithGoogleApi, getBranches } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -7,6 +7,9 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  const [branches, setBranches] = useState([]);
+  const [activeBranchId, setActiveBranchId] = useState(localStorage.getItem('activeBranchId') || 'default');
 
   // Check if user has an active session cookie on app boot
   const checkSession = async () => {
@@ -29,6 +32,23 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (user && (user.role === 'admin' || user.role === 'owner' || user.role === 'manager')) {
+      getBranches().then(res => {
+        if (res.success && res.branches) {
+          setBranches(res.branches);
+          if (!localStorage.getItem('activeBranchId') && res.branches.length > 0) {
+            setActiveBranchId(res.branches[0].branchId);
+            localStorage.setItem('activeBranchId', res.branches[0].branchId);
+          }
+        }
+      }).catch(err => console.error('Failed to load branches', err));
+    } else if (user && user.assignedBranch) {
+      setActiveBranchId(user.assignedBranch);
+      localStorage.setItem('activeBranchId', user.assignedBranch);
+    }
+  }, [user]);
 
   useEffect(() => {
     checkSession();
@@ -139,7 +159,13 @@ export const AuthProvider = ({ children }) => {
         loginWithGoogle,
         logout,
         checkSession,
-        setUser
+        setUser,
+        branches,
+        activeBranchId,
+        setActiveBranchId: (id) => {
+          setActiveBranchId(id);
+          localStorage.setItem('activeBranchId', id);
+        }
       }}
     >
       {children}

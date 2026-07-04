@@ -1,4 +1,5 @@
 const MenuItem = require('../models/MenuItem');
+const MenuOverride = require('../models/MenuOverride');
 const { updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
 const menuCache = require('../utils/menuCache');
 const socket = require('../socket');
@@ -8,13 +9,40 @@ const socket = require('../socket');
 // @access  Public
 const getMenuItems = async (req, res) => {
   try {
-    const cached = menuCache.getMenu();
+    const branchId = req.query.branchId || (req.body && req.body.branchId) || 'default';
+    const cached = menuCache.getMenu(branchId);
     if (cached) {
       return res.status(200).json({ success: true, count: cached.length, data: cached });
     }
-    const menuItems = await MenuItem.find().select('-__v -createdAt -updatedAt').sort({ category: 1, name: 1 }).lean();
-    menuCache.setMenu(menuItems);
-    return res.status(200).json({ success: true, count: menuItems.length, data: menuItems });
+
+    // Always fetch Master Menu
+    const masterItems = await MenuItem.find({ branchId: 'default' }).select('-__v -createdAt -updatedAt').sort({ category: 1, name: 1 }).lean();
+    
+    let finalItems = masterItems;
+
+    // Apply Overrides for specific branches
+    if (branchId !== 'default') {
+      const overrides = await MenuOverride.find({ branchId }).lean();
+      const overrideMap = {};
+      overrides.forEach(o => {
+        overrideMap[o.menuItemId.toString()] = o;
+      });
+
+      finalItems = masterItems.map(item => {
+        const override = overrideMap[item._id.toString()];
+        if (override) {
+          if (override.isHidden) return null; // Hide it completely
+          if (override.price !== undefined) item.price = override.price;
+          if (override.available !== undefined) item.available = override.available;
+          // Tag item to show it has overrides in UI
+          item.hasOverride = true; 
+        }
+        return item;
+      }).filter(item => item !== null);
+    }
+
+    menuCache.setMenu(branchId, finalItems);
+    return res.status(200).json({ success: true, count: finalItems.length, data: finalItems });
   } catch (error) {
     console.error('Error fetching menu items:', error);
     return res.status(500).json({ success: false, message: 'Server error while fetching menu items', error: error.message });
@@ -33,12 +61,15 @@ const createMenuItem = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide name, price, category, and description' });
     }
 
+    const branchId = 'default'; // Force Master Menu creation
+
     const newMenuItem = new MenuItem({
       name,
       price: parseFloat(price),
       originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
       category,
       description,
+      branchId,
       available: available !== undefined ? available : true,
       isCombo: isCombo !== undefined ? isCombo : false,
       image: image || '/images/default-food.png',
@@ -56,7 +87,7 @@ const createMenuItem = async (req, res) => {
     const latestItem = await MenuItem.findById(savedItem._id);
 
     // Clear menu cache since a new item was added
-    menuCache.clearMenu();
+    menuCache.clearMenu(branchId);
 
     const io = socket.getIO();
     if (io) {
@@ -107,8 +138,8 @@ const updateMenuItem = async (req, res) => {
     // Fetch the updated item again to return the latest availability status
     const latestItem = await MenuItem.findById(id);
 
-    // Clear menu cache since an item was updated
-    menuCache.clearMenu();
+    // Clear menu caches (clear all since we don't know which branches are affected by master change)
+    menuCache.clearAll();
 
     const io = socket.getIO();
     if (io) {
@@ -135,7 +166,7 @@ const deleteMenuItem = async (req, res) => {
     }
 
     // Clear menu cache since an item was deleted
-    menuCache.clearMenu();
+    menuCache.clearMenu(deletedItem.branchId || 'default');
 
     return res.status(200).json({ success: true, message: 'Menu item deleted successfully' });
   } catch (error) {
@@ -144,9 +175,47 @@ const deleteMenuItem = async (req, res) => {
   }
 };
 
+// @desc    Update or create a branch override
+// @route   POST /api/menu/override
+// @access  Public (Owner Dashboard)
+const saveMenuOverride = async (req, res) => {
+  try {
+    const { branchId, menuItemId, price, available, isHidden } = req.body;
+    if (!branchId || branchId === 'default' || !menuItemId) {
+      return res.status(400).json({ success: false, message: 'Invalid parameters for override' });
+    }
+
+    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+
+    let override = await MenuOverride.findOne({ cafeId, branchId, menuItemId });
+    if (!override) {
+      override = new MenuOverride({ cafeId, branchId, menuItemId });
+    }
+    
+    if (price !== undefined) override.price = price;
+    if (available !== undefined) override.available = available;
+    if (isHidden !== undefined) override.isHidden = isHidden;
+
+    await override.save();
+    
+    menuCache.clearMenu(branchId);
+    
+    const io = socket.getIO();
+    if (io) {
+      io.to(`cafe_${cafeId}`).emit('menu_updated', { _id: menuItemId });
+    }
+
+    return res.status(200).json({ success: true, data: override });
+  } catch (error) {
+    console.error('Error saving override:', error);
+    return res.status(500).json({ success: false, message: 'Server error while saving override' });
+  }
+};
+
 module.exports = {
   getMenuItems,
   createMenuItem,
   updateMenuItem,
-  deleteMenuItem
+  deleteMenuItem,
+  saveMenuOverride
 };

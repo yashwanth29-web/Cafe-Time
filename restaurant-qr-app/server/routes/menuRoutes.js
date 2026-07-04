@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getMenuItems, createMenuItem, updateMenuItem, deleteMenuItem } = require('../controllers/menuController');
+const { getMenuItems, createMenuItem, updateMenuItem, deleteMenuItem, saveMenuOverride } = require('../controllers/menuController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 const multer = require('multer');
@@ -30,6 +30,7 @@ const upload = multer({
 
 router.get('/', getMenuItems);
 router.post('/', protect, restrictTo('admin', 'owner', 'manager'), createMenuItem);
+router.post('/override', protect, restrictTo('admin', 'owner', 'manager'), saveMenuOverride);
 router.post('/upload-image', protect, restrictTo('admin', 'owner', 'manager'), upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image file uploaded' });

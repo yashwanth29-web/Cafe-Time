@@ -45,13 +45,36 @@ const API = axios.create({
   },
 });
 
-// Request interceptor to attach JWT token to all API requests if present
+// Request interceptor to attach JWT token and active branchId to all API requests if present
 API.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    const branchId = localStorage.getItem('activeBranchId');
+    if (branchId && branchId !== 'default') {
+      const url = config.url || '';
+      const isBranchRoute = url.startsWith('/menu') || url.startsWith('/orders') || 
+                            url.startsWith('/admin') || url.startsWith('/inventory') || 
+                            url.startsWith('/staff') || url.startsWith('/categories');
+      
+      if (isBranchRoute && !url.includes('/branches')) {
+        if (config.method === 'get') {
+          config.params = { ...config.params, branchId };
+        } else if (['post', 'put', 'patch'].includes(config.method)) {
+          if (config.data && !(config.data instanceof FormData) && typeof config.data === 'object') {
+            config.data = { ...config.data, branchId };
+          } else if (config.data instanceof FormData) {
+            if (!config.data.has('branchId')) {
+              config.data.append('branchId', branchId);
+            }
+          }
+        }
+      }
+    }
+
     return config;
   },
   (error) => {
@@ -104,6 +127,11 @@ export const updateMenuItem = async (id, menuItemData) => {
 
 export const deleteMenuItem = async (id) => {
   const response = await API.delete(`/menu/${id}`);
+  return response.data;
+};
+
+export const saveMenuOverride = async (overrideData) => {
+  const response = await API.post('/menu/override', overrideData);
   return response.data;
 };
 

@@ -204,24 +204,13 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
                   <div className="combo-card-title" style={{ fontSize: '12px', fontWeight: 800, lineHeight: 1.2, color: '#3d2516', marginBottom: '10px' }}>{combo.name}</div>
                   
                   {combo.originalPrice && combo.originalPrice > combo.price ? (
-                    <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: '9px', color: '#888' }}>Price (Incl. GST)</span>
-                          <span style={{ fontSize: '13px', textDecoration: 'line-through', color: '#555', fontWeight: 600 }}>₹{combo.originalPrice.toFixed(0)}</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <span style={{ fontSize: '9px', color: '#888' }}>You Pay</span>
-                          <span style={{ fontSize: '16px', color: '#8b3d20', fontWeight: 900 }}>₹{combo.price.toFixed(0)}</span>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'center', color: '#27ae60', fontSize: '10px', fontWeight: 800, borderTop: '1px dashed #e0d5c1', paddingTop: '6px', marginBottom: '8px' }}>
-                        You Save ₹{(combo.originalPrice - combo.price).toFixed(0)}
-                      </div>
-                    </>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '15px', textDecoration: 'line-through', color: '#888', fontWeight: 700 }}>₹{combo.originalPrice.toFixed(0)}</span>
+                      <span style={{ fontSize: '16px', color: '#fff', fontWeight: 900, background: '#6b46c1', padding: '2px 8px', borderRadius: '4px' }}>₹{combo.price.toFixed(0)}</span>
+                    </div>
                   ) : (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', minHeight: '34px' }}>
-                      <span className="combo-card-price" style={{ fontSize: '15px', color: '#8b3d20', fontWeight: 900 }}>₹{combo.price.toFixed(0)}</span>
+                    <div style={{ marginBottom: '12px' }}>
+                      <span className="combo-card-price" style={{ fontSize: '16px', color: '#8b3d20', fontWeight: 900 }}>₹{combo.price.toFixed(0)}</span>
                     </div>
                   )}
                   

@@ -14,11 +14,21 @@ router.get('/:id', async (req, res) => {
           name: 'Dr. Chai Cafe',
           address: 'Main Road, Near Metro Station, Hyderabad',
           gstNumber: '36AAAAA1111A1Z1',
-          supportNumber: '+91 9876543210'
+          supportNumber: '+91 9876543210',
+          upiId: ''
         }
       });
     }
-    return res.status(200).json({ success: true, data: cafe });
+
+    const PaymentConfig = require('../models/PaymentConfig');
+    const payment = await PaymentConfig.findOne({ cafeId: req.params.id });
+    
+    const cafeData = cafe.toObject();
+    if (payment && payment.upiId) {
+      cafeData.upiId = payment.upiId;
+    }
+
+    return res.status(200).json({ success: true, data: cafeData });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error fetching cafe details', error: error.message });
   }

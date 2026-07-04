@@ -31,6 +31,7 @@ function AppContent() {
   const tableParam = searchParams.get('table');
   const cafeIdParam = searchParams.get('cafeId');
   const sourceParam = searchParams.get('source');
+  const branchIdParam = searchParams.get('branchId');
 
   // Synchronously initialize table number state from query param or session storage
   const [tableNumber, setTableNumber] = useState(() => {
@@ -68,6 +69,14 @@ function AppContent() {
       
     }
   }, [cafeIdParam]);
+
+  // Sync branchId state when search parameter changes reactively
+  useEffect(() => {
+    if (branchIdParam) {
+      sessionStorage.setItem('branchId', branchIdParam);
+      localStorage.setItem('activeBranchId', branchIdParam);
+    }
+  }, [branchIdParam]);
 
   // Cart operations
   const addToCart = useCallback((item) => {

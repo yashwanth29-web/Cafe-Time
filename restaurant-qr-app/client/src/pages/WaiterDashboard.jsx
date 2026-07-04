@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getOrders, updateOrderStatus, getCafeInfo, getAssetUrl } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
+import { QRCodeSVG } from 'qrcode.react';
 import '../styles/App.css';
 
 const WaiterDashboard = () =>{
@@ -16,6 +17,7 @@ const WaiterDashboard = () =>{
 
  const [showTakeOrderModal, setShowTakeOrderModal] = useState(false);
  const [takeOrderTable, setTakeOrderTable] = useState('');
+ const [showUpiModal, setShowUpiModal] = useState(null);
 
  useEffect(() =>{
  const fetchCafe = async () =>{
@@ -235,7 +237,7 @@ const WaiterDashboard = () =>{
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`;
+            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${user?.assignedBranch || 'default'}`;
           }
         }}
       />
@@ -250,7 +252,7 @@ const WaiterDashboard = () =>{
           Cancel
         </button>
         <button
-          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`}
+          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${user?.assignedBranch || 'default'}`}
           style={{
             padding: '10px 16px', borderRadius: '8px', border: 'none',
             background: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 'bold'
@@ -262,6 +264,58 @@ const WaiterDashboard = () =>{
     </div>
   </div>
 )}
+
+{showUpiModal && (() => {
+  const upiId = cafeInfo?.upiId || '';
+  const amount = Math.round(showUpiModal.totalAmount);
+  const upiUrl = upiId ? `upi://pay?pa=${upiId}&pn=${encodeURIComponent(cafeInfo?.name || 'Cafe')}&am=${amount}` : '';
+  
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000,
+      display: 'flex', justifyContent: 'center', alignItems: 'center'
+    }}>
+      <div style={{
+        background: 'var(--bg-card)', padding: '24px', borderRadius: '12px',
+        width: '90%', maxWidth: '350px', textAlign: 'center', boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+      }}>
+        <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)' }}>Scan to Pay</h3>
+        {!upiId ? (
+          <p style={{ color: 'var(--color-danger)' }}>Owner has not configured a UPI ID yet.</p>
+        ) : (
+          <div style={{ background: 'white', padding: '16px', borderRadius: '8px', display: 'inline-block' }}>
+            <QRCodeSVG value={upiUrl} size={200} />
+          </div>
+        )}
+        <h2 style={{ marginTop: '16px', color: '#27AE60' }}>₹{amount}</h2>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px' }}>
+          <button
+            onClick={() => setShowUpiModal(null)}
+            style={{
+              padding: '10px 16px', borderRadius: '8px', border: 'none',
+              background: 'var(--color-border)', cursor: 'pointer', fontWeight: 'bold', color: 'var(--color-text-primary)'
+            }}
+          >
+            Close
+          </button>
+          <button
+            onClick={() => {
+              handleMarkPaid(showUpiModal._id);
+              setShowUpiModal(null);
+            }}
+            style={{
+              padding: '10px 16px', borderRadius: '8px', border: 'none',
+              background: '#27AE60', color: 'white', cursor: 'pointer', fontWeight: 'bold'
+            }}
+          >
+            Confirm Paid
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
 </div>
 
  {errorMsg &&
@@ -375,6 +429,22 @@ const WaiterDashboard = () =>{
  minHeight: '44px'
  }}>
   Print POS
+</button>
+<button
+ onClick={() => setShowUpiModal(order)}
+ className="touch-btn"
+ style={{
+ background: '#8E44AD',
+ color: '#ffffff',
+ padding: '10px 12px',
+ borderRadius: '8px',
+ fontSize: '12px',
+ cursor: 'pointer',
+ fontWeight: 'bold',
+ border: 'none',
+ minHeight: '44px'
+ }}>
+  Show UPI QR
 </button>
 <button
  onClick={() =>handleMarkPaid(order._id)}

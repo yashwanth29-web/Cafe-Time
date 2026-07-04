@@ -30,6 +30,12 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   const [reviewRatings, setReviewRatings] = useState({});
   const [reviewTexts, setReviewTexts] = useState({});
   const [submittingReview, setSubmittingReview] = useState({});
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, isOk = true) => {
+    setToast({ msg, isOk });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   // Customer Details Form States
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('customerName') || '');
@@ -281,7 +287,12 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
     if (cart.length === 0) return;
     
     if (!isStaff && (!customerName || !customerPhone)) {
-      alert('Please fill out your name and contact number before placing your order.');
+      showToast('Please fill out your name and contact number before placing your order.', false);
+      return;
+    }
+
+    if (!isStaff && !/^\d{10}$/.test(customerPhone)) {
+      showToast('Please enter a valid 10-digit phone number.', false);
       return;
     }
 
@@ -342,6 +353,16 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   return (
     <div className="cart-page">
+      {toast && (
+        <div style={{
+          position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', fontSize: '14px',
+          background: toast.isOk ? '#2ecc71' : '#e74c3c', color: 'white',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)', animation: 'fadeIn 0.3s ease'
+        }}>
+          {toast.isOk ? '✓' : '⚠️'} {toast.msg}
+        </div>
+      )}
       <div className="cart-header">
         <h2 className="cart-title">Your Order Cart</h2>
       </div>

@@ -59,7 +59,14 @@ const MenuCard = React.memo(({ item, cartItem, addToCart, increaseQuantity, decr
       
       <div className="compact-menu-card-content">
         <h3 className="compact-menu-card-title">{name}</h3>
-        <span className="compact-menu-card-price">₹{price.toFixed(2)}</span>
+        {item.originalPrice && item.originalPrice > price ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '4px 0' }}>
+            <span style={{ fontSize: '13px', textDecoration: 'line-through', color: '#888', fontWeight: 600 }}>₹{item.originalPrice.toFixed(0)}</span>
+            <span style={{ fontSize: '14px', color: '#fff', fontWeight: 900, background: '#6b46c1', padding: '2px 6px', borderRadius: '4px' }}>₹{price.toFixed(0)}</span>
+          </div>
+        ) : (
+          <span className="compact-menu-card-price" style={{ margin: '4px 0', display: 'block' }}>₹{price.toFixed(0)}</span>
+        )}
         
         {cartItem ? (
           <div className="compact-qty-control">

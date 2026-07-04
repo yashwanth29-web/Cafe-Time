@@ -10,6 +10,7 @@ import {
  createMenuItem,
  updateMenuItem,
  deleteMenuItem,
+ saveMenuOverride,
  getStaff,
  createStaff,
  updateStaff,
@@ -1234,18 +1235,38 @@ const exportStaffToCSV = () => {
  // Edit menu item
  const handleEditMenuItem = async (e) =>{
  e.preventDefault();
- if (!editingItem.name || !editingItem.price || !editingItem.category || !editingItem.description) {
+ if (!editingItem.name || !editingItem.price || !editingItem.category) {
  alert('Please fill out all required fields.');
  return;
  }
  try {
- const response = await updateMenuItem(editingItem.id, editingItem);
- if (response.success) {
- setMenuItems((prevItems) =>
- prevItems.map((m) =>m.id === editingItem.id ? response.data : m)
-);
- setShowEditModal(false);
- setEditingItem(null);
+ if (activeBranchId !== 'default') {
+   // Save Override
+   const overrideData = {
+     branchId: activeBranchId,
+     menuItemId: editingItem.id,
+     price: editingItem.price,
+     available: editingItem.available,
+     isHidden: editingItem.isHidden || false
+   };
+   const response = await saveMenuOverride(overrideData);
+   if (response.success) {
+     setMenuItems((prevItems) =>
+       prevItems.map((m) =>m.id === editingItem.id ? { ...m, price: editingItem.price, available: editingItem.available, isHidden: editingItem.isHidden, hasOverride: true } : m)
+     );
+     setShowEditModal(false);
+     setEditingItem(null);
+   }
+ } else {
+   // Save Master Menu Item
+   const response = await updateMenuItem(editingItem.id, editingItem);
+   if (response.success) {
+   setMenuItems((prevItems) =>
+   prevItems.map((m) =>m.id === editingItem.id ? response.data : m)
+  );
+   setShowEditModal(false);
+   setEditingItem(null);
+   }
  }
  } catch (error) {
  console.error('Error updating item:', error);
@@ -1427,7 +1448,7 @@ const exportStaffToCSV = () => {
 
  // Copy table URL
  const handleCopyUrl = (table) =>{
- const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}`;
+ const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}&branchId=${localStorage.getItem('activeBranchId') || 'default'}`;
  navigator.clipboard.writeText(url);
  setCopiedLink(true);
  setTimeout(() =>setCopiedLink(false), 2000);
@@ -1931,9 +1952,10 @@ const exportStaffToCSV = () => {
 <>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px' }}>
 <div style={{ minWidth: 0 }}>
-<h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--color-text-primary)', margin: 0 }}>Cafe Dishes</h3>
-<p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '3px' }}>Manage your customer ordering menu</p>
+<h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--color-text-primary)', margin: 0 }}>{activeBranchId === 'default' ? 'Master Menu (All Branches)' : 'Branch Menu Overrides'}</h3>
+<p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '3px' }}>{activeBranchId === 'default' ? 'Manage your core menu for all branches' : 'Customize prices and availability for this branch'}</p>
 </div>
+{activeBranchId === 'default' && (
 <div className="menu-header-actions">
 <button onClick={() =>setShowCategoryModal(true)} className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', fontSize: '13px' }}>
 📂 <span className="btn-label">Categories</span>
@@ -1942,6 +1964,7 @@ const exportStaffToCSV = () => {
 ➕ <span className="btn-label">Add Item</span>
 </button>
 </div>
+)}
 </div>
 
 <div style={{ marginBottom: '20px' }}>
@@ -1978,9 +2001,18 @@ const exportStaffToCSV = () => {
 <div className="admin-menu-desc">{item.description}</div>
 <div className="admin-menu-meta">
 <span className="admin-menu-price">₹{parseFloat(item.price).toFixed(2)}</span>
+{item.hasOverride && activeBranchId !== 'default' && (
+  <span style={{ fontSize: '10px', color: 'var(--color-primary)', marginLeft: '8px', fontWeight: 'bold' }}>Has Override</span>
+)}
 <div className="menu-card-actions">
-  <button onClick={() =>{setEditingItem({ ...item });setShowEditModal(true);}} className="btn btn-secondary menu-card-btn">✏️<span className="btn-text"> Edit</span></button>
-  <button onClick={() =>handleDeleteMenuItem(item.id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
+  {activeBranchId === 'default' ? (
+    <>
+      <button onClick={() =>{setEditingItem({ ...item });setShowEditModal(true);}} className="btn btn-secondary menu-card-btn">✏️<span className="btn-text"> Edit</span></button>
+      <button onClick={() =>handleDeleteMenuItem(item.id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
+    </>
+  ) : (
+    <button onClick={() =>{setEditingItem({ ...item });setShowEditModal(true);}} className="btn btn-primary menu-card-btn">⚙️<span className="btn-text"> Override</span></button>
+  )}
 </div>
 </div>
 </div>
@@ -3839,13 +3871,13 @@ const exportStaffToCSV = () => {
 </h4>
 <div style={{ background: 'white', padding: '10px', borderRadius: '8px', marginBottom: '12px' }}>
 <img
- src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`)}`}
+ src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${localStorage.getItem('activeBranchId') || 'default'}`)}`}
  alt={`Table ${selectedQrTable} QR Code`}
  style={{ width: '150px', height: '150px', display: 'block' }} />
  
 </div>
 <div style={{ display: 'flex', gap: '10px' }}>
-<a href={`/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', textDecoration: 'none', width: 'auto' }}>
+<a href={`/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${localStorage.getItem('activeBranchId') || 'default'}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', textDecoration: 'none', width: 'auto' }}>
  Open Menu Tab
 </a>
 <button onClick={() =>handleCopyUrl(selectedQrTable)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', width: 'auto' }}>
@@ -3938,12 +3970,10 @@ const exportStaffToCSV = () => {
 <label htmlFor="add-item-price" className="form-label">Price (₹) *</label>
 <input type="number" id="add-item-price" name="add-item-price" required step="0.01" min="0.01" value={newItem.price} onChange={(e) =>setNewItem({ ...newItem, price: e.target.value })} className="form-input" />
 </div>
-{newItem.isCombo && (
 <div className="form-group">
 <label htmlFor="add-item-original-price" className="form-label">Orig. Price (₹)</label>
 <input type="number" id="add-item-original-price" name="add-item-original-price" step="0.01" min="0.01" placeholder="Optional" value={newItem.originalPrice || ''} onChange={(e) =>setNewItem({ ...newItem, originalPrice: e.target.value })} className="form-input" />
 </div>
-)}
 <div className="form-group">
 <label htmlFor="add-item-category" className="form-label">Category *</label>
 <select id="add-item-category" name="add-item-category" value={newItem.category} onChange={(e) =>setNewItem({ ...newItem, category: e.target.value })} className="form-input" disabled={newItem.isCombo}>
@@ -4068,26 +4098,35 @@ const exportStaffToCSV = () => {
 <div className="modal-overlay">
 <div className="modal-container">
 <div className="modal-header">
-<h3 className="modal-title"> Edit Cafe Item</h3>
+<h3 className="modal-title">{activeBranchId === 'default' ? 'Edit Cafe Item' : 'Override Branch Item'}</h3>
 <button onClick={() =>{setShowEditModal(false);setEditingItem(null);}} className="modal-close">&times;</button>
 </div>
 <form onSubmit={handleEditMenuItem}>
 <div className="modal-body">
-<div className="form-group">
-<label htmlFor="edit-item-name" className="form-label">Dish Name *</label>
-<input type="text" id="edit-item-name" name="edit-item-name" required value={editingItem.name} onChange={(e) =>setEditingItem({ ...editingItem, name: e.target.value })} className="form-input" />
-</div>
+{activeBranchId !== 'default' && (
+  <div style={{ marginBottom: '15px', padding: '10px', background: 'rgba(255, 152, 0, 0.1)', border: '1px solid #ff9800', borderRadius: '8px' }}>
+    <strong style={{ color: '#ff9800' }}>Editing override for: {editingItem.name}</strong>
+    <p style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>You are only changing settings for this specific branch. Master details like name, category, and recipe remain unaffected.</p>
+  </div>
+)}
+{activeBranchId === 'default' && (
+  <div className="form-group">
+  <label htmlFor="edit-item-name" className="form-label">Dish Name *</label>
+  <input type="text" id="edit-item-name" name="edit-item-name" required value={editingItem.name} onChange={(e) =>setEditingItem({ ...editingItem, name: e.target.value })} className="form-input" />
+  </div>
+)}
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="edit-item-price" className="form-label">Price (₹) *</label>
+<label htmlFor="edit-item-price" className="form-label">{activeBranchId === 'default' ? 'Price (₹) *' : 'Override Price (₹) *'}</label>
 <input type="number" id="edit-item-price" name="edit-item-price" required step="0.01" min="0.01" value={editingItem.price} onChange={(e) =>setEditingItem({ ...editingItem, price: e.target.value })} className="form-input" />
 </div>
-{editingItem.isCombo && (
+{activeBranchId === 'default' && (
 <div className="form-group">
 <label htmlFor="edit-item-original-price" className="form-label">Orig. Price (₹)</label>
 <input type="number" id="edit-item-original-price" name="edit-item-original-price" step="0.01" min="0.01" placeholder="Optional" value={editingItem.originalPrice || ''} onChange={(e) =>setEditingItem({ ...editingItem, originalPrice: e.target.value })} className="form-input" />
 </div>
 )}
+{activeBranchId === 'default' && (
 <div className="form-group">
 <label htmlFor="edit-item-category" className="form-label">Category *</label>
 <select id="edit-item-category" name="edit-item-category" value={editingItem.category} onChange={(e) =>setEditingItem({ ...editingItem, category: e.target.value })} className="form-input" disabled={editingItem.isCombo}>
@@ -4096,7 +4135,10 @@ const exportStaffToCSV = () => {
 )}
 </select>
 </div>
+)}
 </div>
+{activeBranchId === 'default' && (
+  <>
 <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
 <label className="switch">
   <input type="checkbox" checked={editingItem.isCombo || false} onChange={(e) => {
@@ -4115,6 +4157,19 @@ const exportStaffToCSV = () => {
 <label htmlFor="edit-item-prep-time" className="form-label">Preparation Time (minutes) *</label>
 <input type="number" id="edit-item-prep-time" name="edit-item-prep-time" required min="1" value={editingItem.preparationTime || 10} onChange={(e) =>setEditingItem({ ...editingItem, preparationTime: parseInt(e.target.value) })} className="form-input" />
 </div>
+</>
+)}
+
+{activeBranchId !== 'default' && (
+  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', padding: '10px', border: '1px solid var(--color-danger)', borderRadius: '6px', background: 'rgba(244, 67, 54, 0.05)' }}>
+  <label className="switch">
+    <input type="checkbox" checked={editingItem.isHidden || false} onChange={(e) =>setEditingItem({ ...editingItem, isHidden: e.target.checked })} />
+    <span className="slider round"></span>
+  </label>
+  <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--color-danger)' }}>Completely hide this item from this branch?</span>
+  </div>
+)}
+{activeBranchId === 'default' && (
 <div className="form-group">
 <span id="edit-item-image-label" className="form-label" style={{ display: 'block', marginBottom: '6px' }}>Dish Image</span>
 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }} aria-labelledby="edit-item-image-label">
@@ -4159,6 +4214,8 @@ const exportStaffToCSV = () => {
  }
 </div>
 </div>
+)}
+{activeBranchId === 'default' && (
 <div className="form-group" style={{ borderTop: '1px solid #432E22', paddingTop: '15px', marginTop: '15px' }}>
 <span id="edit-item-recipe-label" className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Recipe Mapping (Ingredients)</span>
  {!editingItem.recipe || editingItem.recipe.length === 0 ?
@@ -4197,6 +4254,7 @@ const exportStaffToCSV = () => {
 <button type="button" onClick={handleAddIngredientToEditingItem} className="btn btn-secondary" style={{ width: 'auto', padding: '9px 12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)' }}>Map</button>
 </div>
 </div>
+)}
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>{setShowEditModal(false);setEditingItem(null);}} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>

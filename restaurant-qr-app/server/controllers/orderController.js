@@ -7,7 +7,7 @@ const socket = require('../socket');
 // @access  Public
 const createOrder = async (req, res) => {
   try {
-    const { cafeId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions, source, staffId } = req.body;
+    const { cafeId, branchId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions, source, staffId } = req.body;
 
     // Simple validation
     if (!tableNumber) {
@@ -22,6 +22,7 @@ const createOrder = async (req, res) => {
 
     const newOrder = new Order({
       cafeId: cafeId || 'CD001',
+      branchId: branchId || 'default',
       tableNumber,
       items,
       totalAmount,
@@ -64,6 +65,12 @@ const getOrders = async (req, res) => {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId);
     if (cafeId) {
       filterQuery.cafeId = cafeId;
+    }
+
+    // Branch ID filter
+    const branchId = req.query.branchId || (req.user && req.user.assignedBranch) || 'default';
+    if (branchId) {
+      filterQuery.branchId = branchId;
     }
 
     // 2. Active orders filter (status != Completed)

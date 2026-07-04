@@ -101,7 +101,8 @@ const OrderSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    expires: 172800 // Automatically delete 48 hours (172800 seconds) after creation
   }
 });
 

@@ -29,7 +29,7 @@ const OwnerProfilePage = () => {
   const [serviceCharge, setServiceChargeState] = useState(() => parseFloat(localStorage.getItem('owner_service_charge') || '0'));
 
   const handleCopyUrl = (table) => {
-    const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}`;
+    const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}&branchId=${localStorage.getItem('activeBranchId') || 'default'}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -320,7 +320,7 @@ const OwnerProfilePage = () => {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', padding: '20px', background: 'rgba(0, 0, 0,0.02)', border: '1px dashed rgba(230,213,195,0.2)', borderRadius: '12px', marginTop: '10px' }}>
             <div style={{ background: '#fff', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>
               <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`)}`}
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${localStorage.getItem('activeBranchId') || 'default'}`)}`}
             alt={`Table ${selectedQrTable} QR Code`}
             style={{ display: 'block', width: '150px', height: '150px' }} />
           
@@ -335,7 +335,7 @@ const OwnerProfilePage = () => {
                 {copiedLink ? '✓ Copied' : '🔗 Copy Link'}
               </button>
               <a
-            href={`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`}
+            href={`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${localStorage.getItem('activeBranchId') || 'default'}`}
             target="_blank"
             rel="noreferrer"
             className="mbtn-cancel"
