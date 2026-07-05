@@ -78,7 +78,7 @@ const OrderSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['Online', 'Counter', 'Pending'],
+    enum: ['Online', 'Counter', 'Pending', 'Cash', 'UPI'],
     default: 'Pending'
   },
   inventoryDeducted: {
@@ -97,6 +97,58 @@ const OrderSchema = new mongoose.Schema({
   staffId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+    default: null
+  },
+  preparingBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  preparingByName: {
+    type: String,
+    default: null
+  },
+  preparingAt: {
+    type: Date,
+    default: null
+  },
+  readyBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  readyByName: {
+    type: String,
+    default: null
+  },
+  readyAt: {
+    type: Date,
+    default: null
+  },
+  servedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  servedByName: {
+    type: String,
+    default: null
+  },
+  servedAt: {
+    type: Date,
+    default: null
+  },
+  paidBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  paidByName: {
+    type: String,
+    default: null
+  },
+  paidAt: {
+    type: Date,
     default: null
   },
   createdAt: {

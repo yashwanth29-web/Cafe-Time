@@ -52,7 +52,7 @@ API.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    const activeBranchId = localStorage.getItem('activeBranchId');
+    const activeBranchId = localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId');
     if (activeBranchId) {
       config.headers['x-branch-id'] = activeBranchId;
     }
@@ -450,8 +450,8 @@ export const markNotificationRead = async (id) => {
   return response.data;
 };
 
-export const getTodayAttendanceStatus = async () => {
-  const response = await API.get('/attendance/today');
+export const getTodayAttendanceStatus = async (params) => {
+  const response = await API.get('/attendance/today', { params });
   return response.data;
 };
 

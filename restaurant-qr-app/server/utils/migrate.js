@@ -193,6 +193,69 @@ const migrateData = async () => {
       console.log(`Migrated User (Staff branches): ${staffResult.modifiedCount} records updated.`);
     } catch (e) { console.warn('User migration skipped:', e.message); }
 
+    // Ensure all existing branches have coordinates and allowed geofence radius configured (default to 100m)
+    try {
+      const branches = await Branch.find({});
+      for (const branch of branches) {
+        let updated = false;
+        if (branch.latitude === undefined || branch.latitude === 0) {
+          branch.latitude = 16.5062;
+          updated = true;
+        }
+        if (branch.longitude === undefined || branch.longitude === 0) {
+          branch.longitude = 80.6480;
+          updated = true;
+        }
+        if (branch.allowedRadius === undefined || branch.allowedRadius === 30) {
+          branch.allowedRadius = 100;
+          updated = true;
+        }
+        if (!branch.openingTime) {
+          branch.openingTime = '09:00 AM';
+          updated = true;
+        }
+        if (!branch.closingTime) {
+          branch.closingTime = '10:00 PM';
+          updated = true;
+        }
+        if (updated) {
+          await branch.save();
+          console.log(`Updated coordinates/radius/business hours for branch: ${branch.branchId}`);
+        }
+
+        // Ensure PaymentConfig exists for the branch
+        const payConf = await PaymentConfig.findOne({ cafeId: branch.cafeId, branchId: branch.branchId });
+        if (!payConf) {
+          await PaymentConfig.create({
+            cafeId: branch.cafeId,
+            branchId: branch.branchId,
+            acceptCash: true,
+            enableUpi: true,
+            upiId: '9346540919@ybl',
+            taxRate: 5,
+            platformCharge: 0
+          });
+          console.log(`Created default PaymentConfig for branch: ${branch.branchId}`);
+        }
+
+        // Ensure OperationalConfig exists for the branch
+        const opConf = await OperationalConfig.findOne({ cafeId: branch.cafeId, branchId: branch.branchId });
+        if (!opConf) {
+          await OperationalConfig.create({
+            cafeId: branch.cafeId,
+            branchId: branch.branchId,
+            tables: [{ id: 'T1', seats: 4 }, { id: 'T2', seats: 4 }, { id: 'T3', seats: 4 }],
+            printerEnabled: false,
+            kitchenDisplayEnabled: true,
+            inventoryEnabled: true
+          });
+          console.log(`Created default OperationalConfig for branch: ${branch.branchId}`);
+        }
+      }
+    } catch (e) {
+      console.warn('Branch configurations seeding skipped:', e.message);
+    }
+
     console.log('Multi-branch data migration completed successfully.');
   } catch (error) {
     console.error('Migration failed:', error);

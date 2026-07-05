@@ -20,11 +20,14 @@ const generatePayroll = async (req, res) => {
   }
 
   try {
-    const result = await payrollService.generateWeeklyPayroll(cafeId, weekStart, weekEnd, req.user._id);
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || 'default';
+    const result = await payrollService.generateWeeklyPayroll(cafeId, activeBranch, weekStart, weekEnd, req.user._id);
 
     // Create Notification for the Owner
     await Notification.create({
       userId: req.user._id,
+      cafeId,
+      branchId: activeBranch,
       title: 'Payroll Generated',
       message: `Weekly Payroll generated successfully for week ${weekStart} to ${weekEnd}. Generated ${result.summary.generatedCount} records.`
     });
@@ -36,6 +39,8 @@ const generatePayroll = async (req, res) => {
       if (employeeUser) {
         await Notification.create({
           userId: employeeUser._id,
+          cafeId,
+          branchId: activeBranch,
           title: 'Weekly Payroll Ready',
           message: `Your payroll for the week ending on ${weekEnd} is ready. Net Salary: $${pr.netSalary}.`
         });
@@ -67,7 +72,7 @@ const listPayroll = async (req, res) => {
   const userId = req.user._id;
 
   try {
-    const activeBranch = req.branchId || 'default';
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     const query = { branchId: activeBranch };
 
     // Enforce role authorization filters
@@ -109,7 +114,7 @@ const getPayrollDetails = async (req, res) => {
   const userId = req.user._id;
 
   try {
-    const activeBranch = req.branchId || 'default';
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     const payroll = await Payroll.findOne({ _id: id, branchId: activeBranch });
     if (!payroll) {
       return res.status(404).json({ success: false, message: 'Payroll record not found in this branch' });
@@ -141,7 +146,7 @@ const getCurrentEmployeePayroll = async (req, res) => {
   const userId = req.user._id;
 
   try {
-    const activeBranch = req.branchId || 'default';
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     const payrolls = await Payroll.find({ employeeId: userId, branchId: activeBranch }).sort({ weekEnd: -1 });
     return res.status(200).json({ success: true, data: payrolls });
   } catch (error) {
@@ -163,7 +168,7 @@ const updatePayroll = async (req, res) => {
   const cafeId = req.user.cafeId;
 
   try {
-    const activeBranch = req.branchId || 'default';
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
     if (!payroll) {
       return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
@@ -255,7 +260,7 @@ const payPayroll = async (req, res) => {
   }
 
   try {
-    const activeBranch = req.branchId || 'default';
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
     if (!payroll) {
       return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
@@ -276,6 +281,8 @@ const payPayroll = async (req, res) => {
     // Create Notification for the Employee
     await Notification.create({
       userId: payroll.employeeId,
+      cafeId: payroll.cafeId || cafeId,
+      branchId: payroll.branchId || activeBranch,
       title: 'Salary Disbursed',
       message: `Your salary of $${payroll.netSalary} for the week ${payroll.weekStart} to ${payroll.weekEnd} has been paid via ${paymentMethod}.`
     });
@@ -300,7 +307,7 @@ const deletePayroll = async (req, res) => {
   const cafeId = req.user.cafeId;
 
   try {
-    const activeBranch = req.branchId || 'default';
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
     if (!payroll) {
       return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
@@ -332,7 +339,7 @@ const getPayrollHistory = async (req, res) => {
   const userId = req.user._id;
 
   try {
-    const activeBranch = req.branchId || 'default';
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     const query = { paymentStatus: 'Paid', branchId: activeBranch };
 
     if (userRole === 'admin' || userRole === 'owner' || userRole === 'manager') {
@@ -364,7 +371,7 @@ const getPayrollReport = async (req, res) => {
   }
 
   try {
-    const activeBranch = req.branchId || 'default';
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     // 1. Total expenses vs pending
     const allRecords = await Payroll.find({ cafeId, branchId: activeBranch });
 

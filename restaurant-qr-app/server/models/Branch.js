@@ -35,11 +35,39 @@ const BranchSchema = new mongoose.Schema({
   },
   allowedRadius: {
     type: Number,
-    default: 30
+    default: 100
+  },
+  city: {
+    type: String,
+    default: ''
+  },
+  state: {
+    type: String,
+    default: ''
+  },
+  pincode: {
+    type: String,
+    default: ''
+  },
+  googleMapsUrl: {
+    type: String,
+    default: ''
+  },
+  openingTime: {
+    type: String,
+    default: '09:00 AM'
+  },
+  closingTime: {
+    type: String,
+    default: '10:00 PM'
   },
   isActive: {
     type: Boolean,
     default: true
+  },
+  unifiedStaffMode: {
+    type: Boolean,
+    default: false
   },
   createdAt: {
     type: Date,

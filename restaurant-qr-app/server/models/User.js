@@ -92,6 +92,7 @@ const UserSchema = new mongoose.Schema({
 
 
 // Optimize queries bounded by branch
-UserSchema.index({ cafeId: 1, branchId: 1 });
+UserSchema.index({ cafeId: 1, assignedBranch: 1 });
+UserSchema.index({ cafeId: 1, assignedBranch: 1, role: 1 });
 
 module.exports = mongoose.model('User', UserSchema);

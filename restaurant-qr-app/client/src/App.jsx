@@ -23,6 +23,7 @@ const CashierDashboard = React.lazy(() => import('./pages/CashierDashboard'));
 const ManagerDashboard = React.lazy(() => import('./pages/ManagerDashboard'));
 const EmployeePayrollPage = React.lazy(() => import('./pages/EmployeePayrollPage'));
 const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
+const StaffOrderWorkspace = React.lazy(() => import('./pages/StaffOrderWorkspace'));
 
 function AppContent() {
   const [cart, setCart] = useState([]);
@@ -42,6 +43,11 @@ function AppContent() {
   // Synchronously initialize cafe ID state from query param or session storage
   const [cafeId, setCafeId] = useState(() => {
     return cafeIdParam || sessionStorage.getItem('cafeId') || '';
+  });
+
+  // Synchronously initialize branch ID state from query param or session storage
+  const [branchId, setBranchId] = useState(() => {
+    return branchIdParam || sessionStorage.getItem('branchId') || '';
   });
 
   // Save source param to session storage if present
@@ -73,6 +79,10 @@ function AppContent() {
 
   // Sync branchId state when search parameter changes reactively
   useEffect(() => {
+    if (branchIdParam) {
+      setBranchId(branchIdParam);
+      sessionStorage.setItem('branchId', branchIdParam);
+    }
     if (branchIdParam && branchIdParam !== activeBranchId) {
       switchBranch(branchIdParam);
     }
@@ -250,35 +260,18 @@ function AppContent() {
             } 
           />
           <Route 
-            path="/kitchen/dashboard" 
+            path="/staff/workspace" 
             element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'chef']}>
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff']}>
                 <SaaSLayout>
-                  <KitchenDashboard />
+                  <StaffOrderWorkspace />
                 </SaaSLayout>
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/waiter/dashboard" 
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'staff']}>
-                <SaaSLayout>
-                  <WaiterDashboard />
-                </SaaSLayout>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/cashier/dashboard" 
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'cashier']}>
-                <SaaSLayout>
-                  <CashierDashboard />
-                </SaaSLayout>
-              </ProtectedRoute>
-            } 
-          />
+          <Route path="/kitchen/dashboard" element={<Navigate to="/staff/workspace" replace />} />
+          <Route path="/waiter/dashboard" element={<Navigate to="/staff/workspace" replace />} />
+          <Route path="/cashier/dashboard" element={<Navigate to="/staff/workspace" replace />} />
           <Route 
             path="/staff/attendance" 
             element={
@@ -297,8 +290,8 @@ function AppContent() {
           {/* Shorthand / Compatibility Redirects */}
           <Route path="/super-admin" element={<Navigate to="/super-admin/dashboard" replace />} />
           <Route path="/admin" element={<Navigate to="/owner/dashboard" replace />} />
-          <Route path="/staff/dashboard" element={<Navigate to="/waiter/dashboard" replace />} />
-          <Route path="/staff" element={<Navigate to="/waiter/dashboard" replace />} />
+          <Route path="/staff/dashboard" element={<Navigate to="/staff/workspace" replace />} />
+          <Route path="/staff" element={<Navigate to="/staff/workspace" replace />} />
 
           {/* Legacy & Demo routes */}
           <Route 

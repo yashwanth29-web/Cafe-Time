@@ -1,30 +1,36 @@
 const { getContext } = require('./context');
 
-let menuCache = {}; // Keyed by branchId
-let categoryCache = {}; // Keyed by cafeId_branchId since categories are branch specific
+let menuCache = {}; // Keyed by cafeId_branchId
+let categoryCache = {}; // Keyed by cafeId_branchId
 
 module.exports = {
   getMenu: () => {
     const context = getContext();
-    const key = (context && context.branchId) || 'default';
+    const cafeId = (context && context.cafeId) || 'CD001';
+    const branchId = (context && context.branchId) || 'default';
+    const key = `${cafeId}_${branchId}`;
     if (menuCache[key]) {
-      console.log(`[CACHE] Menu hit for branch ${key}: serving from memory cache`);
+      console.log(`[CACHE] Menu hit for ${key}: serving from memory cache`);
     }
     return menuCache[key];
   },
   
   setMenu: (data) => {
     const context = getContext();
-    const key = (context && context.branchId) || 'default';
-    console.log(`[CACHE] Menu populated in memory for branch ${key}`);
+    const cafeId = (context && context.cafeId) || 'CD001';
+    const branchId = (context && context.branchId) || 'default';
+    const key = `${cafeId}_${branchId}`;
+    console.log(`[CACHE] Menu populated for ${key}`);
     menuCache[key] = data;
   },
   
   clearMenu: () => {
     const context = getContext();
-    const key = (context && context.branchId) || 'default';
-    if (key && key !== 'default') {
-      console.log(`[CACHE] Menu cache invalidated/cleared for branch ${key}`);
+    const cafeId = (context && context.cafeId) || 'CD001';
+    const branchId = (context && context.branchId) || 'default';
+    if (cafeId && branchId) {
+      const key = `${cafeId}_${branchId}`;
+      console.log(`[CACHE] Menu cache invalidated for ${key}`);
       delete menuCache[key];
     } else {
       console.log('[CACHE] All Menu caches invalidated');

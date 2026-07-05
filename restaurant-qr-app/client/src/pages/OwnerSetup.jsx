@@ -196,8 +196,8 @@ const OwnerSetup = () => {
         gstNumber,
         supportNumber: supportNumber || user.phone,
         paymentConfig: {
-          razorpayKeyId: '',
-          razorpaySecret: '',
+          acceptCash: true,
+          enableUpi: true,
           upiId,
           bankHolderName,
           accountNumber,

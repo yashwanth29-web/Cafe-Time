@@ -12,13 +12,21 @@ const PaymentConfigSchema = new mongoose.Schema({
     default: 'default',
     trim: true
   },
-  razorpayKeyId: {
-    type: String,
-    default: ''
+  acceptCash: {
+    type: Boolean,
+    default: true
   },
-  razorpaySecretEncrypted: {
-    type: String,
-    default: ''
+  enableUpi: {
+    type: Boolean,
+    default: true
+  },
+  taxRate: {
+    type: Number,
+    default: 0
+  },
+  platformCharge: {
+    type: Number,
+    default: 0
   },
   upiId: {
     type: String,
@@ -40,9 +48,9 @@ const PaymentConfigSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
-  isVerified: {
-    type: Boolean,
-    default: false
+  paymentInstructions: {
+    type: String,
+    default: ''
   },
   createdAt: {
     type: Date,

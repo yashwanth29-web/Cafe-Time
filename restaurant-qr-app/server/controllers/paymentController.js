@@ -12,7 +12,7 @@ const mongoose = require('mongoose');
  */
 const createOrder = async (req, res) => {
   try {
-    const { cafeId, items, tableNumber, customerName, customerEmail, customerPhone, specialInstructions } = req.body;
+    const { cafeId, branchId, items, tableNumber, customerName, customerEmail, customerPhone, specialInstructions } = req.body;
 
     // Basic validation
     if (!items || items.length === 0) {
@@ -35,7 +35,7 @@ const createOrder = async (req, res) => {
         dbItem = await MenuItem.findById(itemId);
       }
 
-      // 2. Fallback to name search if ID lookup fails (common for frontend mock IDs)
+      // 2. Fallback to name search if ID lookup fails
       if (!dbItem && item.name) {
         dbItem = await MenuItem.findOne({ name: new RegExp('^' + item.name + '$', 'i') });
       }
@@ -61,16 +61,33 @@ const createOrder = async (req, res) => {
       });
     }
 
-    // Fetch Cafe first to get tax rates and platform charge rates
+    // Fetch branch payment config to get tax rates and platform charge rates
+    const activeBranchId = branchId || 'default';
+    let gstRate = 0;
+    let platformCharge = 0;
+    let upiId = '9346540919@ybl'; // Default fallback UPI ID
+
+    const config = await PaymentConfig.findOne({ cafeId: cafeId || 'CD001', branchId: activeBranchId });
     const cafe = await Cafe.findOne({ cafeId: cafeId || 'CD001' });
-    const gstRate = cafe?.gstRate || 0;
-    const platformCharge = cafe?.serviceChargeRate || 0;
+
+    if (config) {
+      gstRate = config.taxRate || 0;
+      platformCharge = config.platformCharge || 0;
+      if (config.upiId) {
+        upiId = config.upiId;
+      }
+    } else if (cafe) {
+      gstRate = cafe.gstRate || 0;
+      platformCharge = cafe.serviceChargeRate || 0;
+    }
+
     const gstAmount = calculatedTotal * (gstRate / 100);
     const finalTotal = calculatedTotal + gstAmount + platformCharge;
 
     // Create a new Order in DB with 'Pending' payment status
     const newOrder = new Order({
       cafeId: cafeId || 'CD001',
+      branchId: activeBranchId,
       tableNumber: tableNumber || 'Takeaway',
       items: validatedItems,
       totalAmount: finalTotal,
@@ -83,19 +100,7 @@ const createOrder = async (req, res) => {
     });
 
     const savedOrder = await newOrder.save();
-
-    // Fetch Cafe UPI ID and Merchant Name
-    let upiId = '9346540919@ybl'; // Default fallback UPI ID
     let merchantName = (cafe && cafe.name) || "Cypher's Cafe";
-
-    try {
-      const config = await PaymentConfig.findOne({ cafeId: savedOrder.cafeId, branchId: savedOrder.branchId || 'default' });
-      if (config && config.upiId) {
-        upiId = config.upiId;
-      }
-    } catch (dbErr) {
-      console.warn(`Database lookup failed for cafe configs. Using default UPI ID. Error: ${dbErr.message}`);
-    }
 
     // Set order's placeholder order ID
     savedOrder.razorpayOrderId = `UPI-${savedOrder._id}`;
@@ -105,7 +110,7 @@ const createOrder = async (req, res) => {
       success: true,
       appOrderId: savedOrder._id,
       razorpayOrderId: savedOrder.razorpayOrderId,
-      amount: calculatedTotal, // Amount in rupees for UPI
+      amount: calculatedTotal,
       currency: 'INR',
       upiId: upiId,
       merchantName: merchantName

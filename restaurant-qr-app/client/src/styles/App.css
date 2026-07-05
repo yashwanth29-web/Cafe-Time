@@ -1981,3 +1981,50 @@ textarea.form-input {
   font-weight: bold;
 }
 
+/* Responsive styling for Staff Order Workspace */
+.workspace-wrapper {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .workspace-wrapper {
+    padding: 20px 24px;
+    gap: 20px;
+  }
+}
+
+.scrollable-tabs-container {
+  display: flex;
+  overflow-x: auto;
+  gap: 8px;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+  -webkit-overflow-scrolling: touch;
+  white-space: nowrap;
+}
+.scrollable-tabs-container::-webkit-scrollbar {
+  display: none; /* Safari and Chrome */
+}
+
+.workspace-header-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (min-width: 768px) {
+  .workspace-header-card {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+  }
+}
+

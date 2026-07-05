@@ -12,7 +12,8 @@ router.use(protect);
  */
 router.get('/', async (req, res) => {
   try {
-    const notifications = await Notification.find({ userId: req.user._id })
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || 'default';
+    const notifications = await Notification.find({ userId: req.user._id, branchId: activeBranch })
       .sort({ createdAt: -1 })
       .limit(15);
       

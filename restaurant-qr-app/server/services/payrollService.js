@@ -2,11 +2,7 @@ const User = require('../models/User');
 const Attendance = require('../models/Attendance');
 const Payroll = require('../models/Payroll');
 
-const generateWeeklyPayroll = async (cafeId, weekStart, weekEnd, generatedBy) => {
-  // Retrieve the branch context dynamically
-  const { getContext } = require('../utils/context');
-  const context = getContext();
-  const branchId = (context && context.branchId) || 'default';
+const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, generatedBy) => {
 
   // 1. Fetch active employees belonging to this cafe AND this specific branch
   const employees = await User.find({

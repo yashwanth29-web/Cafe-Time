@@ -94,13 +94,13 @@ const checkIn = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Assigned branch is currently inactive' });
     }
 
-    // 3. Distance Validation (Strict 90m radius check)
+    // 3. Distance Validation
     const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
                             typeof branch.longitude === 'number' && branch.longitude !== 0;
     const distance = isGeoConfigured
       ? calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude)
       : 0;
-    const allowedRadius = 90; // Strictly 90 meters maximum limit
+    const allowedRadius = branch.allowedRadius || 100; // Use configured geofence radius or default to 100m
 
     if (isGeoConfigured && distance > allowedRadius) {
       return res.status(400).json({
@@ -113,7 +113,7 @@ const checkIn = async (req, res) => {
 
     // 4. Auto-close previous days' open sessions
     const todayStr = getISTDate();
-    const openSessions = await Attendance.find({ staffId, checkOutTime: { $exists: false } }).lean();
+    const openSessions = await Attendance.find({ staffId, checkOutTime: { $exists: false } });
     for (const session of openSessions) {
       if (session.date !== todayStr) {
         const autoCheckOutTime = new Date(session.checkInTime.getTime() + 8 * 60 * 60 * 1000);
@@ -138,11 +138,10 @@ const checkIn = async (req, res) => {
     // 5. Late Check-in detection (opening time + 15 mins grace period)
     let isLate = false;
     try {
-      const cafe = await Cafe.findOne({ cafeId: staff.cafeId });
-      if (cafe && cafe.openingTime) {
-        const timeStr = cafe.openingTime.replace(/\s*(AM|PM)\s*/i, '');
+      if (branch && branch.openingTime) {
+        const timeStr = branch.openingTime.replace(/\s*(AM|PM)\s*/i, '');
         const [opHour, opMin] = timeStr.split(':').map(Number);
-        const isPM = /PM/i.test(cafe.openingTime);
+        const isPM = /PM/i.test(branch.openingTime);
         
         const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
         const opHour24 = isPM && opHour < 12 ? opHour + 12 : (!isPM && opHour === 12 ? 0 : opHour);
@@ -201,7 +200,7 @@ const checkOut = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No active check-in session found for today.' });
     }
 
-    // Strict 90m Radius Validation for Check-out
+    // Strict Radius Validation for Check-out
     if (latitude !== undefined && longitude !== undefined) {
       const branch = await Branch.findOne({ branchId: session.branchId, cafeId: session.cafeId });
       if (branch) {
@@ -209,12 +208,13 @@ const checkOut = async (req, res) => {
                                 typeof branch.longitude === 'number' && branch.longitude !== 0;
         if (isGeoConfigured) {
           const distance = calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude);
-          if (distance > 90) {
+          const allowedRadius = branch.allowedRadius || 100;
+          if (distance > allowedRadius) {
             return res.status(400).json({
               success: false,
-              message: 'Checkout restricted. You are outside the allowed radius of 90 meters.',
+              message: `Checkout restricted. You are outside the allowed radius of ${allowedRadius} meters.`,
               distance: Math.round(distance),
-              allowedRadius: 90
+              allowedRadius
             });
           }
         }
@@ -252,8 +252,42 @@ const checkOut = async (req, res) => {
 const getTodayStatus = async (req, res) => {
   const staffId = req.user._id;
   const todayStr = getISTDate();
+  const { latitude, longitude } = req.query;
 
   try {
+    const staff = await User.findById(staffId);
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    let branch = null;
+    if (staff.assignedBranch) {
+      branch = await Branch.findOne({ branchId: staff.assignedBranch, cafeId: staff.cafeId });
+    }
+
+    let distance = null;
+    let allowedRadius = 100;
+    let insideRadius = false;
+    let branchName = 'No branch assigned';
+    let branchLat = 0;
+    let branchLng = 0;
+
+    if (branch) {
+      branchName = branch.branchName;
+      allowedRadius = branch.allowedRadius || 100;
+      branchLat = branch.latitude;
+      branchLng = branch.longitude;
+
+      if (latitude !== undefined && longitude !== undefined) {
+        const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
+                                typeof branch.longitude === 'number' && branch.longitude !== 0;
+        if (isGeoConfigured) {
+          distance = calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude);
+          insideRadius = distance <= allowedRadius;
+        }
+      }
+    }
+
     // Check if there is an active session that has reached 8 hours (480 minutes)
     let session = await Attendance.findOne({ staffId, checkOutTime: { $exists: false } });
     if (session) {
@@ -276,7 +310,13 @@ const getTodayStatus = async (req, res) => {
       success: true,
       checkedIn: !!attendance,
       checkedOut: attendance ? !!attendance.checkOutTime : false,
-      attendance
+      attendance,
+      branchName,
+      allowedRadius,
+      distance: distance !== null ? Math.round(distance) : null,
+      insideRadius,
+      latitude: branchLat,
+      longitude: branchLng
     });
   } catch (error) {
     console.error('getTodayStatus error:', error);
@@ -510,19 +550,20 @@ const startExtraWork = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Extra work session is already active.' });
     }
 
-    // Radius validation (Strict 90m)
+    // Radius validation
     const branch = await Branch.findOne({ branchId: attendance.branchId, cafeId: attendance.cafeId });
     if (branch) {
       const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
                               typeof branch.longitude === 'number' && branch.longitude !== 0;
       if (isGeoConfigured) {
         const distance = calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude);
-        if (distance > 90) {
+        const allowedRadius = branch.allowedRadius || 100;
+        if (distance > allowedRadius) {
           return res.status(400).json({
             success: false,
-            message: 'Extra work restricted. You are outside the allowed radius of 90 meters.',
+            message: `Extra work restricted. You are outside the allowed radius of ${allowedRadius} meters.`,
             distance: Math.round(distance),
-            allowedRadius: 90
+            allowedRadius
           });
         }
       }
@@ -563,19 +604,20 @@ const stopExtraWork = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No active extra work session found.' });
     }
 
-    // Radius validation (Strict 90m)
+    // Radius validation
     const branch = await Branch.findOne({ branchId: attendance.branchId, cafeId: attendance.cafeId });
     if (branch) {
       const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
                               typeof branch.longitude === 'number' && branch.longitude !== 0;
       if (isGeoConfigured) {
         const distance = calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude);
-        if (distance > 90) {
+        const allowedRadius = branch.allowedRadius || 100;
+        if (distance > allowedRadius) {
           return res.status(400).json({
             success: false,
-            message: 'Stop extra work restricted. You are outside the allowed radius of 90 meters.',
+            message: `Stop extra work restricted. You are outside the allowed radius of ${allowedRadius} meters.`,
             distance: Math.round(distance),
-            allowedRadius: 90
+            allowedRadius
           });
         }
       }

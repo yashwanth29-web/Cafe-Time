@@ -64,12 +64,14 @@ const createStaff = async (req, res) => {
       targetRole = sRoleLower;
     }
 
-    const activeBranch = req.branchId || 'default';
-    if (assignedBranch && assignedBranch !== activeBranch) {
-      return res.status(400).json({
-        success: false,
-        message: `You can only create staff members for the currently selected branch: ${activeBranch}`
-      });
+    if (assignedBranch) {
+      const branchExists = await Branch.findOne({ branchId: assignedBranch, cafeId });
+      if (!branchExists) {
+        return res.status(400).json({
+          success: false,
+          message: `The assigned branch "${assignedBranch}" does not exist or does not belong to your cafe.`
+        });
+      }
     }
 
     // Auto-generate unique Employee ID
@@ -249,19 +251,14 @@ const updateStaff = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
     }
 
-    const activeBranch = req.branchId || 'default';
-    if (staffMember.assignedBranch !== activeBranch) {
-      return res.status(403).json({
-        success: false,
-        message: 'Unauthorized. This employee belongs to a different branch.'
-      });
-    }
-
-    if (assignedBranch !== undefined && assignedBranch !== activeBranch) {
-      return res.status(400).json({
-        success: false,
-        message: 'You cannot move an employee to another branch.'
-      });
+    if (assignedBranch !== undefined) {
+      const branchExists = await Branch.findOne({ branchId: assignedBranch, cafeId });
+      if (!branchExists) {
+        return res.status(400).json({
+          success: false,
+          message: `The assigned branch "${assignedBranch}" does not exist or does not belong to your cafe.`
+        });
+      }
     }
 
     if (name) staffMember.name = name.trim();
@@ -333,13 +330,7 @@ const deleteStaff = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
     }
 
-    const activeBranch = req.branchId || 'default';
-    if (staffMember.assignedBranch !== activeBranch) {
-      return res.status(403).json({
-        success: false,
-        message: 'Unauthorized. This employee belongs to a different branch.'
-      });
-    }
+
 
     await User.deleteOne({ _id: id });
 
@@ -379,26 +370,23 @@ const getSetupData = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Cafe not found' });
     }
 
-    const paymentConfig = await PaymentConfig.findOne({ cafeId });
-    const operationalConfig = await OperationalConfig.findOne({ cafeId });
-
-    // Decrypt Razorpay Secret for editing in wizard (if configured)
-    let decryptedSecret = '';
-    if (paymentConfig && paymentConfig.razorpaySecretEncrypted) {
-      decryptedSecret = decrypt(paymentConfig.razorpaySecretEncrypted);
-    }
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+    const paymentConfig = await PaymentConfig.findOne({ cafeId, branchId: activeBranch });
+    const operationalConfig = await OperationalConfig.findOne({ cafeId, branchId: activeBranch });
 
     return res.status(200).json({
       success: true,
       cafe,
       paymentConfig: paymentConfig ? {
-        razorpayKeyId: paymentConfig.razorpayKeyId,
-        razorpaySecret: decryptedSecret,
+        acceptCash: paymentConfig.acceptCash,
+        enableUpi: paymentConfig.enableUpi,
         upiId: paymentConfig.upiId,
         bankHolderName: paymentConfig.bankHolderName,
         accountNumber: paymentConfig.accountNumber,
         ifscCode: paymentConfig.ifscCode,
-        isVerified: paymentConfig.isVerified
+        taxRate: paymentConfig.taxRate,
+        platformCharge: paymentConfig.platformCharge,
+        paymentInstructions: paymentConfig.paymentInstructions
       } : null,
       operationalConfig
     });
@@ -434,6 +422,8 @@ const saveSetupData = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Cafe not found' });
     }
 
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+
     if (name) cafe.name = name;
     if (businessType) cafe.businessType = businessType;
     if (branchCount !== undefined) cafe.branchCount = branchCount;
@@ -447,12 +437,11 @@ const saveSetupData = async (req, res) => {
       const { lat, lng } = parseCoords(mapsLocation);
       if (lat !== 0 && lng !== 0) {
         await Branch.findOneAndUpdate(
-          { branchId: 'default', cafeId },
+          { branchId: activeBranch, cafeId },
           { 
             latitude: lat, 
             longitude: lng, 
             address: address || cafe.address || 'Default Address', 
-            branchName: 'Primary Location',
             isActive: true 
           },
           { upsert: true }
@@ -469,23 +458,22 @@ const saveSetupData = async (req, res) => {
     cafe.setupCompleted = true; // Complete setup flag!
     await cafe.save();
 
-    // 2. Save PaymentConfig (Encrypting the Razorpay Secret)
+    // 2. Save PaymentConfig
     if (paymentConfig) {
       const updateData = {
-        razorpayKeyId: paymentConfig.razorpayKeyId,
-        upiId: paymentConfig.upiId,
-        bankHolderName: paymentConfig.bankHolderName,
-        accountNumber: paymentConfig.accountNumber,
-        ifscCode: paymentConfig.ifscCode,
-        isVerified: paymentConfig.isVerified || false
+        acceptCash: paymentConfig.acceptCash !== undefined ? paymentConfig.acceptCash : true,
+        enableUpi: paymentConfig.enableUpi !== undefined ? paymentConfig.enableUpi : true,
+        upiId: (paymentConfig.upiId || '').trim(),
+        bankHolderName: (paymentConfig.bankHolderName || '').trim(),
+        accountNumber: (paymentConfig.accountNumber || '').trim(),
+        ifscCode: (paymentConfig.ifscCode || '').trim(),
+        taxRate: paymentConfig.taxRate !== undefined ? Number(paymentConfig.taxRate) : 0,
+        platformCharge: paymentConfig.platformCharge !== undefined ? Number(paymentConfig.platformCharge) : 0,
+        paymentInstructions: (paymentConfig.paymentInstructions || '').trim()
       };
 
-      if (paymentConfig.razorpaySecret) {
-        updateData.razorpaySecretEncrypted = encrypt(paymentConfig.razorpaySecret);
-      }
-
       await PaymentConfig.findOneAndUpdate(
-        { cafeId },
+        { cafeId, branchId: activeBranch },
         updateData,
         { upsert: true, returnDocument: 'after' }
       );
@@ -494,7 +482,7 @@ const saveSetupData = async (req, res) => {
     // 3. Save OperationalConfig
     if (operationalConfig) {
       await OperationalConfig.findOneAndUpdate(
-        { cafeId },
+        { cafeId, branchId: activeBranch },
         {
           tables: operationalConfig.tables || [],
           printerEnabled: operationalConfig.printerEnabled || false,
@@ -607,7 +595,7 @@ const getBranches = async (req, res) => {
  */
 const createBranch = async (req, res) => {
   const cafeId = req.user.cafeId;
-  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius } = req.body;
+  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
   if (!branchName || !address) {
     return res.status(400).json({ success: false, message: 'Branch Name and Address are required' });
   }
@@ -621,8 +609,15 @@ const createBranch = async (req, res) => {
       manager: (manager || '').trim(),
       latitude: latitude !== undefined ? Number(latitude) : 0,
       longitude: longitude !== undefined ? Number(longitude) : 0,
-      allowedRadius: allowedRadius !== undefined ? Number(allowedRadius) : 30,
-      isActive: isActive !== undefined ? isActive : true
+      allowedRadius: allowedRadius !== undefined ? Number(allowedRadius) : 100,
+      city: (city || '').trim(),
+      state: (state || '').trim(),
+      pincode: (pincode || '').trim(),
+      googleMapsUrl: (googleMapsUrl || '').trim(),
+      openingTime: (openingTime || '09:00 AM').trim(),
+      closingTime: (closingTime || '10:00 PM').trim(),
+      isActive: isActive !== undefined ? isActive : true,
+      unifiedStaffMode: req.body.unifiedStaffMode !== undefined ? !!req.body.unifiedStaffMode : false
     });
     return res.status(201).json({ success: true, branch: newBranch });
   } catch (error) {
@@ -695,7 +690,7 @@ const uploadLogo = async (req, res) => {
 const updateBranch = async (req, res) => {
   const { id } = req.params;
   const cafeId = req.user.cafeId;
-  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius } = req.body;
+  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
 
   if (!cafeId) {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
@@ -714,6 +709,13 @@ const updateBranch = async (req, res) => {
     if (longitude !== undefined) branch.longitude = Number(longitude);
     if (allowedRadius !== undefined) branch.allowedRadius = Number(allowedRadius);
     if (isActive !== undefined) branch.isActive = isActive;
+    if (city !== undefined) branch.city = city.trim();
+    if (state !== undefined) branch.state = state.trim();
+    if (pincode !== undefined) branch.pincode = pincode.trim();
+    if (googleMapsUrl !== undefined) branch.googleMapsUrl = googleMapsUrl.trim();
+    if (openingTime !== undefined) branch.openingTime = openingTime.trim();
+    if (closingTime !== undefined) branch.closingTime = closingTime.trim();
+    if (req.body.unifiedStaffMode !== undefined) branch.unifiedStaffMode = !!req.body.unifiedStaffMode;
 
     await branch.save();
 

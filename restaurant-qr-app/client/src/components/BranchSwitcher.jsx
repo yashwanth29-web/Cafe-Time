@@ -388,20 +388,7 @@ const BranchSwitcher = ({ collapsed = false }) => {
             </span>
           </div>
 
-          {/* Current branch info card */}
-          {activeBranch && (
-            <>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.8px', textTransform: 'uppercase', padding: '2px 4px', marginBottom: '6px' }}>
-                Current Branch
-              </div>
-              <BranchRow
-                branch={activeBranch}
-                isActive={true}
-                onSelect={handleSelect}
-              />
-              <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '12px 0' }} />
-            </>
-          )}
+
 
           {/* Search */}
           {branches.length > 3 && (

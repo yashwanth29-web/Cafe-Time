@@ -122,5 +122,6 @@ const PayrollSchema = new mongoose.Schema({
 
 // Ensure compound index for unique payroll per employee per week range
 PayrollSchema.index({ employeeId: 1, weekStart: 1, weekEnd: 1 }, { unique: true });
+PayrollSchema.index({ cafeId: 1, branchId: 1 });
 
 module.exports = mongoose.model('Payroll', PayrollSchema);

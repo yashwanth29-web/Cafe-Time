@@ -8,11 +8,13 @@ const socket = require('../socket');
 // @access  Public
 const getMenuItems = async (req, res) => {
   try {
+    const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
+    const branchId = req.branchId || req.query.branchId || 'default';
     const cached = menuCache.getMenu();
     if (cached) {
       return res.status(200).json({ success: true, count: cached.length, data: cached });
     }
-    const menuItems = await MenuItem.find().select('-__v -createdAt -updatedAt').sort({ category: 1, name: 1 }).lean();
+    const menuItems = await MenuItem.find({ cafeId, branchId }).select('-__v -createdAt -updatedAt').sort({ category: 1, name: 1 }).lean();
     menuCache.setMenu(menuItems);
     return res.status(200).json({ success: true, count: menuItems.length, data: menuItems });
   } catch (error) {
@@ -27,6 +29,8 @@ const getMenuItems = async (req, res) => {
 const createMenuItem = async (req, res) => {
   try {
     const { name, price, originalPrice, category, description, available, isCombo, image, recipe, preparationTime } = req.body;
+    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+    const branchId = req.branchId || 'default';
 
     // Simple validation
     if (!name || price === undefined || !category || !description) {
@@ -43,24 +47,24 @@ const createMenuItem = async (req, res) => {
       isCombo: isCombo !== undefined ? isCombo : false,
       image: image || '/images/default-food.png',
       recipe: recipe || [],
-      preparationTime: preparationTime ? parseInt(preparationTime) : 10
+      preparationTime: preparationTime ? parseInt(preparationTime) : 10,
+      cafeId,
+      branchId
     });
 
     const savedItem = await newMenuItem.save();
 
     // Auto-update availability based on inventory
-    const cafeId = (req.user && req.user.cafeId) || 'CD001';
-    await updateMenuItemAvailabilityFromInventory(cafeId, savedItem._id);
+    await updateMenuItemAvailabilityFromInventory(cafeId, savedItem._id, branchId);
 
     // Fetch latest status
-    const latestItem = await MenuItem.findById(savedItem._id);
+    const latestItem = await MenuItem.findOne({ _id: savedItem._id, cafeId, branchId });
 
     // Clear menu cache since a new item was added
     menuCache.clearMenu();
 
     const io = socket.getIO();
     if (io) {
-      const branchId = req.branchId || 'default';
       io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || savedItem);
     }
 
@@ -78,6 +82,8 @@ const updateMenuItem = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
+    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+    const branchId = req.branchId || 'default';
 
     if (updateData.price !== undefined) {
       updateData.price = parseFloat(updateData.price);
@@ -91,8 +97,8 @@ const updateMenuItem = async (req, res) => {
       updateData.preparationTime = parseInt(updateData.preparationTime);
     }
 
-    const updatedItem = await MenuItem.findByIdAndUpdate(
-      id,
+    const updatedItem = await MenuItem.findOneAndUpdate(
+      { _id: id, cafeId, branchId },
       updateData,
       { returnDocument: 'after', runValidators: true }
     );
@@ -102,18 +108,16 @@ const updateMenuItem = async (req, res) => {
     }
 
     // Auto-update availability based on inventory
-    const cafeId = (req.user && req.user.cafeId) || 'CD001';
-    await updateMenuItemAvailabilityFromInventory(cafeId, id);
+    await updateMenuItemAvailabilityFromInventory(cafeId, id, branchId);
 
     // Fetch the updated item again to return the latest availability status
-    const latestItem = await MenuItem.findById(id);
+    const latestItem = await MenuItem.findOne({ _id: id, cafeId, branchId });
 
     // Clear menu cache since an item was updated
     menuCache.clearMenu();
 
     const io = socket.getIO();
     if (io) {
-      const branchId = req.branchId || 'default';
       io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || updatedItem);
     }
 
@@ -130,7 +134,10 @@ const updateMenuItem = async (req, res) => {
 const deleteMenuItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const deletedItem = await MenuItem.findByIdAndDelete(id);
+    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+    const branchId = req.branchId || 'default';
+
+    const deletedItem = await MenuItem.findOneAndDelete({ _id: id, cafeId, branchId });
 
     if (!deletedItem) {
       return res.status(404).json({ success: false, message: 'Menu item not found' });

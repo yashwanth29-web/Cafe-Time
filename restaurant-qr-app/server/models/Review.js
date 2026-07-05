@@ -48,4 +48,7 @@ const ReviewSchema = new mongoose.Schema({
   }
 });
 
+// Optimize queries bounded by branch
+ReviewSchema.index({ cafeId: 1, branchId: 1 });
+
 module.exports = mongoose.model('Review', ReviewSchema);

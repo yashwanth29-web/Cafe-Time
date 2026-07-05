@@ -825,7 +825,7 @@ const ManagerDashboard = () =>{
 
 <div className="menu-grid-admin" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
  {filteredMenuItems.map((item) =>
-<div key={item.id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`} style={{
+<div key={item._id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`} style={{
  background: '#1F140E',
  border: '1px solid var(--color-border)',
  borderRadius: '10px',

@@ -175,7 +175,8 @@ const CashierDashboard = () =>{
  try {
  const response = await updateOrderStatus(orderId, {
  status: 'Completed',
- paymentStatus: 'Paid'
+ paymentStatus: 'Paid',
+ paymentMethod: paymentMethod
  });
 
  if (response.success) {
@@ -400,11 +401,11 @@ const CashierDashboard = () =>{
  Settle with Cash
 </button>
 <button
- onClick={() =>handleProcessPayment(selectedOrder._id, 'Online Confirm')}
+ onClick={() =>handleProcessPayment(selectedOrder._id, 'UPI')}
  className="btn btn-primary touch-btn"
  style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9', minHeight: '44px' }}>
  
- Confirm Online Pay
+ Settle with UPI
 </button>
 </div>:
 

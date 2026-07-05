@@ -193,7 +193,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
     if (!success || (activeOrders.length === 0 && completedOrders.length === 0)) return;
     
     // Auto-connect to cafe room
-    connectSocket(cafeId, localStorage.getItem('activeBranchId') || 'default');
+    connectSocket(cafeId, localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId') || 'default');
 
     const handleOrderUpdated = (updatedOrder) => {
       // Check if this updated order belongs to this customer's session
@@ -306,6 +306,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         customerPhone: customerPhone || (isStaff ? '0000000000' : ''),
         specialInstructions,
         cafeId: user?.cafeId || cafeId || 'CD001',
+        branchId: user?.assignedBranch || sessionStorage.getItem('branchId') || 'default',
         source: isStaff ? 'STAFF' : 'QR',
         staffId: isStaff && user ? user._id : undefined
       };
@@ -317,7 +318,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         sessionStorage.removeItem('orderSource');
 
         if (isStaff) {
-          window.location.href = '/waiter/dashboard';
+          window.location.href = '/staff/workspace';
           return;
         }
 

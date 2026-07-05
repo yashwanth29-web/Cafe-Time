@@ -191,17 +191,14 @@ const SaaSLayout = ({ children }) => {
       case 'manager':
         return [
         { label: 'Operational Stats', icon: '💼', path: '/manager/dashboard' },
-        { label: 'Order Log', icon: '📋', path: '/manager/dashboard?tab=orders' },
+        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'Staff Attendance', icon: '👥', path: '/manager/dashboard?tab=attendance' },
         { label: 'Ingredient Stock', icon: '📦', path: '/manager/dashboard?tab=inventory' },
         { label: 'Cafe Menu', icon: '📋', path: '/manager/dashboard?tab=menu' }];
 
       case 'chef':
         return [
-        { label: 'Active Cooking', icon: '👨‍🍳', path: '/kitchen/dashboard' },
-        { label: 'Kitchen Tickets', icon: '📋', path: '/kitchen/dashboard?tab=kot' },
-        { label: 'Ingredient Stock', icon: '📦', path: '/kitchen/dashboard?tab=inventory' },
-        { label: 'Cafe Menu & Recipes', icon: '📋', path: '/kitchen/dashboard?tab=menu' },
+        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
         { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
@@ -209,16 +206,14 @@ const SaaSLayout = ({ children }) => {
       case 'waiter':
       case 'staff':
         return [
-        { label: 'Live Orders', icon: '🛍️', path: '/waiter/dashboard' },
+        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
         { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
 
       case 'cashier':
         return [
-        { label: 'Counter Billing', icon: '💳', path: '/cashier/dashboard' },
-        { label: 'Receipt Logs', icon: '📝', path: '/cashier/dashboard?tab=receipts' },
-        { label: 'Item Availability', icon: '📦', path: '/cashier/dashboard?tab=inventory' },
+        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
         { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
@@ -251,15 +246,15 @@ const SaaSLayout = ({ children }) => {
 
       case 'manager':
         primary = allItems.filter((item) =>
-        ['Operational Stats', 'Order Log', 'Staff Attendance'].includes(item.label)
+        ['Operational Stats', 'Order Workspace', 'Staff Attendance'].includes(item.label)
         );
         primary.push({ label: 'My Attendance', icon: '⏰', path: '/staff/attendance' });
-        remaining = allItems.filter((item) => !['Operational Stats', 'Order Log', 'Staff Attendance'].includes(item.label));
+        remaining = allItems.filter((item) => !['Operational Stats', 'Order Workspace', 'Staff Attendance'].includes(item.label));
         break;
 
       case 'chef':
         primary = allItems.filter((item) =>
-        ['Active Cooking', 'Kitchen Tickets', 'My Attendance', 'Submit Work Report'].includes(item.label)
+        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
         );
         remaining = allItems.filter((item) => !primary.includes(item));
         break;
@@ -267,14 +262,14 @@ const SaaSLayout = ({ children }) => {
       case 'waiter':
       case 'staff':
         primary = allItems.filter((item) =>
-        ['Live Orders', 'My Attendance', 'Submit Work Report'].includes(item.label)
+        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
         );
         remaining = allItems.filter((item) => !primary.includes(item));
         break;
 
       case 'cashier':
         primary = allItems.filter((item) =>
-        ['Counter Billing', 'Receipt Logs', 'My Attendance', 'Submit Work Report'].includes(item.label)
+        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
         );
         remaining = allItems.filter((item) => !primary.includes(item));
         break;
@@ -302,6 +297,7 @@ const SaaSLayout = ({ children }) => {
       case 'Receipt Logs':
       case 'Order Log':
       case 'Live Orders':
+      case 'Order Workspace':
         return 'Orders';
       case 'Cafe Menu':
       case 'Cafe Menu & Recipes':

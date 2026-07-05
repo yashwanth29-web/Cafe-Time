@@ -1,13 +1,14 @@
 const Order = require('../models/Order');
 const { deductInventoryForOrder } = require('./inventoryController');
 const socket = require('../socket');
+const Branch = require('../models/Branch');
 
 // @desc    Create a new order
 // @route   POST /api/orders
 // @access  Public
 const createOrder = async (req, res) => {
   try {
-    const { cafeId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions, source, staffId } = req.body;
+    const { cafeId, branchId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions, source, staffId } = req.body;
 
     // Simple validation
     if (!tableNumber) {
@@ -22,6 +23,7 @@ const createOrder = async (req, res) => {
 
     const newOrder = new Order({
       cafeId: cafeId || 'CD001',
+      branchId: branchId || req.branchId || 'default',
       tableNumber,
       items,
       totalAmount,
@@ -103,9 +105,12 @@ const getOrders = async (req, res) => {
 const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    let order = await Order.findById(id).lean();
+    const cafeId = req.cafeId || req.query.cafeId || 'CD001';
+    const branchId = req.branchId || req.query.branchId || 'default';
+    
+    let order = await Order.findOne({ _id: id, cafeId, branchId }).lean();
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(404).json({ success: false, message: 'Order not found under this branch context' });
     }
 
     return res.status(200).json({ success: true, data: order });
@@ -123,6 +128,30 @@ const updateOrderStatus = async (req, res) => {
     const { status, paymentStatus, paymentMethod } = req.body;
     const { id } = req.params;
 
+    // Strict Branch Isolation Query
+    const order = await Order.findOne({ _id: id, cafeId: req.cafeId, branchId: req.branchId });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found in this branch context' });
+    }
+
+    // Load Branch config for Unified Staff Mode check
+    const branch = await Branch.findOne({ branchId: req.branchId, cafeId: req.cafeId });
+    const isUnified = branch ? !!branch.unifiedStaffMode : false;
+    const userRole = (req.user.role || '').toLowerCase();
+
+    // Check role permissions if Unified Staff Mode is disabled
+    if (!isUnified && !['admin', 'owner', 'manager', 'super_admin'].includes(userRole)) {
+      if (status === 'Preparing' || status === 'Ready') {
+        if (userRole !== 'chef') {
+          return res.status(403).json({ success: false, message: 'Access Denied: Only Kitchen staff (Chefs) can prepare orders or mark them as ready.' });
+        }
+      } else if (status === 'Delivered' || status === 'Completed') {
+        if (userRole !== 'waiter' && userRole !== 'cashier') {
+          return res.status(403).json({ success: false, message: 'Access Denied: Only Waiters or Cashiers can serve orders or collect payment.' });
+        }
+      }
+    }
+
     const updateFields = {};
 
     if (status !== undefined) {
@@ -131,6 +160,31 @@ const updateOrderStatus = async (req, res) => {
         return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${allowedStatuses.join(', ')}` });
       }
       updateFields.status = status;
+
+      // Permanent Audit Trail updates
+      if (status === 'Preparing') {
+        updateFields.preparingBy = req.user._id;
+        updateFields.preparingByName = req.user.name;
+        updateFields.preparingAt = new Date();
+      } else if (status === 'Ready') {
+        updateFields.readyBy = req.user._id;
+        updateFields.readyByName = req.user.name;
+        updateFields.readyAt = new Date();
+      } else if (status === 'Delivered') {
+        updateFields.servedBy = req.user._id;
+        updateFields.servedByName = req.user.name;
+        updateFields.servedAt = new Date();
+      } else if (status === 'Completed') {
+        updateFields.paidBy = req.user._id;
+        updateFields.paidByName = req.user.name;
+        updateFields.paidAt = new Date();
+        updateFields.paymentStatus = 'Paid';
+        if (paymentMethod) {
+          updateFields.paymentMethod = paymentMethod;
+        } else if (order.paymentMethod === 'Pending' || !order.paymentMethod) {
+          updateFields.paymentMethod = 'Cash'; // Default fallback
+        }
+      }
     }
 
     if (paymentStatus !== undefined) {
@@ -142,7 +196,7 @@ const updateOrderStatus = async (req, res) => {
     }
 
     if (paymentMethod !== undefined) {
-      const allowedPaymentMethods = ['Online', 'Counter', 'Pending'];
+      const allowedPaymentMethods = ['Online', 'Counter', 'Pending', 'Cash', 'UPI'];
       if (!allowedPaymentMethods.includes(paymentMethod)) {
         return res.status(400).json({ success: false, message: `Invalid paymentMethod. Must be one of: ${allowedPaymentMethods.join(', ')}` });
       }
@@ -153,18 +207,22 @@ const updateOrderStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No valid fields provided for update. Must be status, paymentStatus, or paymentMethod.' });
     }
 
-    const updatedOrder = await Order.findByIdAndUpdate(
-      id,
-      updateFields,
-      { returnDocument: 'after', runValidators: true }
+    const updatedOrder = await Order.findOneAndUpdate(
+      { _id: id, cafeId: req.cafeId, branchId: req.branchId },
+      { $set: updateFields },
+      { new: true, runValidators: true }
     );
 
     if (!updatedOrder) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(404).json({ success: false, message: 'Order update failed or order not found' });
     }
 
     if (['Ready', 'Completed', 'Delivered'].includes(updatedOrder.status) && !updatedOrder.inventoryDeducted) {
-      await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
+      try {
+        await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
+      } catch (err) {
+        console.warn('Inventory deduction warning during status update:', err.message);
+      }
       // Fetch latest document status
       const latestOrder = await Order.findById(id);
       

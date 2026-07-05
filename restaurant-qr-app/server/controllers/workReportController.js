@@ -157,16 +157,12 @@ const getReports = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Your user profile does not have a cafe assignment.' });
     }
 
-    const query = { cafeId };
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || 'default';
+    const query = { cafeId, branchId: activeBranch };
 
     // Staff filter
     if (staffId) {
       query.staffId = staffId;
-    }
-
-    // Branch filter
-    if (branchId) {
-      query.branchId = branchId;
     }
 
     // Range / Date filters

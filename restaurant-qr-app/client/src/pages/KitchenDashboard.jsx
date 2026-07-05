@@ -177,10 +177,10 @@ const KitchenDashboard = () =>{
   };
 
   const fetchOrders = async () =>{
-   try {
-   const response = await getOrders({ active: true, cafeId: user?.cafeId });
-   if (response.success) {
-   setOrders(response.data);
+    try {
+      const response = await getOrders({ active: true, cafeId: user?.cafeId, branchId: activeBranchId });
+      if (response.success) {
+        setOrders(response.data);
  
    const currentActiveOrders = response.data.filter((o) => o.status === 'Placed' || o.status === 'Preparing');
    
@@ -611,7 +611,7 @@ const KitchenDashboard = () =>{
 
 <div className="menu-grid-admin" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
  {menuItems.map((item) =>
-<div key={item.id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`} style={{
+<div key={item._id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`} style={{
  background: '#1F140E',
  border: '1px solid var(--color-border)',
  borderRadius: '10px',

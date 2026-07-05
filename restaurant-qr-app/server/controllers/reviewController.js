@@ -25,6 +25,7 @@ const createReview = async (req, res) => {
 
     const newReview = new Review({
       cafeId: order.cafeId || 'CD001',
+      branchId: order.branchId || 'default',
       orderId,
       customerName: order.customerName || 'Anonymous',
       rating,
@@ -52,7 +53,8 @@ const getReviews = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No cafe associated with user session' });
     }
 
-    const query = { cafeId };
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || 'default';
+    const query = { cafeId, branchId: activeBranch };
     if (rating) {
       query.rating = Number(rating);
     }
@@ -60,7 +62,7 @@ const getReviews = async (req, res) => {
     const reviews = await Review.find(query).sort({ createdAt: -1 });
 
     // Calculate ratings summary
-    const allReviewsForSummary = await Review.find({ cafeId });
+    const allReviewsForSummary = await Review.find({ cafeId, branchId: activeBranch });
     const totalCount = allReviewsForSummary.length;
     let sum = 0;
     const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };

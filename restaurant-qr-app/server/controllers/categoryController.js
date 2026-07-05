@@ -27,15 +27,15 @@ const seedDefaultCategories = async (cafeId, branchId = 'default') => {
 const getCategories = async (req, res) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
+    const branchId = req.branchId || req.query.branchId || 'default';
     const cached = menuCache.getCategories();
     if (cached) {
       return res.status(200).json({ success: true, count: cached.length, data: cached });
     }
     
-    let categories = await Category.find({ cafeId }).sort({ displayOrder: 1, name: 1 });
+    let categories = await Category.find({ cafeId, branchId }).sort({ displayOrder: 1, name: 1 });
 
     if (categories.length === 0) {
-      const branchId = req.branchId || 'default';
       categories = await seedDefaultCategories(cafeId, branchId);
     }
 
@@ -55,25 +55,27 @@ const createCategory = async (req, res) => {
   try {
     const { name } = req.body;
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
 
     if (!name) {
       return res.status(400).json({ success: false, message: 'Please provide a category name' });
     }
 
-    // Check if category already exists
-    const exists = await Category.findOne({ name: name.trim(), cafeId });
+    // Check if category already exists in this branch
+    const exists = await Category.findOne({ name: name.trim(), cafeId, branchId });
     if (exists) {
-      return res.status(400).json({ success: false, message: 'Category already exists' });
+      return res.status(400).json({ success: false, message: 'Category already exists in this branch' });
     }
 
     const newCategory = new Category({
       name: name.trim(),
-      cafeId
+      cafeId,
+      branchId
     });
 
     const savedCategory = await newCategory.save();
     
-    // Clear category cache for this cafe
+    // Clear category cache for this cafe/branch
     menuCache.clearCategories();
 
     return res.status(201).json({ success: true, data: savedCategory });
@@ -91,12 +93,13 @@ const updateCategory = async (req, res) => {
     const { id } = req.params;
     const { name } = req.body;
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
 
     if (!name) {
       return res.status(400).json({ success: false, message: 'Please provide a category name' });
     }
 
-    const category = await Category.findOne({ _id: id, cafeId });
+    const category = await Category.findOne({ _id: id, cafeId, branchId });
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
@@ -104,24 +107,24 @@ const updateCategory = async (req, res) => {
     const oldName = category.name;
     const newName = name.trim();
 
-    // Check if another category with the new name exists
-    const duplicate = await Category.findOne({ name: newName, cafeId, _id: { $ne: id } });
+    // Check if another category with the new name exists in this branch
+    const duplicate = await Category.findOne({ name: newName, cafeId, branchId, _id: { $ne: id } });
     if (duplicate) {
-      return res.status(400).json({ success: false, message: 'Another category with this name already exists' });
+      return res.status(400).json({ success: false, message: 'Another category with this name already exists in this branch' });
     }
 
     category.name = newName;
     const updatedCategory = await category.save();
 
-    // Cascade update to all menu items in this category
+    // Cascade update to all menu items in this category FOR THIS BRANCH ONLY
     await MenuItem.updateMany(
-      { category: oldName },
+      { category: oldName, cafeId, branchId },
       { category: newName }
     );
 
     // Invalidate caches
     menuCache.clearCategories();
-    menuCache.clearMenu(); // Category name change cascades to MenuItem categories
+    menuCache.clearMenu();
 
     return res.status(200).json({ success: true, data: updatedCategory });
   } catch (error) {
@@ -137,26 +140,25 @@ const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
 
-    const category = await Category.findOne({ _id: id, cafeId });
+    const category = await Category.findOne({ _id: id, cafeId, branchId });
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
     const categoryName = category.name;
 
-    await Category.deleteOne({ _id: id, cafeId });
+    await Category.deleteOne({ _id: id, cafeId, branchId });
 
-    // Update menu items in this category to 'Uncategorized' or delete them?
-    // Let's mark them as 'Uncategorized' so they don't disappear or cause errors,
-    // which allows the owner to reclassify them later.
+    // Update menu items in this category FOR THIS BRANCH ONLY to 'Uncategorized'
     await MenuItem.updateMany(
-      { category: categoryName },
+      { category: categoryName, cafeId, branchId },
       { category: 'Uncategorized' }
     );
     // Invalidate caches
     menuCache.clearCategories();
-    menuCache.clearMenu(); // Deleting a category updates MenuItems to Uncategorized
+    menuCache.clearMenu();
 
     return res.status(200).json({ success: true, message: 'Category deleted successfully, items moved to Uncategorized' });
   } catch (error) {
@@ -172,6 +174,7 @@ const reorderCategories = async (req, res) => {
   try {
     const { orderedIds } = req.body;
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
 
     if (!orderedIds || !Array.isArray(orderedIds)) {
       return res.status(400).json({ success: false, message: 'Please provide an array of category IDs' });
@@ -179,14 +182,14 @@ const reorderCategories = async (req, res) => {
 
     const bulkOps = orderedIds.map((id, index) => ({
       updateOne: {
-        filter: { _id: id, cafeId },
+        filter: { _id: id, cafeId, branchId },
         update: { $set: { displayOrder: index } }
       }
     }));
 
     await Category.bulkWrite(bulkOps);
 
-    // Invalidate categories cache (reordering displayOrder doesn't affect menu items)
+    // Invalidate categories cache
     menuCache.clearCategories();
 
     return res.status(200).json({ success: true, message: 'Categories reordered successfully' });

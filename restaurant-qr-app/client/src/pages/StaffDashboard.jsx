@@ -60,15 +60,31 @@ const StaffDashboard = () => {
  const timerRef = useRef(null);
 
  // Fetch initial data
- const fetchData = async () => {
- try {
- setLoading(true);
- setErrorMsg('');
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setErrorMsg('');
 
- const todayRes = await getTodayAttendanceStatus();
- if (todayRes.success) {
- setTodayStatus(todayRes);
- }
+      let coordsParam = {};
+      if (navigator.geolocation) {
+        const getCoords = () => new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 5000 }
+          );
+        });
+        const currentCoords = await getCoords();
+        if (currentCoords) {
+          coordsParam = currentCoords;
+          setCoords(currentCoords);
+        }
+      }
+
+      const todayRes = await getTodayAttendanceStatus(coordsParam);
+      if (todayRes.success) {
+        setTodayStatus(todayRes);
+      }
 
  const historyRes = await getStaffAttendanceHistory();
  if (historyRes.success) {
@@ -686,12 +702,48 @@ const StaffDashboard = () => {
  </span>
  </div>
 
- <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', paddingBottom: '6px' }}>
- <span style={{ color: 'var(--color-text-secondary)' }}>GPS Distance</span>
- <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
- {todayStatus?.checkedIn ? `${todayStatus.attendance.distanceFromCafe} meters from Cafe` : 'N/A'}
- </span>
- </div>
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)' }}>Assigned Branch</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+      {todayStatus?.branchName || 'N/A'}
+    </span>
+  </div>
+
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)' }}>Allowed Radius</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+      {todayStatus?.allowedRadius ? `${todayStatus.allowedRadius} meters` : '--'}
+    </span>
+  </div>
+
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)' }}>Current Distance</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+      {todayStatus?.checkedIn 
+        ? `${todayStatus.attendance.distanceFromCafe} meters` 
+        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined 
+          ? `${todayStatus.distance} meters` 
+          : 'Acquiring GPS...')}
+    </span>
+  </div>
+
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)' }}>Inside Allowed Area</span>
+    <span style={{ 
+      color: todayStatus?.checkedIn 
+        ? '#2ecc71' 
+        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
+          ? (todayStatus.insideRadius ? '#2ecc71' : '#e74c3c')
+          : 'var(--color-text-secondary)'),
+      fontWeight: 'bold' 
+    }}>
+      {todayStatus?.checkedIn 
+        ? 'Inside Allowed Area' 
+        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
+          ? (todayStatus.insideRadius ? '✅ Yes (Inside Area)' : '❌ No (Outside Area)')
+          : 'Checking location...')}
+    </span>
+  </div>
  </div>
  </div>
 

@@ -27,5 +27,6 @@ const CategorySchema = new mongoose.Schema({
 
 // Compound index to ensure unique category name per branch
 CategorySchema.index({ name: 1, cafeId: 1, branchId: 1 }, { unique: true });
+CategorySchema.index({ cafeId: 1, branchId: 1 });
 
 module.exports = mongoose.model('Category', CategorySchema);

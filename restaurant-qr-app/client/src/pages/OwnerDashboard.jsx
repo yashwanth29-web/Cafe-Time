@@ -187,15 +187,22 @@ const OwnerDashboard = () =>{
  const [showAddBranchModal, setShowAddBranchModal] = useState(false);
  const [showEditBranchModal, setShowEditBranchModal] = useState(false);
  const [editingBranch, setEditingBranch] = useState(null);
- const [newBranch, setNewBranch] = useState({
- branchName: '',
- address: '',
- manager: '',
- latitude: '',
- longitude: '',
- allowedRadius: 30
- });
- const [detectingLocation, setDetectingLocation] = useState(false);
+  const [newBranch, setNewBranch] = useState({
+    branchName: '',
+    address: '',
+    manager: '',
+    latitude: '',
+    longitude: '',
+    allowedRadius: 100,
+    city: '',
+    state: '',
+    pincode: '',
+    googleMapsUrl: '',
+    openingTime: '09:00 AM',
+    closingTime: '10:00 PM',
+    unifiedStaffMode: false
+  });
+  const [detectingLocation, setDetectingLocation] = useState(false);
 
  const [attendanceRecords, setAttendanceRecords] = useState([]);
  const [attendanceSummary, setAttendanceSummary] = useState({
@@ -322,9 +329,16 @@ const OwnerDashboard = () =>{
 
  // Settings / Config States
 
- const [taxRate, setTaxRate] = useState(5); // mock GST
- const [serviceCharge, setServiceCharge] = useState(2.5); // mock service charge
- const [settingsMsg, setSettingsMsg] = useState('');
+  const [taxRate, setTaxRate] = useState(5); // mock GST
+  const [serviceCharge, setServiceCharge] = useState(2.5); // mock service charge
+  const [settingsMsg, setSettingsMsg] = useState('');
+  const [acceptCash, setAcceptCash] = useState(true);
+  const [enableUpi, setEnableUpi] = useState(true);
+  const [upiId, setUpiId] = useState('');
+  const [bankHolderName, setBankHolderName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+  const [paymentInstructions, setPaymentInstructions] = useState('');
 
  // Database Inventory State
  const [inventoryList, setInventoryList] = useState([]);
@@ -431,24 +445,39 @@ const OwnerDashboard = () =>{
  'Starters & Bites',
  'French Fries'];
 
- // Load Setup Config
- const loadSetupConfig = async () =>{
- try {
- const res = await getSetupData();
- if (res.success) {
- if (res.operationalConfig?.tables) {
- const t = res.operationalConfig.tables.map((tbl) =>tbl.id.replace('T', ''));
- if (t.length >0) setDynamicTables(t);
- }
- if (res.cafe) {
- setTaxRate(res.cafe.gstRate !== undefined ? res.cafe.gstRate : 5);
- setServiceCharge(res.cafe.serviceChargeRate !== undefined ? res.cafe.serviceChargeRate : 0);
- }
- }
- } catch (err) {
- console.error('Error fetching tables/keys setup:', err);
- }
- };
+  // Load Setup Config
+  const loadSetupConfig = async () =>{
+    try {
+      const res = await getSetupData();
+      if (res.success) {
+        if (res.operationalConfig?.tables) {
+          const t = res.operationalConfig.tables.map((tbl) =>tbl.id.replace('T', ''));
+          if (t.length >0) setDynamicTables(t);
+        }
+        if (res.cafe) {
+          setTaxRate(res.cafe.gstRate !== undefined ? res.cafe.gstRate : 5);
+          setServiceCharge(res.cafe.serviceChargeRate !== undefined ? res.cafe.serviceChargeRate : 0);
+        }
+        if (res.paymentConfig) {
+          setAcceptCash(res.paymentConfig.acceptCash !== undefined ? res.paymentConfig.acceptCash : true);
+          setEnableUpi(res.paymentConfig.enableUpi !== undefined ? res.paymentConfig.enableUpi : true);
+          setUpiId(res.paymentConfig.upiId || '');
+          setBankHolderName(res.paymentConfig.bankHolderName || '');
+          setAccountNumber(res.paymentConfig.accountNumber || '');
+          setIfscCode(res.paymentConfig.ifscCode || '');
+          setPaymentInstructions(res.paymentConfig.paymentInstructions || '');
+          if (res.paymentConfig.taxRate !== undefined) {
+            setTaxRate(res.paymentConfig.taxRate);
+          }
+          if (res.paymentConfig.platformCharge !== undefined) {
+            setServiceCharge(res.paymentConfig.platformCharge);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching tables/keys setup:', err);
+    }
+  };
 
  const playNotificationSound = () => {
     try {
@@ -1092,94 +1121,145 @@ const exportStaffToCSV = () => {
  };
 
  // Branch Handlers
- const handleAddBranch = async (e) =>{
- e.preventDefault();
- if (!newBranch.branchName || !newBranch.address) {
- alert('Branch Name and Address are required.');
- return;
- }
- try {
- const res = await createBranch({
- branchName: newBranch.branchName,
- address: newBranch.address,
- manager: newBranch.manager,
- latitude: newBranch.latitude ? Number(newBranch.latitude) : 0,
- longitude: newBranch.longitude ? Number(newBranch.longitude) : 0,
- allowedRadius: newBranch.allowedRadius ? Number(newBranch.allowedRadius) : 30,
- isActive: true
- });
- if (res.success) {
- alert(`Branch "${newBranch.branchName}" created successfully.`);
- setNewBranch({ branchName: '', address: '', manager: '', latitude: '', longitude: '', allowedRadius: 30 });
- setShowAddBranchModal(false);
- loadBranches();
- }
- } catch (error) {
- console.error('Error creating branch:', error);
- alert(error.response?.data?.message || 'Failed to create branch.');
- }
- };
+  const handleAddBranch = async (e) =>{
+    e.preventDefault();
+    if (!newBranch.branchName || !newBranch.address) {
+      alert('Branch Name and Address are required.');
+      return;
+    }
+    try {
+      const res = await createBranch({
+        branchName: newBranch.branchName,
+        address: newBranch.address,
+        manager: newBranch.manager,
+        latitude: newBranch.latitude ? Number(newBranch.latitude) : 0,
+        longitude: newBranch.longitude ? Number(newBranch.longitude) : 0,
+        allowedRadius: newBranch.allowedRadius ? Number(newBranch.allowedRadius) : 100,
+        city: newBranch.city || '',
+        state: newBranch.state || '',
+        pincode: newBranch.pincode || '',
+        googleMapsUrl: newBranch.googleMapsUrl || '',
+        openingTime: newBranch.openingTime || '09:00 AM',
+        closingTime: newBranch.closingTime || '10:00 PM',
+        isActive: true,
+        unifiedStaffMode: !!newBranch.unifiedStaffMode
+      });
+      if (res.success) {
+        alert(`Branch "${newBranch.branchName}" created successfully.`);
+        setNewBranch({
+          branchName: '', address: '', manager: '', latitude: '', longitude: '', allowedRadius: 100,
+          city: '', state: '', pincode: '', googleMapsUrl: '', openingTime: '09:00 AM', closingTime: '10:00 PM',
+          unifiedStaffMode: false
+        });
+        setShowAddBranchModal(false);
+        loadBranches();
+      }
+    } catch (error) {
+      console.error('Error creating branch:', error);
+      alert(error.response?.data?.message || 'Failed to create branch.');
+    }
+  };
 
- const handleEditBranch = async (e) =>{
- e.preventDefault();
- if (!editingBranch.branchName || !editingBranch.address) {
- alert('Branch Name and Address are required.');
- return;
- }
- try {
- const res = await updateBranch(editingBranch._id, {
- branchName: editingBranch.branchName,
- address: editingBranch.address,
- manager: editingBranch.manager,
- latitude: editingBranch.latitude ? Number(editingBranch.latitude) : 0,
- longitude: editingBranch.longitude ? Number(editingBranch.longitude) : 0,
- allowedRadius: editingBranch.allowedRadius ? Number(editingBranch.allowedRadius) : 30,
- isActive: editingBranch.isActive
- });
- if (res.success) {
- alert(`Branch updated successfully.`);
- setShowEditBranchModal(false);
- setEditingBranch(null);
- loadBranches();
- }
- } catch (error) {
- console.error('Error updating branch:', error);
- alert(error.response?.data?.message || 'Failed to update branch.');
- }
- };
+  const handleEditBranch = async (e) =>{
+    e.preventDefault();
+    if (!editingBranch.branchName || !editingBranch.address) {
+      alert('Branch Name and Address are required.');
+      return;
+    }
+    try {
+      const res = await updateBranch(editingBranch._id, {
+        branchName: editingBranch.branchName,
+        address: editingBranch.address,
+        manager: editingBranch.manager,
+        latitude: editingBranch.latitude ? Number(editingBranch.latitude) : 0,
+        longitude: editingBranch.longitude ? Number(editingBranch.longitude) : 0,
+        allowedRadius: editingBranch.allowedRadius ? Number(editingBranch.allowedRadius) : 100,
+        city: editingBranch.city || '',
+        state: editingBranch.state || '',
+        pincode: editingBranch.pincode || '',
+        googleMapsUrl: editingBranch.googleMapsUrl || '',
+        openingTime: editingBranch.openingTime || '09:00 AM',
+        closingTime: editingBranch.closingTime || '10:00 PM',
+        isActive: editingBranch.isActive,
+        unifiedStaffMode: !!editingBranch.unifiedStaffMode
+      });
+      if (res.success) {
+        alert(`Branch updated successfully.`);
+        setShowEditBranchModal(false);
+        setEditingBranch(null);
+        loadBranches();
+      }
+    } catch (error) {
+      console.error('Error updating branch:', error);
+      alert(error.response?.data?.message || 'Failed to update branch.');
+    }
+  };
 
- const handleDetectLocation = (type) =>{
- if (!navigator.geolocation) {
- alert("Geolocation is not supported by your browser");
- return;
- }
- setDetectingLocation(true);
- navigator.geolocation.getCurrentPosition(
- (position) =>{
- const { latitude, longitude } = position.coords;
- if (type === 'new') {
- setNewBranch((prev) =>({
- ...prev,
- latitude: latitude.toFixed(6),
- longitude: longitude.toFixed(6)
- }));
- } else if (type === 'edit') {
- setEditingBranch((prev) =>({
- ...prev,
- latitude: latitude.toFixed(6),
- longitude: longitude.toFixed(6)
- }));
- }
- setDetectingLocation(false);
- },
- (error) =>{
- console.error("Error detecting location:", error);
- alert(`Failed to get location: ${error.message}. Please check if location access is blocked by your browser settings.`);
- setDetectingLocation(false);
- },
- { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-);
- };
+  const handleDetectLocation = (type) =>{
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) =>{
+        const { latitude, longitude } = position.coords;
+        let addressStr = '';
+        let cityStr = '';
+        let stateStr = '';
+        let postcodeStr = '';
+        
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
+          const data = await res.json();
+          if (data && data.address) {
+            const addr = data.address;
+            cityStr = addr.city || addr.town || addr.village || addr.suburb || '';
+            stateStr = addr.state || '';
+            postcodeStr = addr.postcode || '';
+            addressStr = data.display_name || '';
+          }
+        } catch (e) {
+          console.error("Reverse geocoding error:", e);
+        }
+
+        const gMapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+
+        if (type === 'new') {
+          setNewBranch((prev) =>({
+            ...prev,
+            latitude: latitude.toFixed(6),
+            longitude: longitude.toFixed(6),
+            address: addressStr || prev.address,
+            city: cityStr || prev.city,
+            state: stateStr || prev.state,
+            pincode: postcodeStr || prev.pincode,
+            googleMapsUrl: gMapsUrl,
+            allowedRadius: prev.allowedRadius || 100
+          }));
+        } else if (type === 'edit') {
+          setEditingBranch((prev) =>({
+            ...prev,
+            latitude: latitude.toFixed(6),
+            longitude: longitude.toFixed(6),
+            address: addressStr || prev.address,
+            city: cityStr || prev.city,
+            state: stateStr || prev.state,
+            pincode: postcodeStr || prev.pincode,
+            googleMapsUrl: gMapsUrl,
+            allowedRadius: prev.allowedRadius || 100
+          }));
+        }
+        setDetectingLocation(false);
+      },
+      (error) =>{
+        console.error("Error detecting location:", error);
+        alert(`Failed to get location: ${error.message}. Please check if location access is blocked by your browser settings.`);
+        setDetectingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
 
  const handleDeleteBranch = async (id) =>{
  if (!window.confirm('Are you sure you want to remove this branch?')) return;
@@ -1423,27 +1503,33 @@ const exportStaffToCSV = () => {
 
  // Save Settings Config
  const handleSaveSettings = async (e) =>{
- e.preventDefault();
- setSettingsMsg('');
- try {
-  const payload = {
-    taxRate,
-    serviceCharge,
-    paymentConfig: {
-      razorpayKeyId: '',
-      razorpaySecret: '',
-      isVerified: true
+    e.preventDefault();
+    setSettingsMsg('');
+    try {
+      const payload = {
+        taxRate,
+        serviceCharge,
+        paymentConfig: {
+          acceptCash,
+          enableUpi,
+          upiId,
+          bankHolderName,
+          accountNumber,
+          ifscCode,
+          paymentInstructions,
+          taxRate,
+          platformCharge: serviceCharge
+        }
+      };
+      const response = await saveSetupData(payload);
+      if (response.success) {
+        setSettingsMsg('Configuration saved successfully!');
+        setTimeout(() => setSettingsMsg(''), 3000);
+      }
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      setSettingsMsg('Server error saving details.');
     }
-  };
-  const response = await saveSetupData(payload);
-  if (response.success) {
-    setSettingsMsg('Configuration saved successfully!');
-    setTimeout(() => setSettingsMsg(''), 3000);
-  }
-  } catch (err) {
-    console.error('Error saving settings:', err);
-    setSettingsMsg('Server error saving details.');
-  }
   };
 
  // Copy table URL
@@ -3761,6 +3847,39 @@ const exportStaffToCSV = () => {
         })}
       </div>
 
+      {/* Workflow Audit Trail */}
+      <div style={{ marginTop: '8px', fontSize: '11px', background: 'rgba(0,0,0,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>Workflow History</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Placed:</span>
+          <span>{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}</span>
+        </div>
+        {order.preparingByName && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Preparing by {order.preparingByName}:</span>
+            <span>{order.preparingAt ? new Date(order.preparingAt).toLocaleString() : 'N/A'}</span>
+          </div>
+        )}
+        {order.readyByName && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Ready by {order.readyByName}:</span>
+            <span>{order.readyAt ? new Date(order.readyAt).toLocaleString() : 'N/A'}</span>
+          </div>
+        )}
+        {order.servedByName && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Served by {order.servedByName}:</span>
+            <span>{order.servedAt ? new Date(order.servedAt).toLocaleString() : 'N/A'}</span>
+          </div>
+        )}
+        {order.paidByName && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Paid by {order.paidByName}:</span>
+            <span>{order.paidAt ? new Date(order.paidAt).toLocaleString() : 'N/A'}</span>
+          </div>
+        )}
+      </div>
+
  {/* Footer: Amount + Payment Status */}
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>
 <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -3810,8 +3929,55 @@ const exportStaffToCSV = () => {
 </div>
 </div>
 
+<div style={{ borderTop: '1px solid var(--color-border)', marginTop: '20px', paddingTop: '20px', marginBottom: '20px' }}>
+  <h4 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1rem', fontWeight: 700 }}>Payment Methods & Counter Billing Settings</h4>
+  
+  <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-primary)', cursor: 'pointer' }}>
+      <input type="checkbox" checked={acceptCash} onChange={(e) => setAcceptCash(e.target.checked)} />
+      Accept Cash at Counter
+    </label>
+    
+    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-primary)', cursor: 'pointer' }}>
+      <input type="checkbox" checked={enableUpi} onChange={(e) => setEnableUpi(e.target.checked)} />
+      Accept UPI (QR / Address)
+    </label>
+  </div>
+
+  {enableUpi && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+      <div className="form-row">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label htmlFor="settings-upi-id" className="form-label" style={{ color: 'var(--color-text-primary)' }}>UPI ID (e.g. UPI Address)</label>
+          <input type="text" id="settings-upi-id" className="form-input" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="e.g. 9346540919@ybl" />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label htmlFor="settings-bank-holder" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Account Holder Name</label>
+          <input type="text" id="settings-bank-holder" className="form-input" value={bankHolderName} onChange={(e) => setBankHolderName(e.target.value)} placeholder="e.g. Cafe Owner" />
+        </div>
+      </div>
+      
+      <div className="form-row">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label htmlFor="settings-bank-acc" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Bank Account Number</label>
+          <input type="text" id="settings-bank-acc" className="form-input" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g. 1234567890" />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label htmlFor="settings-bank-ifsc" className="form-label" style={{ color: 'var(--color-text-primary)' }}>IFSC Code</label>
+          <input type="text" id="settings-bank-ifsc" className="form-input" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g. SBIN0001234" />
+        </div>
+      </div>
+    </div>
+  )}
+
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
+    <label htmlFor="settings-instructions" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Custom Payment Instructions</label>
+    <textarea id="settings-instructions" className="form-input" value={paymentInstructions} onChange={(e) => setPaymentInstructions(e.target.value)} placeholder="e.g. Please show the payment confirmation screen to the server." style={{ minHeight: '80px', resize: 'vertical' }} />
+  </div>
+</div>
+
 <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>
- Save Configuration
+  Save Configuration
 </button>
 </form>
 </div>
@@ -3922,6 +4088,7 @@ const exportStaffToCSV = () => {
 <div><strong>Address:</strong>{b.address}</div>
 <div><strong>Coordinates:</strong>{b.latitude}, {b.longitude}</div>
 <div><strong>Geo-Fence:</strong>{b.allowedRadius} meters radius</div>
+<div><strong>Unified Staff Mode:</strong> {b.unifiedStaffMode ? 'Enabled' : 'Disabled'}</div>
 </div>
 <div style={{ display: 'flex', gap: '10px', marginTop: '10px', borderTop: '1px solid var(--color-border)', paddingTop: '10px' }}>
 <button onClick={() =>{setEditingBranch({ ...b });setShowEditBranchModal(true);}} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', flex: 1, minHeight: '34px' }}>
@@ -4729,13 +4896,45 @@ const exportStaffToCSV = () => {
 </div>
 </div>
 <div className="form-group">
-<label className="form-label">Allowed Geofence Radius *</label>
-<select value={newBranch.allowedRadius} onChange={(e) =>setNewBranch({ ...newBranch, allowedRadius: Number(e.target.value) })} className="form-input" required>
-<option value={20}>20 meters</option>
-<option value={30}>30 meters (Default)</option>
-<option value={50}>50 meters</option>
-<option value={100}>100 meters</option>
+<label className="form-label">Allowed Geofence Radius (meters) *</label>
+<input type="number" min="1" required value={newBranch.allowedRadius} onChange={(e) =>setNewBranch({ ...newBranch, allowedRadius: Number(e.target.value) })} className="form-input" placeholder="e.g. 100" />
+</div>
+<div className="form-group">
+<label className="form-label">Unified Staff Mode</label>
+<select value={newBranch.unifiedStaffMode ? 'true' : 'false'} onChange={(e) =>setNewBranch({ ...newBranch, unifiedStaffMode: e.target.value === 'true' })} className="form-input">
+<option value="false">Disabled (Normal Role Permissions)</option>
+<option value="true">Enabled (Any employee can do any status step)</option>
 </select>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">City *</label>
+<input type="text" required value={newBranch.city || ''} onChange={(e) =>setNewBranch({ ...newBranch, city: e.target.value })} className="form-input" placeholder="e.g. Mangalagiri" />
+</div>
+<div className="form-group">
+<label className="form-label">State *</label>
+<input type="text" required value={newBranch.state || ''} onChange={(e) =>setNewBranch({ ...newBranch, state: e.target.value })} className="form-input" placeholder="e.g. Andhra Pradesh" />
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">Pincode *</label>
+<input type="text" required value={newBranch.pincode || ''} onChange={(e) =>setNewBranch({ ...newBranch, pincode: e.target.value })} className="form-input" placeholder="e.g. 522503" />
+</div>
+<div className="form-group">
+<label className="form-label">Google Maps URL</label>
+<input type="text" value={newBranch.googleMapsUrl || ''} onChange={(e) =>setNewBranch({ ...newBranch, googleMapsUrl: e.target.value })} className="form-input" placeholder="e.g. https://www.google.com/maps..." />
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">Opening Time *</label>
+<input type="text" required value={newBranch.openingTime || '09:00 AM'} onChange={(e) =>setNewBranch({ ...newBranch, openingTime: e.target.value })} className="form-input" placeholder="e.g. 09:00 AM" />
+</div>
+<div className="form-group">
+<label className="form-label">Closing Time *</label>
+<input type="text" required value={newBranch.closingTime || '10:00 PM'} onChange={(e) =>setNewBranch({ ...newBranch, closingTime: e.target.value })} className="form-input" placeholder="e.g. 10:00 PM" />
+</div>
 </div>
 </div>
 <div className="modal-footer">
@@ -4814,13 +5013,8 @@ const exportStaffToCSV = () => {
 </div>
 <div className="form-row">
 <div className="form-group">
-<label className="form-label">Allowed Geofence Radius *</label>
-<select value={editingBranch.allowedRadius || 30} onChange={(e) =>setEditingBranch({ ...editingBranch, allowedRadius: Number(e.target.value) })} className="form-input" required>
-<option value={20}>20 meters</option>
-<option value={30}>30 meters</option>
-<option value={50}>50 meters</option>
-<option value={100}>100 meters</option>
-</select>
+<label className="form-label">Allowed Geofence Radius (meters) *</label>
+<input type="number" min="1" required value={editingBranch.allowedRadius || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, allowedRadius: Number(e.target.value) })} className="form-input" placeholder="e.g. 100" />
 </div>
 <div className="form-group">
 <label className="form-label">Status *</label>
@@ -4828,6 +5022,45 @@ const exportStaffToCSV = () => {
 <option value="true">Active</option>
 <option value="false">Inactive</option>
 </select>
+</div>
+</div>
+<div className="form-row">
+<div className="form-group" style={{ flex: 1 }}>
+<label className="form-label">Unified Staff Mode</label>
+<select value={editingBranch.unifiedStaffMode ? 'true' : 'false'} onChange={(e) =>setEditingBranch({ ...editingBranch, unifiedStaffMode: e.target.value === 'true' })} className="form-input">
+<option value="false">Disabled (Normal Role Permissions)</option>
+<option value="true">Enabled (Any employee can do any status step)</option>
+</select>
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">City *</label>
+<input type="text" required value={editingBranch.city || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, city: e.target.value })} className="form-input" />
+</div>
+<div className="form-group">
+<label className="form-label">State *</label>
+<input type="text" required value={editingBranch.state || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, state: e.target.value })} className="form-input" />
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">Pincode *</label>
+<input type="text" required value={editingBranch.pincode || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, pincode: e.target.value })} className="form-input" />
+</div>
+<div className="form-group">
+<label className="form-label">Google Maps URL</label>
+<input type="text" value={editingBranch.googleMapsUrl || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, googleMapsUrl: e.target.value })} className="form-input" />
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">Opening Time *</label>
+<input type="text" required value={editingBranch.openingTime || '09:00 AM'} onChange={(e) =>setEditingBranch({ ...editingBranch, openingTime: e.target.value })} className="form-input" />
+</div>
+<div className="form-group">
+<label className="form-label">Closing Time *</label>
+<input type="text" required value={editingBranch.closingTime || '10:00 PM'} onChange={(e) =>setEditingBranch({ ...editingBranch, closingTime: e.target.value })} className="form-input" />
 </div>
 </div>
 </div>
