@@ -45,7 +45,8 @@ const OwnerProfilePage = () => {
       branchName: branch.branchName || '',
       address: branch.address || '',
       manager: branch.manager || '',
-      isActive: branch.isActive !== undefined ? branch.isActive : true
+      isActive: branch.isActive !== undefined ? branch.isActive : true,
+      unifiedStaffMode: !!branch.unifiedStaffMode
     });
     setEditingBranchId(branch._id);
     setActiveModal('editBranch');
@@ -99,7 +100,7 @@ const OwnerProfilePage = () => {
       payment: { upiId: paymentConfig?.upiId || '', bankHolderName: paymentConfig?.bankHolderName || '', accountNumber: paymentConfig?.accountNumber || '', ifscCode: paymentConfig?.ifscCode || '', taxRate: taxRate, serviceCharge: serviceCharge },
       ops: { tableCount: operationalConfig?.tables ? operationalConfig.tables.length : 5, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
       theme: { themeMode: themeMode, uiPrimaryColor: primaryColor },
-      branch: { branchName: '', address: '', manager: '' },
+      branch: { branchName: '', address: '', manager: '', unifiedStaffMode: false },
       qr_codes: {}
     }[key] || {};
     setForm(prefill);
@@ -376,6 +377,10 @@ const OwnerProfilePage = () => {
         <input className="minput" id="branch-new-address" name="branch-new-address" value={form.address || ''} onChange={fld('address')} placeholder="Full branch address" required />
         <label className="mlabel" htmlFor="branch-new-manager">Manager Name</label>
         <input className="minput" id="branch-new-manager" name="branch-new-manager" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
+        <div className="mtoggle-row">
+          <label className="mlabel" htmlFor="branch-new-unified" style={{ margin: 0 }}>Unified Staff Mode</label>
+          <input type="checkbox" id="branch-new-unified" name="branch-new-unified" className="mtoggle" checked={!!form.unifiedStaffMode} onChange={fld('unifiedStaffMode')} />
+        </div>
       </>,
 
     editBranch:
@@ -386,6 +391,10 @@ const OwnerProfilePage = () => {
         <input className="minput" id="branch-edit-address" name="branch-edit-address" value={form.address || ''} onChange={fld('address')} placeholder="Full branch address" required />
         <label className="mlabel" htmlFor="branch-edit-manager">Manager Name</label>
         <input className="minput" id="branch-edit-manager" name="branch-edit-manager" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
+        <div className="mtoggle-row">
+          <label className="mlabel" htmlFor="branch-edit-unified" style={{ margin: 0 }}>Unified Staff Mode</label>
+          <input type="checkbox" id="branch-edit-unified" name="branch-edit-unified" className="mtoggle" checked={!!form.unifiedStaffMode} onChange={fld('unifiedStaffMode')} />
+        </div>
         <div className="mtoggle-row">
           <label className="mlabel" htmlFor="branch-edit-active" style={{ margin: 0 }}>Is Active</label>
           <input type="checkbox" id="branch-edit-active" name="branch-edit-active" className="mtoggle" checked={!!form.isActive} onChange={fld('isActive')} />
