@@ -1599,7 +1599,30 @@ const exportStaffToCSV = () => {
  const deductionLogs = inventoryLogs.filter((log) =>log.type === 'Deduction');
  const totalInventoryConsumption = deductionLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
 
-
+  const getRankedItems = () => {
+    const itemCounts = {};
+    completedOrders.forEach(order => {
+      if (order.items && order.items.length > 0) {
+        order.items.forEach(item => {
+          const name = item.name || 'Unknown Item';
+          const qty = item.quantity || 0;
+          const price = item.price || 0;
+          if (!itemCounts[name]) {
+            itemCounts[name] = { name, quantity: 0, revenue: 0 };
+          }
+          itemCounts[name].quantity += qty;
+          itemCounts[name].revenue += qty * price;
+        });
+      }
+    });
+    const sorted = Object.values(itemCounts).sort((a, b) => b.quantity - a.quantity);
+    const topSelling = sorted.slice(0, 5);
+    const slowSelling = sorted.length > 5 
+      ? sorted.slice(sorted.length - 5).reverse()
+      : sorted.slice(0).reverse();
+    return { topSelling, slowSelling };
+  };
+  const { topSelling, slowSelling } = getRankedItems();
 
  const getTopConsumedIngredients = () =>{
  const consumptionMap = {};
@@ -1989,20 +2012,19 @@ const exportStaffToCSV = () => {
   <h4 style={{ color: '#2ecc71', margin: 0, fontSize: '1.1rem' }}>Top Selling Items</h4>
 </div>
 <div className="ranked-list-container">
-  <div className="ranked-list-item">
-    <div className="ranked-list-left">
-      <div className="ranked-badge ranked-badge-1">1</div>
-      <span className="ranked-item-name">Gourmet Double Cheeseburger</span>
-    </div>
-    <span className="ranked-item-metric">242 sold</span>
-  </div>
-  <div className="ranked-list-item">
-    <div className="ranked-list-left">
-      <div className="ranked-badge ranked-badge-2">2</div>
-      <span className="ranked-item-name">Creamy Iced Latte</span>
-    </div>
-    <span className="ranked-item-metric">198 sold</span>
-  </div>
+  {topSelling.length > 0 ? (
+    topSelling.map((item, index) => (
+      <div key={item.name} className="ranked-list-item">
+        <div className="ranked-list-left">
+          <div className={`ranked-badge ranked-badge-${Math.min(index + 1, 3)}`}>{index + 1}</div>
+          <span className="ranked-item-name">{item.name}</span>
+        </div>
+        <span className="ranked-item-metric">{item.quantity} sold (₹{item.revenue.toFixed(2)})</span>
+      </div>
+    ))
+  ) : (
+    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>No sales data available</div>
+  )}
 </div>
 </div>
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
@@ -2011,20 +2033,19 @@ const exportStaffToCSV = () => {
   <h4 style={{ color: '#e74c3c', margin: 0, fontSize: '1.1rem' }}>Slow Selling Items</h4>
 </div>
 <div className="ranked-list-container">
-  <div className="ranked-list-item">
-    <div className="ranked-list-left">
-      <div className="ranked-badge ranked-badge-3">1</div>
-      <span className="ranked-item-name">Hot Pepper Veggie Soup</span>
-    </div>
-    <span className="ranked-item-metric">3 sold</span>
-  </div>
-  <div className="ranked-list-item">
-    <div className="ranked-list-left">
-      <div className="ranked-badge ranked-badge-default">2</div>
-      <span className="ranked-item-name">Classic Black Tea</span>
-    </div>
-    <span className="ranked-item-metric">8 sold</span>
-  </div>
+  {slowSelling.length > 0 ? (
+    slowSelling.map((item, index) => (
+      <div key={item.name} className="ranked-list-item">
+        <div className="ranked-list-left">
+          <div className={`ranked-badge ${index === 0 ? 'ranked-badge-3' : 'ranked-badge-default'}`}>{index + 1}</div>
+          <span className="ranked-item-name">{item.name}</span>
+        </div>
+        <span className="ranked-item-metric">{item.quantity} sold (₹{item.revenue.toFixed(2)})</span>
+      </div>
+    ))
+  ) : (
+    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>No sales data available</div>
+  )}
 </div>
 </div>
 </div>
