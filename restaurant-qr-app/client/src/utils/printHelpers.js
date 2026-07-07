@@ -1,3 +1,5 @@
+import { getAssetUrl } from '../services/api';
+
 export const printPOSReceipt = (order, user = null, cafe = null, branch = null) => {
   let iframe = document.getElementById('receipt-print-iframe');
   if (!iframe) {
@@ -22,7 +24,7 @@ export const printPOSReceipt = (order, user = null, cafe = null, branch = null) 
   const displayBranchName = branch?.branchName || 'Main Branch';
   const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
   const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
-  const logoUrl = cafe?.logoUrl || (cafe?.logo ? `http://localhost:5000/uploads/${cafe.logo}` : '');
+  const logoUrl = getAssetUrl(cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
   const cafeGST = cafe?.gstNumber || '36AAAAA1111A1Z1';
 
   const itemsHtml = order.items.map(item => `
@@ -199,7 +201,7 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
   const displayBranchName = branch?.branchName || 'Main Branch';
   const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
   const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
-  const logoUrl = cafe?.logoUrl || (cafe?.logo ? `http://localhost:5000/uploads/${cafe.logo}` : '');
+  const logoUrl = getAssetUrl(cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
 
   const itemsHtml = order.items.map(item => `
     <tr>
