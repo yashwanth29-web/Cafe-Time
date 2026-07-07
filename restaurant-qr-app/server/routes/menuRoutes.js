@@ -28,6 +28,11 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 } // Limit dish images to 5MB
 });
 
+router.use((req, res, next) => {
+  console.log(`[MENU ROUTE DEBUG] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 router.get('/', getMenuItems);
 router.post('/', protect, restrictTo('admin', 'owner', 'manager'), createMenuItem);
 router.post('/upload-image', protect, restrictTo('admin', 'owner', 'manager'), upload.single('image'), (req, res) => {

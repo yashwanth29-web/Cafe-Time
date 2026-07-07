@@ -32,7 +32,7 @@ export const BranchProvider = ({ children }) => {
         setBranches(res.branches);
         
         const role = (currentUser.role || '').toLowerCase();
-        if (['admin', 'owner'].includes(role)) {
+        if (['super_admin', 'admin', 'owner'].includes(role)) {
           const stored = localStorage.getItem(STORAGE_KEY);
           const ids = res.branches.map(b => b.branchId);
           if (stored && ids.includes(stored)) {
@@ -62,7 +62,7 @@ export const BranchProvider = ({ children }) => {
     if (user) {
       // Determine initial active branch ID from database assignment before API call finishes
       const role = (user.role || '').toLowerCase();
-      if (['admin', 'owner'].includes(role)) {
+      if (['super_admin', 'admin', 'owner'].includes(role)) {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
           setActiveBranchId(stored);
@@ -107,7 +107,7 @@ export const BranchProvider = ({ children }) => {
   const switchBranch = useCallback((branchId) => {
     if (!user) return;
     const role = (user.role || '').toLowerCase();
-    if (!['admin', 'owner'].includes(role)) {
+    if (!['super_admin', 'admin', 'owner'].includes(role)) {
       console.warn('Unauthorized branch switch attempt ignored.');
       return;
     }

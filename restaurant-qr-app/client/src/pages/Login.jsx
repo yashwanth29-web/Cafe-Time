@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
-import '../styles/Auth.css';
+import '../styles/AuthSplit.css';
 
 const Login = () => {
   const [loading, setLoading] = useState(false);
@@ -53,45 +53,71 @@ const Login = () => {
 
   return (
     <GoogleOAuthProvider clientId={googleClientId}>
-      <div className="auth-wrapper">
-      <div className="auth-card">
-        <div className="auth-brand">
-          <img src="/logo.svg" alt="Dr. Chai Cafe Logo" style={{ height: '75px', width: '75px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #6F4E37', marginBottom: '12px', display: 'inline-block' }} />
-          <h1>Dr. Chai Cafe</h1>
-          <p>Login Portal</p>
+      <div className="login-split-container">
+        {/* Left Side: Brand Imagery */}
+        <div className="login-left-panel">
+          <div className="login-overlay">
+            <div className="brand-content">
+              <div className="brand-logo-container">
+                <img src="/logo.png" alt="Dr. Chai Cafe Logo" className="brand-logo-img" />
+              </div>
+              <h1 className="brand-title">Dr. Chai Cafe</h1>
+              <p className="brand-subtitle">
+                Premium Management & Staff Portal. <br />
+                Empowering your cafe's daily operations.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <h2 className="auth-title">Sign In</h2>
+        {/* Right Side: Auth Form */}
+        <div className="login-right-panel">
+          <div className="login-form-container">
+            
+            {/* Mobile Header (Hidden on Desktop) */}
+            <div className="mobile-brand-header">
+              <img src="/logo.png" alt="Dr. Chai Cafe Logo" className="mobile-logo-img" />
+              <h2 style={{ margin: 0, color: '#1a1a1a', fontWeight: 800 }}>Dr. Chai Cafe</h2>
+            </div>
 
-        {errorMsg && (
-          <div className="auth-alert auth-alert-error">
-            {errorMsg}
-          </div>
-        )}
+            <h1 className="login-heading">Welcome Back</h1>
+            <p className="login-subheading">Please sign in to access your dashboard</p>
 
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div className="spinner" style={{ margin: '0 auto 15px auto' }} />
-            <p style={{ color: 'var(--color-text-secondary)' }}>Authenticating with Google...</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 40px 0' }}>
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={handleGoogleError}
-              theme="outline"
-              size="large"
-              text="signin_with"
-              shape="rectangular"
-            />
-          </div>
-        )}
+            {errorMsg && (
+              <div className="auth-alert auth-alert-error" style={{ marginBottom: '24px' }}>
+                {errorMsg}
+              </div>
+            )}
 
-        <p className="auth-info-text">
-          Sign in using your registered Google workspace or personal email account.
-          For customers placing table orders, no login is required.
-        </p>
-      </div>
+            <div className="google-auth-section">
+              {loading ? (
+                <div className="loading-state">
+                  <div className="spinner" style={{ borderColor: 'rgba(0,0,0,0.1)', borderTopColor: 'var(--color-primary)' }} />
+                  <p>Authenticating securely...</p>
+                </div>
+              ) : (
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  theme="filled_black"
+                  size="large"
+                  text="signin_with"
+                  shape="pill"
+                />
+              )}
+            </div>
+
+            <div className="login-divider">
+              <span>Secure Access</span>
+            </div>
+
+            <p style={{ textAlign: 'center', fontSize: '0.85rem', color: '#888', lineHeight: '1.5' }}>
+              Sign in using your registered Google Workspace or personal email account. <br />
+              <strong style={{ color: '#555' }}>Note:</strong> Customers placing table orders do not need to login.
+            </p>
+
+          </div>
+        </div>
       </div>
     </GoogleOAuthProvider>
   );

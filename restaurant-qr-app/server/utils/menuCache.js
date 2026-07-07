@@ -28,7 +28,15 @@ module.exports = {
     const context = getContext();
     const cafeId = (context && context.cafeId) || 'CD001';
     const branchId = (context && context.branchId) || 'default';
-    if (cafeId && branchId) {
+    if (cafeId && branchId === 'default') {
+      // If default branch is cleared, it affects all branches because they inherit from master
+      console.log(`[CACHE] Master branch updated. Invalidating ALL menu caches for ${cafeId}`);
+      Object.keys(menuCache).forEach(k => {
+        if (k.startsWith(`${cafeId}_`)) {
+          delete menuCache[k];
+        }
+      });
+    } else if (cafeId && branchId) {
       const key = `${cafeId}_${branchId}`;
       console.log(`[CACHE] Menu cache invalidated for ${key}`);
       delete menuCache[key];

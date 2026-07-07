@@ -44,6 +44,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import socket, { connectSocket } from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
+import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3 } from 'lucide-react';
 
 const AdminMenuImage = ({ item }) =>{
  const isValidUrl = (url) =>{
@@ -1292,7 +1293,7 @@ const exportStaffToCSV = () => {
 
  // Delete menu item
  const handleDeleteMenuItem = async (id) =>{
- if (window.confirm('Are you sure you want to permanently delete this menu item?')) {
+    if (window.confirm('Are you sure you want to remove this menu item?')) {
  try {
  const response = await deleteMenuItem(id);
  if (response.success) {
@@ -1905,76 +1906,125 @@ const exportStaffToCSV = () => {
 <div className="fade-in">
  {/* Revenue Analytics Cards */}
 <div className="analytics-grid">
-<div className="analytics-card">
-<h4>Today's Settle Revenue</h4>
-<span className="val" style={{ color: '#2ecc71' }}>₹{todayRevenue.toFixed(2)}</span>
-<span className="sub">↑ 14% vs yesterday</span>
-</div>
-<div className="analytics-card">
-<h4>Monthly Settle Revenue</h4>
-<span className="val">₹{monthlyRevenue.toFixed(2)}</span>
-<span className="sub">↑ 8% this month</span>
-</div>
-<div className="analytics-card">
-<h4>Estimated Inventory Value</h4>
-<span className="val" style={{ color: '#e67e22' }}>₹{totalInventoryValue.toFixed(2)}</span>
-<span className="sub">All stock items valued</span>
-</div>
-<div className="analytics-card">
-<h4>Order Source Breakdown</h4>
-<div style={{ display: 'flex', gap: '15px', marginTop: '8px' }}>
-  <div>
-    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>QR</span>
-    <span className="val" style={{ margin: 0, fontSize: '20px' }}>{orders.filter(o => o.source !== 'STAFF').length}</span>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Today's Revenue</h4>
+    <div className="modern-metric-icon-wrapper">
+      <IndianRupee size={18} color="#27ae60" />
+    </div>
   </div>
-  <div>
-    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>STAFF</span>
-    <span className="val" style={{ margin: 0, fontSize: '20px', color: '#3498db' }}>{orders.filter(o => o.source === 'STAFF').length}</span>
-  </div>
+  <p className="modern-metric-value" style={{ color: '#27ae60' }}>₹{todayRevenue.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-success"><TrendingUp size={12} /> 14% vs yesterday</span>
 </div>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Monthly Revenue</h4>
+    <div className="modern-metric-icon-wrapper">
+      <IndianRupee size={18} color="var(--color-primary)" />
+    </div>
+  </div>
+  <p className="modern-metric-value">₹{monthlyRevenue.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-success"><TrendingUp size={12} /> 8% this month</span>
+</div>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Inventory Value</h4>
+    <div className="modern-metric-icon-wrapper">
+      <Package size={18} color="#e67e22" />
+    </div>
+  </div>
+  <p className="modern-metric-value" style={{ color: '#e67e22' }}>₹{totalInventoryValue.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-warning">All stock valued</span>
+</div>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Order Source</h4>
+    <div className="modern-metric-icon-wrapper">
+      <BarChart3 size={18} color="#3498db" />
+    </div>
+  </div>
+  <div style={{ display: 'flex', gap: '20px', marginTop: '4px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span className="modern-metric-value" style={{ fontSize: '1.4rem' }}>{orders.filter(o => o.source !== 'STAFF').length}</span>
+      <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>QR Orders</span>
+    </div>
+    <div style={{ width: '1px', background: 'var(--color-border)' }}></div>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span className="modern-metric-value" style={{ fontSize: '1.4rem', color: '#3498db' }}>{orders.filter(o => o.source === 'STAFF').length}</span>
+      <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Staff POS</span>
+    </div>
+  </div>
 </div>
 </div>
 
  {/* Inventory Analytics Cards */}
 <div className="analytics-grid" style={{ marginTop: '16px' }}>
-<div className="analytics-card">
-<h4>Total Inventory Cost</h4>
-<span className="val" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</span>
-<span className="sub">Initial stock + Purchases</span>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Total Inventory Cost</h4>
+    <div className="modern-metric-icon-wrapper">
+      <IndianRupee size={18} color="#9b59b6" />
+    </div>
+  </div>
+  <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-neutral">Initial stock + Purchases</span>
 </div>
-<div className="analytics-card">
-<h4>Inventory Consumption</h4>
-<span className="val" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</span>
-<span className="sub">Cost of sold ingredients</span>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Inventory Consumption</h4>
+    <div className="modern-metric-icon-wrapper">
+      <IndianRupee size={18} color="#16a085" />
+    </div>
+  </div>
+  <p className="modern-metric-value" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-neutral">Cost of sold ingredients</span>
 </div>
 </div>
 
  {/* Best / Worst Selling items */}
-<div className="owner-double-deck">
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px' }}>
-<h4 style={{ color: '#2ecc71', margin: '0 0 15px 0', fontSize: '1rem' }}>Top Selling Cafe Items</h4>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>1. Gourmet Double Cheeseburger</span>
-<span style={{ color: 'var(--color-text-secondary)' }}>242 sold</span>
+<div className="owner-double-deck" style={{ marginTop: '24px' }}>
+<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+  <TrendingUp size={20} color="#2ecc71" />
+  <h4 style={{ color: '#2ecc71', margin: 0, fontSize: '1.1rem' }}>Top Selling Items</h4>
 </div>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>2. Creamy Iced Latte</span>
-<span style={{ color: 'var(--color-text-secondary)' }}>198 sold</span>
+<div className="ranked-list-container">
+  <div className="ranked-list-item">
+    <div className="ranked-list-left">
+      <div className="ranked-badge ranked-badge-1">1</div>
+      <span className="ranked-item-name">Gourmet Double Cheeseburger</span>
+    </div>
+    <span className="ranked-item-metric">242 sold</span>
+  </div>
+  <div className="ranked-list-item">
+    <div className="ranked-list-left">
+      <div className="ranked-badge ranked-badge-2">2</div>
+      <span className="ranked-item-name">Creamy Iced Latte</span>
+    </div>
+    <span className="ranked-item-metric">198 sold</span>
+  </div>
 </div>
 </div>
+<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+  <TrendingDown size={20} color="#e74c3c" />
+  <h4 style={{ color: '#e74c3c', margin: 0, fontSize: '1.1rem' }}>Slow Selling Items</h4>
 </div>
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px' }}>
-<h4 style={{ color: '#e74c3c', margin: '0 0 15px 0', fontSize: '1rem' }}> Slow Selling Items</h4>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>1. Hot Pepper Veggie Soup</span>
-<span style={{ color: 'var(--color-text-secondary)' }}>3 sold</span>
-</div>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>2. Classic Black Tea</span>
-<span style={{ color: 'var(--color-text-secondary)' }}>8 sold</span>
-</div>
+<div className="ranked-list-container">
+  <div className="ranked-list-item">
+    <div className="ranked-list-left">
+      <div className="ranked-badge ranked-badge-3">1</div>
+      <span className="ranked-item-name">Hot Pepper Veggie Soup</span>
+    </div>
+    <span className="ranked-item-metric">3 sold</span>
+  </div>
+  <div className="ranked-list-item">
+    <div className="ranked-list-left">
+      <div className="ranked-badge ranked-badge-default">2</div>
+      <span className="ranked-item-name">Classic Black Tea</span>
+    </div>
+    <span className="ranked-item-metric">8 sold</span>
+  </div>
 </div>
 </div>
 </div>

@@ -3,8 +3,8 @@
   "name": "Dr. Chai Cafe - Smart QR Ordering",
   "icons": [
     {
-      "src": "/logo.svg",
-      "type": "image/svg+xml",
+      "src": "/logo.png",
+      "type": "image/png",
       "sizes": "192x192 512x512"
     }
   ],

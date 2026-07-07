@@ -59,7 +59,16 @@ const MenuItemSchema = new mongoose.Schema({
       type: Number,
       required: true
     }
-  }]
+  }],
+  masterItemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MenuItem',
+    default: null
+  },
+  isHidden: {
+    type: Boolean,
+    default: false
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

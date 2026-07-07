@@ -52,7 +52,18 @@ API.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    const activeBranchId = localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId');
+    
+    const isCustomerView = window.location.pathname === '/' || window.location.pathname === '/history';
+    
+    let activeBranchId;
+    if (isCustomerView) {
+      // In customer view, strictly prefer the branchId from the URL (which App.jsx puts in sessionStorage)
+      activeBranchId = sessionStorage.getItem('branchId') || localStorage.getItem('activeBranchId');
+    } else {
+      // In owner/staff dashboards, prefer the active branch from localStorage
+      activeBranchId = localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId');
+    }
+    
     if (activeBranchId) {
       config.headers['x-branch-id'] = activeBranchId;
     }

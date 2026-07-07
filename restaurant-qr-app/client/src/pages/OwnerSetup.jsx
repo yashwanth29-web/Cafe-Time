@@ -16,7 +16,7 @@ const OwnerSetup = () => {
   // Step 1: Cafe Profile States
   const [cafeName, setCafeName] = useState('');
   const [logoFile, setLogoFile] = useState(null);
-  const [logoPreview, setLogoPreview] = useState('/logo.svg');
+  const [logoPreview, setLogoPreview] = useState('/logo.png');
   const [logoUrl, setLogoUrl] = useState('');
   const [address, setAddress] = useState('');
   const [mapsLocation, setMapsLocation] = useState('40.7128,-74.0060'); // Default GPS coordinates

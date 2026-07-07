@@ -205,18 +205,15 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
                   
                   {combo.originalPrice && combo.originalPrice > combo.price ? (
                     <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '14px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontSize: '9px', color: '#888' }}>Price (Incl. GST)</span>
-                          <span style={{ fontSize: '13px', textDecoration: 'line-through', color: '#555', fontWeight: 600 }}>₹{combo.originalPrice.toFixed(0)}</span>
+                          <span style={{ fontSize: '20px', textDecoration: 'line-through', color: '#e74c3c', fontWeight: 600 }}>₹{combo.originalPrice.toFixed(0)}</span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                           <span style={{ fontSize: '9px', color: '#888' }}>You Pay</span>
-                          <span style={{ fontSize: '16px', color: '#8b3d20', fontWeight: 900 }}>₹{combo.price.toFixed(0)}</span>
+                          <span style={{ fontSize: '13px', color: '#27ae60', fontWeight: 900 }}>₹{combo.price.toFixed(0)}</span>
                         </div>
-                      </div>
-                      <div style={{ textAlign: 'center', color: '#27ae60', fontSize: '10px', fontWeight: 800, borderTop: '1px dashed #e0d5c1', paddingTop: '6px', marginBottom: '8px' }}>
-                        You Save ₹{(combo.originalPrice - combo.price).toFixed(0)}
                       </div>
                     </>
                   ) : (

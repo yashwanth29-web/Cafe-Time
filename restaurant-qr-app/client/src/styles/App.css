@@ -1800,6 +1800,148 @@ textarea.form-input {
   scrollbar-width: none !important;
 }
 
+/* --- MODERN OWNER DASHBOARD UI --- */
+.modern-metric-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.modern-metric-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+  border-color: var(--color-primary);
+}
+
+.modern-metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.modern-metric-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.modern-metric-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.03);
+}
+
+.modern-metric-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 8px 0;
+  line-height: 1.2;
+}
+
+.modern-metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 20px;
+  width: fit-content;
+}
+
+.modern-pill-success {
+  background: rgba(46, 204, 113, 0.15);
+  color: #27ae60;
+}
+
+.modern-pill-warning {
+  background: rgba(230, 126, 34, 0.15);
+  color: #d35400;
+}
+
+.modern-pill-neutral {
+  background: rgba(149, 165, 166, 0.15);
+  color: #7f8c8d;
+}
+
+.ranked-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ranked-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: rgba(0,0,0,0.015);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  transition: background 0.2s ease;
+}
+
+.ranked-list-item:hover {
+  background: rgba(0,0,0,0.03);
+}
+
+.ranked-list-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ranked-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: white;
+}
+
+.ranked-badge-1 { background: linear-gradient(135deg, #f1c40f, #f39c12); }
+.ranked-badge-2 { background: linear-gradient(135deg, #bdc3c7, #95a5a6); }
+.ranked-badge-3 { background: linear-gradient(135deg, #d35400, #e67e22); }
+.ranked-badge-default { background: var(--color-primary); }
+
+.ranked-item-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.ranked-item-metric {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--bg-main);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+
 .saas-content-inner {
   padding: 12px !important;
 }
