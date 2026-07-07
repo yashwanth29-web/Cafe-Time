@@ -18,7 +18,6 @@ const parseCoordinates = (input) => {
   if (generalMatch) return { latitude: parseFloat(generalMatch[1]), longitude: parseFloat(generalMatch[2]) };
   return null;
 };
-};
 
 // Helper: Get IST Date String (YYYY-MM-DD)
 const getISTDate = (date = new Date()) => {
