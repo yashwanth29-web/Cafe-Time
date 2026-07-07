@@ -215,11 +215,16 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
       </div>
 
       {/* Combos Slider */}
-      {!searchQuery && menuItems.some(i => (i.isCombo || i.category === 'Combos') && i.available) && (
+      {!searchQuery && selectedCategory !== 'Combos' && menuItems.some(i => (i.isCombo || i.category === 'Combos') && i.available) && (
         <div style={{ marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 10px 0', color: 'var(--color-text-primary)' }}>⭐ Best Combos For You</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0', color: 'var(--color-text-primary)' }}>⭐ Best Combos For You</h3>
+            {menuItems.filter(i => (i.isCombo || i.category === 'Combos') && i.available).length > 3 && (
+              <button onClick={() => setSelectedCategory('Combos')} style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', fontSize: '12px', fontWeight: '800', cursor: 'pointer', padding: 0 }}>View All</button>
+            )}
+          </div>
           <div className="combos-carousel">
-            {menuItems.filter(i => (i.isCombo || i.category === 'Combos') && i.available).map(combo => (
+            {menuItems.filter(i => (i.isCombo || i.category === 'Combos') && i.available).slice(0, 3).map(combo => (
               <div key={combo.id} className="combo-card" style={{ position: 'relative', border: '1px solid #f0e4d8', background: '#fffcf7' }}>
                 {combo.originalPrice && combo.originalPrice > combo.price && (
                   <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -304,7 +309,7 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
 
       {/* Menu Cards Grid */}
       <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '10px 0 12px 0', color: 'var(--color-text-primary)' }}>{searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Items' : selectedCategory}</h3>
-      {filteredMenu.filter(i => !(i.isCombo || i.category === 'Combos') || searchQuery).length === 0 ?
+      {filteredMenu.filter(i => selectedCategory === 'Combos' || !(i.isCombo || i.category === 'Combos') || searchQuery).length === 0 ?
         <div style={{
           padding: '50px 20px', textAlign: 'center', background: 'var(--bg-card)',
           borderRadius: 'var(--radius-lg)', border: '1px dashed var(--color-border)',
@@ -319,7 +324,7 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
         </div> 
       :
         <div className="compact-menu-grid">
-          {filteredMenu.filter(i => !(i.isCombo || i.category === 'Combos') || searchQuery).map((item) => {
+          {filteredMenu.filter(i => selectedCategory === 'Combos' || !(i.isCombo || i.category === 'Combos') || searchQuery).map((item) => {
             const cartItem = cart.find((cItem) => cItem.item.id === item.id);
             return (
               <MenuCard
