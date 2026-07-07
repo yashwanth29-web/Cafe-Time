@@ -26,8 +26,9 @@ module.exports = function multiBranchPlugin(schema) {
     });
   }
 
-  // Ensure index on { cafeId, branchId }
-  schema.index({ cafeId: 1, branchId: 1 });
+  // We do NOT add a global { cafeId: 1, branchId: 1 } index here because 
+  // many individual schemas define their own specific compound indexes 
+  // (sometimes with unique: true), which causes Mongoose duplicate index warnings.
 
   // Helper to apply branch filters to query
   const applyBranchFilter = function() {

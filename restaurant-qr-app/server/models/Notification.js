@@ -34,8 +34,8 @@ const NotificationSchema = new mongoose.Schema({
   }
 });
 
-// Index on userId and isRead for quick fetching in layout
-NotificationSchema.index({ userId: 1, isRead: 1 });
-NotificationSchema.index({ createdAt: -1 });
+// Index for multi-branch querying and sorting
+NotificationSchema.index({ cafeId: 1, branchId: 1, userId: 1, isRead: 1 });
+NotificationSchema.index({ cafeId: 1, branchId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Notification', NotificationSchema);
