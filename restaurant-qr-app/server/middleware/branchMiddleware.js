@@ -2,6 +2,26 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Branch = require('../models/Branch');
 const { runWithContext } = require('../utils/context');
+const mongoose = require('mongoose');
+const connectDB = require('../config/db');
+
+// Helper to wait for DB connection and retry if disconnected
+const waitDbConnection = async (timeoutMs = 5000) => {
+  if (mongoose.connection.readyState === 1) return;
+
+  if (mongoose.connection.readyState === 0) {
+    console.log('[DB RECONNECT] Database is disconnected. Triggering reconnect...');
+    connectDB().catch(err => console.error('[DB RECONNECT] Reconnection attempt failed:', err.message));
+  }
+
+  const startTime = Date.now();
+  while (mongoose.connection.readyState !== 1) {
+    if (Date.now() - startTime > timeoutMs) {
+      throw new Error('Database connection is temporarily unavailable. Please try again in a few seconds.');
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+};
 
 // Active branches in-memory cache with 5s TTL
 const branchCache = new Map(); // Keyed by `${cafeId}_${branchId}` -> { isActive, exists, expiresAt }
@@ -28,6 +48,9 @@ const verifyBranchActive = async (cafeId, branchId) => {
 
 const attachCafeAndBranch = async (req, res, next) => {
   try {
+    // Wait for DB connection if transiently disconnected
+    await waitDbConnection();
+
     // Exempt check
     const path = req.path;
     const isExempt = 

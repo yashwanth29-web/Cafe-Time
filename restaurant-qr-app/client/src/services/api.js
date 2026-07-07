@@ -17,23 +17,43 @@ const getBaseURL = () => {
 // Helper to format absolute asset URLs to use the current host (useful when testing via local network IPs)
 export const getAssetUrl = (url) => {
   if (!url) return '';
-  
-  // If the URL is just a relative path like "/uploads/lassi.png", 
-  // we must prepend the backend server address if we are in local development.
+
+  // 1. Handle relative paths (e.g. /uploads/filename.jpg)
   if (url.startsWith('/uploads')) {
     const envUrl = import.meta.env.VITE_API_URL;
+    let origin = '';
     if (envUrl) {
-      return envUrl.replace(/\/api$/, '') + url;
+      origin = envUrl.replace(/\/api$/, '');
+    } else {
+      origin = window.location.origin;
     }
-    if ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port === '5173') {
-      return `http://${window.location.hostname}:5000${url}`;
+    
+    // Support protocol matching
+    if (window.location.protocol === 'https:' && origin.startsWith('http:')) {
+      origin = origin.replace('http:', 'https:');
+    }
+    return `${origin}${url}`;
+  }
+
+  // 2. Handle absolute paths from other domains or localhost:5000 fallback
+  if (url.includes('localhost:5000') && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    const envUrl = import.meta.env.VITE_API_URL;
+    let origin = envUrl ? envUrl.replace(/\/api$/, '') : window.location.origin;
+    if (window.location.protocol === 'https:' && origin.startsWith('http:')) {
+      origin = origin.replace('http:', 'https:');
+    }
+
+    const match = url.match(/\/uploads\/.+$/);
+    if (match) {
+      return `${origin}${match[0]}`;
     }
   }
 
-  if (url.includes('localhost:5000') && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    const backendHost = window.location.port === '5173' ? `${window.location.hostname}:5000` : window.location.host;
-    return url.replace('localhost:5000', backendHost);
+  // 3. Upgrade insecure absolute URLs in production to avoid mixed content warnings
+  if (window.location.protocol === 'https:' && url.startsWith('http://') && !url.includes('localhost') && !url.includes('127.0.0.1')) {
+    return url.replace('http://', 'https://');
   }
+
   return url;
 };
 

@@ -134,9 +134,31 @@ const initializeSocket = (server) => {
       // Join Cafe Owner Room
       if (role === 'owner') {
         socket.join(`cafe:${cafeId}:owner`);
+        socket.join(`cafe_${cafeId}_owner`);
         console.log(`[SOCKET] Socket ${socket.id} joined room cafe:${cafeId}:owner`);
       }
     }
+
+    // Support client join_room event for anonymous customers and staff switches
+    socket.on('join_room', async ({ cafeId, branchId }) => {
+      try {
+        if (!cafeId) return;
+        const targetCafe = cafeId || 'CD001';
+        const targetBranch = branchId || 'default';
+
+        // Join Cafe Rooms
+        socket.join(`cafe:${targetCafe}`);
+        socket.join(`cafe_${targetCafe}`);
+
+        // Join Branch Rooms
+        socket.join(`branch:${targetBranch}`);
+        socket.join(`branch_${targetCafe}_${targetBranch}`);
+
+        console.log(`[SOCKET] Socket ${socket.id} joined rooms cafe:${targetCafe} and branch:${targetBranch}`);
+      } catch (err) {
+        console.error('[SOCKET] join_room error:', err.message);
+      }
+    });
 
     // Allow customers to request tracking for a specific order.
     // The server verifies the order exists in the DB before joining to prevent arbitrary room selection.
@@ -157,6 +179,7 @@ const initializeSocket = (server) => {
         }
 
         socket.join(`order:${orderId}`);
+        socket.join(`order_${orderId}`);
         console.log(`[SOCKET] Socket ${socket.id} joined room order:${orderId} (Customer tracking)`);
         socket.emit('tracking_confirmed', { orderId });
       } catch (err) {
