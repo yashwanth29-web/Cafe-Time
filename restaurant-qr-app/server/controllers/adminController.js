@@ -183,7 +183,7 @@ const getStaff = async (req, res) => {
         createdAt: { $gte: todayStart }
       });
       
-      const sAttendances = attendancesThisWeek.filter(a => a.staffId.toString() === s._id.toString());
+      const sAttendances = attendancesThisWeek.filter(a => a.staffId && a.staffId.toString() === s._id.toString());
       const weeklyBreakdown = {
         'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0, 'Friday': 0, 'Saturday': 0, 'Sunday': 0
       };
