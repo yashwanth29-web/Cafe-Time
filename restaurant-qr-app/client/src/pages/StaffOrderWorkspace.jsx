@@ -2,9 +2,10 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
-import { getOrders, updateOrderStatus, getInventory, reportShortage, getMenu, getAssetUrl, getCafeInfo } from '../services/api';
+import { getOrders, updateOrderStatus, getInventory, reportShortage, getMenu, getAssetUrl, getCafeInfo, getPaymentInfo } from '../services/api';
 import socket, { connectSocket } from '../socket';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
+import { QRCodeSVG } from 'qrcode.react';
 import '../styles/App.css';
 
 const StaffOrderWorkspace = () => {
@@ -34,23 +35,33 @@ const StaffOrderWorkspace = () => {
   const [showShortageModal, setShowShortageModal] = useState(false);
   const [selectedItemForShortage, setSelectedItemForShortage] = useState(null);
   const [shortageReason, setShortageReason] = useState('');
+  
+  const [paymentInfo, setPaymentInfo] = useState({ enableUpi: false, upiId: '' });
+  const [showUpiModal, setShowUpiModal] = useState(false);
+  const [upiOrder, setUpiOrder] = useState(null);
 
-  // Fetch Cafe Details
+  // Fetch Cafe Details & Payment Info
   useEffect(() => {
-    const fetchCafe = async () => {
+    const fetchCafeAndPayment = async () => {
       if (user?.cafeId) {
         try {
           const res = await getCafeInfo(user.cafeId);
           if (res.success) {
             setCafeInfo(res.data);
           }
+          if (activeBranchId) {
+            const payRes = await getPaymentInfo();
+            if (payRes.success && payRes.data) {
+              setPaymentInfo(payRes.data);
+            }
+          }
         } catch (e) {
-          console.error('Error fetching cafe info:', e);
+          console.error('Error fetching cafe or payment info:', e);
         }
       }
     };
-    fetchCafe();
-  }, [user]);
+    fetchCafeAndPayment();
+  }, [user, activeBranchId]);
 
   // Audio chimes
   const playNotificationSound = useCallback(() => {
@@ -629,7 +640,14 @@ const StaffOrderWorkspace = () => {
                             </button>
                             <button
                               disabled={!canCollect}
-                              onClick={() => handleCollectPayment(order._id, 'UPI')}
+                              onClick={() => {
+                                if (paymentInfo.enableUpi && paymentInfo.upiId) {
+                                  setUpiOrder(order);
+                                  setShowUpiModal(true);
+                                } else {
+                                  handleCollectPayment(order._id, 'UPI');
+                                }
+                              }}
                               style={{
                                 background: '#27ae60', color: 'white', border: 'none', padding: '8px 12px',
                                 borderRadius: '8px', cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
@@ -926,6 +944,47 @@ const StaffOrderWorkspace = () => {
           </form>
         </div>
       )}
+      {showUpiModal && upiOrder && paymentInfo.upiId && (
+        <div className="modal-overlay">
+          <div className="modal-content fade-in" style={{ maxWidth: '350px', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: '#27ae60' }}>Scan to Pay</h3>
+            <p style={{ fontSize: '13px', color: '#7f8c8d', marginBottom: '20px' }}>Ask the customer to scan this QR code with their UPI app (GPay, PhonePe, Paytm).</p>
+            
+            <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', display: 'inline-block', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+              <QRCodeSVG 
+                value={`upi://pay?pa=${paymentInfo.upiId}&pn=${encodeURIComponent(cafeInfo?.name || 'Cafe')}&am=${upiOrder.totalAmount}&cu=INR&tn=Order%20${upiOrder.orderNumber}`} 
+                size={200} 
+                level="M" 
+                includeMargin={true}
+              />
+            </div>
+            
+            <div style={{ fontSize: '24px', fontWeight: '800', color: '#2c3e50', marginBottom: '8px' }}>
+              ₹{upiOrder.totalAmount.toFixed(2)}
+            </div>
+            <div style={{ fontSize: '14px', color: '#7f8c8d', marginBottom: '24px' }}>
+              Order #{upiOrder.orderNumber}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button 
+                onClick={() => {
+                  handleCollectPayment(upiOrder._id, 'UPI');
+                  setShowUpiModal(false);
+                }}
+                style={{ padding: '14px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+                Confirm Payment Received
+              </button>
+              <button 
+                onClick={() => setShowUpiModal(false)}
+                style={{ padding: '12px', background: '#ecf0f1', color: '#7f8c8d', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

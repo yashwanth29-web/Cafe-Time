@@ -502,6 +502,11 @@ export const getCafeInfo = async (cafeId) => {
   return response.data;
 };
 
+export const getPaymentInfo = async () => {
+  const response = await API.get('/cafe/payment-info/config');
+  return response.data;
+};
+
 // Customer Reviews APIs
 export const submitReview = async (reviewPayload) => {
   const response = await API.post('/reviews', reviewPayload);
