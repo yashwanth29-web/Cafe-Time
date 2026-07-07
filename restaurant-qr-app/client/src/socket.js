@@ -3,11 +3,17 @@ import { io } from 'socket.io-client';
 // Determine Socket URL dynamically based on environment or window location
 const getSocketUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl) return envUrl.replace(/\/api\/?$/, '');
   
+  // If we are in production or accessed via non-localhost, dynamically match the window origin
+  // and ignore localhost-bound compile-time configurations
   if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+      return envUrl.replace(/\/api\/?$/, '');
+    }
     return window.location.origin;
   }
+
+  if (envUrl) return envUrl.replace(/\/api\/?$/, '');
   return `http://${window.location.hostname}:5000`;
 };
 

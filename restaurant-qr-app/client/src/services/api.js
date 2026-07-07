@@ -3,12 +3,17 @@ import axios from 'axios';
 // Dynamically determine the backend API base URL for deployment/local IP testing
 const getBaseURL = () => {
   const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl) return envUrl;
-
-  // If in production or accessed via non-localhost, dynamically match the window origin
+  
+  // If we are in production or accessed via non-localhost, dynamically match the window origin
+  // and ignore localhost-bound compile-time configurations
   if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+      return envUrl;
+    }
     return `${window.location.origin}/api`;
   }
+
+  if (envUrl) return envUrl;
   
   // Default to development local server port
   return `http://${window.location.hostname}:5000/api`;
@@ -22,7 +27,10 @@ export const getAssetUrl = (url) => {
   if (url.startsWith('/uploads')) {
     const envUrl = import.meta.env.VITE_API_URL;
     let origin = '';
-    if (envUrl) {
+    
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      origin = window.location.origin;
+    } else if (envUrl) {
       origin = envUrl.replace(/\/api$/, '');
     } else {
       origin = window.location.origin;
@@ -37,12 +45,7 @@ export const getAssetUrl = (url) => {
 
   // 2. Handle absolute paths from other domains or localhost:5000 fallback
   if (url.includes('localhost:5000') && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    const envUrl = import.meta.env.VITE_API_URL;
-    let origin = envUrl ? envUrl.replace(/\/api$/, '') : window.location.origin;
-    if (window.location.protocol === 'https:' && origin.startsWith('http:')) {
-      origin = origin.replace('http:', 'https:');
-    }
-
+    const origin = window.location.origin;
     const match = url.match(/\/uploads\/.+$/);
     if (match) {
       return `${origin}${match[0]}`;
