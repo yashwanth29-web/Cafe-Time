@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useBranch } from '../context/BranchContext';
 import OwnerLayout from '../components/OwnerLayout';
-import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff } from '../services/api';
+import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff, getAssetUrl } from '../services/api';
 
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
@@ -622,7 +622,7 @@ const OwnerProfilePage = () => {
           {/* Banner */}
           <div className="pp-banner">
             <div className="pp-avatar-wrap">
-              <div className="pp-avatar">{cafeData?.logoUrl ? <img src={cafeData.logoUrl} alt="cafe" /> : '☕'}</div>
+              <div className="pp-avatar">{cafeData?.logoUrl ? <img src={getAssetUrl(cafeData.logoUrl)} alt="cafe" /> : '☕'}</div>
               <div className="pp-identity">
                 <h2>{cafeData?.name || 'My Cafe'}</h2>
                 <p>{cafeData?.cafeId} · {cafeData?.businessType || 'Cafe'}</p>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getSetupData, saveSetupData, uploadLogo } from '../services/api';
+import { getSetupData, saveSetupData, uploadLogo, getAssetUrl } from '../services/api';
 
 const OwnerSetup = () => {
   const { user, checkSession } = useAuth();
@@ -616,7 +616,7 @@ const OwnerSetup = () => {
             
             <div className="mobile-logo-box" style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
               <div className="logo-preview-box">
-                <img src={logoPreview} alt="Logo Preview" />
+                <img src={getAssetUrl(logoPreview)} alt="Logo Preview" />
               </div>
               <div className="form-group" style={{ flex: 1 }}>
                 <label htmlFor="cafe-logo">Upload Cafe Logo</label>
