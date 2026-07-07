@@ -78,7 +78,7 @@ const AttendanceSchema = new mongoose.Schema({
   imageExpiredAt: {
     type: Date,
     default: null
-
+  },
   workingHours: {
     type: Number,
     default: 0
@@ -96,7 +96,6 @@ const AttendanceSchema = new mongoose.Schema({
   },
   extraWorkEndTime: {
     type: Date
-  },
   },
   createdAt: {
     type: Date,
