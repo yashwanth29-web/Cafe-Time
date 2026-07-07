@@ -6,6 +6,11 @@ const ReviewSchema = new mongoose.Schema({
     required: true,
     default: 'CD001'
   },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
+  },
   orderId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Order',
@@ -43,7 +48,7 @@ const ReviewSchema = new mongoose.Schema({
   }
 });
 
-// Performance Indexes
 ReviewSchema.index({ cafeId: 1, createdAt: -1 });
+ReviewSchema.index({ cafeId: 1, branchId: 1 });
 
 module.exports = mongoose.model('Review', ReviewSchema);

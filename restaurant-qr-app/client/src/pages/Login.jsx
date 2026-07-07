@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
-import '../styles/Auth.css';
+import '../styles/AuthSplit.css';
 
 const Login = () => {
-  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const { initiateLogin, user } = useAuth();
+  const { loginWithGoogle, user } = useAuth();
   const navigate = useNavigate();
+  
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'placeholder_client_id_please_replace_me.apps.googleusercontent.com';
 
   // If already logged in, redirect to the appropriate dashboard
   useEffect(() => {
     if (user) {
       const userRole = (user.role || '').toLowerCase();
-      console.log('User already logged in. Redirecting role:', userRole);
+      
       if (userRole === 'super_admin') {
         navigate('/super-admin/dashboard', { replace: true });
       } else if (userRole === 'admin' || userRole === 'owner') {
@@ -33,84 +35,91 @@ const Login = () => {
     }
   }, [user, navigate]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-
-    if (!email) {
-      setErrorMsg('Please enter your email address');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setErrorMsg('Please enter a valid email address');
-      return;
-    }
-
+  const handleGoogleSuccess = async (credentialResponse) => {
     try {
       setLoading(true);
-      await initiateLogin(email);
-      // Success: redirect to OTP verification screen with email as parameter
-      navigate(`/verify-otp?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      setErrorMsg('');
+      await loginWithGoogle(credentialResponse.credential);
+      // AuthContext useEffect will automatically handle the redirect once user state is set
     } catch (err) {
-      setErrorMsg(err.message || 'Login attempt failed. Please check your credentials.');
-    } finally {
+      setErrorMsg(err.message || 'Google login failed.');
       setLoading(false);
     }
   };
 
+  const handleGoogleError = () => {
+    setErrorMsg('Google Login was unsuccessful. Please try again.');
+  };
+
   return (
-    <div className="auth-wrapper">
-      <div className="auth-card">
-        <div className="auth-brand">
-          <img src="/logo.png" alt="Cypher's Café Logo" style={{ height: '75px', width: '75px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #6F4E37', marginBottom: '12px', display: 'inline-block' }} />
-          <h1>Cypher's Café</h1>
-          <p>Login Portal</p>
+    <GoogleOAuthProvider clientId={googleClientId}>
+      <div className="login-split-container">
+        {/* Left Side: Brand Imagery */}
+        <div className="login-left-panel">
+          <div className="login-overlay">
+            <div className="brand-content">
+              <div className="brand-logo-container">
+                <img src="/logo.png" alt="Dr. Chai Cafe Logo" className="brand-logo-img" />
+              </div>
+              <h1 className="brand-title">Dr. Chai Cafe</h1>
+              <p className="brand-subtitle">
+                Premium Management & Staff Portal. <br />
+                Empowering your cafe's daily operations.
+              </p>
+            </div>
+          </div>
         </div>
 
-        <h2 className="auth-title">Sign In</h2>
+        {/* Right Side: Auth Form */}
+        <div className="login-right-panel">
+          <div className="login-form-container">
+            
+            {/* Mobile Header (Hidden on Desktop) */}
+            <div className="mobile-brand-header">
+              <img src="/logo.png" alt="Dr. Chai Cafe Logo" className="mobile-logo-img" />
+              <h2 style={{ margin: 0, color: '#1a1a1a', fontWeight: 800 }}>Dr. Chai Cafe</h2>
+            </div>
 
-        {errorMsg && (
-          <div className="auth-alert auth-alert-error">
-            {errorMsg}
-          </div>
-        )}
+            <h1 className="login-heading">Welcome Back</h1>
+            <p className="login-subheading">Please sign in to access your dashboard</p>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <div className="auth-input-group">
-            <label htmlFor="email">Email Address</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              className="auth-input"
-              placeholder="name@cafe.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-              autoFocus
-            />
-          </div>
-
-          <button type="submit" className="auth-button" disabled={loading}>
-            {loading ? (
-              <>
-                <div className="spinner" />
-                Sending OTP...
-              </>
-            ) : (
-              'Send OTP Code'
+            {errorMsg && (
+              <div className="auth-alert auth-alert-error" style={{ marginBottom: '24px' }}>
+                {errorMsg}
+              </div>
             )}
-          </button>
-        </form>
 
-        <p className="auth-info-text">
-          Enter your registered email address to receive a one-time verification password (OTP). 
-          For customers placing table orders, no login is required.
-        </p>
+            <div className="google-auth-section">
+              {loading ? (
+                <div className="loading-state">
+                  <div className="spinner" style={{ borderColor: 'rgba(0,0,0,0.1)', borderTopColor: 'var(--color-primary)' }} />
+                  <p>Authenticating securely...</p>
+                </div>
+              ) : (
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  theme="filled_black"
+                  size="large"
+                  text="signin_with"
+                  shape="pill"
+                />
+              )}
+            </div>
+
+            <div className="login-divider">
+              <span>Secure Access</span>
+            </div>
+
+            <p style={{ textAlign: 'center', fontSize: '0.85rem', color: '#888', lineHeight: '1.5' }}>
+              Sign in using your registered Google Workspace or personal email account. <br />
+              <strong style={{ color: '#555' }}>Note:</strong> Customers placing table orders do not need to login.
+            </p>
+
+          </div>
+        </div>
       </div>
-    </div>
+    </GoogleOAuthProvider>
   );
 };
 

@@ -2,6 +2,8 @@ const Order = require('../models/Order');
 const Branch = require('../models/Branch');
 const mongoose = require('mongoose');
 const { deductInventoryForOrder } = require('./inventoryController');
+const socket = require('../socket');
+const Branch = require('../models/Branch');
 
 const emitOrderUpdated = async (order) => {
   if (!order) return;
@@ -95,7 +97,7 @@ const appendLegacyFallback = async (order, branchMap = null) => {
 // @access  Public
 const createOrder = async (req, res) => {
   try {
-    const { cafeId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions, branchId } = req.body;
+      await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
 
     // Simple validation
     if (!tableNumber) {
@@ -132,6 +134,7 @@ const createOrder = async (req, res) => {
 
     const newOrder = new Order({
       cafeId: cafeId || 'CD001',
+      branchId: branchId || req.branchId || 'default',
       tableNumber,
       items,
       totalAmount,
@@ -140,17 +143,7 @@ const createOrder = async (req, res) => {
       customerEmail: customerEmail || '',
       customerPhone: customerPhone || '',
       specialInstructions: specialInstructions || '',
-      paymentStatus: req.body.paymentStatus || 'Pending',
-      paymentMethod: req.body.paymentMethod || 'Pending',
-      orderSource: req.body.orderSource || 'QR',
-      createdBy: req.body.createdBy || '',
-      createdByRole: req.body.createdByRole || '',
-      branchId: resolvedBranch._id,
-      branchName: resolvedBranch.branchName,
-      branchAddress: resolvedBranch.address,
-      subtotal: finalSubtotal,
-      tax: finalTax,
-      grandTotal: finalGrandTotal
+    const { cafeId, branchId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions, source, staffId, paymentStatus, paymentMethod, orderSource, createdBy, createdByRole } = req.body;
     });
 
     const savedOrder = await newOrder.save();
@@ -158,23 +151,19 @@ const createOrder = async (req, res) => {
     // Auto deduct inventory stock
     await deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items);
 
-    const formattedOrder = await appendLegacyFallback(savedOrder);
-
-    // Emit orderCreated
-    try {
-      const { getIO } = require('../config/socket');
-      const io = getIO();
-      const branchIdStr = String(formattedOrder.branchId || '');
-      if (branchIdStr) {
-        io.to(`branch:${branchIdStr}`).emit('orderCreated', formattedOrder);
-      }
-      io.to(`cafe:${formattedOrder.cafeId}:owner`).emit('orderCreated', formattedOrder);
-      console.log(`[SOCKET] Broadcasted orderCreated for ${formattedOrder._id}`);
-    } catch (err) {
-      console.error('[SOCKET] Error emitting orderCreated:', err.message);
-    }
-
-    return res.status(201).json({ success: true, data: formattedOrder });
+      paymentStatus: req.body.paymentStatus || 'Pending',
+      paymentMethod: req.body.paymentMethod || 'Pending',
+      orderSource: req.body.orderSource || source || 'QR',
+      createdBy: req.body.createdBy || '',
+      createdByRole: req.body.createdByRole || '',
+      branchId: resolvedBranch ? String(resolvedBranch._id) : (branchId || 'default'),
+      branchName: resolvedBranch ? resolvedBranch.branchName : 'Main Branch',
+      branchAddress: resolvedBranch ? resolvedBranch.address : '',
+      subtotal: finalSubtotal || Number((totalAmount / 1.05).toFixed(2)),
+      tax: finalTax || Number((totalAmount - (totalAmount / 1.05)).toFixed(2)),
+      grandTotal: finalGrandTotal || totalAmount,
+      source: source || req.body.orderSource || 'QR',
+      staffId: staffId || null
   } catch (error) {
     console.error('Error creating order:', error);
     return res.status(500).json({ success: false, message: 'Server error while placing order', error: error.message });
@@ -186,57 +175,21 @@ const createOrder = async (req, res) => {
 // @access  Public (Owner/Staff Dashboards)
 const getOrders = async (req, res) => {
   try {
-    // Optional filters and pagination
-    const { cafeId, branchId, status, page, limit } = req.query;
-    
-    const query = {};
-    if (cafeId) query.cafeId = cafeId;
-    if (branchId) {
-      if (mongoose.isValidObjectId(branchId)) {
-        query.branchId = branchId;
-      } else {
-        // Resolve code BR002 to ObjectId
-        const resolvedBranch = await Branch.findOne({ branchId, cafeId: cafeId || 'CD001' }).lean();
-        if (resolvedBranch) {
-          query.branchId = resolvedBranch._id;
-        } else {
-          query.branchId = branchId;
-        }
+    const formattedOrder = await appendLegacyFallback(savedOrder);
+    try {
+      const { getIO } = require('../config/socket');
+      const io = getIO();
+      const branchIdStr = String(formattedOrder.branchId || '');
+      if (branchIdStr) {
+        io.to(`branch:${branchIdStr}`).emit('orderCreated', formattedOrder);
+        io.to(`branch_${formattedOrder.cafeId}_${branchIdStr}`).emit('order_created', formattedOrder);
       }
+      io.to(`cafe:${formattedOrder.cafeId}:owner`).emit('orderCreated', formattedOrder);
+      io.to(`cafe_${formattedOrder.cafeId}`).emit('order_created', formattedOrder);
+    } catch (err) {
+      console.error('[SOCKET] Error emitting orderCreated:', err.message);
     }
-    if (status) query.status = status;
-
-    let ordersQuery = Order.find(query).sort({ createdAt: -1 });
-
-    if (page && limit) {
-      const skipVal = (parseInt(page) - 1) * parseInt(limit);
-      const limitVal = parseInt(limit);
-      ordersQuery = ordersQuery.skip(skipVal).limit(limitVal);
-    }
-
-    const orders = await ordersQuery.lean();
-
-    // Cache branches in memory to avoid N+1 query loop
-    const branchMap = new Map();
-    const allBranches = await Branch.find().lean();
-    allBranches.forEach(b => {
-      branchMap.set(String(b._id), b);
-      branchMap.set(String(b.branchId), b);
-      if (!branchMap.has(b.cafeId)) {
-        branchMap.set(b.cafeId, b);
-      }
-    });
-
-    const formattedOrders = [];
-    for (const order of orders) {
-      formattedOrders.push(await appendLegacyFallback(order, branchMap));
-    }
-
-    return res.status(200).json({ 
-      success: true, 
-      count: formattedOrders.length, 
-      data: formattedOrders 
-    });
+    return res.status(201).json({ success: true, data: formattedOrder });
   } catch (error) {
     console.error('Error fetching orders:', error);
     return res.status(500).json({ success: false, message: 'Server error while fetching orders', error: error.message });
@@ -249,12 +202,58 @@ const getOrders = async (req, res) => {
 const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findById(id).lean();
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+    const filterQuery = {};
+    const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
+    if (cafeId) filterQuery.cafeId = cafeId;
+
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
+    const queryBranch = req.query.branchId || req.headers['x-branch-id'];
+    
+    if (isStaff && req.user?.assignedBranch) {
+      filterQuery.branchId = req.user.assignedBranch;
+    } else if (queryBranch) {
+      // If owner filters by a branch
+      filterQuery.branchId = queryBranch;
+    } // If owner requests all branches (no queryBranch), don't restrict branchId!
+
+    if (req.query.active === 'true') {
+      filterQuery.status = { $ne: 'Completed' };
     }
-    const formattedOrder = await appendLegacyFallback(order);
-    return res.status(200).json({ success: true, data: formattedOrder });
+    if (status) {
+      filterQuery.status = status;
+    }
+
+    if (req.query.date) {
+      const parts = req.query.date.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
+        const endOfDay = new Date(year, month, day + 1, 0, 0, 0, 0);
+        filterQuery.createdAt = { $gte: startOfDay, $lt: endOfDay };
+      }
+    }
+
+    const orders = await Order.find(filterQuery).sort({ createdAt: -1 }).limit(200).lean();
+    const branchMap = new Map();
+    const allBranches = await Branch.find().lean();
+    allBranches.forEach(b => {
+      branchMap.set(String(b._id), b);
+      branchMap.set(String(b.branchId), b);
+    });
+
+    const formattedOrders = [];
+    for (const order of orders) {
+      formattedOrders.push(await appendLegacyFallback(order, branchMap));
+    }
+
+    return res.status(200).json({ success: true, count: formattedOrders.length, data: formattedOrders });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found under this branch context' });
+    }
+    const cafeId = req.cafeId || req.query.cafeId || 'CD001';
+    let order = await Order.findOne({ _id: id, cafeId }).lean();
   } catch (error) {
     console.error('Error fetching single order:', error);
     return res.status(500).json({ success: false, message: 'Server error while retrieving order status', error: error.message });
@@ -269,6 +268,30 @@ const updateOrderStatus = async (req, res) => {
     const { status, paymentStatus, paymentMethod } = req.body;
     const { id } = req.params;
 
+    // Strict Branch Isolation Query
+    const order = await Order.findOne({ _id: id, cafeId: req.cafeId, branchId: req.branchId });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found in this branch context' });
+    }
+
+    // Load Branch config for Unified Staff Mode check
+    const branch = await Branch.findOne({ branchId: req.branchId, cafeId: req.cafeId });
+    const isUnified = branch ? !!branch.unifiedStaffMode : false;
+    const userRole = (req.user.role || '').toLowerCase();
+
+    // Check role permissions if Unified Staff Mode is disabled
+    if (!isUnified && !['admin', 'owner', 'manager', 'super_admin'].includes(userRole)) {
+      if (status === 'Preparing' || status === 'Ready') {
+        if (userRole !== 'chef') {
+          return res.status(403).json({ success: false, message: 'Access Denied: Only Kitchen staff (Chefs) can prepare orders or mark them as ready.' });
+        }
+      } else if (status === 'Delivered' || status === 'Completed') {
+        if (userRole !== 'waiter' && userRole !== 'cashier') {
+          return res.status(403).json({ success: false, message: 'Access Denied: Only Waiters or Cashiers can serve orders or collect payment.' });
+        }
+      }
+    }
+
     const updateFields = {};
 
     if (status !== undefined) {
@@ -277,6 +300,31 @@ const updateOrderStatus = async (req, res) => {
         return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${allowedStatuses.join(', ')}` });
       }
       updateFields.status = status;
+
+      // Permanent Audit Trail updates
+      if (status === 'Preparing') {
+        updateFields.preparingBy = req.user._id;
+        updateFields.preparingByName = req.user.name;
+        updateFields.preparingAt = new Date();
+      } else if (status === 'Ready') {
+        updateFields.readyBy = req.user._id;
+        updateFields.readyByName = req.user.name;
+        updateFields.readyAt = new Date();
+      } else if (status === 'Delivered') {
+        updateFields.servedBy = req.user._id;
+        updateFields.servedByName = req.user.name;
+        updateFields.servedAt = new Date();
+      } else if (status === 'Completed') {
+        updateFields.paidBy = req.user._id;
+        updateFields.paidByName = req.user.name;
+        updateFields.paidAt = new Date();
+        updateFields.paymentStatus = 'Paid';
+        if (paymentMethod) {
+          updateFields.paymentMethod = paymentMethod;
+        } else if (order.paymentMethod === 'Pending' || !order.paymentMethod) {
+          updateFields.paymentMethod = 'Cash'; // Default fallback
+        }
+      }
     }
 
     if (paymentStatus !== undefined) {
@@ -288,7 +336,8 @@ const updateOrderStatus = async (req, res) => {
     }
 
     if (paymentMethod !== undefined) {
-      const allowedPaymentMethods = ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card'];
+    const formattedOrder = await appendLegacyFallback(order);
+    return res.status(200).json({ success: true, data: formattedOrder });
       if (!allowedPaymentMethods.includes(paymentMethod)) {
         return res.status(400).json({ success: false, message: `Invalid paymentMethod. Must be one of: ${allowedPaymentMethods.join(', ')}` });
       }
@@ -299,27 +348,18 @@ const updateOrderStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No valid fields provided for update. Must be status, paymentStatus, or paymentMethod.' });
     }
 
-    const updatedOrder = await Order.findByIdAndUpdate(
-      id,
-      updateFields,
-      { new: true, returnDocument: 'after', runValidators: true }
-    ).lean();
+      const allowedPaymentMethods = ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card'];
 
     if (!updatedOrder) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
+      return res.status(404).json({ success: false, message: 'Order update failed or order not found' });
     }
 
     if (['Ready', 'Completed', 'Delivered'].includes(updatedOrder.status) && !updatedOrder.inventoryDeducted) {
-      await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
-      const latestOrder = await Order.findById(id).lean();
-      const formattedLatest = await appendLegacyFallback(latestOrder || updatedOrder);
-      await emitOrderUpdated(formattedLatest);
-      return res.status(200).json({ success: true, data: formattedLatest });
-    }
-
-    const formattedOrder = await appendLegacyFallback(updatedOrder);
-    await emitOrderUpdated(formattedOrder);
-    return res.status(200).json({ success: true, data: formattedOrder });
+    const updatedOrder = await Order.findOneAndUpdate(
+      { _id: id, cafeId: req.cafeId || 'CD001' },
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    ).lean();
   } catch (error) {
     console.error('Error updating order status:', error);
     return res.status(500).json({ success: false, message: 'Server error while updating order status', error: error.message });
@@ -341,7 +381,7 @@ const updateOrderPaymentMethod = async (req, res) => {
 
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
-      { paymentMethod },
+      { paymentMethod, paymentStatus: 'Paid' },
       { new: true, runValidators: true }
     ).lean();
 
@@ -349,8 +389,29 @@ const updateOrderPaymentMethod = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+      try {
+        await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
+      } catch (err) {
+        console.warn('Inventory deduction warning during status update:', err.message);
+      }
+      const latestOrder = await Order.findById(id).lean();
+      const formattedLatest = await appendLegacyFallback(latestOrder || updatedOrder);
+      const io = socket.getIO();
+      if (io) {
+        const bIdStr = String(formattedLatest.branchId || '');
+        io.to(`branch:${bIdStr}`).emit('orderUpdated', formattedLatest);
+        io.to(`branch_${formattedLatest.cafeId}_${bIdStr}`).emit('order_updated', formattedLatest);
+      }
+      return res.status(200).json({ success: true, data: formattedLatest });
+    }
+
     const formattedOrder = await appendLegacyFallback(updatedOrder);
-    await emitOrderUpdated(formattedOrder);
+    const io = socket.getIO();
+    if (io) {
+      const bIdStr = String(formattedOrder.branchId || '');
+      io.to(`branch:${bIdStr}`).emit('orderUpdated', formattedOrder);
+      io.to(`branch_${formattedOrder.cafeId}_${bIdStr}`).emit('order_updated', formattedOrder);
+    }
     return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {
     console.error('Error updating order payment method:', error);

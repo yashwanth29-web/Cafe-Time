@@ -83,10 +83,8 @@ const createReport = async (req, res) => {
       }
     }
 
-    // 3. Construct absolute image URLs
-    const protocol = req.protocol;
-    const host = req.get('host');
-    const photos = req.files.map(file => `${protocol}://${host}/uploads/${file.filename}`);
+    // 3. Construct relative image URLs
+    const photos = req.files.map(file => `/uploads/${file.filename}`);
 
     // Sync to GridFS
     const gridFsFileIds = [];
@@ -155,16 +153,12 @@ const getReports = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Your user profile does not have a cafe assignment.' });
     }
 
-    const query = { cafeId };
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || 'default';
+    const query = { cafeId, branchId: activeBranch };
 
     // Staff filter
     if (staffId) {
       query.staffId = staffId;
-    }
-
-    // Branch filter
-    if (branchId) {
-      query.branchId = branchId;
     }
 
     // Range / Date filters

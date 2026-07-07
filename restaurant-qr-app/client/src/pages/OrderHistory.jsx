@@ -1,14 +1,10 @@
-import { toast } from '../components/Toast';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import RazorpayPayment from '../components/RazorpayPayment';
-import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview } from '../services/api';
+import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
-import { useSocket } from '../hooks/useSocket';
 
 const OrderHistory = ({ cafeId }) => {
   const navigate = useNavigate();
-  const { socket, reconnectTrigger } = useSocket();
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -34,6 +30,8 @@ const OrderHistory = ({ cafeId }) => {
   const [customerName, setCustomerName] = useState(() => localStorage.getItem('customerName') || '');
   const [customerEmail, setCustomerEmail] = useState(() => localStorage.getItem('customerEmail') || '');
   const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('customerPhone') || '');
+
+
 
   // Keep contact details in localStorage for convenience on future visits
   useEffect(() => {
@@ -104,7 +102,7 @@ const OrderHistory = ({ cafeId }) => {
   const speakThankYou = () => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cafeNameStr = cafeInfo?.name || 'CoffeeDay Cafe';
+      const cafeNameStr = cafeInfo?.name || 'Dr. Chai Cafe';
       const text = `Payment successful. Thank you for visiting ${cafeNameStr}! Have a wonderful day.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.95;
@@ -122,188 +120,141 @@ const OrderHistory = ({ cafeId }) => {
     });
   };
 
-  const fetchActiveOrders = useCallback(async (isSilent = false) => {
-    const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-    const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
-    if (activeIds.length === 0 && completedIds.length === 0) {
-      setSuccess(false);
-      return;
-    }
-
-    if (!isSilent) setLoadingOrders(true);
-    const fetchedActive = [];
-    const fetchedCompleted = [];
-    let updatedIds = [...activeIds];
-    let updatedCompIds = [...completedIds];
-
-    for (const id of activeIds) {
-      try {
-        const res = await getOrderById(id);
-        if (res.success) {
-          if (res.data.paymentStatus !== 'Paid' && res.data.status !== 'Completed') {
-            fetchedActive.push(res.data);
-          } else {
-            fetchedCompleted.push(res.data);
-            updatedIds = updatedIds.filter((x) => x !== id);
-            if (!updatedCompIds.includes(id)) updatedCompIds.push(id);
-            if (!voicedOrderIds.includes(id)) {
-              triggerPaidFeedback(id);
-            }
-            localStorage.removeItem('customerName');
-            localStorage.removeItem('customerEmail');
-            localStorage.removeItem('customerPhone');
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching active order:', id, error);
-      }
-    }
-
-    for (const cid of completedIds) {
-      try {
-        const res = await getOrderById(cid);
-        if (res.success) fetchedCompleted.push(res.data);
-      } catch(e) {}
-    }
-
-    sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
-    sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
-
-    // Merge logic: newest state wins using event versioning timestamp check
-    if (fetchedActive.length > 0 || fetchedCompleted.length > 0) {
-      if (fetchedActive.length > 0) {
-        setActiveOrders(prev => {
-          if (prev.length === 0) return fetchedActive;
-          return fetchedActive.map(newOrder => {
-            const existing = prev.find(o => o._id === newOrder._id);
-            if (existing) {
-              const newTime = new Date(newOrder.updatedAt || 0).getTime();
-              const oldTime = new Date(existing.updatedAt || 0).getTime();
-              return newTime > oldTime ? newOrder : existing;
-            }
-            return newOrder;
-          });
-        });
-      } else {
-        setActiveOrders([]);
-      }
-      
-      if (fetchedCompleted.length > 0) setCompletedOrders(fetchedCompleted);
-      setSuccess(true);
-    } else {
-      setSuccess(false);
-    }
-    if (!isSilent) setLoadingOrders(false);
-  }, [voicedOrderIds]);
-
-  // Initial Fetch on Mount
+  // Fetch active orders on mount
   useEffect(() => {
-    fetchActiveOrders();
-  }, [fetchActiveOrders]);
-
-  // Join Order Rooms for customer order tracking
-  useEffect(() => {
-    if (!socket) return;
-    const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-    activeIds.forEach(orderId => {
-      socket.emit('trackOrder', { orderId });
-    });
-  }, [socket, activeOrders]);
-
-  // Socket Event Listeners with Event Versioning Safeguards
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleIncomingOrder = (incoming) => {
-      console.log('[SOCKET] Customer dashboard received order event:', incoming);
-      if (!incoming || !incoming._id) return;
-
-      const incomingTime = new Date(incoming.updatedAt || 0).getTime();
-
-      // Check active orders
-      setActiveOrders(prev => {
-        const existing = prev.find(o => o._id === incoming._id);
-        if (existing) {
-          const existingTime = new Date(existing.updatedAt || 0).getTime();
-          if (incomingTime <= existingTime) {
-            console.log('[SOCKET] Customer: Ignored stale event for order:', incoming._id);
-            return prev;
-          }
-        }
-
-        // If completed or paid, move from active list
-        if (incoming.paymentStatus === 'Paid' || incoming.status === 'Completed') {
-          // Remove from active list
-          setTimeout(() => {
-            if (!voicedOrderIds.includes(incoming._id)) {
-              triggerPaidFeedback(incoming._id);
-            }
-            
-            // Sync session storage
-            const currentActive = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-            const updatedActive = currentActive.filter(id => id !== incoming._id);
-            sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedActive));
-            
-            const currentComp = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
-            if (!currentComp.includes(incoming._id)) {
-              currentComp.push(incoming._id);
-              sessionStorage.setItem('completedOrderIds', JSON.stringify(currentComp));
-            }
-
-            setCompletedOrders(cPrev => {
-              if (cPrev.find(o => o._id === incoming._id)) return cPrev;
-              return [...cPrev, incoming];
-            });
-          }, 100);
-
-          return prev.filter(o => o._id !== incoming._id);
-        }
-
-        // Otherwise update order in active list
-        if (existing) {
-          return prev.map(o => o._id === incoming._id ? incoming : o);
-        } else {
-          // Verify if it belongs to activeOrderIds
-          const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-          if (activeIds.includes(incoming._id)) {
-            return [...prev, incoming];
-          }
-          return prev;
-        }
-      });
-    };
-
-    socket.on('orderUpdated', handleIncomingOrder);
-    socket.on('paymentCompleted', handleIncomingOrder);
-
-    return () => {
-      socket.off('orderUpdated', handleIncomingOrder);
-      socket.off('paymentCompleted', handleIncomingOrder);
-    };
-  }, [socket, voicedOrderIds]);
-
-  // One-off REST sync on socket reconnection
-  useEffect(() => {
-    if (reconnectTrigger > 0) {
-      console.log('[SOCKET] Reconnect event detected. Performing single-off REST synchronization.');
-      fetchActiveOrders(true);
-    }
-  }, [reconnectTrigger, fetchActiveOrders]);
-
-  // Fallback Polling (increased interval from 5s to 30s for recovery safety)
-  useEffect(() => {
-    if (!success || (activeOrders.length === 0 && completedOrders.length === 0)) return;
-
-    const pollInterval = setInterval(() => {
+    const fetchActiveOrders = async () => {
       const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-      if (activeIds.length > 0) {
-        console.log('[POLLING] Executing 60s recovery check...');
-        fetchActiveOrders(true);
+      const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
+      if (activeIds.length === 0 && completedIds.length === 0) {
+        setSuccess(false);
+        return;
       }
-    }, 60000);
+
+      setLoadingOrders(true);
+      const fetchedActive = [];
+      const fetchedCompleted = [];
+      let updatedIds = [...activeIds];
+      let updatedCompIds = [...completedIds];
+
+      for (const id of activeIds) {
+        try {
+          const res = await getOrderById(id);
+          if (res.success) {
+            if (res.data.paymentStatus !== 'Paid' && res.data.status !== 'Completed') {
+              fetchedActive.push(res.data);
+            } else {
+              fetchedCompleted.push(res.data);
+              // Remove paid orders from active list in session storage so we don't keep polling them
+              updatedIds = updatedIds.filter((x) => x !== id);
+              if (!updatedCompIds.includes(id)) updatedCompIds.push(id);
+              if (!voicedOrderIds.includes(id)) {
+                triggerPaidFeedback(id);
+              }
+              // Clear customer details on completion
+              localStorage.removeItem('customerName');
+              localStorage.removeItem('customerEmail');
+              localStorage.removeItem('customerPhone');
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching active order:', id, error);
+        }
+      }
+
+      // Also fetch completed
+      for (const cid of completedIds) {
+        try {
+          const res = await getOrderById(cid);
+          if (res.success) fetchedCompleted.push(res.data);
+        } catch(e) {}
+      }
+
+      sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
+      sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
+
+      if (fetchedActive.length > 0 || fetchedCompleted.length > 0) {
+        if (fetchedActive.length > 0) setActiveOrders(fetchedActive);
+        if (fetchedCompleted.length > 0) setCompletedOrders(fetchedCompleted);
+        setSuccess(true);
+      } else {
+        setSuccess(false);
+      }
+      setLoadingOrders(false);
+    };
+
+    fetchActiveOrders();
+  }, []);
+
+  // Poll order status if order was successfully placed
+  useEffect(() => {
+    if (!success || activeOrders.length === 0 && completedOrders.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+      if (activeIds.length === 0 && activeOrders.length === 0) {
+        return;
+      }
+
+      let changed = false;
+      const updatedList = [];
+      const newlyCompleted = [];
+      let updatedIds = [...activeIds];
+      const currentCompIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
+      let updatedCompIds = [...currentCompIds];
+
+      for (const order of activeOrders) {
+        try {
+          const res = await getOrderById(order._id);
+          if (res.success) {
+            if (res.data.paymentStatus === 'Paid' || res.data.status === 'Completed') {
+              updatedIds = updatedIds.filter((x) => x !== order._id);
+              if (!updatedCompIds.includes(order._id)) updatedCompIds.push(order._id);
+              newlyCompleted.push(res.data);
+              changed = true;
+              triggerPaidFeedback(order._id);
+              // Clear customer details on completion
+              localStorage.removeItem('customerName');
+              localStorage.removeItem('customerEmail');
+              localStorage.removeItem('customerPhone');
+            } else {
+              updatedList.push(res.data);
+              if (
+              res.data.status !== order.status ||
+              res.data.paymentStatus !== order.paymentStatus ||
+              res.data.paymentMethod !== order.paymentMethod)
+              {
+                changed = true;
+              }
+            }
+          } else {
+            updatedList.push(order);
+          }
+        } catch (error) {
+          console.error('Error polling order:', order._id, error);
+          updatedList.push(order);
+        }
+      }
+
+      if (changed || newlyCompleted.length > 0) {
+        sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
+        sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
+        if (updatedList.length > 0) {
+          setActiveOrders(updatedList);
+        } else {
+          setActiveOrders([]);
+        }
+        if (newlyCompleted.length > 0) {
+          setCompletedOrders((prev) => {
+            const ids = prev.map((o) => o._id);
+            const filteredNew = newlyCompleted.filter((o) => !ids.includes(o._id));
+            return [...prev, ...filteredNew];
+          });
+        }
+      }
+    }, 5000);
 
     return () => clearInterval(pollInterval);
-  }, [success, activeOrders.length, completedOrders.length, fetchActiveOrders]);
+  }, [success, activeOrders, completedOrders]);
 
   const handleCounterPayRequest = async (orderId) => {
     setLoading(true);
@@ -342,297 +293,342 @@ const OrderHistory = ({ cafeId }) => {
   };
 
   // Dynamic Live Tracker Success / Invoice view
-  if (activeOrders.length > 0 || completedOrders.length > 0) {
+  if (activeOrders.length > 0) {
+    return (
+      <div className="main-content" style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        minHeight: 'calc(100vh - 120px)',
+        padding: '10px 16px 20px 16px',
+        boxSizing: 'border-box'
+      }}>
+        {/* Compact Tracker Card */}
+        <div className="success-screen" style={{
+          width: '100%',
+          maxWidth: '440px',
+          padding: '16px',
+          margin: '0 auto',
+          borderRadius: '16px',
+          boxShadow: 'var(--shadow-lg)',
+          animation: 'slideUp 0.4s ease-out',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--color-border)'
+        }}>
+          <h3 style={{
+            fontSize: '15px',
+            fontWeight: 800,
+            textAlign: 'center',
+            margin: '0 0 12px 0',
+            color: 'var(--color-primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}>
+            ⏳ Active Orders Tracker
+          </h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {activeOrders.map((order) => {
+              const isServed = order.status === 'Ready' || order.status === 'Delivered' || order.status === 'Completed';
+              const isPaid = order.paymentStatus === 'Paid';
+              const orderStatus = order.status;
+
+              return (
+                <div key={order._id} style={{
+                  background: 'rgba(0, 0, 0, 0.02)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '12px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.05)'
+                }}>
+                  {/* Status Indicator */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--color-text-secondary)' }}>
+                      ID: #{order._id.slice(-6).toUpperCase()}
+                    </span>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      color: isServed ? 'var(--color-success)' : 'var(--color-primary)',
+                      background: isServed ? 'rgba(40,167,69,0.1)' : 'rgba(224,142,39,0.1)',
+                      padding: '2px 6px',
+                      borderRadius: '8px'
+                    }}>
+                      {orderStatus}
+                    </span>
+                  </div>
+
+                  {/* Visual Status Header */}
+                  {!isServed ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '10px' }}>
+                      <div className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2.5px', borderTopColor: 'var(--color-primary)' }}></div>
+                      <p style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', margin: 0, fontWeight: 600 }}>
+                        {orderStatus === 'Placed' ?
+                          'Waiting for kitchen acceptance...' :
+                          'Chefs are crafting your order!'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                      <p style={{ fontSize: '11.5px', color: 'var(--color-success)', margin: 0, fontWeight: 700 }}>
+                        🍽️ Served & Enjoy!
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Interactive Progress Track */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: '16px', padding: '0 8px' }}>
+                    {/* Step 1: Placed */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ 
+                        width: '18px', 
+                        height: '18px', 
+                        borderRadius: '50%', 
+                        background: 'var(--color-primary)', 
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        boxShadow: '0 0 6px var(--color-primary)'
+                      }}>✓</div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--color-primary)' }}>Placed</span>
+                    </div>
+                    
+                    {/* Line 1 */}
+                    <div style={{ 
+                      flex: 1, 
+                      height: '3px', 
+                      background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)', 
+                      borderRadius: '1.5px',
+                      margin: '0 4px',
+                      marginTop: '-12px'
+                    }}></div>
+                    
+                    {/* Step 2: Preparing */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ 
+                        width: '18px', 
+                        height: '18px', 
+                        borderRadius: '50%', 
+                        background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--bg-secondary)', 
+                        border: `2px solid ${orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: orderStatus !== 'Placed' ? 'white' : 'var(--color-text-secondary)',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        boxShadow: orderStatus !== 'Placed' ? '0 0 6px var(--color-primary)' : 'none'
+                      }}>
+                        {orderStatus !== 'Placed' ? '✓' : '2'}
+                      </div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Preparing</span>
+                    </div>
+                    
+                    {/* Line 2 */}
+                    <div style={{ 
+                      flex: 1, 
+                      height: '3px', 
+                      background: isServed ? 'var(--color-success)' : 'var(--color-border)', 
+                      borderRadius: '1.5px',
+                      margin: '0 4px',
+                      marginTop: '-12px'
+                    }}></div>
+                    
+                    {/* Step 3: Ready */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ 
+                        width: '18px', 
+                        height: '18px', 
+                        borderRadius: '50%', 
+                        background: isServed ? 'var(--color-success)' : 'var(--bg-secondary)', 
+                        border: `2px solid ${isServed ? 'var(--color-success)' : 'var(--color-border)'}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: isServed ? 'white' : 'var(--color-text-secondary)',
+                        fontSize: '9px',
+                        fontWeight: 'bold',
+                        boxShadow: isServed ? '0 0 6px var(--color-success)' : 'none'
+                      }}>
+                        {isServed ? '✓' : '3'}
+                      </div>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>Ready</span>
+                    </div>
+                  </div>
+
+                  {/* Order Details Card */}
+                  <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--color-border)', padding: '12px', borderRadius: '10px', marginBottom: '8px', fontSize: '11.5px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div>
+                        <span style={{ color: 'var(--color-text-secondary)', marginRight: '4px' }}>Table:</span>
+                        <span style={{ fontWeight: 800, color: 'var(--color-text-primary)', fontSize: '13px' }}>{order.tableNumber}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--color-text-secondary)', marginRight: '4px' }}>Total:</span>
+                        <span style={{ fontWeight: 800, color: 'var(--color-primary)', fontSize: '13px' }}>₹{order.totalAmount.toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span style={{ 
+                          fontWeight: 850, 
+                          color: isPaid ? 'var(--color-success)' : '#f39c12',
+                          background: isPaid ? 'rgba(46, 204, 113, 0.1)' : 'rgba(243, 156, 18, 0.1)',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '10px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}>
+                          {order.paymentStatus}
+                        </span>
+                      </div>
+                    </div>
+                    {order.specialInstructions && (
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '6px', borderTop: '1px solid var(--color-border)', paddingTop: '6px', fontSize: '11px' }}>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>Note:</span>
+                        <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>{order.specialInstructions}</span>
+                      </div>
+                    )}
+                    <div style={{ borderTop: '1px solid var(--color-border)', marginTop: '8px', paddingTop: '8px' }}>
+                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px', display: 'block', marginBottom: '6px' }}>Items Ordered:</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {order.items.map((it, idx) => {
+                          const displayImage = it.image ? getAssetUrl(it.image) : '/images/default-food.png';
+                          return (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+                              <img
+                                src={displayImage}
+                                alt={it.name}
+                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+                                onError={(e) => { e.target.src = '/images/default-food.png'; }}
+                              />
+                              <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+                                {it.quantity}x
+                              </span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+                                {it.name}
+                              </span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary)', marginLeft: 'auto' }}>
+                                ₹{(it.price * it.quantity).toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Options */}
+                  {isServed && !isPaid && (
+                    <div style={{ background: 'rgba(0, 0, 0, 0.02)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '10px', borderRadius: '8px' }}>
+                      <div>
+                        <h4 style={{ color: 'var(--color-text-primary)', fontSize: '11px', fontWeight: '800', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          💵 Cash Payment at Counter
+                        </h4>
+                        <p style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: '1.3', margin: '0' }}>
+                          Please proceed to the cashier counter to complete your payment with cash. Share your <strong>Table {order.tableNumber}</strong>.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {errorMsg && (
+            <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)', color: 'var(--color-text-primary)', fontSize: '11px', padding: '8px', marginTop: '10px', borderRadius: '6px', textAlign: 'center' }}>
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
+          <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
+            View Menu
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (completedOrders.length > 0) {
     return (
       <div className="main-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '75vh', padding: '20px 10px' }}>
         <div className="success-screen" style={{ width: '100%', maxWidth: '440px', padding: '24px 16px', animation: 'scaleUp 0.3s ease-out' }}>
-          
-          {activeOrders.length > 0 &&
-          <>
-              <h2 className="success-title" style={{ fontSize: '20px', fontWeight: 900, textAlign: 'center', marginBottom: '16px', color: 'var(--color-primary)' }}>
-                ⏳ Active Orders Tracker
-              </h2>
+          <h2 className="success-title" style={{ fontSize: '20px', fontWeight: 900, textAlign: 'center', marginBottom: '16px', color: 'var(--color-success)' }}>
+            ✔️ Completed Invoice & Receipt
+          </h2>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '30px' }}>
-                {activeOrders.map((order) => {
-                const isServed = order.status === 'Ready' || order.status === 'Delivered' || order.status === 'Completed';
-                const isPaid = order.paymentStatus === 'Paid';
-                const orderStatus = order.status;
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {completedOrders.map((order) => {
+              const itemsSubtotal = order.items.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
+              const gstRate = cafeInfo?.gstRate || 0;
+              const platformCharge = cafeInfo?.serviceChargeRate || 0;
+              const gstAmount = itemsSubtotal * (gstRate / 100);
+              const hasReviewed = submittedReviews.includes(order._id);
 
-                return (
-                  <div key={order._id} style={{
-                    background: 'rgba(0, 0, 0, 0.02)',
-                    border: '1px solid var(--color-border)',
+              return (
+                <div key={order._id} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Invoice Block */}
+                  <div style={{
+                    background: '#FAF6F0',
+                    color: '#33271c',
+                    border: '1px solid #E6D5C3',
                     borderRadius: '16px',
-                    padding: '16px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    padding: '20px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    fontFamily: "'Courier New', Courier, monospace"
                   }}>
-                      {/* Status Indicator */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--color-text-secondary)' }}>
-                          ID: #{order._id.slice(-6).toUpperCase()}
-                        </span>
-                        <span style={{
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        color: isServed ? 'var(--color-success)' : 'var(--color-primary)',
-                        background: isServed ? 'rgba(40,167,69,0.1)' : 'rgba(224,142,39,0.1)',
-                        padding: '4px 8px',
-                        borderRadius: '12px'
-                      }}>
-                          {orderStatus}
-                        </span>
-                      </div>
+                    <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '12px', marginBottom: '12px' }}>
+                      <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>{cafeInfo?.name || 'Dr. Chai Cafe'}</h3>
+                      <p style={{ margin: '2px 0', fontSize: '10px' }}>{cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
+                      {cafeInfo?.gstNumber && <p style={{ margin: '2px 0', fontSize: '10px', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
+                    </div>
 
-                      {/* Visual Status Header */}
-                      {!isServed ?
-                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                          <div className="spinner" style={{ width: '36px', height: '36px', borderWidth: '4px', margin: '0 auto 8px auto', borderTopColor: 'var(--color-primary)' }}></div>
-                          <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', margin: 0 }}>
-                            {orderStatus === 'Placed' ?
-                        'Waiting for kitchen acceptance...' :
-                        'Our chefs are crafting your fresh order!'}
-                          </p>
-                        </div> :
+                    <div style={{ fontSize: '11px', marginBottom: '12px' }}>
+                      <div><strong>Invoice #:</strong> {order._id.toUpperCase()}</div>
+                      <div><strong>Date:</strong> {new Date(order.createdAt).toLocaleString()}</div>
+                      <div><strong>Table:</strong> Table {order.tableNumber}</div>
+                      <div><strong>Customer:</strong> {order.customerName || 'Customer'}</div>
+                    </div>
 
-                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                          <p style={{ fontSize: '12px', color: 'var(--color-success)', margin: 0, fontWeight: 700 }}>
-                            🍽️ Served & Enjoy!
-                          </p>
-                        </div>
-                    }
-
-                      {/* Interactive Progress Track */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '16px', padding: '0 4px' }}>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', boxShadow: '0 0 6px var(--color-primary)' }}></div>
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--color-primary)' }}>Placed</span>
-                        </div>
-                        <div style={{ flex: 1, height: '3px', background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)', borderRadius: '1.5px' }}></div>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)' }}></div>
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Preparing</span>
-                        </div>
-                        <div style={{ flex: 1, height: '3px', background: isServed ? 'var(--color-success)' : 'var(--color-border)', borderRadius: '1.5px' }}></div>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isServed ? 'var(--color-success)' : 'var(--color-border)' }}></div>
-                          <span style={{ fontSize: '9px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>Ready</span>
-                        </div>
-                      </div>
-
-                      {/* Order Details Card */}
-                      <div style={{ backgroundColor: 'rgba(0, 0, 0,0.01)', border: '1px solid rgba(0, 0, 0,0.05)', padding: '10px', borderRadius: '8px', marginBottom: '12px', fontSize: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--color-text-secondary)' }}>Table</span>
-                          <span style={{ fontWeight: 800, color: 'var(--color-text-primary)' }}>{order.tableNumber}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--color-text-secondary)' }}>Total Amount</span>
-                          <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>₹{order.totalAmount.toFixed(2)}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--color-text-secondary)' }}>Payment Status</span>
-                          <span style={{ fontWeight: 800, color: 'var(--color-warning)' }}>{order.paymentStatus}</span>
-                        </div>
-                        {order.specialInstructions &&
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px', borderTop: '1px solid rgba(0, 0, 0,0.05)', paddingTop: '4px' }}>
-                            <span style={{ color: 'var(--color-text-secondary)' }}>Instructions:</span>
-                            <span style={{ fontWeight: 600, color: 'var(--color-warning)' }}>{order.specialInstructions}</span>
-                          </div>
-                      }
-                        <div style={{ borderTop: '1px solid rgba(0, 0, 0,0.05)', marginTop: '6px', paddingTop: '6px' }}>
-                          <span style={{ color: 'var(--color-text-secondary)', display: 'block', marginBottom: '2px' }}>Items:</span>
-                          <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                            {order.items.map((it) => `${it.name} (x${it.quantity})`).join(', ')}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Payment Options */}
-                      {isServed && !isPaid &&
-                    <div style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid rgba(0, 0, 0,0.05)', padding: '10px', borderRadius: '8px' }}>
-                          {order.paymentMethod === 'Counter' ?
-                      <div>
-                              <h4 style={{ color: 'var(--color-text-primary)', fontSize: '12px', fontWeight: '800', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                🏪 Counter Payment Requested
-                              </h4>
-                              <p style={{ fontSize: '10px', color: 'var(--color-text-secondary)', lineHeight: '1.4', margin: '0 0 8px 0' }}>
-                                Proceed to cashier and share <strong>Table {order.tableNumber}</strong> or order suffix.
-                              </p>
-                              <button
-                          onClick={() => handleCancelCounterPayRequest(order._id)}
-                          disabled={loading}
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 8px', fontSize: '11px', width: '100%', cursor: loading ? 'not-allowed' : 'pointer' }}>
-                          
-                                Change to Pay Online
-                              </button>
-                            </div> :
-
-                      <div>
-                              <h4 style={{ color: 'var(--color-text-primary)', fontSize: '12px', fontWeight: '800', margin: '0 0 8px 0', textAlign: 'center' }}>
-                                Select Payment Method
-                              </h4>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <RazorpayPayment
-                            cart={order.items.map((it) => ({ item: it, quantity: it.quantity }))}
-                            tableNumber={order.tableNumber}
-                            customerDetails={{
-                              name: customerName || order.customerName || 'Customer',
-                              email: customerEmail || order.customerEmail || 'customer@example.com',
-                              phone: customerPhone || order.customerPhone || '9999999999'
-                            }}
-                            specialInstructions={order.specialInstructions}
-                            existingOrderId={order._id}
-                            cafeId={cafeId || order.cafeId || 'CD001'}
-                            buttonText="Pay Online (Razorpay)"
-                            onPaymentSuccess={(updatedOrder) => {
-                              setActiveOrders((prev) => prev.map((o) => o._id === order._id ? updatedOrder : o));
-                              triggerPaidFeedback(order._id);
-                            }}
-                            onPaymentError={(err) => {
-                              setErrorMsg(err);
-                            }} />
-                          
-                                
-                                <button
-                            onClick={() => handleCounterPayRequest(order._id)}
-                            disabled={loading}
-                            className="btn btn-secondary"
-                            style={{
-                              padding: '8px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              width: '100%',
-                              borderRadius: '6px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '4px',
-                              cursor: loading ? 'not-allowed' : 'pointer',
-                              border: '1px solid var(--color-border)',
-                              color: 'var(--color-text-primary)',
-                              background: 'rgba(0, 0, 0,0.03)'
-                            }}>
-                            
-                                  <span>🏪</span>
-                                  <span>Pay at Counter</span>
-                                </button>
-                              </div>
-                            </div>
-                      }
-                        </div>
-                    }
-                    </div>);
-
-              })}
-              </div>
-            </>
-          }
-
-          {completedOrders.length > 0 &&
-          <>
-              <h2 className="success-title" style={{ fontSize: '20px', fontWeight: 900, textAlign: 'center', marginBottom: '16px', color: 'var(--color-success)' }}>
-                ✔️ Completed Invoice & Receipt
-              </h2>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {completedOrders.map((order) => {
-                const sub = order.subtotal !== undefined ? order.subtotal : (order.totalAmount / 1.05);
-                const gst = order.tax !== undefined ? order.tax : (order.totalAmount - sub);
-                const hasReviewed = submittedReviews.includes(order._id);
-
-                return (
-                  <div key={order._id} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      {/* Invoice Block */}
-                      <div style={{
-                      background: '#FAF6F0',
-                      color: '#33271c',
-                      border: '1px solid #E6D5C3',
-                      borderRadius: '16px',
-                      padding: '20px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                      fontFamily: "'Courier New', Courier, monospace"
-                    }}>
-                        <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '12px', marginBottom: '12px' }}>
-                          <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>{order.branchName || cafeInfo?.name || 'Dr. Chai Cafe'}</h3>
-                          <p style={{ margin: '2px 0', fontSize: '10px' }}>{order.branchAddress || cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
-                          {cafeInfo?.gstNumber && <p style={{ margin: '2px 0', fontSize: '10px', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
-                        </div>
-
-                        <div style={{ fontSize: '11px', marginBottom: '12px' }}>
-                          <div><strong>Invoice #:</strong> {order._id.toUpperCase()}</div>
-                          <div><strong>Date:</strong> {new Date(order.createdAt).toLocaleString()}</div>
-                          <div><strong>Table:</strong> Table {order.tableNumber}</div>
-                          <div><strong>Customer:</strong> {order.customerName || 'Customer'}</div>
-                        </div>
-
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', marginBottom: '12px' }}>
-                          <thead>
-                            <tr style={{ borderBottom: '1px solid #33271c', borderTop: '1px solid #33271c' }}>
-                              <th style={{ padding: '4px 0', textAlign: 'left' }}>Item</th>
-                              <th style={{ padding: '4px 0', textAlign: 'center' }}>Qty</th>
-                              <th style={{ padding: '4px 0', textAlign: 'right' }}>Price</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {order.items.map((item, idx) =>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', marginBottom: '12px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #33271c', borderTop: '1px solid #33271c' }}>
+                          <th style={{ padding: '4px 0', textAlign: 'left' }}>Item</th>
+                          <th style={{ padding: '4px 0', textAlign: 'center' }}>Qty</th>
+                          <th style={{ padding: '4px 0', textAlign: 'right' }}>Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {order.items.map((item, idx) =>
                           <tr key={idx}>
-                                <td style={{ padding: '3px 0' }}>{item.name}</td>
-                                <td style={{ padding: '3px 0', textAlign: 'center' }}>{item.quantity}</td>
-                                <td style={{ padding: '3px 0', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
-                              </tr>
-                          )}
-                          </tbody>
-                        </table>
+                            <td style={{ padding: '3px 0' }}>{item.name}</td>
+                            <td style={{ padding: '3px 0', textAlign: 'center' }}>{item.quantity}</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
 
-                        <div style={{ borderTop: '1px dashed #33271c', paddingTop: '8px', textAlign: 'right', fontSize: '11px' }}>
-                          <div>Subtotal (Tax Excl.): ₹{sub.toFixed(2)}</div>
-                          <div>CGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
-                          <div>SGST (2.5%): ₹{(gst / 2).toFixed(2)}</div>
-                          <div style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '6px' }}>
-                            GRAND TOTAL: ₹{order.totalAmount.toFixed(2)}
-                          </div>
-                          <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>
-                            Payment Method: <strong>{order.paymentMethod || 'Paid'}</strong>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => printPOSReceipt(order, null, cafeInfo)}
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            fontSize: '13px',
-                            marginTop: '15px',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            background: 'var(--color-primary, #C27D5F)',
-                            fontWeight: 'bold',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            boxShadow: '0 4px 12px rgba(194, 125, 95, 0.3)',
-                            fontFamily: 'var(--font-family)',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'var(--color-primary-hover, #D49073)';
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'var(--color-primary, #C27D5F)';
-                            e.currentTarget.style.transform = 'translateY(0)';
-                          }}>
-                          🖨️ Download & Print PDF Invoice
-                        </button>
+                    <div style={{ borderTop: '1px dashed #33271c', paddingTop: '8px', textAlign: 'right', fontSize: '11px' }}>
+                      <div>Subtotal: ₹{itemsSubtotal.toFixed(2)}</div>
+                      {gstRate > 0 && <div>GST ({gstRate}%): ₹{gstAmount.toFixed(2)}</div>}
+                      {platformCharge > 0 && <div>Platform Charge: ₹{platformCharge.toFixed(2)}</div>}
+                      <div style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '6px' }}>
+                        GRAND TOTAL: ₹{order.totalAmount.toFixed(2)}
                       </div>
+                      <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>
+                        Payment Method: <strong>{order.paymentMethod || 'Paid'}</strong>
+                      </div>
+                    </div>
+                  </div>
 
-                      {/* Review Block */}
-                      {!hasReviewed ?
+                  {/* Review Block */}
+                  {!hasReviewed ?
                     <div style={{
                       background: 'rgba(0, 0, 0, 0.03)',
                       border: '1px solid var(--color-border)',
@@ -640,28 +636,27 @@ const OrderHistory = ({ cafeId }) => {
                       padding: '16px',
                       fontFamily: "'Outfit', 'Inter', sans-serif"
                     }}>
-                          <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: '800', margin: '0 0 10px 0', textAlign: 'center' }}>
-                            ⭐ RATE YOUR EXPERIENCE
-                          </h4>
-                          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
-                            {[1, 2, 3, 4, 5].map((star) =>
-                        <span
-                          key={star}
-                          onClick={() => {
-                            setReviewRatings((prev) => ({ ...prev, [order._id]: star }));
-                          }}
-                          style={{
-                            fontSize: '28px',
-                            cursor: 'pointer',
-                            color: (reviewRatings[order._id] || 0) >= star ? '#d4af37' : '#555',
-                            transition: 'color 0.2s'
-                          }}>
-                          
-                                ★
-                              </span>
+                      <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: '800', margin: '0 0 10px 0', textAlign: 'center' }}>
+                        ⭐ RATE YOUR EXPERIENCE
+                      </h4>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
+                        {[1, 2, 3, 4, 5].map((star) =>
+                          <span
+                            key={star}
+                            onClick={() => {
+                              setReviewRatings((prev) => ({ ...prev, [order._id]: star }));
+                            }}
+                            style={{
+                              fontSize: '28px',
+                              cursor: 'pointer',
+                              color: (reviewRatings[order._id] || 0) >= star ? '#d4af37' : '#555',
+                              transition: 'color 0.2s'
+                            }}>
+                            ★
+                          </span>
                         )}
-                          </div>
-                          <textarea
+                      </div>
+                      <textarea
                         placeholder="Write a quick review about the taste, service, or atmosphere..."
                         value={reviewTexts[order._id] || ''}
                         onChange={(e) => {
@@ -680,8 +675,8 @@ const OrderHistory = ({ cafeId }) => {
                           resize: 'vertical',
                           marginBottom: '10px'
                         }} />
-                      
-                          <button
+
+                      <button
                         disabled={submittingReview[order._id] || !reviewRatings[order._id]}
                         onClick={async () => {
                           setSubmittingReview((prev) => ({ ...prev, [order._id]: true }));
@@ -696,21 +691,20 @@ const OrderHistory = ({ cafeId }) => {
                               setSubmittedReviews(updatedReviews);
                               localStorage.setItem('submittedReviews', JSON.stringify(updatedReviews));
                             } else {
-                              toast.error('Failed to submit review.');
+                              alert('Failed to submit review.');
                             }
                           } catch (err) {
                             console.error('Review submit failed:', err);
-                            toast.error('Connection error submitting review.');
+                            alert('Connection error submitting review.');
                           } finally {
                             setSubmittingReview((prev) => ({ ...prev, [order._id]: false }));
                           }
                         }}
                         className="btn btn-primary"
                         style={{ width: '100%', padding: '10px', fontSize: '12px' }}>
-                        
-                            {submittingReview[order._id] ? 'Submitting...' : 'Submit Feedback'}
-                          </button>
-                        </div> :
+                        {submittingReview[order._id] ? 'Submitting...' : 'Submit Feedback'}
+                      </button>
+                    </div> :
 
                     <div style={{
                       background: 'rgba(39, 174, 96, 0.1)',
@@ -722,19 +716,17 @@ const OrderHistory = ({ cafeId }) => {
                       fontSize: '12px',
                       fontWeight: 'bold'
                     }}>
-                          💚 Thank you for your feedback! Review submitted.
-                        </div>
-                    }
-                    </div>);
-
-              })}
-              </div>
-            </>
-          }
+                      💚 Thank you for your feedback! Review submitted.
+                    </div>
+                  }
+                </div>
+              );
+            })}
+          </div>
 
           {errorMsg &&
-          <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)', color: 'var(--color-text-primary)', fontSize: '12px', padding: '10px', marginTop: '16px', borderRadius: '8px', textAlign: 'center' }}>
-              ⚠️∩╕Å {errorMsg}
+            <div style={{ backgroundColor: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)', color: 'var(--color-text-primary)', fontSize: '12px', padding: '10px', marginTop: '16px', borderRadius: '8px', textAlign: 'center' }}>
+              ⚠️ {errorMsg}
             </div>
           }
 
@@ -742,8 +734,8 @@ const OrderHistory = ({ cafeId }) => {
             View Menu
           </Link>
         </div>
-      </div>);
-
+      </div>
+    );
   }
 
 

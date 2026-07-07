@@ -5,7 +5,7 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 const WorkReport = require('./models/WorkReport');
 
 async function run() {
-  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/coffeedaycafe';
+  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/Dr. Chai Cafe';
   await mongoose.connect(uri);
   const reports = await WorkReport.find({});
   console.log('TOTAL REPORTS:', reports.length);

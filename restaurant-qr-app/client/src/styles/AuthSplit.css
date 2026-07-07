@@ -1,0 +1,174 @@
+/* New Split Screen Login Styles */
+.login-split-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  background-color: #FAFAFA;
+  font-family: 'Outfit', sans-serif;
+}
+
+.login-left-panel {
+  flex: 1.2;
+  background-image: url('https://images.unsplash.com/photo-1554118811-1e0d58224f24?q=80&w=2047&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .login-left-panel {
+    display: block;
+  }
+}
+
+.login-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, rgba(30, 21, 16, 0.85) 0%, rgba(111, 78, 55, 0.7) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.brand-content {
+  text-align: center;
+  color: white;
+  max-width: 400px;
+}
+
+.brand-logo-container {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  border-radius: 50%;
+  display: inline-block;
+  backdrop-filter: blur(10px);
+  margin-bottom: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.2);
+  animation: float 4s ease-in-out infinite;
+}
+
+.brand-logo-img {
+  height: 120px;
+  width: 120px;
+  object-fit: contain;
+}
+
+.brand-title {
+  font-size: 3rem;
+  font-weight: 800;
+  margin: 0 0 16px 0;
+  letter-spacing: -0.5px;
+}
+
+.brand-subtitle {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+.login-right-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: #ffffff;
+}
+
+.login-form-container {
+  width: 100%;
+  max-width: 420px;
+}
+
+.mobile-brand-header {
+  display: none;
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.mobile-logo-img {
+  height: 100px;
+  width: 100px;
+  background: #f5f5f5;
+  border-radius: 50%;
+  padding: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+@media (max-width: 899px) {
+  .login-split-container {
+    background-image: url('https://images.unsplash.com/photo-1554118811-1e0d58224f24?q=80&w=2047&auto=format&fit=crop');
+    background-size: cover;
+    background-position: center;
+  }
+
+  .login-right-panel {
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    padding: 20px;
+  }
+
+  .login-form-container {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border-radius: 24px;
+    padding: 40px 30px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3);
+  }
+
+  .mobile-brand-header {
+    display: block;
+  }
+}
+
+.login-heading {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+}
+
+.login-subheading {
+  font-size: 1rem;
+  color: #666;
+  margin: 0 0 40px 0;
+}
+
+.google-auth-section {
+  margin-bottom: 30px;
+  display: flex;
+  justify-content: center;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #999;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 30px 0;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #eaeaea;
+}
+
+.login-divider span {
+  padding: 0 15px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #666;
+  gap: 12px;
+}

@@ -1,6 +1,10 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import {
+ getBranches,
+ createBranch,
+ updateBranch,
+ deleteBranch,
  getOrders,
  getMenu,
  createMenuItem,
@@ -12,7 +16,6 @@ import {
  deleteStaff,
  getSetupData,
  saveSetupData,
- verifyRazorpayKeys,
  getInventory,
  createInventoryItem,
  updateInventoryItem,
@@ -31,10 +34,6 @@ import {
  createInventoryCategory,
  deleteInventoryCategory,
  uploadMenuItemImage,
- getBranches,
- createBranch,
- updateBranch,
- deleteBranch,
  getOwnerTodayAttendance,
  getOwnerAttendanceReports,
  getWorkReports,
@@ -42,8 +41,10 @@ import {
  getAssetUrl } from
 '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
+import socket, { connectSocket } from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
-import { useSocket } from '../hooks/useSocket';
+import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3 } from 'lucide-react';
 
 const AdminMenuImage = ({ item }) =>{
  const isValidUrl = (url) =>{
@@ -68,7 +69,6 @@ const AdminMenuImage = ({ item }) =>{
 
  const [imgFailed, setImgFailed] = useState(!isValidUrl(item.image));
  const [prevImage, setPrevImage] = useState(item.image);
- const resolvedSrc = getAssetUrl(item.image);
 
  if (item.image !== prevImage) {
  setPrevImage(item.image);
@@ -98,7 +98,7 @@ const AdminMenuImage = ({ item }) =>{
 
  return (
 <img
- src={resolvedSrc}
+ src={getAssetUrl(item.image)}
  alt={item.name}
  className="admin-menu-img"
  onError={() =>setImgFailed(true)} />);
@@ -107,8 +107,8 @@ const AdminMenuImage = ({ item }) =>{
 
 const OwnerDashboard = () =>{
  const { logout, user } = useAuth();
+ const { branches, branchesLoading, activeBranchId, onBranchSwitch, loadBranches } = useBranch();
  const navigate = useNavigate();
- const { socket, reconnectTrigger } = useSocket();
  const location = useLocation();
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
@@ -126,75 +126,85 @@ const OwnerDashboard = () =>{
  return tabParam === 'reviews' ? 'reviews' : 'dishes';
  });
 
- const [staffSubTab, setStaffSubTab] = useState(() =>{
- return tabParam === 'reports' ? 'reports' : tabParam === 'attendance' ? 'attendance' : 'roster';
- });
+  const [staffSubTab, setStaffSubTab] = useState(() => {
+    const subParam = searchParams.get('sub');
+    if (tabParam === 'reports') return 'reports';
+    if (tabParam === 'attendance') return 'attendance';
+    if (subParam === 'salary') return 'salary';
+    return 'roster';
+  });
 
- useEffect(() =>{
- if (tabParam) {
- if (tabParam === 'reviews') {
- setActiveTab('menu');
- setMenuSubTab('reviews');
- } else if (tabParam === 'reports') {
- setActiveTab('staff');
- setStaffSubTab('reports');
- } else if (tabParam === 'attendance') {
- setActiveTab('staff');
- setStaffSubTab('attendance');
- } else if (tabParam === 'settings' || tabParam === 'config') {
- navigate('/owner/profile');
- } else {
- setActiveTab(tabParam);
- if (tabParam === 'menu') {
- setMenuSubTab('dishes');
- }
- if (tabParam === 'staff') {
- setStaffSubTab('roster');
- }
- }
- } else {
- setActiveTab('analytics');
- }
- }, [tabParam, navigate]);
+  useEffect(() => {
+    if (tabParam) {
+      if (tabParam === 'reviews') {
+        setActiveTab('menu');
+        setMenuSubTab('reviews');
+      } else if (tabParam === 'reports') {
+        setActiveTab('staff');
+        setStaffSubTab('reports');
+      } else if (tabParam === 'attendance') {
+        setActiveTab('staff');
+        setStaffSubTab('attendance');
+      } else if (tabParam === 'settings' || tabParam === 'config') {
+        navigate('/owner/profile');
+      } else {
+        setActiveTab(tabParam);
+        if (tabParam === 'menu') {
+          setMenuSubTab('dishes');
+        }
+        if (tabParam === 'staff') {
+          const subParam = searchParams.get('sub');
+          if (subParam === 'salary') {
+            setStaffSubTab('salary');
+          } else {
+            setStaffSubTab('roster');
+          }
+        }
+      }
+    } else {
+      setActiveTab('analytics');
+    }
+  }, [tabParam, searchParams, navigate]);
 
  // Base Data States
  const [orders, setOrders] = useState([]);
- const [overviewFilterBranch, setOverviewFilterBranch] = useState('');
  const [ordersLoading, setOrdersLoading] = useState(true);
  const [ordersError, setOrdersError] = useState('');
+ const seenPaidOrderIdsRef = useRef(new Set());
  const [orderDateFilter, setOrderDateFilter] = useState(() => {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
  });
  const [orderSearchQuery, setOrderSearchQuery] = useState('');
- const [ownerCollapsedTables, setOwnerCollapsedTables] = useState({});
  const [menuItems, setMenuItems] = useState([]);
  const [menuLoading, setMenuLoading] = useState(false);
  const [menuError, setMenuError] = useState('');
  const [staff, setStaff] = useState([]);
  const [staffLoading, setStaffLoading] = useState(false);
  const [staffError, setStaffError] = useState('');
- const [staffSearchQuery, setStaffSearchQuery] = useState('');
- const [staffFilterRole, setStaffFilterRole] = useState('');
- const [staffFilterBranch, setStaffFilterBranch] = useState('');
- const [staffFilterStatus, setStaffFilterStatus] = useState('');
 
  // Branch & Attendance States
- const [branches, setBranches] = useState([]);
- const [branchesLoading, setBranchesLoading] = useState(false);
- const [branchesError, setBranchesError] = useState('');
+ // Note: branches & branchesLoading come from BranchContext via useBranch()
  const [showAddBranchModal, setShowAddBranchModal] = useState(false);
  const [showEditBranchModal, setShowEditBranchModal] = useState(false);
  const [editingBranch, setEditingBranch] = useState(null);
- const [newBranch, setNewBranch] = useState({
- branchName: '',
- address: '',
- manager: '',
- latitude: '',
- longitude: '',
- allowedRadius: 30
- });
- const [detectingLocation, setDetectingLocation] = useState(false);
+  const [newBranch, setNewBranch] = useState({
+    branchName: '',
+    address: '',
+    manager: '',
+    latitude: '',
+    longitude: '',
+    allowedRadius: 100,
+    city: '',
+    state: '',
+    pincode: '',
+    googleMapsUrl: '',
+    openingTime: '09:00 AM',
+    closingTime: '10:00 PM',
+    unifiedStaffMode: false
+  });
+  const [detectingLocation, setDetectingLocation] = useState(false);
+
  const [attendanceRecords, setAttendanceRecords] = useState([]);
  const [attendanceSummary, setAttendanceSummary] = useState({
  totalStaff: 0,
@@ -217,6 +227,8 @@ const OwnerDashboard = () =>{
  const [reportsFilterStaff, setReportsFilterStaff] = useState('');
  const [reportsFilterBranch, setReportsFilterBranch] = useState('');
  const [selectedReport, setSelectedReport] = useState(null);
+ const [salarySearchQuery, setSalarySearchQuery] = useState('');
+ const [salaryRoleFilter, setSalaryRoleFilter] = useState('');
 
  // Form / Dialog States
  const [showAddModal, setShowAddModal] = useState(false);
@@ -225,6 +237,11 @@ const OwnerDashboard = () =>{
  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
  const [editingStaff, setEditingStaff] = useState(null);
  const [editingItem, setEditingItem] = useState(null);
+ const [expandedStaffId, setExpandedStaffId] = useState(null);
+ const [selectedSalaryStaff, setSelectedSalaryStaff] = useState(null);
+ const [showSalaryDetailModal, setShowSalaryDetailModal] = useState(false);
+ const [editingWageId, setEditingWageId] = useState(null);
+ const [tempWage, setTempWage] = useState(0);
 
  // New staff input state
  const [newStaff, setNewStaff] = useState({
@@ -232,7 +249,8 @@ const OwnerDashboard = () =>{
  email: '',
  phone: '',
  staffRole: 'waiter',
- assignedBranch: ''
+ assignedBranch: '',
+ dailyRate: 0
  });
 
  // New menu item input state
@@ -311,13 +329,17 @@ const OwnerDashboard = () =>{
  const [dynamicTables, setDynamicTables] = useState(['1', '2', '3', '4', '5']);
 
  // Settings / Config States
- const [razorpayKeyId, setRazorpayKeyId] = useState('');
- const [razorpaySecret, setRazorpaySecret] = useState('');
- const [isRazorpayVerified, setIsRazorpayVerified] = useState(false);
- const [verifyingKeys, setVerifyingKeys] = useState(false);
- const [taxRate, setTaxRate] = useState(0);
- const [serviceCharge, setServiceCharge] = useState(0);
- const [settingsMsg, setSettingsMsg] = useState('');
+
+  const [taxRate, setTaxRate] = useState(5); // mock GST
+  const [serviceCharge, setServiceCharge] = useState(2.5); // mock service charge
+  const [settingsMsg, setSettingsMsg] = useState('');
+  const [acceptCash, setAcceptCash] = useState(true);
+  const [enableUpi, setEnableUpi] = useState(true);
+  const [upiId, setUpiId] = useState('');
+  const [bankHolderName, setBankHolderName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+  const [paymentInstructions, setPaymentInstructions] = useState('');
 
  // Database Inventory State
  const [inventoryList, setInventoryList] = useState([]);
@@ -379,32 +401,15 @@ const OwnerDashboard = () =>{
  const [menuSearch, setMenuSearch] = useState('');
  const [inventorySearch, setInventorySearch] = useState('');
 
-  const filteredMenuItems = useMemo(() => menuItems.filter((item) =>
-    item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
-    (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
-  ), [menuItems, menuSearch]);
+ const filteredMenuItems = menuItems.filter((item) =>
+ item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+ (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
+);
 
-  const filteredInventoryList = useMemo(() => inventoryList.filter((item) =>
-    item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-    (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
-  ), [inventoryList, inventorySearch]);
-
-  const filteredStaff = useMemo(() => staff.filter(member => {
-    const query = staffSearchQuery.toLowerCase();
-    const matchesSearch = !staffSearchQuery || 
-      (member.name || '').toLowerCase().includes(query) ||
-      (member.phone || '').toLowerCase().includes(query) ||
-      (member.email || '').toLowerCase().includes(query) ||
-      (member.employeeId || '').toLowerCase().includes(query);
-    
-    const matchesRole = !staffFilterRole || (member.staffRole || '').toLowerCase() === staffFilterRole.toLowerCase();
-    const matchesBranch = !staffFilterBranch || member.assignedBranch === staffFilterBranch;
-    const matchesStatus = !staffFilterStatus || (
-      staffFilterStatus === 'active' ? member.isActive : !member.isActive
-    );
-
-    return matchesSearch && matchesRole && matchesBranch && matchesStatus;
-  }), [staff, staffSearchQuery, staffFilterRole, staffFilterBranch, staffFilterStatus]);
+ const filteredInventoryList = inventoryList.filter((item) =>
+ item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+ (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
+);
 
  const [imageUploading, setImageUploading] = useState(false);
 
@@ -441,7 +446,7 @@ const OwnerDashboard = () =>{
  'Starters & Bites',
  'French Fries'];
 
- // Load Setup Config
+  // Load Setup Config
   const loadSetupConfig = async () =>{
     try {
       const res = await getSetupData();
@@ -450,14 +455,24 @@ const OwnerDashboard = () =>{
           const t = res.operationalConfig.tables.map((tbl) =>tbl.id.replace('T', ''));
           if (t.length >0) setDynamicTables(t);
         }
-        if (res.paymentConfig) {
-          setRazorpayKeyId(res.paymentConfig.razorpayKeyId || '');
-          setRazorpaySecret(res.paymentConfig.razorpaySecret || '');
-          setIsRazorpayVerified(res.paymentConfig.isVerified || false);
-        }
         if (res.cafe) {
-          if (res.cafe.gstRate !== undefined) setTaxRate(res.cafe.gstRate);
-          if (res.cafe.serviceChargeRate !== undefined) setServiceCharge(res.cafe.serviceChargeRate);
+          setTaxRate(res.cafe.gstRate !== undefined ? res.cafe.gstRate : 5);
+          setServiceCharge(res.cafe.serviceChargeRate !== undefined ? res.cafe.serviceChargeRate : 0);
+        }
+        if (res.paymentConfig) {
+          setAcceptCash(res.paymentConfig.acceptCash !== undefined ? res.paymentConfig.acceptCash : true);
+          setEnableUpi(res.paymentConfig.enableUpi !== undefined ? res.paymentConfig.enableUpi : true);
+          setUpiId(res.paymentConfig.upiId || '');
+          setBankHolderName(res.paymentConfig.bankHolderName || '');
+          setAccountNumber(res.paymentConfig.accountNumber || '');
+          setIfscCode(res.paymentConfig.ifscCode || '');
+          setPaymentInstructions(res.paymentConfig.paymentInstructions || '');
+          if (res.paymentConfig.taxRate !== undefined) {
+            setTaxRate(res.paymentConfig.taxRate);
+          }
+          if (res.paymentConfig.platformCharge !== undefined) {
+            setServiceCharge(res.paymentConfig.platformCharge);
+          }
         }
       }
     } catch (err) {
@@ -465,15 +480,70 @@ const OwnerDashboard = () =>{
     }
   };
 
+ const playNotificationSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(587.33, audioContext.currentTime); // D5
+      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.15);
+      setTimeout(() => {
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880.00, audioContext.currentTime); // A5
+        gain2.gain.setValueAtTime(0.2, audioContext.currentTime);
+        osc2.start();
+        osc2.stop(audioContext.currentTime + 0.2);
+      }, 150);
+    } catch (e) {
+      
+    }
+  };
+
+  const speakPaymentReceived = (order) => {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      const tableInfo = order.tableNumber && order.tableNumber !== 'Takeaway' && order.tableNumber !== 'Walk-in'
+        ? `for Table ${order.tableNumber}`
+        : 'for Takeaway';
+      const text = `Payment received ${tableInfo}. Amount: ${Math.round(order.totalAmount)} rupees.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech synthesis failed:', err);
+    }
+  };
+
  // Fetch Orders (Monitoring)
  const fetchOrders = async () =>{
  try {
- const response = await getOrders();
+ const response = await getOrders({ date: orderDateFilter, cafeId: user?.cafeId });
  if (response.success) {
- const cafeOrders = user?.cafeId ?
- response.data.filter((order) =>order.cafeId === user.cafeId) :
- response.data;
- setOrders(cafeOrders);
+ setOrders(response.data);
+  
+  // Track paid status transition
+  const paidOrders = response.data.filter((o) => o.paymentStatus === 'Paid');
+  if (seenPaidOrderIdsRef.current.size === 0) {
+    paidOrders.forEach((o) => seenPaidOrderIdsRef.current.add(o._id));
+  } else {
+    const newPaidOrders = paidOrders.filter((o) => !seenPaidOrderIdsRef.current.has(o._id));
+    if (newPaidOrders.length > 0) {
+      playNotificationSound();
+      newPaidOrders.forEach((order) => {
+        speakPaymentReceived(order);
+        seenPaidOrderIdsRef.current.add(order._id);
+      });
+    }
+  }
  setOrdersError('');
  } else {
  setOrdersError('Failed to refresh orders.');
@@ -492,7 +562,8 @@ const OwnerDashboard = () =>{
  try {
  const response = await getMenu();
  if (response.success) {
- setMenuItems(response.data);
+ const mappedData = response.data.map(item => ({ ...item, id: item._id || item.id }));
+ setMenuItems(mappedData);
  setMenuError('');
  } else {
  setMenuError('Failed to load cafe menu.');
@@ -706,32 +777,13 @@ const OwnerDashboard = () =>{
  setStaff(response.staff);
  setStaffError('');
  } else {
- setStaffError('Failed to load staff list.');
+ setStaffError('Failed to load staff roster.');
  }
  } catch (error) {
  console.error('Error fetching staff:', error);
  setStaffError('Cannot connect to local server staff database.');
  } finally {
  setStaffLoading(false);
- }
- };
-
- // Fetch Branches
- const fetchBranches = async () =>{
- setBranchesLoading(true);
- try {
- const res = await getBranches();
- if (res.success) {
- setBranches(res.branches);
- setBranchesError('');
- } else {
- setBranchesError('Failed to load branches.');
- }
- } catch (error) {
- console.error('Error fetching branches:', error);
- setBranchesError('Cannot connect to branch database.');
- } finally {
- setBranchesLoading(false);
  }
  };
 
@@ -830,159 +882,99 @@ const OwnerDashboard = () =>{
  if (activeTab === 'staff' && staffSubTab === 'reports') {
  fetchWorkReports();
  fetchStaffList();
- fetchBranches();
  }
  }, [reportsFilterRange, reportsFilterStaff, reportsFilterBranch, activeTab, staffSubTab]);
 
- useEffect(() => {
-   loadSetupConfig();
- }, []);
-
  useEffect(() =>{
- if (activeTab === 'orders' || activeTab === 'analytics') {
  fetchOrders();
- }
- if (activeTab === 'menu') {
  fetchMenu();
- fetchCategories();
- }
+ loadSetupConfig();
+
  if (activeTab === 'staff') {
  fetchStaffList();
- fetchBranches();
- }
- if (activeTab === 'config') {
- fetchBranches();
  }
  if (activeTab === 'staff' && staffSubTab === 'attendance') {
  fetchAttendanceToday();
- fetchBranches();
  }
- if (activeTab === 'inventory' || activeTab === 'analytics') {
+ if (activeTab === 'inventory' || activeTab === 'analytics' || activeTab === 'menu') {
  fetchInventoryList();
+ fetchCategories();
  fetchInventoryCategories();
  }
 
-  // Live background polling for orders (recovery check)
-  const pollingInterval = setInterval(() =>{
-    console.log('[POLLING] Owner Dashboard: Running 60s recovery check...');
-    fetchOrders();
-  }, 60000);
+  if (user && user.cafeId) {
+    connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);
 
-  // Separate interval for heavier but still useful background updates (inventory list and reviews)
-  const heavyPollingInterval = setInterval(() => {
-    if (activeTab === 'inventory') {
-      const fetchInventoryListSilent = async () => {
-        try {
-          const invRes = await getInventory();
-          if (invRes.success) setInventoryList(invRes.data);
-        } catch (err) {
-          console.error('Silent inventory refresh failed:', err);
-        }
-      };
-      fetchInventoryListSilent();
-    }
-    if (activeTab === 'menu' && menuSubTab === 'reviews') {
-      const fetchReviewsSilent = async () => {
-        try {
-          const params = {};
-          if (reviewsFilterRating) params.rating = reviewsFilterRating;
-          const response = await getReviews(params);
-          if (response && response.success) {
-            setReviews(response.data || []);
-            if (response.summary) setReviewsSummary(response.summary);
-          }
-        } catch (err) {
-          console.error('Silent reviews refresh failed:', err);
-        }
-      };
-      fetchReviewsSilent();
-    }
-  }, 60000);
+    const handleOrderCreated = (newOrder) => {
+      setOrders(prev => {
+        if (prev.some(o => o._id === newOrder._id)) return prev;
+        return [newOrder, ...prev];
+      });
+    };
 
-  return () => {
-    clearInterval(pollingInterval);
-    clearInterval(heavyPollingInterval);
-  };
- }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating]);
+    const handleOrderUpdated = (updatedOrder) => {
+      setOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
+    };
 
- // Socket Event Listeners with versioning safeguards for Owner
- useEffect(() => {
-   if (!socket) return;
+    const handleMenuUpdated = () => {
+      fetchMenu(true);
+      fetchCategories(true);
+    };
 
-   const handleOrderCreated = (newOrder) => {
-     console.log('[SOCKET] Owner received orderCreated:', newOrder);
-     if (!newOrder || !newOrder._id) return;
-     if (user?.cafeId && newOrder.cafeId !== user.cafeId) return;
+    socket.on('order_created', handleOrderCreated);
+    socket.on('order_updated', handleOrderUpdated);
+    socket.on('menu_updated', handleMenuUpdated);
 
-     setOrders(prev => {
-       if (prev.find(o => o._id === newOrder._id)) return prev;
-       return [newOrder, ...prev];
-     });
-   };
+    return () => {
+      socket.off('order_created', handleOrderCreated);
+      socket.off('order_updated', handleOrderUpdated);
+      socket.off('menu_updated', handleMenuUpdated);
+    };
+  }
 
-   const handleOrderUpdated = (updatedOrder) => {
-     console.log('[SOCKET] Owner received orderUpdated:', updatedOrder);
-     if (!updatedOrder || !updatedOrder._id) return;
-     if (user?.cafeId && updatedOrder.cafeId !== user.cafeId) return;
+  return undefined;
+ }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating, orderDateFilter, user, activeBranchId]);
 
-     setOrders(prev => {
-       return prev.map(o => {
-         if (o._id === updatedOrder._id) {
-           const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
-           const existingTime = new Date(o.updatedAt || 0).getTime();
-           if (incomingTime <= existingTime) return o;
-           return updatedOrder;
-         }
-         return o;
-       });
-     });
-   };
+  // ── Branch switch listener ──
+  // When the user picks a different branch via the BranchSwitcher, refresh all branch-specific data
+  useEffect(() => {
+    const unsubscribe = onBranchSwitch((newBranchId) => {
+      // Immediately reset all branch-specific states to prevent screen flash of previous branch data
+      setOrders([]);
+      setOrdersLoading(true);
+      setMenuItems([]);
+      setMenuLoading(true);
+      setInventoryList([]);
+      setInventoryLogs([]);
+      setInventoryLoading(true);
+      setCategories([]);
+      setCategoryLoading(true);
+      setInventoryCategories([]);
+      setInvCategoryLoading(true);
+      setStaff([]);
+      setStaffLoading(true);
+      setAttendanceRecords([]);
+      setAttendanceLoading(true);
+      setAttendanceReports(null);
+      setWorkReports([]);
+      setReportsLoading(true);
 
-   const handleInventoryUpdated = (updatedItems) => {
-     console.log('[SOCKET] Owner received inventoryUpdated:', updatedItems);
-     if (!Array.isArray(updatedItems)) return;
-
-     setInventoryList(prev => {
-       if (prev.length === 0) return prev;
-       return prev.map(item => {
-         const match = updatedItems.find(p => String(p._id) === String(item._id));
-         if (match) {
-           const incomingTime = new Date(match.updatedAt || 0).getTime();
-           const existingTime = new Date(item.updatedAt || 0).getTime();
-           if (incomingTime <= existingTime) return item;
-           return {
-             ...item,
-             quantity: match.quantity,
-             stock: match.quantity,
-             updatedAt: match.updatedAt
-           };
-         }
-         return item;
-       });
-     });
-   };
-
-   socket.on('orderCreated', handleOrderCreated);
-   socket.on('orderUpdated', handleOrderUpdated);
-   socket.on('paymentCompleted', handleOrderUpdated);
-   socket.on('inventoryUpdated', handleInventoryUpdated);
-
-   return () => {
-     socket.off('orderCreated', handleOrderCreated);
-     socket.off('orderUpdated', handleOrderUpdated);
-     socket.off('paymentCompleted', handleOrderUpdated);
-     socket.off('inventoryUpdated', handleInventoryUpdated);
-   };
- }, [socket, user]);
-
- // One-off REST sync on reconnect
- useEffect(() => {
-   if (reconnectTrigger > 0) {
-     console.log('[SOCKET] Owner Dashboard: Reconnected. Running full REST sync.');
-     fetchOrders();
-     if (activeTab === 'inventory') fetchInventoryList();
-   }
- }, [reconnectTrigger, activeTab]);
+      // Fetch data relevant to the currently active tab
+      fetchOrders();
+      fetchMenu();
+      fetchInventoryList();
+      fetchCategories();
+      fetchInventoryCategories();
+      loadSetupConfig();
+      if (activeTab === 'staff') {
+        fetchStaffList();
+        if (staffSubTab === 'attendance') fetchAttendanceToday();
+        if (staffSubTab === 'reports') fetchWorkReports();
+      }
+      if (activeTab === 'menu' && menuSubTab === 'reviews') fetchReviewsData();
+    });
+    return unsubscribe;
+  }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab]);
 
  // Register new staff
  const handleAddStaff = async (e) =>{
@@ -993,10 +985,13 @@ const OwnerDashboard = () =>{
  }
  try {
  setStaffLoading(true);
- const response = await createStaff(newStaff);
+ const response = await createStaff({
+   ...newStaff,
+   dailyRate: Number(newStaff.dailyRate || 0)
+ });
  if (response.success) {
  alert(response.message || `Staff member "${newStaff.name}" registered successfully.`);
- setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '' });
+ setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });
  setShowAddStaffModal(false);
  fetchStaffList();
  }
@@ -1023,7 +1018,8 @@ const OwnerDashboard = () =>{
  phone: editingStaff.phone,
  staffRole: editingStaff.staffRole,
  assignedBranch: editingStaff.assignedBranch,
- isActive: editingStaff.isActive
+ isActive: editingStaff.isActive,
+ dailyRate: Number(editingStaff.dailyRate || 0)
  });
  if (response.success) {
  alert('Staff member updated successfully.');
@@ -1040,6 +1036,72 @@ const OwnerDashboard = () =>{
  };
 
  // Delete staff
+  const handleSaveWage = async (staffId, wage) => {
+    try {
+      setStaffLoading(true);
+      const target = staff.find(s => s._id === staffId);
+      if (!target) return;
+      const response = await updateStaff(staffId, {
+        name: target.name,
+        email: target.email,
+        phone: target.phone,
+        staffRole: target.staffRole,
+        assignedBranch: target.assignedBranch,
+        isActive: target.isActive,
+        dailyRate: Number(wage)
+      });
+      if (response.success) {
+        alert('Daily wage updated successfully.');
+        setEditingWageId(null);
+        fetchStaffList();
+      }
+    } catch (err) {
+      console.error('Error saving wage:', err);
+      alert(err.response?.data?.message || 'Failed to update wage.');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+const exportStaffToCSV = () => {
+  if (!staff || staff.length === 0) {
+    alert("No staff data to export.");
+    return;
+  }
+  const headers = ['Employee ID', 'Name', 'Role', 'Email', 'Phone', 'Branch', 'Salary Type', 'Daily Wage', 'Weekly Wage', 'Monthly Wage', 'Current Week Salary', 'Orders Today', 'Status', 'Joined Date'];
+  const csvRows = [headers.join(',')];
+  staff.forEach(member => {
+    const branchName = branches.find(b => b.branchId === member.assignedBranch)?.branchName || 'Unassigned';
+    const row = [
+      member.employeeId || 'N/A',
+      `"${member.name || ''}"`,
+      member.staffRole || '',
+      member.email || '',
+      member.phone || '',
+      `"${branchName}"`,
+      member.salaryType || 'DAILY',
+      member.dailyRate || 0,
+      member.weeklyRate || 0,
+      member.monthlyRate || 0,
+      member.currentWeekSalary || 0,
+      member.ordersHandledToday || 0,
+      member.isActive ? 'Active' : 'Inactive',
+      new Date(member.createdAt).toLocaleDateString()
+    ];
+    csvRows.push(row.join(','));
+  });
+  const csvData = csvRows.join('\n');
+  const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Staff_Roster_${new Date().toISOString().split('T')[0]}.csv`;
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
  const handleDeleteStaff = async (id) =>{
  if (!window.confirm('Are you sure you want to remove this staff member?')) {
  return;
@@ -1060,115 +1122,157 @@ const OwnerDashboard = () =>{
  };
 
  // Branch Handlers
- const handleAddBranch = async (e) =>{
- e.preventDefault();
- if (!newBranch.branchName || !newBranch.address) {
- alert('Branch Name and Address are required.');
- return;
- }
- try {
- setBranchesLoading(true);
- const res = await createBranch({
- branchName: newBranch.branchName,
- address: newBranch.address,
- manager: newBranch.manager,
- latitude: newBranch.latitude ? Number(newBranch.latitude) : 0,
- longitude: newBranch.longitude ? Number(newBranch.longitude) : 0,
- allowedRadius: newBranch.allowedRadius ? Number(newBranch.allowedRadius) : 30,
- isActive: true
- });
- if (res.success) {
- alert(`Branch "${newBranch.branchName}" created successfully.`);
- setNewBranch({ branchName: '', address: '', manager: '', latitude: '', longitude: '', allowedRadius: 30 });
- setShowAddBranchModal(false);
- fetchBranches();
- }
- } catch (error) {
- console.error('Error creating branch:', error);
- alert(error.response?.data?.message || 'Failed to create branch.');
- } finally {
- setBranchesLoading(false);
- }
- };
+  const handleAddBranch = async (e) =>{
+    e.preventDefault();
+    if (!newBranch.branchName || !newBranch.address) {
+      alert('Branch Name and Address are required.');
+      return;
+    }
+    try {
+      const res = await createBranch({
+        branchName: newBranch.branchName,
+        address: newBranch.address,
+        manager: newBranch.manager,
+        latitude: newBranch.latitude ? Number(newBranch.latitude) : 0,
+        longitude: newBranch.longitude ? Number(newBranch.longitude) : 0,
+        allowedRadius: newBranch.allowedRadius ? Number(newBranch.allowedRadius) : 100,
+        city: newBranch.city || '',
+        state: newBranch.state || '',
+        pincode: newBranch.pincode || '',
+        googleMapsUrl: newBranch.googleMapsUrl || '',
+        openingTime: newBranch.openingTime || '09:00 AM',
+        closingTime: newBranch.closingTime || '10:00 PM',
+        isActive: true,
+        unifiedStaffMode: !!newBranch.unifiedStaffMode
+      });
+      if (res.success) {
+        alert(`Branch "${newBranch.branchName}" created successfully.`);
+        setNewBranch({
+          branchName: '', address: '', manager: '', latitude: '', longitude: '', allowedRadius: 100,
+          city: '', state: '', pincode: '', googleMapsUrl: '', openingTime: '09:00 AM', closingTime: '10:00 PM',
+          unifiedStaffMode: false
+        });
+        setShowAddBranchModal(false);
+        loadBranches();
+      }
+    } catch (error) {
+      console.error('Error creating branch:', error);
+      alert(error.response?.data?.message || 'Failed to create branch.');
+    }
+  };
 
- const handleEditBranch = async (e) =>{
- e.preventDefault();
- if (!editingBranch.branchName || !editingBranch.address) {
- alert('Branch Name and Address are required.');
- return;
- }
- try {
- setBranchesLoading(true);
- const res = await updateBranch(editingBranch._id, {
- branchName: editingBranch.branchName,
- address: editingBranch.address,
- manager: editingBranch.manager,
- latitude: editingBranch.latitude ? Number(editingBranch.latitude) : 0,
- longitude: editingBranch.longitude ? Number(editingBranch.longitude) : 0,
- allowedRadius: editingBranch.allowedRadius ? Number(editingBranch.allowedRadius) : 30,
- isActive: editingBranch.isActive
- });
- if (res.success) {
- alert(`Branch updated successfully.`);
- setShowEditBranchModal(false);
- setEditingBranch(null);
- fetchBranches();
- }
- } catch (error) {
- console.error('Error updating branch:', error);
- alert(error.response?.data?.message || 'Failed to update branch.');
- } finally {
- setBranchesLoading(false);
- }
- };
+  const handleEditBranch = async (e) =>{
+    e.preventDefault();
+    if (!editingBranch.branchName || !editingBranch.address) {
+      alert('Branch Name and Address are required.');
+      return;
+    }
+    try {
+      const res = await updateBranch(editingBranch._id, {
+        branchName: editingBranch.branchName,
+        address: editingBranch.address,
+        manager: editingBranch.manager,
+        latitude: editingBranch.latitude ? Number(editingBranch.latitude) : 0,
+        longitude: editingBranch.longitude ? Number(editingBranch.longitude) : 0,
+        allowedRadius: editingBranch.allowedRadius ? Number(editingBranch.allowedRadius) : 100,
+        city: editingBranch.city || '',
+        state: editingBranch.state || '',
+        pincode: editingBranch.pincode || '',
+        googleMapsUrl: editingBranch.googleMapsUrl || '',
+        openingTime: editingBranch.openingTime || '09:00 AM',
+        closingTime: editingBranch.closingTime || '10:00 PM',
+        isActive: editingBranch.isActive,
+        unifiedStaffMode: !!editingBranch.unifiedStaffMode
+      });
+      if (res.success) {
+        alert(`Branch updated successfully.`);
+        setShowEditBranchModal(false);
+        setEditingBranch(null);
+        loadBranches();
+      }
+    } catch (error) {
+      console.error('Error updating branch:', error);
+      alert(error.response?.data?.message || 'Failed to update branch.');
+    }
+  };
 
- const handleDetectLocation = (type) =>{
- if (!navigator.geolocation) {
- alert("Geolocation is not supported by your browser");
- return;
- }
- setDetectingLocation(true);
- navigator.geolocation.getCurrentPosition(
- (position) =>{
- const { latitude, longitude } = position.coords;
- if (type === 'new') {
- setNewBranch((prev) =>({
- ...prev,
- latitude: latitude.toFixed(6),
- longitude: longitude.toFixed(6)
- }));
- } else if (type === 'edit') {
- setEditingBranch((prev) =>({
- ...prev,
- latitude: latitude.toFixed(6),
- longitude: longitude.toFixed(6)
- }));
- }
- setDetectingLocation(false);
- },
- (error) =>{
- console.error("Error detecting location:", error);
- alert(`Failed to get location: ${error.message}. Please check if location access is blocked by your browser settings.`);
- setDetectingLocation(false);
- },
- { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-);
- };
+  const handleDetectLocation = (type) =>{
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setDetectingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) =>{
+        const { latitude, longitude } = position.coords;
+        let addressStr = '';
+        let cityStr = '';
+        let stateStr = '';
+        let postcodeStr = '';
+        
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
+          const data = await res.json();
+          if (data && data.address) {
+            const addr = data.address;
+            cityStr = addr.city || addr.town || addr.village || addr.suburb || '';
+            stateStr = addr.state || '';
+            postcodeStr = addr.postcode || '';
+            addressStr = data.display_name || '';
+          }
+        } catch (e) {
+          console.error("Reverse geocoding error:", e);
+        }
+
+        const gMapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+
+        if (type === 'new') {
+          setNewBranch((prev) =>({
+            ...prev,
+            latitude: latitude.toFixed(6),
+            longitude: longitude.toFixed(6),
+            address: addressStr || prev.address,
+            city: cityStr || prev.city,
+            state: stateStr || prev.state,
+            pincode: postcodeStr || prev.pincode,
+            googleMapsUrl: gMapsUrl,
+            allowedRadius: prev.allowedRadius || 100
+          }));
+        } else if (type === 'edit') {
+          setEditingBranch((prev) =>({
+            ...prev,
+            latitude: latitude.toFixed(6),
+            longitude: longitude.toFixed(6),
+            address: addressStr || prev.address,
+            city: cityStr || prev.city,
+            state: stateStr || prev.state,
+            pincode: postcodeStr || prev.pincode,
+            googleMapsUrl: gMapsUrl,
+            allowedRadius: prev.allowedRadius || 100
+          }));
+        }
+        setDetectingLocation(false);
+      },
+      (error) =>{
+        console.error("Error detecting location:", error);
+        alert(`Failed to get location: ${error.message}. Please check if location access is blocked by your browser settings.`);
+        setDetectingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
 
  const handleDeleteBranch = async (id) =>{
  if (!window.confirm('Are you sure you want to remove this branch?')) return;
  try {
- setBranchesLoading(true);
  const res = await deleteBranch(id);
  if (res.success) {
  alert(res.message || 'Branch deleted successfully.');
- fetchBranches();
+ loadBranches();
  }
  } catch (error) {
  console.error('Error deleting branch:', error);
  alert(error.response?.data?.message || 'Failed to delete branch.');
- } finally {
- setBranchesLoading(false);
  }
  };
 
@@ -1176,10 +1280,10 @@ const OwnerDashboard = () =>{
  const handleToggleAvailability = async (item) =>{
  const updatedStatus = !item.available;
  try {
- const response = await updateMenuItem(item.id, { available: updatedStatus });
+ const response = await updateMenuItem(item._id, { available: updatedStatus });
  if (response.success) {
  setMenuItems((prevItems) =>
- prevItems.map((m) =>m.id === item.id ? { ...m, available: updatedStatus } : m)
+ prevItems.map((m) =>m._id === item._id ? { ...m, available: updatedStatus } : m)
 );
  }
  } catch (error) {
@@ -1189,11 +1293,11 @@ const OwnerDashboard = () =>{
 
  // Delete menu item
  const handleDeleteMenuItem = async (id) =>{
- if (window.confirm('Are you sure you want to permanently delete this menu item?')) {
+    if (window.confirm('Are you sure you want to remove this menu item?')) {
  try {
  const response = await deleteMenuItem(id);
  if (response.success) {
- setMenuItems((prevItems) =>prevItems.filter((item) =>item.id !== id));
+ setMenuItems((prevItems) =>prevItems.filter((item) =>item._id !== id));
  }
  } catch (error) {
  console.error('Error deleting item:', error);
@@ -1237,10 +1341,10 @@ const OwnerDashboard = () =>{
  return;
  }
  try {
- const response = await updateMenuItem(editingItem.id, editingItem);
+ const response = await updateMenuItem(editingItem._id, editingItem);
  if (response.success) {
  setMenuItems((prevItems) =>
- prevItems.map((m) =>m.id === editingItem.id ? response.data : m)
+ prevItems.map((m) =>m._id === editingItem._id ? response.data : m)
 );
  setShowEditModal(false);
  setEditingItem(null);
@@ -1262,8 +1366,9 @@ const OwnerDashboard = () =>{
 );
 
  if (invRes.success) {
- setInventoryList(invRes.data);
- setInventoryError('');
+  const mappedInv = invRes.data.map(item => ({ ...item, id: item._id || item.id }));
+  setInventoryList(mappedInv);
+  setInventoryError('');
  } else {
  setInventoryError('Failed to load inventory.');
  }
@@ -1398,23 +1503,29 @@ const OwnerDashboard = () =>{
  };
 
  // Save Settings Config
-  const handleSaveSettings = async (e) =>{
+ const handleSaveSettings = async (e) =>{
     e.preventDefault();
     setSettingsMsg('');
     try {
       const payload = {
+        taxRate,
+        serviceCharge,
         paymentConfig: {
-          razorpayKeyId,
-          razorpaySecret,
-          isVerified: isRazorpayVerified
-        },
-        gstRate: Number(taxRate),
-        serviceChargeRate: Number(serviceCharge)
+          acceptCash,
+          enableUpi,
+          upiId,
+          bankHolderName,
+          accountNumber,
+          ifscCode,
+          paymentInstructions,
+          taxRate,
+          platformCharge: serviceCharge
+        }
       };
       const response = await saveSetupData(payload);
       if (response.success) {
         setSettingsMsg('Configuration saved successfully!');
-        setTimeout(() =>setSettingsMsg(''), 3000);
+        setTimeout(() => setSettingsMsg(''), 3000);
       }
     } catch (err) {
       console.error('Error saving settings:', err);
@@ -1422,33 +1533,9 @@ const OwnerDashboard = () =>{
     }
   };
 
- // Test Razorpay Keys
- const testRazorpayConnection = async () =>{
- if (!razorpayKeyId || !razorpaySecret) {
- alert('Razorpay Key ID and Secret are required.');
- return;
- }
- setVerifyingKeys(true);
- try {
- const res = await verifyRazorpayKeys(razorpayKeyId, razorpaySecret);
- if (res.success) {
- setIsRazorpayVerified(true);
- alert('Razorpay connection verified successfully!');
- } else {
- setIsRazorpayVerified(false);
- alert('Verification failed. Check credentials.');
- }
- } catch (err) {
- setIsRazorpayVerified(false);
- alert('Verification failed: Bad credentials.');
- } finally {
- setVerifyingKeys(false);
- }
- };
-
  // Copy table URL
  const handleCopyUrl = (table) =>{
- const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}`;
+  const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
  navigator.clipboard.writeText(url);
  setCopiedLink(true);
  setTimeout(() =>setCopiedLink(false), 2000);
@@ -1463,91 +1550,75 @@ const OwnerDashboard = () =>{
  return isToday ? `Today ${timeString}` : `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${timeString}`;
  };
 
-  // Analytical Calculations
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+ // Analytical Calculations
+ const now = new Date();
+ const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+ const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  // Filter base lists by branch if selected
-  const filteredOrdersForAnalytics = overviewFilterBranch
-    ? orders.filter(o => o.branchId && String(o.branchId) === String(overviewFilterBranch))
-    : orders;
+ const completedOrders = orders.filter((o) =>o.paymentStatus === 'Paid');
 
-  const filteredInventoryForAnalytics = overviewFilterBranch
-    ? inventoryList.filter(item => item.branch && String(item.branch) === String(overviewFilterBranch))
-    : inventoryList;
+ const todayOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfToday);
+ const todayRevenue = todayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
 
-  const filteredLogsForAnalytics = overviewFilterBranch
-    ? inventoryLogs.filter(log => (log.branchId && String(log.branchId) === String(overviewFilterBranch)) || (log.branch && String(log.branch) === String(overviewFilterBranch)))
-    : inventoryLogs;
+ const monthlyOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfMonth);
+ const monthlyRevenue = monthlyOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
 
-  const completedOrders = filteredOrdersForAnalytics.filter((o) =>o.paymentStatus === 'Paid');
+ const totalOrdersCount = orders.length;
 
-  const todayOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfToday);
-  const todayRevenue = todayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
+ const getWeeklySalesData = () =>{
+ const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+ const result = [];
+ for (let i = 6; i >= 0; i--) {
+ const d = new Date();
+ d.setDate(d.getDate() - i);
+ const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+ const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
 
-  const monthlyOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfMonth);
-  const monthlyRevenue = monthlyOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
+ const dayOrders = completedOrders.filter((o) =>{
+ const orderDate = new Date(o.createdAt);
+ return orderDate >= startOfDay && orderDate< endOfDay;
+ });
 
-  const totalOrdersCount = filteredOrdersForAnalytics.length;
+ const daySales = dayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
+ result.push({
+ day: d.toDateString() === now.toDateString() ? 'Today' : dayLabels[d.getDay()],
+ sales: Math.round(daySales * 100) / 100
+ });
+ }
+ return result;
+ };
 
-  const getWeeklySalesData = () =>{
-  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const result = [];
-  for (let i = 6; i >= 0; i--) {
-  const d = new Date();
-  d.setDate(d.getDate() - i);
-  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+ const weeklySalesData = getWeeklySalesData();
+ const maxWeeklySales = Math.max(...weeklySalesData.map((d) =>d.sales), 1);
 
-  const dayOrders = completedOrders.filter((o) =>{
-  const orderDate = new Date(o.createdAt);
-  return orderDate >= startOfDay && orderDate< endOfDay;
-  });
+ const totalInventoryValue = inventoryList.reduce((acc, item) =>acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 0);
 
-  const daySales = dayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
-  result.push({
-  day: d.toDateString() === now.toDateString() ? 'Today' : dayLabels[d.getDay()],
-  sales: Math.round(daySales * 100) / 100
-  });
-  }
-  return result;
-  };
+ const purchaseLogs = inventoryLogs.filter((log) =>log.type === 'Purchase' || log.type === 'Initial');
+ const totalInventoryCost = purchaseLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
 
-  const weeklySalesData = getWeeklySalesData();
-  const maxWeeklySales = Math.max(...weeklySalesData.map((d) =>d.sales), 1);
+ const deductionLogs = inventoryLogs.filter((log) =>log.type === 'Deduction');
+ const totalInventoryConsumption = deductionLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
 
-  const totalInventoryValue = filteredInventoryForAnalytics.reduce((acc, item) =>acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 0);
 
-  const purchaseLogs = filteredLogsForAnalytics.filter((log) =>log.type === 'Purchase' || log.type === 'Initial');
-  const totalInventoryCost = purchaseLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
 
-  const deductionLogs = filteredLogsForAnalytics.filter((log) =>log.type === 'Deduction');
-  const totalInventoryConsumption = deductionLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
+ const getTopConsumedIngredients = () =>{
+ const consumptionMap = {};
+ inventoryLogs.
+ filter((log) =>log.type === 'Deduction').
+ forEach((log) =>{
+ const name = log.itemName;
+ const qty = Math.abs(log.quantityChanged || 0);
+ consumptionMap[name] = (consumptionMap[name] || 0) + qty;
+ });
 
-  const lowStockAlertsCount = filteredInventoryForAnalytics.filter((item) =>item.status === 'LOW_STOCK' || item.status === 'OUT_OF_STOCK' || (item.quantity !== undefined ? item.quantity : item.stock)<= (item.reorderLevel !== undefined ? item.reorderLevel : item.minStock)).length;
-
-  const wastageLogs = filteredLogsForAnalytics.filter((log) =>log.type === 'Wastage' || log.type === 'Damaged');
-  const totalWastageCost = wastageLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
-
-  const getTopConsumedIngredients = () =>{
-  const consumptionMap = {};
-  filteredLogsForAnalytics.
-  filter((log) =>log.type === 'Deduction').
-  forEach((log) =>{
-  const name = log.itemName;
-  const qty = Math.abs(log.quantityChanged || 0);
-  consumptionMap[name] = (consumptionMap[name] || 0) + qty;
-  });
-
-  return Object.entries(consumptionMap).
-  map(([name, qty]) =>{
-  const item = filteredInventoryForAnalytics.find((i) =>i.name === name);
-  return { name, quantity: qty, unit: item?.unit || 'g' };
-  }).
-  sort((a, b) =>b.quantity - a.quantity).
-  slice(0, 5);
-  };
+ return Object.entries(consumptionMap).
+ map(([name, qty]) =>{
+ const item = inventoryList.find((i) =>i.name === name);
+ return { name, quantity: qty, unit: item?.unit || 'g' };
+ }).
+ sort((a, b) =>b.quantity - a.quantity).
+ slice(0, 5);
+ };
 
  return (
 <OwnerLayout>
@@ -1670,30 +1741,24 @@ const OwnerDashboard = () =>{
  padding: 25px;
  }
  }
-  /* ── Menu Grid: 1-col on mobile, 2-col on small tablets, 3-col on desktop ── */
-  .menu-grid-admin {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-  }
-  @media (min-width: 600px) {
-  .menu-grid-admin {
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  }
-  }
-  @media (min-width: 768px) {
-  .menu-grid-admin {
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  }
-  }
-  @media (min-width: 1200px) {
-  .menu-grid-admin {
-  grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
-  }
-  }
+ /* ── Menu Grid: 2-col on mobile ── */
+ .menu-grid-admin {
+ display: grid;
+ grid-template-columns: repeat(2, 1fr);
+ gap: 10px;
+ }
+ @media (min-width: 768px) {
+ .menu-grid-admin {
+ grid-template-columns: repeat(3, 1fr);
+ gap: 16px;
+ }
+ }
+ @media (min-width: 1200px) {
+ .menu-grid-admin {
+ grid-template-columns: repeat(4, 1fr);
+ gap: 18px;
+ }
+ }
  /* ── Menu Card: vertical card layout ── */
  .admin-menu-card {
  background: var(--bg-card);
@@ -1815,203 +1880,151 @@ const OwnerDashboard = () =>{
  }
  }
  .orders-monitor-wrapper {
-  padding: 12px;
-  }
-  .orders-monitor-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-  }
-  @media (min-width: 480px) {
-  .orders-monitor-grid {
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-  }
-  }
-  @media (min-width: 600px) {
-  .orders-monitor-wrapper {
-  padding: 25px;
-  }
-  }
+ padding: 12px;
+ }
+ .orders-monitor-grid {
+ display: grid;
+ grid-template-columns: repeat(2, 1fr);
+ gap: 10px;
+ }
+ @media (min-width: 600px) {
+ .orders-monitor-wrapper {
+ padding: 25px;
+ }
+ .orders-monitor-grid {
+ grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+ gap: 16px;
+ }
+ }
  `}</style>
 
-  {/* Header with Title */}
-  <div style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottom: '1px solid var(--color-border)',
-    paddingBottom: '16px',
-    marginBottom: '24px',
-    flexWrap: 'wrap',
-    gap: '12px',
-    marginTop: '12px'
-  }}>
-    <div>
-      <h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>
-        Owner Control Station
-      </h2>
-      <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
-        Live insights, staff reports, multi-branch revenue tracking, and menu overrides.
-      </p>
-    </div>
-  </div>
-
  {/* Navigation Tabs removed to prevent duplicate navigation */}
+ {/* Branch switching is now handled by the BranchSwitcher in the header/sidebar */}
 
  {/* TAB 1: BUSINESS ANALYTICS */}
  {activeTab === 'analytics' &&
 <div className="fade-in">
-  {/* Branch Selector Dropdown */}
-  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      <label style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--color-text-secondary)' }}>Filter Analytics by Branch:</label>
-      <select
-        value={overviewFilterBranch}
-        onChange={(e) => setOverviewFilterBranch(e.target.value)}
-        className="form-input"
-        style={{ width: '200px', margin: 0 }}>
-        <option value="">All Branches</option>
-        {branches.map((b) => (
-          <option key={b._id} value={b.branchId}>{b.branchName}</option>
-        ))}
-      </select>
-    </div>
-  </div>
  {/* Revenue Analytics Cards */}
 <div className="analytics-grid">
-<div className="analytics-card">
-<h4>Today's Settle Revenue</h4>
-<span className="val" style={{ color: '#2ecc71' }}>₹{todayRevenue.toFixed(2)}</span>
-<span className="sub">↑ 14% vs yesterday</span>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Today's Revenue</h4>
+    <div className="modern-metric-icon-wrapper">
+      <IndianRupee size={18} color="#27ae60" />
+    </div>
+  </div>
+  <p className="modern-metric-value" style={{ color: '#27ae60' }}>₹{todayRevenue.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-success"><TrendingUp size={12} /> 14% vs yesterday</span>
 </div>
-<div className="analytics-card">
-<h4>Monthly Settle Revenue</h4>
-<span className="val">₹{monthlyRevenue.toFixed(2)}</span>
-<span className="sub">↑ 8% this month</span>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Monthly Revenue</h4>
+    <div className="modern-metric-icon-wrapper">
+      <IndianRupee size={18} color="var(--color-primary)" />
+    </div>
+  </div>
+  <p className="modern-metric-value">₹{monthlyRevenue.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-success"><TrendingUp size={12} /> 8% this month</span>
 </div>
-<div className="analytics-card">
-<h4>Estimated Inventory Value</h4>
-<span className="val" style={{ color: '#e67e22' }}>₹{totalInventoryValue.toFixed(2)}</span>
-<span className="sub">All stock items valued</span>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Inventory Value</h4>
+    <div className="modern-metric-icon-wrapper">
+      <Package size={18} color="#e67e22" />
+    </div>
+  </div>
+  <p className="modern-metric-value" style={{ color: '#e67e22' }}>₹{totalInventoryValue.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-warning">All stock valued</span>
 </div>
-<div className="analytics-card">
-<h4>Total Ticket Orders</h4>
-<span className="val">{totalOrdersCount} orders</span>
-<span className="sub" style={{ color: '#ff9800' }}>Active monitoring active</span>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Order Source</h4>
+    <div className="modern-metric-icon-wrapper">
+      <BarChart3 size={18} color="#3498db" />
+    </div>
+  </div>
+  <div style={{ display: 'flex', gap: '20px', marginTop: '4px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span className="modern-metric-value" style={{ fontSize: '1.4rem' }}>{orders.filter(o => o.source !== 'STAFF').length}</span>
+      <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>QR Orders</span>
+    </div>
+    <div style={{ width: '1px', background: 'var(--color-border)' }}></div>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span className="modern-metric-value" style={{ fontSize: '1.4rem', color: '#3498db' }}>{orders.filter(o => o.source === 'STAFF').length}</span>
+      <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Staff POS</span>
+    </div>
+  </div>
 </div>
 </div>
 
  {/* Inventory Analytics Cards */}
 <div className="analytics-grid" style={{ marginTop: '16px' }}>
-<div className="analytics-card">
-<h4>Total Inventory Cost</h4>
-<span className="val" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</span>
-<span className="sub">Initial stock + Purchases</span>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Total Inventory Cost</h4>
+    <div className="modern-metric-icon-wrapper">
+      <IndianRupee size={18} color="#9b59b6" />
+    </div>
+  </div>
+  <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-neutral">Initial stock + Purchases</span>
 </div>
-<div className="analytics-card">
-<h4>Inventory Consumption</h4>
-<span className="val" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</span>
-<span className="sub">Cost of sold ingredients</span>
-</div>
-<div className="analytics-card">
-<h4>Wastage & Spoiled Cost</h4>
-<span className="val" style={{ color: '#e74c3c' }}>₹{totalWastageCost.toFixed(2)}</span>
-<span className="sub">Spoiled & damaged items</span>
-</div>
-<div className="analytics-card">
-<h4>Low Stock Alerts</h4>
-<span className="val" style={{ color: lowStockAlertsCount >0 ? '#e74c3c' : '#2ecc71' }}>
- {lowStockAlertsCount} items
-</span>
-<span className="sub" style={{ color: lowStockAlertsCount >0 ? '#e74c3c' : '#2ecc71' }}>
- {lowStockAlertsCount >0 ? ' Stock replenishment needed' : ' All items in stock'}
-</span>
-</div>
-</div>
-
-<div className="card-deck">
- {/* Premium Sales Graphics */}
-<div className="chart-card">
-<h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.1rem', margin: '0 0 20px 0', fontWeight: 700 }}>
- Weekly Sales Performance (Last 7 Days)
-</h3>
- 
- {/* Micro SVG Flexbox chart */}
-<div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '180px', padding: '10px 0', borderBottom: '1px solid var(--color-border)' }}>
- {weeklySalesData.map((d, index) =>{
- const percent = d.sales / maxWeeklySales * 100;
- return (
-<div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '12%' }}>
-<span style={{ fontSize: '10px', color: 'var(--color-text-primary)', fontWeight: 'bold', marginBottom: '6px' }}>₹{d.sales}</span>
-<div style={{
- width: '100%',
- height: `${percent}%`,
- background: 'linear-gradient(to top, #6F4E37, #C69B7B)',
- borderRadius: '4px 4px 0 0',
- transition: 'height 0.3s ease'
- }} />
-<span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '8px', fontWeight: 'bold' }}>{d.day}</span>
-</div>);
-
- })}
-</div>
-</div>
-
- {/* Branch Performance Comparison */}
-<div className="chart-card">
-<h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.1rem', margin: '0 0 20px 0', fontWeight: 700 }}>
- Branch Performance
-</h3>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-<div>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '5px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>Main Branch</span>
-<strong style={{ color: 'var(--color-primary)' }}>60%</strong>
-</div>
-<div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
-<div style={{ width: '60%', height: '100%', background: 'var(--color-primary)' }} />
-</div>
-</div>
-<div>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '5px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>Uptown Branch</span>
-<strong style={{ color: 'var(--color-primary)' }}>40%</strong>
-</div>
-<div style={{ height: '8px', background: 'var(--bg-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
-<div style={{ width: '40%', height: '100%', background: 'var(--color-primary)' }} />
-</div>
-</div>
-</div>
+<div className="modern-metric-card">
+  <div className="modern-metric-header">
+    <h4 className="modern-metric-title">Inventory Consumption</h4>
+    <div className="modern-metric-icon-wrapper">
+      <IndianRupee size={18} color="#16a085" />
+    </div>
+  </div>
+  <p className="modern-metric-value" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
+  <span className="modern-metric-pill modern-pill-neutral">Cost of sold ingredients</span>
 </div>
 </div>
 
  {/* Best / Worst Selling items */}
-<div className="owner-double-deck">
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px' }}>
-<h4 style={{ color: '#2ecc71', margin: '0 0 15px 0', fontSize: '1rem' }}>Top Selling Cafe Items</h4>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>1. Gourmet Double Cheeseburger</span>
-<span style={{ color: 'var(--color-text-secondary)' }}>242 sold</span>
+<div className="owner-double-deck" style={{ marginTop: '24px' }}>
+<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+  <TrendingUp size={20} color="#2ecc71" />
+  <h4 style={{ color: '#2ecc71', margin: 0, fontSize: '1.1rem' }}>Top Selling Items</h4>
 </div>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>2. Creamy Iced Latte</span>
-<span style={{ color: 'var(--color-text-secondary)' }}>198 sold</span>
+<div className="ranked-list-container">
+  <div className="ranked-list-item">
+    <div className="ranked-list-left">
+      <div className="ranked-badge ranked-badge-1">1</div>
+      <span className="ranked-item-name">Gourmet Double Cheeseburger</span>
+    </div>
+    <span className="ranked-item-metric">242 sold</span>
+  </div>
+  <div className="ranked-list-item">
+    <div className="ranked-list-left">
+      <div className="ranked-badge ranked-badge-2">2</div>
+      <span className="ranked-item-name">Creamy Iced Latte</span>
+    </div>
+    <span className="ranked-item-metric">198 sold</span>
+  </div>
 </div>
 </div>
+<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+  <TrendingDown size={20} color="#e74c3c" />
+  <h4 style={{ color: '#e74c3c', margin: 0, fontSize: '1.1rem' }}>Slow Selling Items</h4>
 </div>
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px' }}>
-<h4 style={{ color: '#e74c3c', margin: '0 0 15px 0', fontSize: '1rem' }}> Slow Selling Items</h4>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>1. Hot Pepper Veggie Soup</span>
-<span style={{ color: 'var(--color-text-secondary)' }}>3 sold</span>
-</div>
-<div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px solid var(--color-border)', paddingBottom: '6px' }}>
-<span style={{ color: 'var(--color-text-primary)' }}>2. Classic Black Tea</span>
-<span style={{ color: 'var(--color-text-secondary)' }}>8 sold</span>
-</div>
+<div className="ranked-list-container">
+  <div className="ranked-list-item">
+    <div className="ranked-list-left">
+      <div className="ranked-badge ranked-badge-3">1</div>
+      <span className="ranked-item-name">Hot Pepper Veggie Soup</span>
+    </div>
+    <span className="ranked-item-metric">3 sold</span>
+  </div>
+  <div className="ranked-list-item">
+    <div className="ranked-list-left">
+      <div className="ranked-badge ranked-badge-default">2</div>
+      <span className="ranked-item-name">Classic Black Tea</span>
+    </div>
+    <span className="ranked-item-metric">8 sold</span>
+  </div>
 </div>
 </div>
 </div>
@@ -2115,7 +2128,7 @@ const OwnerDashboard = () =>{
 
 <div className="menu-grid-admin">
  {filteredMenuItems.map((item) =>
-<div key={item.id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
+<div key={item._id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
 <AdminMenuImage item={item} />
 <div className="admin-menu-info">
 <div className="admin-menu-title">{item.name}</div>
@@ -2124,7 +2137,7 @@ const OwnerDashboard = () =>{
 <span className="admin-menu-price">₹{parseFloat(item.price).toFixed(2)}</span>
 <div className="menu-card-actions">
   <button onClick={() =>{setEditingItem({ ...item });setShowEditModal(true);}} className="btn btn-secondary menu-card-btn">✏️<span className="btn-text"> Edit</span></button>
-  <button onClick={() =>handleDeleteMenuItem(item.id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
+  <button onClick={() =>handleDeleteMenuItem(item._id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
 </div>
 </div>
 </div>
@@ -2364,7 +2377,8 @@ const OwnerDashboard = () =>{
  transition: 'all 0.2s',
  fontFamily: 'inherit'
  }}>
-  Staff Members
+ 
+ Staff Roster
 </button>
 <button
  onClick={() =>setStaffSubTab('reports')}
@@ -2400,6 +2414,23 @@ const OwnerDashboard = () =>{
  
  Attendance Logs
 </button>
+<button
+ onClick={() =>setStaffSubTab('salary')}
+ style={{
+ padding: '8px 16px',
+ borderRadius: '8px',
+ border: 'none',
+ background: staffSubTab === 'salary' ? 'var(--color-primary)' : 'transparent',
+ color: staffSubTab === 'salary' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+ fontSize: '13.5px',
+ fontWeight: 700,
+ cursor: 'pointer',
+ transition: 'all 0.2s',
+ fontFamily: 'inherit'
+ }}>
+ 
+ Staff Salaries
+</button>
 </div>
 
  {staffSubTab === 'roster' &&
@@ -2408,7 +2439,7 @@ const OwnerDashboard = () =>{
  {/* ─── Add Staff Modal ─── */}
  {showAddStaffModal &&
 <div
- onClick={(e) =>{if (e.target === e.currentTarget) {setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '' });}}}
+ onClick={(e) =>{if (e.target === e.currentTarget) {setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });}}}
  style={{
  position: 'fixed', inset: 0, zIndex: 3000,
  background: 'rgba(0,0,0,0.75)',
@@ -2432,10 +2463,10 @@ const OwnerDashboard = () =>{
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
 <div>
 <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Add New Staff</h3>
-<p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Register a new team member to the staff roster</p>
+<p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Register a new team member to the roster</p>
 </div>
 <button
- onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '' });}}
+ onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });}}
  style={{
  background: 'rgba(0, 0, 0,0.06)', border: '1px solid rgba(0, 0, 0,0.08)',
  borderRadius: '50%', width: '36px', height: '36px',
@@ -2459,6 +2490,10 @@ const OwnerDashboard = () =>{
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
 <label htmlFor="roster-phone-number" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Phone Number *</label>
 <input type="text" id="roster-phone-number" name="roster-phone-number" className="form-input" placeholder="e.g. 9876543210" value={newStaff.phone} onChange={(e) =>setNewStaff({ ...newStaff, phone: e.target.value })} required />
+</div>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+<label htmlFor="roster-daily-wage" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Daily Wage (₹) *</label>
+<input type="number" min="0" id="roster-daily-wage" name="roster-daily-wage" className="form-input" placeholder="e.g. 500" value={newStaff.dailyRate || ''} onChange={(e) =>setNewStaff({ ...newStaff, dailyRate: Number(e.target.value) })} required />
 </div>
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -2485,7 +2520,7 @@ const OwnerDashboard = () =>{
 <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
 <button
  type="button"
- onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '' });}}
+ onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });}}
  style={{
  flex: 1, padding: '12px', borderRadius: '10px',
  border: '1px solid var(--color-border)', background: 'transparent',
@@ -2510,7 +2545,24 @@ const OwnerDashboard = () =>{
  {/* Staff Roster List Card */}
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-<h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff List</h4>
+<h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff Roster List</h4>
+<div style={{ display: 'flex', gap: '10px' }}>
+<button
+ onClick={exportStaffToCSV}
+ style={{
+ display: 'flex', alignItems: 'center', gap: '8px',
+ background: '#2ecc71', color: 'white',
+ border: 'none', borderRadius: '10px',
+ padding: '8px 16px', fontSize: '13px', fontWeight: 700,
+ cursor: 'pointer', fontFamily: 'inherit',
+ boxShadow: '0 4px 16px rgba(46, 204, 113, 0.4)',
+ transition: 'all 0.2s ease'
+ }}
+ onMouseEnter={(e) =>{e.currentTarget.style.transform = 'translateY(-1px)';e.currentTarget.style.boxShadow = '0 6px 20px rgba(46, 204, 113, 0.5)';}}
+ onMouseLeave={(e) =>{e.currentTarget.style.transform = 'translateY(0)';e.currentTarget.style.boxShadow = '0 4px 16px rgba(46, 204, 113, 0.4)';}}>
+ <span style={{ fontSize: '16px' }}>📥</span>
+ <span>Export CSV</span>
+</button>
 <button
  onClick={() =>setShowAddStaffModal(true)}
  style={{
@@ -2529,228 +2581,184 @@ const OwnerDashboard = () =>{
 <span>Add Staff</span>
 </button>
 </div>
-
-{/* Search and Filters Bar */}
-<div style={{
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  gap: '12px',
-  marginBottom: '20px',
-  alignItems: 'center'
-}} className="staff-filters-bar">
-  {/* Search input */}
-  <div style={{ position: 'relative', gridColumn: 'span 2' }} className="staff-search-wrapper">
-    <span style={{
-      position: 'absolute',
-      left: '12px',
-      top: '50%',
-      transform: 'translateY(-50%)',
-      color: 'var(--color-text-secondary)',
-      fontSize: '14px',
-      pointerEvents: 'none'
-    }}>🔍</span>
-    <input
-      type="text"
-      placeholder="Search by name, phone, ID..."
-      value={staffSearchQuery}
-      onChange={(e) => setStaffSearchQuery(e.target.value)}
-      className="form-input"
-      style={{
-        paddingLeft: '36px',
-        width: '100%',
-        margin: 0
-      }}
-    />
-  </div>
-
-  {/* Filter by Role */}
-  <div style={{ position: 'relative' }}>
-    <select
-      value={staffFilterRole}
-      onChange={(e) => setStaffFilterRole(e.target.value)}
-      className="form-input"
-      style={{ width: '100%', margin: 0 }}
-    >
-      <option value="">All Roles</option>
-      <option value="chef">Chef</option>
-      <option value="waiter">Waiter</option>
-      <option value="barista">Barista</option>
-      <option value="cashier">Cashier</option>
-      <option value="manager">Manager</option>
-      <option value="staff">Staff / Server</option>
-    </select>
-  </div>
-
-  {/* Filter by Branch */}
-  <div style={{ position: 'relative' }}>
-    <select
-      value={staffFilterBranch}
-      onChange={(e) => setStaffFilterBranch(e.target.value)}
-      className="form-input"
-      style={{ width: '100%', margin: 0 }}
-    >
-      <option value="">All Branches</option>
-      {branches.map((b) => (
-        <option key={b.branchId} value={b.branchId}>{b.branchName}</option>
-      ))}
-    </select>
-  </div>
-
-  {/* Filter by Status */}
-  <div style={{ position: 'relative' }}>
-    <select
-      value={staffFilterStatus}
-      onChange={(e) => setStaffFilterStatus(e.target.value)}
-      className="form-input"
-      style={{ width: '100%', margin: 0 }}
-    >
-      <option value="">All Statuses</option>
-      <option value="active">Active</option>
-      <option value="inactive">Inactive</option>
-    </select>
-  </div>
 </div>
-
-{/* Clear Filters Button */}
-{(staffSearchQuery || staffFilterRole || staffFilterBranch || staffFilterStatus) && (
-  <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '16px' }}>
-    <button
-      onClick={() => {
-        setStaffSearchQuery('');
-        setStaffFilterRole('');
-        setStaffFilterBranch('');
-        setStaffFilterStatus('');
-      }}
-      style={{
-        background: 'transparent',
-        border: '1px solid var(--color-danger)',
-        color: 'var(--color-danger)',
-        padding: '6px 12px',
-        borderRadius: '8px',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        cursor: 'pointer',
-        transition: 'all 0.2s'
-      }}
-    >
-      Clear Filters
-    </button>
-  </div>
-)}
-
  {staffLoading && staff.length === 0 ?
 <div style={{ textAlign: 'center', padding: '40px 0' }}>
 <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading staff members...</p>
+<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading staff roster...</p>
 </div>:
 
 <>
-{filteredStaff.length === 0 ? (
-  <div style={{
-    padding: '50px 20px',
-    textAlign: 'center',
-    background: 'rgba(0, 0, 0,0.01)',
-    borderRadius: '12px',
-    border: '1px dashed var(--color-border)',
-    color: 'var(--color-text-secondary)',
-    fontStyle: 'italic'
-  }}>
-    No staff members found matching the selected filters.
-  </div>
-) : (
-  <>
-  <div className="desktop-tablet-staff" style={{ width: '100%', overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
-  <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700, backgroundColor: 'var(--bg-card)' }}>
-  <th style={{ padding: '10px' }}>Emp ID</th>
-  <th style={{ padding: '10px' }}>Name</th>
-  <th style={{ padding: '10px' }}>Email</th>
-  <th style={{ padding: '10px' }}>Phone</th>
-  <th style={{ padding: '10px' }}>Role</th>
-  <th style={{ padding: '10px' }}>Branch</th>
-  <th style={{ padding: '10px' }}>Last Seen</th>
-  <th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
-  <th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
+<div className="desktop-tablet-staff" style={{ display: 'none', width: '100%', overflowX: 'auto' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+<thead>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+<th style={{ padding: '10px' }}>Emp ID</th>
+<th style={{ padding: '10px' }}>Name</th>
+<th style={{ padding: '10px' }}>Contact</th>
+<th style={{ padding: '10px' }}>Role</th>
+<th style={{ padding: '10px' }}>Branch</th>
+<th style={{ padding: '10px' }}>Daily Wage</th>
+<th style={{ padding: '10px' }}>Req. Hours</th>
+<th style={{ padding: '10px' }}>Current Week Salary</th>
+<th style={{ padding: '10px' }}>Last Login</th>
+<th style={{ padding: '10px' }}>Orders (Today)</th>
+<th style={{ padding: '10px' }}>Joined Date</th>
+<th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
+<th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
+</tr>
+</thead>
+<tbody>
+ {staff.map((member) => (
+  <React.Fragment key={member._id}>
+<tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+<td style={{ padding: '12px 10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</td>
+<td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
+<td style={{ padding: '12px 10px' }}>
+  <div style={{ fontSize: '13px' }}>{member.phone}</div>
+  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{member.email || 'N/A'}</div>
+</td>
+<td style={{ padding: '12px 10px' }}>
+<span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
+</td>
+<td style={{ padding: '12px 10px' }}>
+ {branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}
+</td>
+<td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+ ₹{member.dailyRate || 0}
+</td>
+<td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)' }}>
+ {member.requiredHours || 8} hrs
+</td>
+<td 
+  style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)', cursor: 'pointer', userSelect: 'none' }}
+  onClick={() => setExpandedStaffId(expandedStaffId === member._id ? null : member._id)}
+  title="Click to view weekly breakdown"
+>
+  ₹{member.currentWeekSalary || 0} <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{expandedStaffId === member._id ? '▲' : '▼'}</span>
+</td>
+<td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+ {formatLastSeen(member.lastSeen || member.lastLogin)}
+</td>
+<td style={{ padding: '12px 10px', fontSize: '13px', fontWeight: 'bold', color: 'var(--color-primary)' }}>
+ {member.ordersHandledToday || 0}
+</td>
+<td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+ {new Date(member.createdAt).toLocaleDateString()}
+</td>
+<td style={{ padding: '12px 10px', textAlign: 'center' }}>
+<span style={{
+ backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+ color: member.isActive ? '#2ecc71' : '#e74c3c',
+ padding: '3px 8px',
+ borderRadius: '12px',
+ fontSize: '11px',
+ fontWeight: 'bold'
+ }}>
+ {member.isActive ? 'Active' : 'Inactive'}
+</span>
+</td>
+<td style={{ padding: '12px 10px', textAlign: 'center' }}>
+<div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+<button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}> Edit</button>
+<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
+</div>
+</td>
+</tr>
+{expandedStaffId === member._id && (
+  <tr style={{ background: 'rgba(0,0,0,0.15)' }}>
+    <td colSpan={13} style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontWeight: 'bold', color: 'var(--color-primary)', fontSize: '13px' }}>
+          Weekly Salary Breakdown (Monday - Sunday):
+        </div>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
+            <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', minWidth: '85px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>{day}</span>
+              <span style={{ fontWeight: 'bold', color: 'var(--color-text-primary)', marginTop: '2px', fontSize: '13px' }}>₹{member.weeklyBreakdown?.[day] || 0}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(143,168,155,0.1)', padding: '6px 16px', borderRadius: '8px', border: '1px solid var(--color-primary)' }}>
+          <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 'bold' }}>Total Weekly Salary</span>
+          <span style={{ fontWeight: 800, color: 'var(--color-primary)', fontSize: '15px', marginTop: '2px' }}>₹{member.currentWeekSalary || 0}</span>
+        </div>
+      </div>
+    </td>
   </tr>
-  </thead>
-  <tbody>
-   {filteredStaff.map((member) =>
-  <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-  <td style={{ padding: '12px 10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</td>
-  <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
-  <td style={{ padding: '12px 10px' }}>{member.email || 'N/A'}</td>
-  <td style={{ padding: '12px 10px' }}>{member.phone}</td>
-  <td style={{ padding: '12px 10px' }}>
-  <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
-  </td>
-  <td style={{ padding: '12px 10px' }}>
-   {branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}
-  </td>
-  <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-   {formatLastSeen(member.lastSeen)}
-  </td>
-  <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-  <span style={{
-   backgroundColor: member.isActive ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
-   color: member.isActive ? 'var(--color-success)' : 'var(--color-danger)',
-   padding: '3px 8px',
-   borderRadius: '12px',
-   fontSize: '11px',
-   fontWeight: 'bold'
-   }}>
-   {member.isActive ? 'Active' : 'Inactive'}
-  </span>
-  </td>
-  <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-  <button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}> Edit</button>
-  <button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
-  </div>
-  </td>
-  </tr>
-  )}
-  </tbody>
-  </table>
-  </div>
-
-  <div className="mobile-only-staff">
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-   {filteredStaff.map((member) =>
-  <div key={member._id} style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px', boxShadow: 'var(--shadow-sm)' }}>
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-  <span style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</span>
-  <span className="admin-menu-badge" style={{ textTransform: 'capitalize', background: 'rgba(255, 107, 8, 0.15)', color: '#FF6B08', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>{member.staffRole}</span>
-  </div>
-  <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
-  <div>🆔 ID:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</span></div>
-  <div>{member.email || 'No Email'}</div>
-  <div>{member.phone}</div>
-  <div>Branch:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}</span></div>
-  <div style={{ marginTop: '4px' }}>Seen: {formatLastSeen(member.lastSeen)}</div>
-  </div>
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
-  <span style={{
-   backgroundColor: member.isActive ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
-   color: member.isActive ? 'var(--color-success)' : 'var(--color-danger)',
-   padding: '4px 10px',
-   borderRadius: '12px',
-   fontSize: '12px',
-   fontWeight: 'bold'
-   }}>
-   {member.isActive ? 'Active' : 'Inactive'}
-  </span>
-  <div style={{ display: 'flex', gap: '10px' }}>
-  <button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px' }}> Edit</button>
-  <button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
-  </div>
-  </div>
-  </div>
-  )}
-  </div>
-  </div>
-  </>
 )}
+  </React.Fragment>
+))}
+</tbody>
+</table>
+</div>
+
+<div className="mobile-only-staff" style={{ display: 'none' }}>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+ {staff.map((member) =>
+<div key={member._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+<span style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</span>
+<span className="admin-menu-badge" style={{ textTransform: 'capitalize', background: 'rgba(255, 107, 8, 0.15)', color: '#FF6B08', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>{member.staffRole}</span>
+</div>
+<div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
+<div>🆔 ID:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</span></div>
+<div>{member.email || 'No Email'}</div>
+<div>{member.phone}</div>
+<div>Branch:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}</span></div>
+<div>Daily Wage:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> ₹{member.dailyRate || 0}</span></div>
+<div>Required Hours:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.requiredHours || 8} hrs</span></div>
+<div>Current Week Salary:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}> ₹{member.currentWeekSalary || 0}</span></div>
+<div>Orders Today: <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.ordersHandledToday || 0}</span></div>
+<div>Joined: {new Date(member.createdAt).toLocaleDateString()}</div>
+<div style={{ marginTop: '4px' }}>Login: {formatLastSeen(member.lastSeen || member.lastLogin)}</div>
+
+{/* Mobile Weekly Breakdown */}
+<div style={{ 
+  marginTop: '12px', 
+  padding: '10px', 
+  background: 'rgba(0,0,0,0.15)', 
+  borderRadius: '8px',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(4, 1fr)',
+  gap: '8px',
+  fontSize: '11px',
+  border: '1px solid var(--color-border)'
+}}>
+  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
+    <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <span style={{ color: 'var(--color-text-secondary)', fontSize: '9px', fontWeight: 600 }}>{day.slice(0, 3)}</span>
+      <span style={{ fontWeight: 'bold', color: 'var(--color-text-primary)' }}>₹{member.weeklyBreakdown?.[day] || 0}</span>
+    </div>
+  ))}
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gridColumn: 'span 1', background: 'rgba(143,168,155,0.1)', borderRadius: '4px' }}>
+    <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', fontSize: '9px' }}>Total</span>
+    <span style={{ fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{member.currentWeekSalary || 0}</span>
+  </div>
+</div>
+
+</div>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
+<span style={{
+ backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+ color: member.isActive ? '#2ecc71' : '#e74c3c',
+ padding: '4px 10px',
+ borderRadius: '12px',
+ fontSize: '12px',
+ fontWeight: 'bold'
+ }}>
+ {member.isActive ? 'Active' : 'Inactive'}
+</span>
+<div style={{ display: 'flex', gap: '10px' }}>
+<button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px' }}> Edit</button>
+<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
+</div>
+</div>
+</div>
+)}
+</div>
+</div>
 </>
  }
 </div>
@@ -2806,10 +2814,10 @@ const OwnerDashboard = () =>{
  No check-in logs recorded today yet.
 </div>:
 
-<div style={{ overflow: 'auto', maxHeight: '450px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '800px' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700, backgroundColor: 'var(--bg-card)' }}>
+<div style={{ overflowX: 'auto' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<thead>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
 <th style={{ padding: '10px' }}>Staff Name</th>
 <th style={{ padding: '10px' }}>Branch</th>
 <th style={{ padding: '10px' }}>Check In</th>
@@ -2905,10 +2913,9 @@ const OwnerDashboard = () =>{
  {attendanceReports.branchReports && attendanceReports.branchReports.length >0 &&
 <div style={{ marginTop: '10px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Branch Attendance Performance Breakdown</h4>
-<div style={{ overflow: 'auto', maxHeight: '300px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '500px' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-<tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', backgroundColor: 'var(--bg-card)' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<thead>
+<tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
 <th style={{ padding: '8px' }}>Branch Name</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Total Check-ins</th>
 <th style={{ padding: '8px', textAlign: 'right' }}>Total Hours Logged</th>
@@ -2925,15 +2932,14 @@ const OwnerDashboard = () =>{
 </tbody>
 </table>
 </div>
-</div>
  }
 
  {/* Filtered records detail log */}
 <div style={{ marginTop: '10px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Detailed History Records ({attendanceReports.records.length})</h4>
-<div style={{ maxHeight: '300px', overflow: 'auto', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '700px' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
+<div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
 <th style={{ padding: '10px' }}>Date</th>
 <th style={{ padding: '10px' }}>Staff Name</th>
@@ -2998,8 +3004,15 @@ const OwnerDashboard = () =>{
 <select
  value={reportsFilterRange}
  onChange={(e) =>setReportsFilterRange(e.target.value)}
- className="form-input"
- style={{ margin: 0 }}>
+ style={{
+ backgroundColor: 'rgba(0,0,0,0.2)',
+ border: '1px solid var(--color-border)',
+ borderRadius: '8px',
+ padding: '8px 12px',
+ color: 'var(--color-text-primary)',
+ fontSize: '0.85rem',
+ outline: 'none'
+ }}>
  
 <option value="today">Today</option>
 <option value="this_week">This Week (Last 7 Days)</option>
@@ -3013,8 +3026,15 @@ const OwnerDashboard = () =>{
 <select
  value={reportsFilterStaff}
  onChange={(e) =>setReportsFilterStaff(e.target.value)}
- className="form-input"
- style={{ margin: 0 }}>
+ style={{
+ backgroundColor: 'rgba(0,0,0,0.2)',
+ border: '1px solid var(--color-border)',
+ borderRadius: '8px',
+ padding: '8px 12px',
+ color: 'var(--color-text-primary)',
+ fontSize: '0.85rem',
+ outline: 'none'
+ }}>
  
 <option value="">All Staff</option>
  {staff.map((member) =>
@@ -3031,8 +3051,15 @@ const OwnerDashboard = () =>{
 <select
  value={reportsFilterBranch}
  onChange={(e) =>setReportsFilterBranch(e.target.value)}
- className="form-input"
- style={{ margin: 0 }}>
+ style={{
+ backgroundColor: 'rgba(0,0,0,0.2)',
+ border: '1px solid var(--color-border)',
+ borderRadius: '8px',
+ padding: '8px 12px',
+ color: 'var(--color-text-primary)',
+ fontSize: '0.85rem',
+ outline: 'none'
+ }}>
  
 <option value="">All Branches</option>
  {branches.map((b) =>
@@ -3093,7 +3120,7 @@ const OwnerDashboard = () =>{
 
 <div style={{
  display: 'grid',
- gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
+ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
  gap: '20px'
  }}>
  {workReports.map((report) =>
@@ -3101,27 +3128,24 @@ const OwnerDashboard = () =>{
  key={report._id}
  onClick={() =>setSelectedReport(report)}
  style={{
- background: 'var(--bg-card)',
+ background: 'rgba(0, 0, 0,0.01)',
  border: '1px solid var(--color-border)',
  borderRadius: '12px',
  padding: '16px',
  cursor: 'pointer',
- transition: 'transform 0.15s, border-color 0.15s, box-shadow 0.15s',
+ transition: 'transform 0.15s, border-color 0.15s',
  display: 'flex',
  flexDirection: 'column',
  justifyContent: 'space-between',
- minHeight: '220px',
- boxShadow: 'var(--shadow-sm)'
+ minHeight: '220px'
  }}
  onMouseEnter={(e) =>{
  e.currentTarget.style.borderColor = 'var(--color-primary)';
  e.currentTarget.style.transform = 'translateY(-2px)';
- e.currentTarget.style.boxShadow = 'var(--shadow-md)';
  }}
  onMouseLeave={(e) =>{
  e.currentTarget.style.borderColor = 'var(--color-border)';
  e.currentTarget.style.transform = 'translateY(0)';
- e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
  }}>
  
 <div>
@@ -3190,6 +3214,246 @@ const OwnerDashboard = () =>{
 </div>
 </div>
  }
+
+ {staffSubTab === 'salary' && (
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+    {/* Salary Dashboard Header / Filter bar */}
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+        <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff Salary Calculator</h4>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input 
+            type="text" 
+            placeholder="Search Employee..." 
+            value={salarySearchQuery} 
+            onChange={e => setSalarySearchQuery(e.target.value)} 
+            className="form-input" 
+            style={{ width: '200px', height: '40px', padding: '0 12px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+          />
+          <select 
+            value={salaryRoleFilter} 
+            onChange={e => setSalaryRoleFilter(e.target.value)} 
+            className="form-input" 
+            style={{ width: '150px', height: '40px', padding: '0 10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+          >
+            <option value="">All Roles</option>
+            <option value="chef">Chef</option>
+            <option value="waiter">Waiter</option>
+            <option value="barista">Barista</option>
+            <option value="cashier">Cashier</option>
+            <option value="manager">Manager</option>
+            <option value="staff">Staff</option>
+          </select>
+          <button 
+            onClick={() => { fetchStaffList(); alert('Salaries refreshed successfully.'); }} 
+            className="btn btn-primary" 
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px', height: '40px', width: 'auto' }}
+          >
+            Refresh Salary
+          </button>
+        </div>
+      </div>
+
+      {staffLoading && staff.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading salary calculations...</p>
+        </div>
+      ) : (
+        <>
+          {/* Desktop Table View */}
+          <div className="desktop-tablet-staff" style={{ display: 'none', width: '100%', overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                  <th style={{ padding: '12px 10px' }}>Name</th>
+                  <th style={{ padding: '12px 10px' }}>Role</th>
+                  <th style={{ padding: '12px 10px' }}>Daily Wage</th>
+                  <th style={{ padding: '12px 10px' }}>Required Hours</th>
+                  <th style={{ padding: '12px 10px' }}>Worked This Week</th>
+                  <th style={{ padding: '12px 10px' }}>Working Days</th>
+                  <th style={{ padding: '12px 10px' }}>Weekly Salary</th>
+                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {staff
+                  .filter(s => {
+                    const matchesSearch = s.name.toLowerCase().includes(salarySearchQuery.toLowerCase());
+                    const matchesRole = !salaryRoleFilter || (s.staffRole || s.role || '').toLowerCase() === salaryRoleFilter.toLowerCase();
+                    return matchesSearch && matchesRole;
+                  })
+                  .map(member => (
+                    <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
+                      <td style={{ padding: '12px 10px' }}>
+                        <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole || member.role}</span>
+                      </td>
+                      <td style={{ padding: '12px 10px' }}>
+                        {editingWageId === member._id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <input 
+                              type="number" 
+                              value={tempWage} 
+                              onChange={e => setTempWage(Number(e.target.value))} 
+                              style={{ width: '70px', padding: '6px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text-primary)', fontSize: '13px' }} 
+                              min={0}
+                            />
+                            <button onClick={() => handleSaveWage(member._id, tempWage)} style={{ background: 'var(--color-primary)', border: 'none', color: 'white', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Save</button>
+                            <button onClick={() => setEditingWageId(null)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Cancel</button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}</span>
+                            <button onClick={() => { setEditingWageId(member._id); setTempWage(member.dailyRate || 0); }} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-primary)', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Edit</button>
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)' }}>{member.requiredHours || 8} hrs</td>
+                      <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{member.actualHoursWorked || 0} hrs</td>
+                      <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)' }}>{member.workingDays || 0} days</td>
+                      <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{member.currentWeekSalary || 0}</td>
+                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                        <button 
+                          onClick={() => { setSelectedSalaryStaff(member); setShowSalaryDetailModal(true); }} 
+                          className="btn btn-secondary" 
+                          style={{ padding: '5px 10px', fontSize: '12px', width: 'auto' }}
+                        >
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile View */}
+          <div className="mobile-only-staff" style={{ display: 'none' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              {staff
+                .filter(s => {
+                  const matchesSearch = s.name.toLowerCase().includes(salarySearchQuery.toLowerCase());
+                  const matchesRole = !salaryRoleFilter || (s.staffRole || s.role || '').toLowerCase() === salaryRoleFilter.toLowerCase();
+                  return matchesSearch && matchesRole;
+                })
+                .map(member => (
+                  <div key={member._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <span style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</span>
+                      <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole || member.role}</span>
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
+                      <div>Daily Wage:
+                        {editingWageId === member._id ? (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+                            <input 
+                              type="number" 
+                              value={tempWage} 
+                              onChange={e => setTempWage(Number(e.target.value))} 
+                              style={{ width: '60px', padding: '4px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '4px', color: 'var(--color-text-primary)' }} 
+                              min={0}
+                            />
+                            <button onClick={() => handleSaveWage(member._id, tempWage)} style={{ background: 'var(--color-primary)', border: 'none', color: 'white', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px' }}>Save</button>
+                            <button onClick={() => setEditingWageId(null)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px' }}>Cancel</button>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, marginLeft: '4px' }}>
+                            ₹{member.dailyRate || 0}
+                            <button onClick={() => { setEditingWageId(member._id); setTempWage(member.dailyRate || 0); }} style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '11px', textDecoration: 'underline', marginLeft: '6px' }}>Edit</button>
+                          </span>
+                        )}
+                      </div>
+                      <div>Required Hours:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.requiredHours || 8} hrs</span></div>
+                      <div>Worked This Week:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.actualHoursWorked || 0} hrs</span></div>
+                      <div>Working Days:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.workingDays || 0} days</span></div>
+                      <div>Weekly Salary:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}> ₹{member.currentWeekSalary || 0}</span></div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
+                      <button 
+                        onClick={() => { setSelectedSalaryStaff(member); setShowSalaryDetailModal(true); }} 
+                        className="btn btn-secondary touch-btn" 
+                        style={{ padding: '6px 12px', fontSize: '12px', minHeight: '36px' }}
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+
+    {/* Employee Detail View Modal */}
+    {showSalaryDetailModal && selectedSalaryStaff && (
+      <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+        <div className="modal-container" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '20px', padding: '28px 24px', width: '100%', maxWidth: '600px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+          <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Employee Salary Details</h3>
+              <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.85rem' }}>{selectedSalaryStaff.name} ({selectedSalaryStaff.staffRole || selectedSalaryStaff.role})</p>
+            </div>
+            <button onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }} className="modal-close" style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
+          </div>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,0.1)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
+              <div>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Daily Wage:</span>
+                <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>₹{selectedSalaryStaff.dailyRate || 0}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Required Hours:</span>
+                <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{selectedSalaryStaff.requiredHours || 8} hrs</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Weekly Total:</span>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>₹{selectedSalaryStaff.currentWeekSalary || 0}</div>
+              </div>
+            </div>
+            <div>
+              <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attendance Log & Daily Salary</h4>
+              {(!selectedSalaryStaff.attendances || selectedSalaryStaff.attendances.length === 0) ? (
+                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', background: 'rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+                  No attendance logs found for this week.
+                </div>
+              ) : (
+                <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                        <th style={{ padding: '10px' }}>Date</th>
+                        <th style={{ padding: '10px' }}>Check In</th>
+                        <th style={{ padding: '10px' }}>Check Out</th>
+                        <th style={{ padding: '10px' }}>Worked</th>
+                        <th style={{ padding: '10px' }}>Salary</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedSalaryStaff.attendances.map((att, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{att.date}</td>
+                          <td style={{ padding: '10px', color: 'var(--color-text-secondary)' }}>{new Date(att.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                          <td style={{ padding: '10px', color: 'var(--color-text-secondary)' }}>{att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                          <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{att.workingHours || 0} hrs</td>
+                          <td style={{ padding: '10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>₹{att.dailySalary || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="modal-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }} className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }}>Close</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+ )}
 </div>
  }
 
@@ -3321,10 +3585,10 @@ const OwnerDashboard = () =>{
 </div>
 
  {/* Desktop: scrollable table */}
-<div className="inv-desktop-table" style={{ overflow: 'auto', maxHeight: '550px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '950px' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--bg-card)' }}>
+<div className="inv-desktop-table">
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<thead>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
 <th style={{ padding: '8px' }}>Ingredient Name</th>
 <th style={{ padding: '8px' }}>Category</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
@@ -3380,10 +3644,10 @@ const OwnerDashboard = () =>{
 
  {/* SUBTAB 2: Movement Logs */}
  {inventorySubTab === 'movements' &&
-<div style={{ overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '850px' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--bg-card)' }}>
+<div style={{ overflowX: 'auto' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<thead>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
 <th style={{ padding: '8px' }}>Timestamp</th>
 <th style={{ padding: '8px' }}>Ingredient</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Type</th>
@@ -3450,11 +3714,10 @@ const OwnerDashboard = () =>{
 </div>
 </div>
 
-<h4 style={{ color: 'var(--color-text-primary)', margin: '10px 0 10px 0' }}>Detailed Wastage & Spoilage Log</h4>
-<div style={{ overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', minWidth: '750px' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--bg-card)' }}>
+<h4 style={{ color: 'var(--color-text-primary)', margin: '10px 0 0 0' }}>Detailed Wastage & Spoilage Log</h4>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<thead>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
 <th style={{ padding: '8px' }}>Date</th>
 <th style={{ padding: '8px' }}>Ingredient</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Type</th>
@@ -3483,20 +3746,19 @@ const OwnerDashboard = () =>{
 </tbody>
 </table>
 </div>
-</div>
  }
 
  {/* SUBTAB 4: Suppliers */}
  {inventorySubTab === 'suppliers' &&
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '16px' }}>
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
  {Array.from(new Set(inventoryList.map((item) =>item.supplier || 'Unassigned Supplier'))).map((sup) =>{
  const supItems = inventoryList.filter((item) =>(item.supplier || 'Unassigned Supplier') === sup);
  const totalSupplierValue = supItems.reduce((sum, i) =>sum + (i.quantity || i.stock) * (i.costPrice || i.cost), 0);
  return (
-<div key={sup} style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
+<div key={sup} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '12px' }}>
 <strong style={{ color: 'var(--color-text-primary)', fontSize: '1rem' }}>{sup}</strong>
-<span style={{ fontSize: '11px', background: '#6F4E37', color: 'var(--color-text-primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+<span style={{ fontSize: '11px', background: 'var(--color-primary)', color: '#ffffff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
  {supItems.length} Products
 </span>
 </div>
@@ -3526,7 +3788,7 @@ const OwnerDashboard = () =>{
  {/* TAB 5: ORDERS MONITOR (READ-ONLY) */}
  {activeTab === 'orders' &&
 <div className="fade-in">
-<div className="orders-monitor-wrapper" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px' }}>
+<div className="orders-monitor-wrapper" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', overflowX: 'auto' }}>
 
 {/* Filter Controls for Orders */}
 <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', background: 'rgba(0,0,0,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
@@ -3571,240 +3833,123 @@ const OwnerDashboard = () =>{
 </div>
 
 <div className="orders-monitor-grid">
-  {(() => {
-    const filteredOrders = orders.filter((order) => {
-      if (!order.createdAt) return true;
-      const localDate = new Date(order.createdAt);
-      const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
-      
-      const matchesDate = orderDateStr === orderDateFilter;
-      if (!matchesDate) return false;
-      
-      if (!orderSearchQuery) return true;
-      
-      const q = orderSearchQuery.toLowerCase();
-      return (
-        (order._id && order._id.toLowerCase().includes(q)) || 
-        (order.tableNumber && String(order.tableNumber).toLowerCase().includes(q)) || 
-        (order.status && order.status.toLowerCase().includes(q)) ||
-        (order.items && order.items.some(i => i.name && i.name.toLowerCase().includes(q)))
-      );
-    });
+ {orders
+ .filter((order) => {
+ if (!order.createdAt) return true;
+ const localDate = new Date(order.createdAt);
+ const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+ 
+ const matchesDate = orderDateStr === orderDateFilter;
+ if (!matchesDate) return false;
+ 
+ if (!orderSearchQuery) return true;
+ 
+ const q = orderSearchQuery.toLowerCase();
+ return (
+ (order._id && order._id.toLowerCase().includes(q)) || 
+ (order.tableNumber && String(order.tableNumber).toLowerCase().includes(q)) || 
+ (order.status && order.status.toLowerCase().includes(q)) ||
+ (order.items && order.items.some(i => i.name && i.name.toLowerCase().includes(q)))
+ );
+ })
+ .map((order) =>
+<div key={order._id} style={{
+ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)',
+ borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
+ }}>
+ {/* Header: Order ID + Status */}
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+<span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>
+ #{order._id.substring(order._id.length - 8).toUpperCase()}
+</span>
+<span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>· Table {order.tableNumber}</span>
+</div>
+<span style={{
+ color: order.status === 'Placed' ? '#3498db' : order.status === 'Preparing' ? '#ff9800' : order.status === 'Ready' ? '#2ecc71' : order.status === 'Delivered' ? '#9b59b6' : order.status === 'Completed' ? '#27AE60' : '#7f8c8d',
+ background: order.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
+ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800
+ }}>
+ {order.status}
+</span>
+</div>
 
-    const groupedOrders = {};
-    filteredOrders.forEach((order) => {
-      const table = order.tableNumber || 'Takeaway';
-      if (!groupedOrders[table]) {
-        groupedOrders[table] = [];
-      }
-      groupedOrders[table].push(order);
-    });
+      {/* Items List */}
+      <div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {order.items.map((i, idx) => {
+          const displayImage = i.image ? getAssetUrl(i.image) : '/images/default-food.png';
+          return (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+              <img
+                src={displayImage}
+                alt={i.name}
+                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+                onError={(e) => { e.target.src = '/images/default-food.png'; }}
+              />
+              <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+                {i.quantity}x
+              </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+                {i.name}
+              </span>
+            </div>
+          );
+        })}
+      </div>
 
-    const sortedTableKeys = Object.keys(groupedOrders).sort((a, b) => {
-      if (a === 'Takeaway') return 1;
-      if (b === 'Takeaway') return -1;
-      const numA = parseInt(a.replace(/\D/g, ''), 10);
-      const numB = parseInt(b.replace(/\D/g, ''), 10);
-      if (!isNaN(numA) && !isNaN(numB)) {
-        return numA - numB;
-      }
-      return a.localeCompare(b);
-    });
-
-    if (sortedTableKeys.length === 0) {
-      return (
-        <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px' }}>
-          No active orders at the moment.
+      {/* Workflow Audit Trail */}
+      <div style={{ marginTop: '8px', fontSize: '11px', background: 'rgba(0,0,0,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>Workflow History</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Placed:</span>
+          <span>{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}</span>
         </div>
-      );
-    }
-
-    return sortedTableKeys.map((tableNum) => {
-      const tableOrders = groupedOrders[tableNum];
-      const activeCount = tableOrders.filter(o => ['Placed', 'Preparing', 'Ready'].includes(o.status)).length;
-      const revenue = tableOrders.reduce((sum, o) => sum + o.totalAmount, 0);
-      const totalOrders = tableOrders.length;
-      const avgBill = totalOrders > 0 ? revenue / totalOrders : 0;
-      
-      const itemQuantities = {};
-      tableOrders.forEach(o => {
-        o.items.forEach(item => {
-          itemQuantities[item.name] = (itemQuantities[item.name] || 0) + item.quantity;
-        });
-      });
-      const topItems = Object.entries(itemQuantities)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3);
-
-      const lastOrder = tableOrders.reduce((latest, o) => !latest || new Date(o.createdAt) > new Date(latest.createdAt) ? o : latest, null);
-      const isCollapsed = ownerCollapsedTables[tableNum] !== false; // Default to collapsed (true)
-
-      const toggleCollapse = () => {
-        setOwnerCollapsedTables(prev => ({
-          ...prev,
-          [tableNum]: !isCollapsed
-        }));
-      };
-
-      return (
-        <div 
-          key={tableNum} 
-          style={{
-            gridColumn: '1 / -1',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--color-border)',
-            borderRadius: '16px',
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            transition: 'all 0.3s ease'
-          }}
-        >
-          {/* Header Summary */}
-          <div 
-            onClick={toggleCollapse}
-            style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              cursor: 'pointer',
-              flexWrap: 'wrap',
-              gap: '12px',
-              userSelect: 'none'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--color-text-primary)' }}>
-                Table {tableNum}
-              </span>
-              <span style={{
-                fontSize: '12px',
-                fontWeight: 'bold',
-                background: activeCount > 0 ? 'rgba(255, 107, 8, 0.15)' : 'rgba(127, 140, 141, 0.15)',
-                color: activeCount > 0 ? 'var(--color-primary)' : '#7f8c8d',
-                padding: '2px 8px',
-                borderRadius: '6px'
-              }}>
-                {activeCount} Active Orders
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-                Last Order: <strong>{lastOrder ? new Date(lastOrder.createdAt).toLocaleTimeString() : 'N/A'}</strong>
-              </span>
-              <span style={{ fontSize: '1.2rem', color: 'var(--color-text-secondary)' }}>
-                {isCollapsed ? '▼' : '▲'}
-              </span>
-            </div>
+        {order.preparingByName && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Preparing by {order.preparingByName}:</span>
+            <span>{order.preparingAt ? new Date(order.preparingAt).toLocaleString() : 'N/A'}</span>
           </div>
-
-          {/* Metrics Row */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-            gap: '16px',
-            background: 'rgba(0,0,0,0.02)',
-            padding: '16px',
-            borderRadius: '12px',
-            border: '1px solid var(--color-border)'
-          }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Orders</span>
-              <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--color-text-primary)' }}>{totalOrders}</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Total Revenue</span>
-              <span style={{ fontSize: '18px', fontWeight: '800', color: '#2ecc71' }}>₹{revenue.toFixed(2)}</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Average Bill</span>
-              <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--color-primary)' }}>₹{avgBill.toFixed(2)}</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', gridColumn: 'span 2' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Top Ordered Items</span>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
-                {topItems.length > 0 ? topItems.map(([name, qty], idx) => (
-                  <span key={idx} style={{
-                    background: 'rgba(0,0,0,0.1)',
-                    padding: '3px 8px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    color: 'var(--color-text-secondary)'
-                  }}>
-                    {name} <strong style={{ color: 'var(--color-primary)' }}>x{qty}</strong>
-                  </span>
-                )) : <span style={{ fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-secondary)' }}>No items ordered</span>}
-              </div>
-            </div>
+        )}
+        {order.readyByName && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Ready by {order.readyByName}:</span>
+            <span>{order.readyAt ? new Date(order.readyAt).toLocaleString() : 'N/A'}</span>
           </div>
+        )}
+        {order.servedByName && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Served by {order.servedByName}:</span>
+            <span>{order.servedAt ? new Date(order.servedAt).toLocaleString() : 'N/A'}</span>
+          </div>
+        )}
+        {order.paidByName && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Paid by {order.paidByName}:</span>
+            <span>{order.paidAt ? new Date(order.paidAt).toLocaleString() : 'N/A'}</span>
+          </div>
+        )}
+      </div>
 
-          {/* Expanded Orders List */}
-          {!isCollapsed && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: '16px',
-              borderTop: '1px solid var(--color-border)',
-              paddingTop: '16px',
-              marginTop: '8px'
-            }}>
-              {tableOrders.map((order) => (
-                <div key={order._id} style={{
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px'
-                }}>
-                  {/* Header: Order ID + Status */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '14px' }}>
-                      #{order._id.substring(order._id.length - 8).toUpperCase()}
-                    </span>
-                    <span style={{
-                      color: order.status === 'Placed' ? '#3498db' : order.status === 'Preparing' ? '#ff9800' : order.status === 'Ready' ? '#2ecc71' : order.status === 'Delivered' ? '#9b59b6' : order.status === 'Completed' ? '#27AE60' : '#7f8c8d',
-                      background: order.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
-                      padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800
-                    }}>
-                      {order.status}
-                    </span>
-                  </div>
-
-                  {/* Items List */}
-                  <div style={{ background: 'rgba(0,0,0,0.03)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '100px', overflowY: 'auto' }}>
-                    {order.items.map((i, idx) => (
-                      <div key={idx} style={{ display: 'flex', gap: '6px', marginBottom: idx !== order.items.length - 1 ? '4px' : 0 }}>
-                        <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{i.quantity}x</span>
-                        <span>{i.name}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Footer: Amount + Payment Status */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>Total Amount</span>
-                      <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>₹{order.totalAmount.toFixed(2)}</span>
-                    </div>
-                    <span style={{
-                      color: order.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
-                      fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
-                    }}>
-                      {order.paymentStatus === 'Paid' ? ' Paid' : ' Pending'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    });
-  })()}
+ {/* Footer: Amount + Payment Status */}
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>
+<div style={{ display: 'flex', flexDirection: 'column' }}>
+<span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>Total Amount</span>
+<span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '16px' }}>₹{order.totalAmount.toFixed(2)}</span>
+</div>
+<span style={{
+ color: order.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
+ fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
+ }}>
+ {order.paymentStatus === 'Paid' ? ' Paid' : ' Pending'}
+</span>
+</div>
+</div>
+)}
+ {orders.length === 0 &&
+<div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px' }}>
+ No active orders at the moment.
+</div>
+ }
 </div>
 </div>
 </div>
@@ -3815,34 +3960,13 @@ const OwnerDashboard = () =>{
 <div className="fade-in">
  {/* Payment Integration settings */}
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', marginBottom: '30px' }}>
-<h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 20px 0', fontSize: '1.2rem', fontWeight: 700 }}> Setup Payment Gateways</h3>
+<h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 20px 0', fontSize: '1.2rem', fontWeight: 700 }}>Tax & Charges Configuration</h3>
  {settingsMsg &&
 <div style={{ background: 'rgba(39,174,96,0.15)', borderLeft: '4px solid #27AE60', color: '#27AE60', padding: '12px', marginBottom: '20px', borderRadius: '4px' }}>
  {settingsMsg}
 </div>
  }
 <form onSubmit={handleSaveSettings}>
-<div className="form-row" style={{ marginBottom: '20px' }}>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="settings-razorpay-key-id" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Razorpay Key ID</label>
-<input type="text" id="settings-razorpay-key-id" name="settings-razorpay-key-id" className="form-input" value={razorpayKeyId} onChange={(e) =>setRazorpayKeyId(e.target.value)} placeholder="rzp_test_..." />
-</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="settings-razorpay-secret" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Razorpay Secret Key</label>
-<input type="password" id="settings-razorpay-secret" name="settings-razorpay-secret" className="form-input" value={razorpaySecret} onChange={(e) =>setRazorpaySecret(e.target.value)} placeholder="••••••••••••••••••••" />
-</div>
-</div>
-
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.1)', padding: '15px', borderRadius: '8px', border: '1px dashed #5C4331', marginBottom: '20px' }}>
-<div>
-<span style={{ fontWeight: 600, fontSize: '0.85rem', color: isRazorpayVerified ? '#2ECC71' : '#E6D5C3' }}>
- Status: {isRazorpayVerified ? 'Keys Verified & Configured ' : 'Verification Required'}
-</span>
-</div>
-<button type="button" onClick={testRazorpayConnection} className="btn btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '12px' }} disabled={verifyingKeys}>
- {verifyingKeys ? 'Verifying...' : 'Test Razorpay Connection'}
-</button>
-</div>
 
 <div className="form-row" style={{ marginBottom: '20px' }}>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -3850,13 +3974,60 @@ const OwnerDashboard = () =>{
 <input type="number" id="settings-tax-rate" name="settings-tax-rate" className="form-input" value={taxRate} onChange={(e) =>setTaxRate(parseFloat(e.target.value))} />
 </div>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="settings-service-charge" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Service Charge (%)</label>
+<label htmlFor="settings-service-charge" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Platform Charge (Flat ₹)</label>
 <input type="number" id="settings-service-charge" name="settings-service-charge" className="form-input" value={serviceCharge} onChange={(e) =>setServiceCharge(parseFloat(e.target.value))} />
 </div>
 </div>
 
+<div style={{ borderTop: '1px solid var(--color-border)', marginTop: '20px', paddingTop: '20px', marginBottom: '20px' }}>
+  <h4 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1rem', fontWeight: 700 }}>Payment Methods & Counter Billing Settings</h4>
+  
+  <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-primary)', cursor: 'pointer' }}>
+      <input type="checkbox" checked={acceptCash} onChange={(e) => setAcceptCash(e.target.checked)} />
+      Accept Cash at Counter
+    </label>
+    
+    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-primary)', cursor: 'pointer' }}>
+      <input type="checkbox" checked={enableUpi} onChange={(e) => setEnableUpi(e.target.checked)} />
+      Accept UPI (QR / Address)
+    </label>
+  </div>
+
+  {enableUpi && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+      <div className="form-row">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label htmlFor="settings-upi-id" className="form-label" style={{ color: 'var(--color-text-primary)' }}>UPI ID (e.g. UPI Address)</label>
+          <input type="text" id="settings-upi-id" className="form-input" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="e.g. 9346540919@ybl" />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label htmlFor="settings-bank-holder" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Account Holder Name</label>
+          <input type="text" id="settings-bank-holder" className="form-input" value={bankHolderName} onChange={(e) => setBankHolderName(e.target.value)} placeholder="e.g. Cafe Owner" />
+        </div>
+      </div>
+      
+      <div className="form-row">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label htmlFor="settings-bank-acc" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Bank Account Number</label>
+          <input type="text" id="settings-bank-acc" className="form-input" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="e.g. 1234567890" />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <label htmlFor="settings-bank-ifsc" className="form-label" style={{ color: 'var(--color-text-primary)' }}>IFSC Code</label>
+          <input type="text" id="settings-bank-ifsc" className="form-input" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} placeholder="e.g. SBIN0001234" />
+        </div>
+      </div>
+    </div>
+  )}
+
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
+    <label htmlFor="settings-instructions" className="form-label" style={{ color: 'var(--color-text-primary)' }}>Custom Payment Instructions</label>
+    <textarea id="settings-instructions" className="form-input" value={paymentInstructions} onChange={(e) => setPaymentInstructions(e.target.value)} placeholder="e.g. Please show the payment confirmation screen to the server." style={{ minHeight: '80px', resize: 'vertical' }} />
+  </div>
+</div>
+
 <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>
- Save Configuration
+  Save Configuration
 </button>
 </form>
 </div>
@@ -3905,13 +4076,13 @@ const OwnerDashboard = () =>{
 </h4>
 <div style={{ background: 'white', padding: '10px', borderRadius: '8px', marginBottom: '12px' }}>
 <img
- src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`)}`}
+ src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`)}`}
  alt={`Table ${selectedQrTable} QR Code`}
  style={{ width: '150px', height: '150px', display: 'block' }} />
  
 </div>
 <div style={{ display: 'flex', gap: '10px' }}>
-<a href={`/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', textDecoration: 'none', width: 'auto' }}>
+<a href={`/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', textDecoration: 'none', width: 'auto' }}>
  Open Menu Tab
 </a>
 <button onClick={() =>handleCopyUrl(selectedQrTable)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', width: 'auto' }}>
@@ -3946,7 +4117,7 @@ const OwnerDashboard = () =>{
  No branches configured yet. Add one to start tracking location-based attendance.
 </div>:
 
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '20px' }}>
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
  {branches.map((b) =>
 <div key={b._id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -3967,6 +4138,7 @@ const OwnerDashboard = () =>{
 <div><strong>Address:</strong>{b.address}</div>
 <div><strong>Coordinates:</strong>{b.latitude}, {b.longitude}</div>
 <div><strong>Geo-Fence:</strong>{b.allowedRadius} meters radius</div>
+<div><strong>Unified Staff Mode:</strong> {b.unifiedStaffMode ? 'Enabled' : 'Disabled'}</div>
 </div>
 <div style={{ display: 'flex', gap: '10px', marginTop: '10px', borderTop: '1px solid var(--color-border)', paddingTop: '10px' }}>
 <button onClick={() =>{setEditingBranch({ ...b });setShowEditBranchModal(true);}} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', flex: 1, minHeight: '34px' }}>
@@ -4004,14 +4176,30 @@ const OwnerDashboard = () =>{
 <label htmlFor="add-item-price" className="form-label">Price (₹) *</label>
 <input type="number" id="add-item-price" name="add-item-price" required step="0.01" min="0.01" value={newItem.price} onChange={(e) =>setNewItem({ ...newItem, price: e.target.value })} className="form-input" />
 </div>
+{newItem.isCombo && (
+<div className="form-group">
+<label htmlFor="add-item-original-price" className="form-label">Orig. Price (₹)</label>
+<input type="number" id="add-item-original-price" name="add-item-original-price" step="0.01" min="0.01" placeholder="Optional" value={newItem.originalPrice || ''} onChange={(e) =>setNewItem({ ...newItem, originalPrice: e.target.value })} className="form-input" />
+</div>
+)}
 <div className="form-group">
 <label htmlFor="add-item-category" className="form-label">Category *</label>
-<select id="add-item-category" name="add-item-category" value={newItem.category} onChange={(e) =>setNewItem({ ...newItem, category: e.target.value })} className="form-input">
- {(categories.length >0 ? categories.map((c) =>c.name) : presetCategories).map((cat) =>
+<select id="add-item-category" name="add-item-category" value={newItem.category} onChange={(e) =>setNewItem({ ...newItem, category: e.target.value })} className="form-input" disabled={newItem.isCombo}>
+ {Array.from(new Set([...(categories.length >0 ? categories.map((c) =>c.name) : presetCategories), 'Combos'])).map((cat) =>
 <option key={cat} value={cat}>{cat}</option>
 )}
 </select>
 </div>
+</div>
+<div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
+<label className="switch">
+  <input type="checkbox" checked={newItem.isCombo || false} onChange={(e) => {
+    const isCombo = e.target.checked;
+    setNewItem({ ...newItem, isCombo, category: isCombo ? 'Combos' : newItem.category });
+  }} />
+  <span className="slider round"></span>
+</label>
+<span style={{ fontSize: '14px', fontWeight: 'bold' }}>Is this a Combo?</span>
 </div>
 <div className="form-group">
 <label htmlFor="add-item-description" className="form-label">Description *</label>
@@ -4132,14 +4320,30 @@ const OwnerDashboard = () =>{
 <label htmlFor="edit-item-price" className="form-label">Price (₹) *</label>
 <input type="number" id="edit-item-price" name="edit-item-price" required step="0.01" min="0.01" value={editingItem.price} onChange={(e) =>setEditingItem({ ...editingItem, price: e.target.value })} className="form-input" />
 </div>
+{editingItem.isCombo && (
+<div className="form-group">
+<label htmlFor="edit-item-original-price" className="form-label">Orig. Price (₹)</label>
+<input type="number" id="edit-item-original-price" name="edit-item-original-price" step="0.01" min="0.01" placeholder="Optional" value={editingItem.originalPrice || ''} onChange={(e) =>setEditingItem({ ...editingItem, originalPrice: e.target.value })} className="form-input" />
+</div>
+)}
 <div className="form-group">
 <label htmlFor="edit-item-category" className="form-label">Category *</label>
-<select id="edit-item-category" name="edit-item-category" value={editingItem.category} onChange={(e) =>setEditingItem({ ...editingItem, category: e.target.value })} className="form-input">
- {(categories.length >0 ? categories.map((c) =>c.name) : presetCategories).map((cat) =>
+<select id="edit-item-category" name="edit-item-category" value={editingItem.category} onChange={(e) =>setEditingItem({ ...editingItem, category: e.target.value })} className="form-input" disabled={editingItem.isCombo}>
+ {Array.from(new Set([...(categories.length >0 ? categories.map((c) =>c.name) : presetCategories), 'Combos'])).map((cat) =>
 <option key={cat} value={cat}>{cat}</option>
 )}
 </select>
 </div>
+</div>
+<div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
+<label className="switch">
+  <input type="checkbox" checked={editingItem.isCombo || false} onChange={(e) => {
+    const isCombo = e.target.checked;
+    setEditingItem({ ...editingItem, isCombo, category: isCombo ? 'Combos' : editingItem.category });
+  }} />
+  <span className="slider round"></span>
+</label>
+<span style={{ fontSize: '14px', fontWeight: 'bold' }}>Is this a Combo?</span>
 </div>
 <div className="form-group">
 <label htmlFor="edit-item-description" className="form-label">Description *</label>
@@ -4419,11 +4623,11 @@ const OwnerDashboard = () =>{
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="add-inv-stock" className="form-label">Initial Stock *</label>
-<input type="number" id="add-inv-stock" name="add-inv-stock" required value={newInventoryItem.stock} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, stock: Number(e.target.value), quantity: Number(e.target.value) })} className="form-input" />
+<input type="number" id="add-inv-stock" name="add-inv-stock" required value={newInventoryItem.stock ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, stock: e.target.value === '' ? '' : Number(e.target.value), quantity: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="add-inv-minstock" className="form-label">Safety Minimum *</label>
-<input type="number" id="add-inv-minstock" name="add-inv-minstock" required value={newInventoryItem.minStock} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, minStock: Number(e.target.value), reorderLevel: Number(e.target.value) })} className="form-input" />
+<input type="number" id="add-inv-minstock" name="add-inv-minstock" required value={newInventoryItem.minStock ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, minStock: e.target.value === '' ? '' : Number(e.target.value), reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
@@ -4433,13 +4637,13 @@ const OwnerDashboard = () =>{
 </div>
 <div className="form-group">
 <label htmlFor="add-inv-cost" className="form-label">Cost per Unit (₹) *</label>
-<input type="number" step="0.001" id="add-inv-cost" name="add-inv-cost" required value={newInventoryItem.cost} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, cost: Number(e.target.value), costPrice: Number(e.target.value) })} className="form-input" />
+<input type="number" step="0.001" id="add-inv-cost" name="add-inv-cost" required value={newInventoryItem.cost ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, cost: e.target.value === '' ? '' : Number(e.target.value), costPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="add-inv-sellingprice" className="form-label">Selling Price (₹) *</label>
-<input type="number" step="0.01" id="add-inv-sellingprice" name="add-inv-sellingprice" required value={newInventoryItem.sellingPrice} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, sellingPrice: Number(e.target.value) })} className="form-input" />
+<input type="number" step="0.01" id="add-inv-sellingprice" name="add-inv-sellingprice" required value={newInventoryItem.sellingPrice ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, sellingPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="add-inv-category" className="form-label">Category *</label>
@@ -4483,27 +4687,27 @@ const OwnerDashboard = () =>{
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="edit-inv-stock" className="form-label">Current Stock *</label>
-<input type="number" id="edit-inv-stock" name="edit-inv-stock" required value={editingInventoryItem.stock} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, stock: Number(e.target.value), quantity: Number(e.target.value) })} className="form-input" />
+<input type="number" id="edit-inv-stock" name="edit-inv-stock" required value={editingInventoryItem.quantity ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, quantity: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-minstock" className="form-label">Safety Minimum *</label>
-<input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.minStock} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, minStock: Number(e.target.value), reorderLevel: Number(e.target.value) })} className="form-input" />
+<input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.reorderLevel ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="edit-inv-unit" className="form-label">Unit of Measurement *</label>
-<input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
+<input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-cost" className="form-label">Cost per Unit (₹) *</label>
-<input type="number" step="0.001" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.cost} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, cost: Number(e.target.value), costPrice: Number(e.target.value) })} className="form-input" />
+<input type="number" step="0.001" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
 <div className="form-group">
 <label htmlFor="edit-inv-sellingprice" className="form-label">Selling Price (₹) *</label>
-<input type="number" step="0.01" id="edit-inv-sellingprice" name="edit-inv-sellingprice" required value={editingInventoryItem.sellingPrice || 0} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, sellingPrice: Number(e.target.value) })} className="form-input" />
+<input type="number" step="0.01" id="edit-inv-sellingprice" name="edit-inv-sellingprice" required value={editingInventoryItem.sellingPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, sellingPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-category" className="form-label">Category *</label>
@@ -4642,6 +4846,10 @@ const OwnerDashboard = () =>{
 )}
 </select>
 </div>
+<div className="form-group">
+<label className="form-label">Daily Wage (₹) *</label>
+<input type="number" min="0" required value={editingStaff.dailyRate || ''} onChange={(e) =>setEditingStaff({ ...editingStaff, dailyRate: Number(e.target.value) })} className="form-input" />
+</div>
 <div className="form-row">
 <div className="form-group">
 <label className="form-label">Staff Role *</label>
@@ -4738,13 +4946,45 @@ const OwnerDashboard = () =>{
 </div>
 </div>
 <div className="form-group">
-<label className="form-label">Allowed Geofence Radius *</label>
-<select value={newBranch.allowedRadius} onChange={(e) =>setNewBranch({ ...newBranch, allowedRadius: Number(e.target.value) })} className="form-input" required>
-<option value={20}>20 meters</option>
-<option value={30}>30 meters (Default)</option>
-<option value={50}>50 meters</option>
-<option value={100}>100 meters</option>
+<label className="form-label">Allowed Geofence Radius (meters) *</label>
+<input type="number" min="1" required value={newBranch.allowedRadius} onChange={(e) =>setNewBranch({ ...newBranch, allowedRadius: Number(e.target.value) })} className="form-input" placeholder="e.g. 100" />
+</div>
+<div className="form-group">
+<label className="form-label">Unified Staff Mode</label>
+<select value={newBranch.unifiedStaffMode ? 'true' : 'false'} onChange={(e) =>setNewBranch({ ...newBranch, unifiedStaffMode: e.target.value === 'true' })} className="form-input">
+<option value="false">Disabled (Normal Role Permissions)</option>
+<option value="true">Enabled (Any employee can do any status step)</option>
 </select>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">City *</label>
+<input type="text" required value={newBranch.city || ''} onChange={(e) =>setNewBranch({ ...newBranch, city: e.target.value })} className="form-input" placeholder="e.g. Mangalagiri" />
+</div>
+<div className="form-group">
+<label className="form-label">State *</label>
+<input type="text" required value={newBranch.state || ''} onChange={(e) =>setNewBranch({ ...newBranch, state: e.target.value })} className="form-input" placeholder="e.g. Andhra Pradesh" />
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">Pincode *</label>
+<input type="text" required value={newBranch.pincode || ''} onChange={(e) =>setNewBranch({ ...newBranch, pincode: e.target.value })} className="form-input" placeholder="e.g. 522503" />
+</div>
+<div className="form-group">
+<label className="form-label">Google Maps URL</label>
+<input type="text" value={newBranch.googleMapsUrl || ''} onChange={(e) =>setNewBranch({ ...newBranch, googleMapsUrl: e.target.value })} className="form-input" placeholder="e.g. https://www.google.com/maps..." />
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">Opening Time *</label>
+<input type="text" required value={newBranch.openingTime || '09:00 AM'} onChange={(e) =>setNewBranch({ ...newBranch, openingTime: e.target.value })} className="form-input" placeholder="e.g. 09:00 AM" />
+</div>
+<div className="form-group">
+<label className="form-label">Closing Time *</label>
+<input type="text" required value={newBranch.closingTime || '10:00 PM'} onChange={(e) =>setNewBranch({ ...newBranch, closingTime: e.target.value })} className="form-input" placeholder="e.g. 10:00 PM" />
+</div>
 </div>
 </div>
 <div className="modal-footer">
@@ -4823,13 +5063,8 @@ const OwnerDashboard = () =>{
 </div>
 <div className="form-row">
 <div className="form-group">
-<label className="form-label">Allowed Geofence Radius *</label>
-<select value={editingBranch.allowedRadius || 30} onChange={(e) =>setEditingBranch({ ...editingBranch, allowedRadius: Number(e.target.value) })} className="form-input" required>
-<option value={20}>20 meters</option>
-<option value={30}>30 meters</option>
-<option value={50}>50 meters</option>
-<option value={100}>100 meters</option>
-</select>
+<label className="form-label">Allowed Geofence Radius (meters) *</label>
+<input type="number" min="1" required value={editingBranch.allowedRadius || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, allowedRadius: Number(e.target.value) })} className="form-input" placeholder="e.g. 100" />
 </div>
 <div className="form-group">
 <label className="form-label">Status *</label>
@@ -4837,6 +5072,45 @@ const OwnerDashboard = () =>{
 <option value="true">Active</option>
 <option value="false">Inactive</option>
 </select>
+</div>
+</div>
+<div className="form-row">
+<div className="form-group" style={{ flex: 1 }}>
+<label className="form-label">Unified Staff Mode</label>
+<select value={editingBranch.unifiedStaffMode ? 'true' : 'false'} onChange={(e) =>setEditingBranch({ ...editingBranch, unifiedStaffMode: e.target.value === 'true' })} className="form-input">
+<option value="false">Disabled (Normal Role Permissions)</option>
+<option value="true">Enabled (Any employee can do any status step)</option>
+</select>
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">City *</label>
+<input type="text" required value={editingBranch.city || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, city: e.target.value })} className="form-input" />
+</div>
+<div className="form-group">
+<label className="form-label">State *</label>
+<input type="text" required value={editingBranch.state || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, state: e.target.value })} className="form-input" />
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">Pincode *</label>
+<input type="text" required value={editingBranch.pincode || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, pincode: e.target.value })} className="form-input" />
+</div>
+<div className="form-group">
+<label className="form-label">Google Maps URL</label>
+<input type="text" value={editingBranch.googleMapsUrl || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, googleMapsUrl: e.target.value })} className="form-input" />
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label className="form-label">Opening Time *</label>
+<input type="text" required value={editingBranch.openingTime || '09:00 AM'} onChange={(e) =>setEditingBranch({ ...editingBranch, openingTime: e.target.value })} className="form-input" />
+</div>
+<div className="form-group">
+<label className="form-label">Closing Time *</label>
+<input type="text" required value={editingBranch.closingTime || '10:00 PM'} onChange={(e) =>setEditingBranch({ ...editingBranch, closingTime: e.target.value })} className="form-input" />
 </div>
 </div>
 </div>
@@ -4879,11 +5153,11 @@ const OwnerDashboard = () =>{
 <div style={{ marginBottom: '24px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem', marginBottom: '8px', fontWeight: 700 }}>Description / Notes:</h4>
 <p style={{
- backgroundColor: 'var(--bg-secondary)',
+ backgroundColor: 'rgba(0,0,0,0.15)',
  padding: '12px 16px',
  borderRadius: '8px',
  border: '1px solid var(--color-border)',
- color: 'var(--color-text-primary)',
+ color: 'var(--color-text-secondary)',
  fontSize: '0.9rem',
  margin: 0,
  whiteSpace: 'pre-wrap',

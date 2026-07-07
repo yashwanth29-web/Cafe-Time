@@ -52,6 +52,11 @@ const InventorySchema = new mongoose.Schema({
     default: 'Main',
     trim: true
   },
+  branchId: {
+    type: String,
+    required: true,
+    default: 'default'
+  },
   reorderLevel: {
     type: Number,
     required: true,
@@ -90,7 +95,10 @@ InventorySchema.pre('save', function() {
   }
 });
 
-// Performance Indexes
 InventorySchema.index({ cafeId: 1, name: 1 });
+InventorySchema.index({ cafeId: 1, branchId: 1, name: 1 });
+InventorySchema.index({ cafeId: 1, branchId: 1, category: 1 });
+InventorySchema.index({ cafeId: 1, branchId: 1, status: 1 });
+InventorySchema.index({ cafeId: 1, branchId: 1 });
 
 module.exports = mongoose.model('Inventory', InventorySchema);

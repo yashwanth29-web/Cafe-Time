@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { useBranch } from '../context/BranchContext';
 import OwnerLayout from '../components/OwnerLayout';
-import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff, verifyRazorpayKeys } from '../services/api';
-import { confirm } from '../components/Toast';
+import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff } from '../services/api';
 
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
+  const { themeMode, setThemeMode, primaryColor, updatePrimaryColor } = useTheme();
+  const { activeBranchId } = useBranch();
   const navigate = useNavigate();
 
   const [cafeData, setCafeData] = useState(null);
@@ -22,37 +25,13 @@ const OwnerProfilePage = () => {
   const [form, setForm] = useState({});
   const [editingBranchId, setEditingBranchId] = useState(null);
 
-  const [verifyingKeys, setVerifyingKeys] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedQrTable, setSelectedQrTable] = useState(null);
-  const [taxRate, setTaxRateState] = useState(0);
-  const [serviceCharge, setServiceChargeState] = useState(0);
-
-  const testRazorpayConnection = async (keyId, secret) => {
-    if (!keyId || !secret) {
-      showToast('Key ID and Secret are required to test.', false);
-      return;
-    }
-    setVerifyingKeys(true);
-    try {
-      const res = await verifyRazorpayKeys(keyId, secret);
-      if (res.success) {
-        showToast('Razorpay connection verified successfully!');
-        setForm((f) => ({ ...f, isVerified: true }));
-      } else {
-        showToast('Verification failed. Check credentials.', false);
-        setForm((f) => ({ ...f, isVerified: false }));
-      }
-    } catch (err) {
-      showToast('Verification failed: Bad credentials.', false);
-      setForm((f) => ({ ...f, isVerified: false }));
-    } finally {
-      setVerifyingKeys(false);
-    }
-  };
+  const [taxRate, setTaxRateState] = useState(() => parseFloat(localStorage.getItem('owner_tax_rate') || '5'));
+  const [serviceCharge, setServiceChargeState] = useState(() => parseFloat(localStorage.getItem('owner_service_charge') || '0'));
 
   const handleCopyUrl = (table) => {
-    const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}`;
+    const url = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -66,14 +45,15 @@ const OwnerProfilePage = () => {
       branchName: branch.branchName || '',
       address: branch.address || '',
       manager: branch.manager || '',
-      isActive: branch.isActive !== undefined ? branch.isActive : true
+      isActive: branch.isActive !== undefined ? branch.isActive : true,
+      unifiedStaffMode: !!branch.unifiedStaffMode
     });
     setEditingBranchId(branch._id);
     setActiveModal('editBranch');
   };
 
   const handleDeleteBranch = async (id, name) => {
-    if (!(await confirm(`Are you sure you want to delete branch "${name}"?`))) return;
+    if (!window.confirm(`Are you sure you want to delete branch "${name}"?`)) return;
     setSaving(true);
     try {
       await deleteBranch(id);
@@ -94,8 +74,14 @@ const OwnerProfilePage = () => {
         setCafeData(r.cafe);
         setPaymentConfig(r.paymentConfig);
         setOpsConfig(r.operationalConfig);
-        if (r.cafe?.gstRate !== undefined) setTaxRateState(parseFloat(r.cafe.gstRate));
-        if (r.cafe?.serviceChargeRate !== undefined) setServiceChargeState(parseFloat(r.cafe.serviceChargeRate));
+        if (r.cafe.gstRate !== undefined) {
+          setTaxRateState(r.cafe.gstRate);
+          localStorage.setItem('owner_tax_rate', String(r.cafe.gstRate));
+        }
+        if (r.cafe.serviceChargeRate !== undefined) {
+          setServiceChargeState(r.cafe.serviceChargeRate);
+          localStorage.setItem('owner_service_charge', String(r.cafe.serviceChargeRate));
+        }
       }
       if (br.success) setBranches(br.branches || []);
       if (st.success) setStaffCount(st.staff?.length || 0);
@@ -110,10 +96,11 @@ const OwnerProfilePage = () => {
       owner: { name: user?.name || '', phone: user?.phone || '' },
       cafe: { name: cafeData?.name || '', businessType: cafeData?.businessType || 'Cafe', branchCount: cafeData?.branchCount || 1, gstNumber: cafeData?.gstNumber || '' },
       location: { address: cafeData?.address || '', city: cafeData?.city || '', state: cafeData?.state || '', pincode: cafeData?.pincode || '', mapsLocation: cafeData?.mapsLocation || '' },
-      hours: { openingTime: cafeData?.openingTime || '', closingTime: cafeData?.closingTime || '', supportNumber: cafeData?.supportNumber || '' },
-      payment: { razorpayKeyId: paymentConfig?.razorpayKeyId || '', razorpaySecret: '', upiId: paymentConfig?.upiId || '', bankHolderName: paymentConfig?.bankHolderName || '', accountNumber: paymentConfig?.accountNumber || '', ifscCode: paymentConfig?.ifscCode || '', taxRate: taxRate, serviceCharge: serviceCharge, isVerified: paymentConfig?.isVerified || false },
-      ops: { tableCount: operationalConfig?.tables?.length || 0, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
-      branch: { branchName: '', address: '', manager: '' },
+      hours: { openingTime: cafeData?.openingTime || '', closingTime: cafeData?.closingTime || '', supportNumber: cafeData?.supportNumber || '', requiredDailyHours: cafeData?.requiredDailyHours || 8 },
+      payment: { upiId: paymentConfig?.upiId || '', bankHolderName: paymentConfig?.bankHolderName || '', accountNumber: paymentConfig?.accountNumber || '', ifscCode: paymentConfig?.ifscCode || '', taxRate: taxRate, serviceCharge: serviceCharge },
+      ops: { tableCount: operationalConfig?.tables ? operationalConfig.tables.length : 5, kitchenDisplayEnabled: operationalConfig?.kitchenDisplayEnabled || false, printerEnabled: operationalConfig?.printerEnabled || false, inventoryEnabled: operationalConfig?.inventoryEnabled || false },
+      theme: { themeMode: themeMode, uiPrimaryColor: primaryColor },
+      branch: { branchName: '', address: '', manager: '', unifiedStaffMode: false },
       qr_codes: {}
     }[key] || {};
     setForm(prefill);
@@ -135,43 +122,20 @@ const OwnerProfilePage = () => {
       if (activeModal === 'hours') await saveSetupData(form);else
       if (activeModal === 'payment') {
         const { taxRate: newTaxRate, serviceCharge: newServiceCharge, ...paymentFields } = form;
-        await saveSetupData({
-          paymentConfig: paymentFields,
-          gstRate: newTaxRate !== undefined ? Number(newTaxRate) : 0,
-          serviceChargeRate: newServiceCharge !== undefined ? Number(newServiceCharge) : 0
-        });
-        setTaxRateState(parseFloat(newTaxRate !== undefined ? newTaxRate : 0));
+        await saveSetupData({ paymentConfig: paymentFields, taxRate: newTaxRate, serviceCharge: newServiceCharge });
+        localStorage.setItem('owner_tax_rate', String(newTaxRate !== undefined ? newTaxRate : 5));
+        localStorage.setItem('owner_service_charge', String(newServiceCharge !== undefined ? newServiceCharge : 0));
+        setTaxRateState(parseFloat(newTaxRate !== undefined ? newTaxRate : 5));
         setServiceChargeState(parseFloat(newServiceCharge !== undefined ? newServiceCharge : 0));
       } else
       if (activeModal === 'ops') {
         const tables = Array.from({ length: Number(form.tableCount) }, (_, i) => ({ id: `T${i + 1}`, label: `Table-${i + 1}` }));
         await saveSetupData({ operationalConfig: { tables, kitchenDisplayEnabled: form.kitchenDisplayEnabled, printerEnabled: form.printerEnabled, inventoryEnabled: form.inventoryEnabled } });
-      } else if (activeModal === 'branch') {
-        if (!form.branchName || !form.branchName.trim()) {
-          showToast('Branch Name is required.', false);
-          setSaving(false);
-          return;
-        }
-        if (!form.address || !form.address.trim()) {
-          showToast('Address is required.', false);
-          setSaving(false);
-          return;
-        }
-        await createBranch(form);
-      } else
-      if (activeModal === 'editBranch') {
-        if (!form.branchName || !form.branchName.trim()) {
-          showToast('Branch Name is required.', false);
-          setSaving(false);
-          return;
-        }
-        if (!form.address || !form.address.trim()) {
-          showToast('Address is required.', false);
-          setSaving(false);
-          return;
-        }
-        await updateBranch(editingBranchId, form);
-      }
+      } else if (activeModal === 'theme') {
+        setThemeMode(form.themeMode);
+        await updatePrimaryColor(form.uiPrimaryColor);
+      } else if (activeModal === 'branch') {await createBranch(form);} else
+      if (activeModal === 'editBranch') {await updateBranch(editingBranchId, form);}
       await load();showToast('Saved successfully!');closeModal();
     } catch (err) {showToast(err?.response?.data?.message || 'Save failed.', false);} finally
     {setSaving(false);}
@@ -198,7 +162,7 @@ const OwnerProfilePage = () => {
           const state = a.state || '';
           const pin = a.postcode || '';
           const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
-          setForm((f) => ({ ...f, address: street || f.address, city, state, pincode: pin, mapsLocation: mapsUrl, latitude: lat.toFixed(6), longitude: lon.toFixed(6) }));
+          setForm((f) => ({ ...f, address: street || f.address, city, state, pincode: pin, mapsLocation: mapsUrl }));
           showToast('Location filled from GPS!');
         } catch {showToast('Could not fetch address. Try manually.', false);} finally
         {setGeoLoading(false);}
@@ -229,11 +193,15 @@ const OwnerProfilePage = () => {
   },
   {
     key: 'payment', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>, title: 'Payment Setup',
-    rows: [['Razorpay', paymentConfig?.isVerified ? '✅ Verified' : '○ Not set'], ['Tax Rate (GST)', `${taxRate}%`], ['Service Charge', `${serviceCharge}%`], ['UPI ID', paymentConfig?.upiId || '—']]
+    rows: [['UPI ID', paymentConfig?.upiId || '—'], ['Tax Rate (GST)', `${taxRate}%`], ['Platform Charge', `₹${serviceCharge}`], ['Bank Holder', paymentConfig?.bankHolderName || '—']]
   },
   {
     key: 'ops', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>, title: 'Operations',
     rows: [['Tables', operationalConfig?.tables?.length || 0], ['Kitchen Display', operationalConfig?.kitchenDisplayEnabled ? 'On' : 'Off'], ['Printer', operationalConfig?.printerEnabled ? 'On' : 'Off']]
+  },
+  {
+    key: 'theme', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>, title: 'Appearance & Theme',
+    rows: [['Theme Mode', themeMode === 'system' ? 'System Default' : themeMode === 'dark' ? 'Dark Mode' : 'Light Mode'], ['Cafe Brand Color', <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>{primaryColor} <span style={{ width: '12px', height: '12px', background: primaryColor, borderRadius: '50%', display: 'inline-block' }}></span></div>]]
   },
   {
     key: 'qr_codes', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="3"></rect><rect x="14" y="7" width="3" height="3"></rect><rect x="7" y="14" width="3" height="3"></rect><rect x="14" y="14" width="3" height="3"></rect></svg>, title: 'Table QR Codes',
@@ -292,39 +260,14 @@ const OwnerProfilePage = () => {
 
         <label className="mlabel" htmlFor="profile-address">Full Address</label>
         <input className="minput" id="profile-address" name="profile-address" value={form.address || ''} onChange={fld('address')} placeholder="Street, Area" />
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
-          <div>
-            <label className="mlabel" htmlFor="profile-city" style={{ marginTop: 0 }}>City</label>
-            <input className="minput" id="profile-city" name="profile-city" value={form.city || ''} onChange={fld('city')} style={{ marginBottom: 0 }} />
-          </div>
-          <div>
-            <label className="mlabel" htmlFor="profile-state" style={{ marginTop: 0 }}>State</label>
-            <input className="minput" id="profile-state" name="profile-state" value={form.state || ''} onChange={fld('state')} style={{ marginBottom: 0 }} />
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
-          <div>
-            <label className="mlabel" htmlFor="profile-pincode" style={{ marginTop: 0 }}>Pincode</label>
-            <input className="minput" id="profile-pincode" name="profile-pincode" value={form.pincode || ''} onChange={fld('pincode')} style={{ marginBottom: 0 }} />
-          </div>
-          <div>
-            <label className="mlabel" htmlFor="profile-maps-location" style={{ marginTop: 0 }}>Google Maps URL</label>
-            <input className="minput" id="profile-maps-location" name="profile-maps-location" value={form.mapsLocation || ''} onChange={fld('mapsLocation')} placeholder="https://maps.google.com/..." style={{ marginBottom: 0 }} />
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
-          <div>
-            <label className="mlabel" htmlFor="profile-latitude" style={{ marginTop: 0 }}>Latitude</label>
-            <input className="minput" id="profile-latitude" name="profile-latitude" type="number" step="0.000001" value={form.latitude || ''} onChange={fld('latitude')} placeholder="e.g. 16.455215" style={{ marginBottom: 0 }} />
-          </div>
-          <div>
-            <label className="mlabel" htmlFor="profile-longitude" style={{ marginTop: 0 }}>Longitude</label>
-            <input className="minput" id="profile-longitude" name="profile-longitude" type="number" step="0.000001" value={form.longitude || ''} onChange={fld('longitude')} placeholder="e.g. 80.574133" style={{ marginBottom: 0 }} />
-          </div>
-        </div>
+        <label className="mlabel" htmlFor="profile-city">City</label>
+        <input className="minput" id="profile-city" name="profile-city" value={form.city || ''} onChange={fld('city')} />
+        <label className="mlabel" htmlFor="profile-state">State</label>
+        <input className="minput" id="profile-state" name="profile-state" value={form.state || ''} onChange={fld('state')} />
+        <label className="mlabel" htmlFor="profile-pincode">Pincode</label>
+        <input className="minput" id="profile-pincode" name="profile-pincode" value={form.pincode || ''} onChange={fld('pincode')} />
+        <label className="mlabel" htmlFor="profile-maps-location">Google Maps URL</label>
+        <input className="minput" id="profile-maps-location" name="profile-maps-location" value={form.mapsLocation || ''} onChange={fld('mapsLocation')} placeholder="https://maps.google.com/..." />
       </>,
 
     hours:
@@ -335,34 +278,20 @@ const OwnerProfilePage = () => {
         <input className="minput" id="profile-closing-time" name="profile-closing-time" type="time" value={form.closingTime || ''} onChange={fld('closingTime')} />
         <label className="mlabel" htmlFor="profile-support-phone">Support Phone Number</label>
         <input className="minput" id="profile-support-phone" name="profile-support-phone" type="tel" value={form.supportNumber || ''} onChange={fld('supportNumber')} placeholder="+91 XXXXXXXXXX" />
+        <label className="mlabel" htmlFor="profile-required-hours">Required Daily Hours</label>
+        <input className="minput" id="profile-required-hours" name="profile-required-hours" type="number" min={1} max={24} value={form.requiredDailyHours !== undefined ? form.requiredDailyHours : 8} onChange={fld('requiredDailyHours')} placeholder="e.g. 8" />
       </>,
 
     payment:
     <>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '14px', padding: '12px', background: 'rgba(0, 0, 0,0.02)', borderRadius: '8px', border: '1px solid rgba(230,213,195,0.1)' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>Razorpay Verification: {form.isVerified ? '✅ Verified' : '❌ Unverified'}</span>
-          <button
-          type="button"
-          onClick={() => testRazorpayConnection(form.razorpayKeyId, form.razorpaySecret)}
-          disabled={verifyingKeys}
-          style={{ marginTop: '8px', background: verifyingKeys ? '#3D2820' : '#6F4E37', color: 'var(--color-text-primary)', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: verifyingKeys ? 'wait' : 'pointer', fontWeight: 'bold', fontSize: '0.75rem' }}>
-          
-            {verifyingKeys ? 'Testing Connection...' : 'Test Razorpay Connection'}
-          </button>
-        </div>
-
-        <label className="mlabel" htmlFor="profile-razorpay-key">Razorpay Key ID</label>
-        <input className="minput" id="profile-razorpay-key" name="profile-razorpay-key" value={form.razorpayKeyId || ''} onChange={fld('razorpayKeyId')} placeholder="rzp_live_..." />
-        <label className="mlabel" htmlFor="profile-razorpay-secret">Razorpay Secret</label>
-        <input className="minput" id="profile-razorpay-secret" name="profile-razorpay-secret" type="password" value={form.razorpaySecret || ''} onChange={fld('razorpaySecret')} placeholder="Enter secret (only to change)" />
+        <label className="mlabel" htmlFor="profile-upi-id">UPI ID</label>
+        <input className="minput" id="profile-upi-id" name="profile-upi-id" value={form.upiId || ''} onChange={fld('upiId')} placeholder="name@upi" />
         
         <label className="mlabel" htmlFor="profile-tax-rate">GST Tax Rate (%)</label>
         <input className="minput" id="profile-tax-rate" name="profile-tax-rate" type="number" min={0} value={form.taxRate !== undefined ? form.taxRate : 5} onChange={fld('taxRate')} />
-        <label className="mlabel" htmlFor="profile-service-charge">Service Charge (%)</label>
+        <label className="mlabel" htmlFor="profile-service-charge">Platform Charge (Flat ₹)</label>
         <input className="minput" id="profile-service-charge" name="profile-service-charge" type="number" min={0} value={form.serviceCharge !== undefined ? form.serviceCharge : 0} onChange={fld('serviceCharge')} />
         
-        <label className="mlabel" htmlFor="profile-upi-id">UPI ID</label>
-        <input className="minput" id="profile-upi-id" name="profile-upi-id" value={form.upiId || ''} onChange={fld('upiId')} placeholder="name@upi" />
         <label className="mlabel" htmlFor="profile-bank-holder">Bank Holder Name</label>
         <input className="minput" id="profile-bank-holder" name="profile-bank-holder" value={form.bankHolderName || ''} onChange={fld('bankHolderName')} />
         <label className="mlabel" htmlFor="profile-account-number">Account Number</label>
@@ -394,7 +323,7 @@ const OwnerProfilePage = () => {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', padding: '20px', background: 'rgba(0, 0, 0,0.02)', border: '1px dashed rgba(230,213,195,0.2)', borderRadius: '12px', marginTop: '10px' }}>
             <div style={{ background: '#fff', padding: '15px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>
               <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`)}`}
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`)}`}
             alt={`Table ${selectedQrTable} QR Code`}
             style={{ display: 'block', width: '150px', height: '150px' }} />
           
@@ -409,7 +338,7 @@ const OwnerProfilePage = () => {
                 {copiedLink ? '✓ Copied' : '🔗 Copy Link'}
               </button>
               <a
-            href={`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}`}
+            href={`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`}
             target="_blank"
             rel="noreferrer"
             className="mbtn-cancel"
@@ -425,7 +354,7 @@ const OwnerProfilePage = () => {
     ops:
     <>
         <label className="mlabel" htmlFor="profile-table-count">Number of Tables</label>
-        <input className="minput" id="profile-table-count" name="profile-table-count" type="number" min={0} value={form.tableCount || 0} onChange={fld('tableCount')} />
+        <input className="minput" id="profile-table-count" name="profile-table-count" type="number" min={0} value={form.tableCount !== undefined ? form.tableCount : ''} onChange={fld('tableCount')} />
         <div className="mtoggle-row">
           <label className="mlabel" htmlFor="profile-kds-enabled" style={{ margin: 0 }}>Kitchen Display System</label>
           <input type="checkbox" id="profile-kds-enabled" name="profile-kds-enabled" className="mtoggle" checked={!!form.kitchenDisplayEnabled} onChange={fld('kitchenDisplayEnabled')} />
@@ -448,6 +377,10 @@ const OwnerProfilePage = () => {
         <input className="minput" id="branch-new-address" name="branch-new-address" value={form.address || ''} onChange={fld('address')} placeholder="Full branch address" required />
         <label className="mlabel" htmlFor="branch-new-manager">Manager Name</label>
         <input className="minput" id="branch-new-manager" name="branch-new-manager" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
+        <div className="mtoggle-row">
+          <label className="mlabel" htmlFor="branch-new-unified" style={{ margin: 0 }}>Unified Staff Mode</label>
+          <input type="checkbox" id="branch-new-unified" name="branch-new-unified" className="mtoggle" checked={!!form.unifiedStaffMode} onChange={fld('unifiedStaffMode')} />
+        </div>
       </>,
 
     editBranch:
@@ -459,28 +392,76 @@ const OwnerProfilePage = () => {
         <label className="mlabel" htmlFor="branch-edit-manager">Manager Name</label>
         <input className="minput" id="branch-edit-manager" name="branch-edit-manager" value={form.manager || ''} onChange={fld('manager')} placeholder="Optional" />
         <div className="mtoggle-row">
+          <label className="mlabel" htmlFor="branch-edit-unified" style={{ margin: 0 }}>Unified Staff Mode</label>
+          <input type="checkbox" id="branch-edit-unified" name="branch-edit-unified" className="mtoggle" checked={!!form.unifiedStaffMode} onChange={fld('unifiedStaffMode')} />
+        </div>
+        <div className="mtoggle-row">
           <label className="mlabel" htmlFor="branch-edit-active" style={{ margin: 0 }}>Is Active</label>
           <input type="checkbox" id="branch-edit-active" name="branch-edit-active" className="mtoggle" checked={!!form.isActive} onChange={fld('isActive')} />
+        </div>
+      </>,
+
+    theme:
+    <>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', marginBottom: '16px' }}>Customize the look and feel of the application.</p>
+        
+        <label className="mlabel" htmlFor="profile-theme-mode">Your Display Theme (Device Only)</label>
+        <select className="minput" id="profile-theme-mode" name="profile-theme-mode" value={form.themeMode || 'system'} onChange={fld('themeMode')} style={{ marginBottom: '16px' }}>
+          <option value="system">System Default</option>
+          <option value="light">Light Mode</option>
+          <option value="dark">Dark Mode</option>
+        </select>
+
+        <label className="mlabel" htmlFor="profile-ui-primary-color">Cafe Brand Color (Global)</label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '16px' }}>
+          {['#D47F46', '#8B4513', '#2ecc71', '#3498db', '#9b59b6'].map((color) => (
+            <div 
+              key={color}
+              onClick={() => setForm(f => ({ ...f, uiPrimaryColor: color }))}
+              style={{
+                width: '100%',
+                aspectRatio: '1',
+                backgroundColor: color,
+                borderRadius: '8px',
+                cursor: 'pointer',
+                border: form.uiPrimaryColor === color ? '3px solid white' : '1px solid rgba(255,255,255,0.2)',
+                boxShadow: form.uiPrimaryColor === color ? '0 0 0 2px var(--color-primary)' : 'none'
+              }}
+            />
+          ))}
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <input 
+            type="color" 
+            id="profile-ui-primary-color" 
+            name="profile-ui-primary-color" 
+            value={form.uiPrimaryColor || '#D47F46'} 
+            onChange={fld('uiPrimaryColor')} 
+            style={{ width: '40px', height: '40px', padding: 0, border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          />
+          <span style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem', fontFamily: 'monospace' }}>
+            {form.uiPrimaryColor || '#D47F46'}
+          </span>
         </div>
       </>
 
   };
 
-  const modalTitles = { owner: 'Edit Owner Profile', cafe: 'Edit Cafe Identity', location: 'Edit Location', hours: 'Edit Business Hours', payment: 'Edit Payment Setup', ops: 'Edit Operations', branch: 'Add New Branch', editBranch: 'Edit Branch Details', qr_codes: 'Table QR Codes' };
+  const modalTitles = { owner: 'Edit Owner Profile', cafe: 'Edit Cafe Identity', location: 'Edit Location', hours: 'Edit Business Hours', payment: 'Edit Payment Setup', ops: 'Edit Operations', branch: 'Add New Branch', editBranch: 'Edit Branch Details', qr_codes: 'Table QR Codes', theme: 'Appearance & Theme' };
 
   return (
     <OwnerLayout>
       <style>{`
-        /* Modal always has dark bg — force light text there */
-        .moverlay {
+        .pp, .moverlay {
           --color-text-primary: #F8F5F0;
           --color-text-secondary: #B4C4B9;
         }
-        .pp { width: 100%; max-width:900px; margin:0 auto; padding:28px 20px 60px; box-sizing: border-box; overflow-x: hidden; }
+        .pp { max-width:900px; margin:0 auto; padding:28px 20px 60px; }
         @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         .pp { animation:fadeIn .35s ease; }
 
-        /* banner — always dark */
+        /* banner */
         .pp-banner {
           background:linear-gradient(135deg,#1C2420 0%,#121815 55%,#24302A 100%);
           border-radius:16px; position:relative; overflow:hidden;
@@ -499,10 +480,10 @@ const OwnerProfilePage = () => {
           box-shadow:0 6px 20px rgba(0,0,0,.5);
         }
         .pp-avatar img { width:100%; height:100%; object-fit:cover; }
-        .pp-identity h2 { font-size:1.35rem; font-weight:800; color:#F8F5F0; margin:0; text-align:center; }
+        .pp-identity h2 { font-size:1.35rem; font-weight:800; color: var(--color-text-primary); margin:0; text-align:center; }
         .pp-identity p  { font-size:.78rem; color:#788E82; margin:2px 0 0; font-weight:600; text-align:center; }
 
-        /* progress — always dark bg */
+        /* progress */
         .pp-prog {
           background:rgba(28,36,32,.7); border:1px solid rgba(143,168,155,.1);
           border-radius:12px; padding:14px 18px; margin-bottom:28px;
@@ -510,62 +491,55 @@ const OwnerProfilePage = () => {
         }
         .prog-outer { flex:1; height:7px; background:rgba(0,0,0,.4); border-radius:4px; overflow:hidden; }
         .prog-inner { height:100%; background:linear-gradient(90deg,#8FA89B,#A2B9AC); border-radius:4px; transition:width .4s; }
-        .pp-prog span { font-size:.82rem; font-weight:700; color:#F8F5F0; white-space:nowrap; }
+        .pp-prog span { font-size:.82rem; font-weight:700; color: var(--color-text-primary); white-space:nowrap; }
         .btn-setup { background:#8FA89B; color:#121815; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:.8rem; cursor:pointer; white-space:nowrap; font-family:inherit; }
         .btn-setup:hover { background:#A2B9AC; }
 
-        /* section card — theme-aware */
+        /* grid container */
+        .card-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 20px;
+          margin-bottom: 24px;
+        }
+
+        /* section card */
         .sec-card {
-          background: var(--bg-card);
-          border:1px solid var(--color-border);
+          background:rgba(28,36,32,.75);
+          border:1px solid rgba(143,168,155,.1);
           border-radius:14px; padding:20px;
           cursor:pointer; transition:all .2s;
           position:relative; overflow:hidden;
-          box-sizing: border-box !important;
         }
         .sec-card::after {
           content:''; position:absolute; inset:0;
           background:rgba(143,168,155,0); transition:background .2s;
           border-radius:14px; pointer-events:none;
         }
-        .sec-card:hover { border-color:var(--color-primary); transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.12); }
+        .sec-card:hover { border-color:rgba(143,168,155,.28); transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.3); }
         .sec-card:hover::after { background:rgba(143,168,155,.03); }
         .sec-card:active { transform:translateY(0); }
 
         .sec-card-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
         .sec-card-icon { font-size:1.1rem; }
-        .sec-card-title { font-size:.88rem; font-weight:800; color:var(--color-primary); text-transform:uppercase; letter-spacing:.5px; }
-        .sec-card-edit { margin-left:auto; font-size:.7rem; color:var(--color-primary); font-weight:700; opacity:.8; }
+        .sec-card-title { font-size:.88rem; font-weight:800; color: var(--color-text-primary); text-transform:uppercase; letter-spacing:.5px; }
+        .sec-card-edit { margin-left:auto; font-size:.7rem; color:#8FA89B; font-weight:700; opacity:.8; }
 
-        .sec-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--color-border); }
+        .sec-row { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid rgba(143,168,155,.05); }
         .sec-row:last-child { border-bottom:none; }
-        .sec-row-label { font-size:.72rem; color:var(--color-text-secondary); font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
-        .sec-row-value { font-size:.82rem; color:var(--color-text-primary); font-weight:500; text-align:right; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .sec-row-empty { color:var(--color-text-secondary); opacity:.5; font-style:italic; }
+        .sec-row-label { font-size:.72rem; color:#788E82; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+        .sec-row-value { font-size:.82rem; color: var(--color-text-primary); font-weight:500; text-align:right; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .sec-row-empty { color:#2C3A33; font-style:italic; }
 
         /* branches card full-width */
         .sec-card-full { grid-column:1/-1; }
 
-        /* card grid layout */
-        .card-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 20px;
-          width: 100%;
-          box-sizing: border-box;
-        }
-        @media (min-width: 600px) {
-          .card-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-        }
-
-        /* modal overlay — always dark */
+        /* modal overlay */
         .moverlay {
-          position:fixed; inset:0; z-index:1000;
-          background:rgba(0,0,0,.6); backdrop-filter:blur(6px);
+          position:fixed; top:0; left:0; right:0; bottom:0;
+          background:rgba(0,0,0,.7); backdrop-filter:blur(6px);
           display:flex; align-items:center; justify-content:center;
-          padding:20px; animation:fadeIn .2s ease;
+          z-index:2000;
         }
         .mcard {
           background:#1C2420; border:1px solid rgba(143,168,155,.18);
@@ -579,15 +553,15 @@ const OwnerProfilePage = () => {
         .mcard::-webkit-scrollbar-thumb { background:#2C3A33; border-radius:4px; }
 
         .mhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
-        .mhead h3 { font-size:1.05rem; font-weight:800; color:#F8F5F0; margin:0; }
+        .mhead h3 { font-size:1.05rem; font-weight:800; color: var(--color-text-primary); margin:0; }
         .mclose { background:none; border:none; color:#788E82; font-size:1.2rem; cursor:pointer; padding:4px; line-height:1; }
-        .mclose:hover { color:#F8F5F0; }
+        .mclose:hover { color: var(--color-text-primary); }
 
         .mlabel { display:block; font-size:.72rem; font-weight:700; color:#788E82; text-transform:uppercase; letter-spacing:.4px; margin:14px 0 6px; }
         .minput {
           width:100%; padding:10px 14px; box-sizing:border-box;
           background:#121815; border:1px solid rgba(143,168,155,.18);
-          border-radius:9px; color:#F8F5F0; font-size:.9rem; font-family:inherit;
+          border-radius:9px; color: var(--color-text-primary); font-size:.9rem; font-family:inherit;
           outline:none; transition:border-color .2s;
         }
         .minput:focus { border-color:#8FA89B; }
@@ -600,43 +574,42 @@ const OwnerProfilePage = () => {
         .mbtn-save:hover:not(:disabled) { background:#A2B9AC; }
         .mbtn-save:disabled { opacity:.6; cursor:default; }
         .mbtn-cancel { background:rgba(255,255,255,.06); color:#788E82; border:1px solid rgba(143,168,155,.12); padding:11px 20px; border-radius:9px; font-weight:700; font-size:.875rem; cursor:pointer; font-family:inherit; }
-        .mbtn-cancel:hover { background:rgba(255,255,255,.1); color:#F8F5F0; }
+        .mbtn-cancel:hover { background:rgba(255,255,255,.1); color: var(--color-text-primary); }
 
-        /* branches list — theme-aware */
-        .branch-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--color-border); }
-        .branch-name { font-weight:700; color:var(--color-text-primary); font-size:.875rem; }
-        .branch-addr { font-size:.75rem; color:var(--color-text-secondary); margin-top:2px; }
+        /* branches list */
+        .branch-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(143,168,155,.06); }
+        .branch-name { font-weight:700; color: var(--color-text-primary); font-size:.875rem; }
+        .branch-addr { font-size:.75rem; color:#788E82; margin-top:2px; }
         .badge-on  { background:rgba(46,204,113,.15); color:#2ecc71; padding:2px 9px; border-radius:20px; font-size:.7rem; font-weight:700; }
-        .badge-off { background:rgba(255,255,255,.06); color:var(--color-text-secondary); padding:2px 9px; border-radius:20px; font-size:.7rem; font-weight:700; }
+        .badge-off { background:rgba(255,255,255,.06); color:#2C3A33; padding:2px 9px; border-radius:20px; font-size:.7rem; font-weight:700; }
         .add-branch-row { padding-top:12px; }
-        .btn-add { background:transparent; border:1px dashed var(--color-border); color:var(--color-primary); padding:9px; border-radius:9px; font-weight:700; font-size:.82rem; cursor:pointer; width:100%; font-family:inherit; transition:all .2s; }
-        .btn-add:hover { border-color:var(--color-primary); color:var(--color-text-primary); background:rgba(143,168,155,.08); }
+        .btn-add { background:transparent; border:1px dashed rgba(143,168,155,.4); color:#8FA89B; padding:9px; border-radius:9px; font-weight:700; font-size:.82rem; cursor:pointer; width:100%; font-family:inherit; transition:all .2s; }
+        .btn-add:hover { border-color:#8FA89B; color: var(--color-text-primary); background:rgba(143,168,155,.08); }
 
         /* toast */
         .toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:9999; padding:11px 22px; border-radius:10px; font-weight:700; font-size:.875rem; box-shadow:0 8px 24px rgba(0,0,0,.5); animation:fadeIn .25s ease; white-space:nowrap; }
-        .tok { background:#27ae60; color:#fff; }
-        .terr { background:#e74c3c; color:#fff; }
+        .tok { background:#27ae60; color: var(--color-text-primary); }
+        .terr { background:#e74c3c; color: var(--color-text-primary); }
 
         .spinner { width:36px; height:36px; border:3px solid rgba(143,168,155,.2); border-top-color:#8FA89B; border-radius:50%; animation:spin 1s linear infinite; margin:80px auto; }
         @keyframes spin { to{transform:rotate(360deg)} }
 
         @media(max-width:767px) {
-          .pp {
-            padding: 16px 12px 60px !important;
+          .card-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
           }
-          .moverlay { align-items:flex-end; padding:0; z-index:1100 !important; }
+          .moverlay { align-items:flex-end; padding:0; }
           .mcard {
             width:100% !important; max-width:100% !important;
-            height:100dvh !important; max-height:100dvh !important;
+            height:100vh !important; max-height:100vh !important;
             border-radius:0 !important; border:none !important;
-            margin:0 !important; padding:16px 16px 80px 16px !important;
+            margin:0 !important; padding:16px !important;
             display:flex !important; flex-direction:column !important;
-            overflow-y:auto !important;
           }
           .mfooter {
-            position:fixed; bottom:0; left:0; right:0; background:#1C2420;
-            padding:16px 16px 24px 16px; z-index:1200;
-            border-top:1px solid rgba(143,168,155,.12);
+            position:sticky; bottom:0; background:#1C2420;
+            padding:16px 0 8px 0; z-index:10;
           }
         }
       `}</style>
@@ -692,13 +665,13 @@ const OwnerProfilePage = () => {
               </div>
               {branches.length === 0 && <p style={{ color: '#A2B9AC', fontStyle: 'italic', fontSize: '.85rem', margin: '4px 0 10px' }}>No branches added yet.</p>}
               {branches.map((b) =>
-              <div key={b._id} className="branch-item" style={{ padding: '12px 0', borderBottom: '1px solid rgba(230,213,195,.06)' }}>
-                  <div className="branch-info">
+              <div key={b._id} className="branch-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(230,213,195,.06)' }}>
+                  <div>
                     <div className="branch-name" style={{ fontWeight: 700, color: 'var(--color-text-secondary)', fontSize: '.875rem' }}>{b.branchName}</div>
                     <div className="branch-addr" style={{ fontSize: '.75rem', color: '#B4C4B9', marginTop: '2px' }}>{b.address}{b.manager ? ` · ${b.manager}` : ''}</div>
                     <span className={b.isActive ? 'badge-on' : 'badge-off'} style={{ display: 'inline-block', marginTop: '4px' }}>{b.isActive ? 'Active' : 'Inactive'}</span>
                   </div>
-                  <div className="branch-actions">
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                     onClick={(e) => {e.stopPropagation();openEditBranchModal(b);}}
                     style={{ background: '#3E2723', color: 'var(--color-text-primary)', border: '1px solid rgba(230,213,195,.18)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -723,8 +696,8 @@ const OwnerProfilePage = () => {
           {/* Sign Out Button */}
           <div style={{ marginTop: '40px', textAlign: 'center' }}>
             <button
-              onClick={async () => {
-                if (await confirm('Are you sure you want to sign out?')) {
+              onClick={() => {
+                if (window.confirm('Are you sure you want to sign out?')) {
                   logout();
                 }
               }}

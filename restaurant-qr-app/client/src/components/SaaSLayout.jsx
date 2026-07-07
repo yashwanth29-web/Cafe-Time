@@ -1,28 +1,96 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getInventory, getCafeInfo } from '../services/api';
-import { useTheme } from '../hooks/useTheme';
+import { getInventory, getNotifications, markNotificationRead } from '../services/api';
+import BranchSwitcher from './BranchSwitcher';
+import { useBranch } from '../context/BranchContext';
 
 const SaaSLayout = ({ children }) => {
   const { user, logout } = useAuth();
+  const { activeBranchId } = useBranch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme, setTheme, resolvedTheme } = useTheme();
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
-  const notificationRef = useRef(null);
-  const bellButtonRef = useRef(null);
-  const mobileBellButtonRef = useRef(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return window.innerWidth >= 768 && window.innerWidth < 1024;
   });
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await getNotifications();
+      if (res && res.success) {
+        setNotifications(res.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch notifications:', err);
+    }
+  };
+
+  const handleMarkAsRead = async (id) => {
+    try {
+      await markNotificationRead(id);
+      fetchNotifications();
+    } catch (err) {
+      console.error('Failed to mark read:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user && activeBranchId) {
+      fetchNotifications();
+      const interval = setInterval(fetchNotifications, 20000);
+      return () => clearInterval(interval);
+    }
+  }, [user, activeBranchId]);
+
+
+
+  const renderNotificationList = () => {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', maxHeight: '250px', overflowY: 'auto' }}>
+        {lowStockAlerts.map((item, idx) => (
+          <div key={`stock-${idx}`} style={{ padding: '8px 0', borderBottom: '1px solid #2D2D2D', color: '#F39C12' }}>
+            ⚠️ <strong>{item.name}</strong> inventory running low ({item.quantity !== undefined ? item.quantity : item.stock} {item.unit} left).
+          </div>
+        ))}
+        {notifications.map((n, idx) => (
+          <div 
+            key={`db-notif-${n._id || idx}`}
+            onClick={() => !n.isRead && handleMarkAsRead(n._id)}
+            style={{ 
+              padding: '8px 0', 
+              borderBottom: '1px solid #2D2D2D', 
+              color: n.isRead ? '#888' : '#FFF',
+              cursor: n.isRead ? 'default' : 'pointer',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <div style={{ paddingRight: '4px' }}>
+              <strong>{n.title}</strong>
+              <div style={{ marginTop: '2px', opacity: 0.9 }}>{n.message}</div>
+              <span style={{ fontSize: '9px', opacity: 0.6, display: 'block', marginTop: '4px' }}>{new Date(n.createdAt).toLocaleTimeString()}</span>
+            </div>
+            {!n.isRead && <span style={{ minWidth: '8px', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--color-primary)', marginLeft: '8px' }} />}
+          </div>
+        ))}
+        {lowStockAlerts.length === 0 && notifications.length === 0 && (
+          <div style={{ padding: '12px 0', color: '#bbb', textAlign: 'center' }}>
+            🟢 No alerts or updates.
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const userRole = (user?.role || '').toLowerCase();
+  const unreadCount = lowStockAlerts.length + notifications.filter(n => !n.isRead).length;
 
   useEffect(() => {
     const handleResize = () => {
@@ -38,24 +106,6 @@ const SaaSLayout = ({ children }) => {
     handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  const [cafeInfo, setCafeInfo] = useState(null);
-
-  useEffect(() => {
-    if (user?.cafeId) {
-      const fetchCafe = async () => {
-        try {
-          const res = await getCafeInfo(user.cafeId);
-          if (res.success) {
-            setCafeInfo(res.data);
-          }
-        } catch (err) {
-          console.error('Error fetching cafe info in SaaSLayout:', err);
-        }
-      };
-      fetchCafe();
-    }
-  }, [user?.cafeId]);
 
   useEffect(() => {
     if (user && ['admin', 'owner', 'manager'].includes(userRole)) {
@@ -81,48 +131,39 @@ const SaaSLayout = ({ children }) => {
     }
   }, [user, userRole]);
 
-  useEffect(() => {
-    const handleOutsideClick = (e) => {
-      if (notificationsOpen) {
-        const clickedInsideDropdown = notificationRef.current && notificationRef.current.contains(e.target);
-        const clickedInsideBellDesktop = bellButtonRef.current && bellButtonRef.current.contains(e.target);
-        const clickedInsideBellMobile = mobileBellButtonRef.current && mobileBellButtonRef.current.contains(e.target);
-        
-        if (!clickedInsideDropdown && !clickedInsideBellDesktop && !clickedInsideBellMobile) {
-          setNotificationsOpen(false);
-        }
-      }
-      if (profileDropdownOpen && !e.target.closest('.profile-dropdown-container')) {
-        setProfileDropdownOpen(false);
-      }
-      if (themeMenuOpen && !e.target.closest('.theme-dropdown-container')) {
-        setThemeMenuOpen(false);
-      }
-    };
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setProfileDropdownOpen(false);
-        setNotificationsOpen(false);
-        setThemeMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [notificationsOpen, profileDropdownOpen, themeMenuOpen]);
-
-  useEffect(() => {
-    setNotificationsOpen(false);
-    setProfileDropdownOpen(false);
-    setMoreMenuOpen(false);
-    setMobileDrawerOpen(false);
-    setThemeMenuOpen(false);
-  }, [location]);
-
   if (!user) return <>{children}</>;
+
+  if (activeBranchId === null) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        fontFamily: "'Outfit', sans-serif",
+        color: '#6F4E37',
+        backgroundColor: '#121212'
+      }}>
+        <div style={{
+          border: '4px solid #333',
+          borderTop: '4px solid #e67e22',
+          borderRadius: '50%',
+          width: '40px',
+          height: '40px',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '15px'
+        }} />
+        <p style={{ fontWeight: '500' }}>Initializing branch context...</p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   // Role based navigation configuration
   const getNavItems = () => {
@@ -150,90 +191,36 @@ const SaaSLayout = ({ children }) => {
       case 'manager':
         return [
         { label: 'Operational Stats', icon: '💼', path: '/manager/dashboard' },
-        { label: 'Order Log', icon: '📋', path: '/manager/dashboard?tab=orders' },
+        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'Staff Attendance', icon: '👥', path: '/manager/dashboard?tab=attendance' },
         { label: 'Ingredient Stock', icon: '📦', path: '/manager/dashboard?tab=inventory' },
         { label: 'Cafe Menu', icon: '📋', path: '/manager/dashboard?tab=menu' }];
 
       case 'chef':
         return [
-        { label: 'Active Cooking', icon: '👨‍🍳', path: '/kitchen/dashboard' },
-        { label: 'Kitchen Tickets', icon: '📋', path: '/kitchen/dashboard?tab=kot' },
-        { label: 'Ingredient Stock', icon: '📦', path: '/kitchen/dashboard?tab=inventory' },
-        { label: 'Cafe Menu & Recipes', icon: '📋', path: '/kitchen/dashboard?tab=menu' },
+        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }];
+        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
+        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
 
       case 'waiter':
       case 'staff':
         return [
-        { label: 'Live Orders', icon: '🛍️', path: '/waiter/dashboard' },
-        { label: 'Manual Orders', icon: '📝', path: '/manual-order' },
+        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }];
+        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
+        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
 
       case 'cashier':
         return [
-        { label: 'Counter Billing', icon: '💳', path: '/cashier/dashboard' },
-        { label: 'Manual Orders', icon: '📝', path: '/manual-order' },
-        { label: 'Receipt Logs', icon: '📝', path: '/cashier/dashboard?tab=receipts' },
-        { label: 'Item Availability', icon: '📦', path: '/cashier/dashboard?tab=inventory' },
+        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' }];
+        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
+        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
 
       default:
         return [];
     }
-  };
-
-  const getHeaderInfo = () => {
-    const search = location.search;
-    const pathname = location.pathname;
-
-    if (pathname.includes('/owner/profile')) {
-      return { title: 'Settings & Profile', subtitle: 'Manage restaurant details and branches' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-    }
-    
-    if (pathname.includes('/owner/dashboard')) {
-      if (search.includes('tab=menu')) return { title: 'Menu & Reviews', subtitle: 'Configure cafe menu items and feedback' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-      if (search.includes('tab=staff')) return { title: 'Staff & Reports', subtitle: 'Manage employee shifts and activity logs' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-      if (search.includes('tab=inventory')) return { title: 'Inventory Control', subtitle: 'Track ingredients, suppliers, and waste' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-      if (search.includes('tab=orders')) return { title: 'Order Monitor', subtitle: 'Track live orders and billing receipts' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-      return { title: 'Business Stats', subtitle: `Overview of ${cafeInfo?.name || 'Cafe'} performance` + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-    }
-
-    if (pathname.includes('/super-admin/dashboard')) {
-      if (search.includes('tab=cafes')) return { title: 'Manage Cafes', subtitle: 'Supervise cafe setup and activations' };
-      if (search.includes('tab=subscriptions')) return { title: 'Subscriptions', subtitle: 'Manage platform subscription tiers' };
-      if (search.includes('tab=branches')) return { title: 'Branch Monitoring', subtitle: 'Oversee cafe branches and coverage' };
-      if (search.includes('tab=tickets')) return { title: 'Support Center', subtitle: 'Resolve platform support queries' };
-      if (search.includes('tab=revenue')) return { title: 'Revenue Metrics', subtitle: 'Analyze commissions and transactions' };
-      if (search.includes('tab=health')) return { title: 'System Diagnostics', subtitle: 'Monitor server and database health' };
-      if (search.includes('tab=logs')) return { title: 'Platform Logfiles', subtitle: 'System audit logs and error diagnostics' };
-      return { title: 'Platform Stats', subtitle: 'Overall system health and billing insights' };
-    }
-
-    if (pathname.includes('/manager/dashboard')) {
-      return { title: 'Operational Stats', subtitle: 'Oversee cafe operations, attendance, and stock' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-    }
-
-    if (pathname.includes('/kitchen/dashboard')) {
-      return { title: 'Active Cooking', subtitle: 'Manage active tickets and recipe stock' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-    }
-
-    if (pathname.includes('/waiter/dashboard')) {
-      return { title: 'Live Orders', subtitle: 'Track active tables and serve status' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-    }
-
-    if (pathname.includes('/cashier/dashboard')) {
-      return { title: 'Counter Billing', subtitle: 'Execute counter billing and receipt logs' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-    }
-
-    if (pathname.includes('/staff/attendance')) {
-      return { title: 'My Attendance', subtitle: 'Submit shift report and view logs' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
-    }
-
-    return { title: cafeInfo?.name || 'Smart Cafe', subtitle: 'Welcome to the Dashboard' + (user?.cafeId ? ` · Cafe ID: ${user.cafeId}` : '') };
   };
 
   const getMobileNavConfig = () => {
@@ -259,15 +246,15 @@ const SaaSLayout = ({ children }) => {
 
       case 'manager':
         primary = allItems.filter((item) =>
-        ['Operational Stats', 'Order Log', 'Staff Attendance'].includes(item.label)
+        ['Operational Stats', 'Order Workspace', 'Staff Attendance'].includes(item.label)
         );
         primary.push({ label: 'My Attendance', icon: '⏰', path: '/staff/attendance' });
-        remaining = allItems.filter((item) => !['Operational Stats', 'Order Log', 'Staff Attendance'].includes(item.label));
+        remaining = allItems.filter((item) => !['Operational Stats', 'Order Workspace', 'Staff Attendance'].includes(item.label));
         break;
 
       case 'chef':
         primary = allItems.filter((item) =>
-        ['Active Cooking', 'Kitchen Tickets', 'My Attendance', 'Submit Work Report'].includes(item.label)
+        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
         );
         remaining = allItems.filter((item) => !primary.includes(item));
         break;
@@ -275,14 +262,14 @@ const SaaSLayout = ({ children }) => {
       case 'waiter':
       case 'staff':
         primary = allItems.filter((item) =>
-        ['Live Orders', 'My Attendance', 'Submit Work Report'].includes(item.label)
+        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
         );
         remaining = allItems.filter((item) => !primary.includes(item));
         break;
 
       case 'cashier':
         primary = allItems.filter((item) =>
-        ['Counter Billing', 'Receipt Logs', 'My Attendance', 'Submit Work Report'].includes(item.label)
+        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
         );
         remaining = allItems.filter((item) => !primary.includes(item));
         break;
@@ -310,6 +297,7 @@ const SaaSLayout = ({ children }) => {
       case 'Receipt Logs':
       case 'Order Log':
       case 'Live Orders':
+      case 'Order Workspace':
         return 'Orders';
       case 'Cafe Menu':
       case 'Cafe Menu & Recipes':
@@ -454,139 +442,22 @@ const SaaSLayout = ({ children }) => {
   const { primary: primaryMobileItems, remaining: remainingMobileItems } = getMobileNavConfig();
 
   const handleLogout = async () => {
-    setProfileDropdownOpen(false);
     await logout();
     navigate('/login');
   };
 
-  const handleProfileClick = (e) => {
-    e.stopPropagation();
-    setProfileDropdownOpen(prev => !prev);
+  const handleProfileClick = () => {
+    if (['admin', 'owner'].includes(userRole)) {
+      navigate('/owner/profile');
+    } else {
+      setProfileDropdownOpen(!profileDropdownOpen);
+    }
   };
 
   const formatRoleLabel = (r) => {
-    if (!r) return 'Staff';
-    const cleanRole = r.toLowerCase();
-    if (cleanRole === 'super_admin') return 'Super Admin';
-    if (cleanRole === 'admin' || cleanRole === 'owner') return 'Cafe Owner';
-    return cleanRole.charAt(0).toUpperCase() + cleanRole.slice(1);
-  };
-
-  const renderProfileDropdown = () => {
-    if (!profileDropdownOpen) return null;
-
-    const displayOwnerName = cafeInfo?.ownerName || (['admin', 'owner'].includes(userRole) ? user.name : 'Kamala Bevara');
-    const firstLetter = cafeInfo?.name ? cafeInfo.name.charAt(0).toUpperCase() : '☕';
-
-    return (
-      <>
-        {/* Transparent backdrop overlay */}
-        <div 
-          onClick={(e) => {
-            e.stopPropagation();
-            setProfileDropdownOpen(false);
-          }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 999,
-            background: 'transparent',
-            cursor: 'default'
-          }} 
-        />
-        <div 
-          className="profile-dropdown-card"
-          onClick={(e) => e.stopPropagation()} // Prevent event bubbling inside dropdown
-          style={{ zIndex: 1000 }}
-        >
-          {/* Header Section */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            padding: '20px',
-            gap: '14px',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '18px'
-          }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '50%',
-              overflow: 'hidden',
-              backgroundColor: 'rgba(194, 125, 95, 0.1)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '2px solid var(--color-primary)',
-              flexShrink: 0
-            }}>
-              {cafeInfo?.logoUrl ? (
-                <img src={cafeInfo.logoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <span style={{ fontSize: '22px', fontWeight: 'bold', color: 'var(--color-primary)' }}>
-                  {firstLetter}
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: '4px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-              <span className="dropdown-title" style={{ fontSize: '14.5px', fontWeight: 800, whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }} title={cafeInfo?.name}>
-                {cafeInfo?.name || "Smart Cafe"}
-              </span>
-              <span className="dropdown-subtitle" style={{ fontSize: '11px', fontWeight: 650, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                Cafe ID: {user.cafeId || 'N/A'}
-              </span>
-              <span className="dropdown-title" style={{ fontSize: '13px', fontWeight: 700, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                Owner: {displayOwnerName}
-              </span>
-              <span className="dropdown-subtitle" style={{ fontSize: '11.5px', fontWeight: 500, marginTop: '1px', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                {user.email}
-              </span>
-              <span className="dropdown-subtitle" style={{ 
-                alignSelf: 'flex-start',
-                fontSize: '9.5px', 
-                fontWeight: 750, 
-                color: 'var(--color-primary)', 
-                backgroundColor: 'rgba(194, 125, 95, 0.12)', 
-                padding: '2px 8px', 
-                borderRadius: '12px',
-                marginTop: '4px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>
-                {formatRoleLabel(userRole)}
-              </span>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <button
-              onClick={() => {
-                setProfileDropdownOpen(false);
-                if (['admin', 'owner'].includes(userRole)) {
-                  navigate('/owner/profile');
-                } else {
-                  navigate('/staff/attendance');
-                }
-              }}
-              className="dropdown-action-btn"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-              Settings & Profile
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="dropdown-action-btn-danger"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-              Logout
-            </button>
-          </div>
-        </div>
-      </>
-    );
+    if (r === 'super_admin') return 'Super Admin';
+    if (r === 'admin' || r === 'owner') return 'Cafe Owner';
+    return r.charAt(0).toUpperCase() + r.slice(1);
   };
 
   return (
@@ -602,12 +473,14 @@ const SaaSLayout = ({ children }) => {
 
       {/* Sidebar Drawer for tablet */}
       <aside className={`sidebar-drawer ${mobileDrawerOpen ? 'open' : ''}`}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid var(--border-color)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="mh-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {cafeInfo?.logoUrl ? <img src={cafeInfo.logoUrl} alt="logo" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} /> : '☕'}
-            </div>
-            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>{cafeInfo?.name || "Cypher's Café"}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #2d2d2d' }}>
+          <div 
+            onClick={() => { navigate('/'); setMobileDrawerOpen(false); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+            title="Go to Home"
+          >
+            <div className="mh-logo">☕</div>
+            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>Dr. Chai Cafe</span>
           </div>
           <button className="drawer-close-btn" onClick={() => setMobileDrawerOpen(false)}>×</button>
         </div>
@@ -621,8 +494,22 @@ const SaaSLayout = ({ children }) => {
                   navigate(item.path);
                   setMobileDrawerOpen(false);
                 }}
-                className={`sidebar-menu-btn ${isActive ? 'active' : ''}`}
-              >
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: isActive ? 'rgba(143, 168, 155, 0.12)' : 'transparent',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  fontSize: '14.5px',
+                  fontWeight: isActive ? 800 : 500,
+                  cursor: 'pointer',
+                  width: '100%',
+                  textAlign: 'left'
+                }}>
+                
                 <span style={{ fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {renderSvgIcon(item.label, isActive) || item.icon}
                 </span>
@@ -632,6 +519,37 @@ const SaaSLayout = ({ children }) => {
           })}
         </nav>
         
+        {/* Mobile Drawer Profile Footer */}
+        <div style={{
+          marginTop: 'auto',
+          padding: '20px',
+          borderTop: '1px solid #2d2d2d',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              backgroundColor: '#3f3f3f',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              fontSize: '14px',
+              border: '2px solid var(--color-border)'
+            }}>
+              {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{user.name}</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{formatRoleLabel(userRole)}</span>
+            </div>
+          </div>
+        </div>
       </aside>
 
       {/* Mobile Top Header */}
@@ -640,148 +558,112 @@ const SaaSLayout = ({ children }) => {
           <button className="hamburger-btn" onClick={() => setMobileDrawerOpen(true)}>
             ☰
           </button>
-          <div className="mh-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {cafeInfo?.logoUrl ? <img src={cafeInfo.logoUrl} alt="logo" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} /> : '☕'}
+          <div 
+            onClick={() => navigate('/')}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+            title="Go to Home"
+          >
+            <div className="mh-logo">☕</div>
+            <span className="mh-name">Dr. Chai</span>
           </div>
-          <span className="mh-name">{cafeInfo?.name || "Cypher's Café"}</span>
         </div>
-        <div className="mh-actions">
-          {/* Theme Dropdown Toggle */}
-          <div className="theme-dropdown-container" style={{ position: 'relative' }}>
-            <button
-              className="mh-icon-btn"
-              onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-              title="Change Theme"
-              style={{ background: 'rgba(0, 0, 0, 0.04)', border: '1px solid rgba(0, 0, 0, 0.06)' }}
-            >
-              {theme === 'light' ? '🌞' : theme === 'dark' ? '🌙' : '💻'}
-            </button>
-            {themeMenuOpen && (
-              <div style={{
-                position: 'absolute',
-                top: '50px',
-                right: 0,
-                width: '150px',
-                backgroundColor: 'var(--bg-card)',
-                border: '1px solid var(--color-border)',
-                borderRadius: '8px',
-                boxShadow: 'var(--shadow-md)',
-                padding: '4px 0',
-                zIndex: 700
-              }}>
-                <button
-                  onClick={() => { setTheme('light'); setThemeMenuOpen(false); }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: theme === 'light' ? 'rgba(212, 144, 115, 0.15)' : 'transparent',
-                    border: 'none',
-                    color: 'var(--color-text-primary)',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: '13.5px',
-                    fontWeight: theme === 'light' ? 'bold' : 'normal'
-                  }}
-                >
-                  <span>🌞</span> Light Mode
-                </button>
-                <button
-                  onClick={() => { setTheme('dark'); setThemeMenuOpen(false); }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: theme === 'dark' ? 'rgba(212, 144, 115, 0.15)' : 'transparent',
-                    border: 'none',
-                    color: 'var(--color-text-primary)',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: '13.5px',
-                    fontWeight: theme === 'dark' ? 'bold' : 'normal'
-                  }}
-                >
-                  <span>🌙</span> Dark Mode
-                </button>
-                <button
-                  onClick={() => { setTheme('system'); setThemeMenuOpen(false); }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: theme === 'system' ? 'rgba(212, 144, 115, 0.15)' : 'transparent',
-                    border: 'none',
-                    color: 'var(--color-text-primary)',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: '13.5px',
-                    fontWeight: theme === 'system' ? 'bold' : 'normal'
-                  }}
-                >
-                  <span>💻</span> System Default
-                </button>
-              </div>
-            )}
-          </div>
 
+        {['admin', 'owner'].includes(userRole) && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <BranchSwitcher collapsed={true} />
+          </div>
+        )}
+
+        <div className="mh-actions">
           {/* Notification Bell */}
-          <div>
-            <button ref={bellButtonRef} className="mh-icon-btn" onClick={() => setNotificationsOpen(!notificationsOpen)}>
+          <div style={{ position: 'relative' }}>
+            <button className="mh-icon-btn" onClick={() => setNotificationsOpen(!notificationsOpen)}>
               🔔
-              {lowStockAlerts.length > 0 &&
-              <span className="bnav-badge" style={{ top: '-4px', right: '-4px' }}>{lowStockAlerts.length}</span>
+              {unreadCount > 0 &&
+              <span className="bnav-badge" style={{ top: '-4px', right: '-4px' }}>{unreadCount}</span>
               }
             </button>
             {notificationsOpen &&
-            <div ref={notificationRef} style={{
+            <div style={{
               position: 'absolute',
-              top: '55px',
-              right: '16px',
-              width: '300px',
-              maxWidth: 'calc(100vw - 32px)',
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
+              top: '50px',
+              right: 0,
+              width: '280px',
+              backgroundColor: '#1E1E1E',
+              border: '1px solid #333',
               borderRadius: '12px',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
               padding: '16px',
               zIndex: 700
             }}>
                 <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: 'var(--color-text-primary)' }}>
                   Notifications & Alerts
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', maxHeight: '200px', overflowY: 'auto' }}>
-                  {lowStockAlerts.length === 0 ?
-                <>
-                      <div style={{ padding: '6px 0', borderBottom: '1px solid var(--border-color)', color: 'var(--color-text-secondary)' }}>
-                        🟢 System active and monitoring heartbeat.
-                      </div>
-                      <div style={{ padding: '6px 0', color: 'var(--color-text-secondary)' }}>
-                        📋 Chef Dashboard synced with Kitchen Queue.
-                      </div>
-                    </> :
-
-                lowStockAlerts.map((item, idx) =>
-                <div key={idx} style={{ padding: '8px 0', borderBottom: idx < lowStockAlerts.length - 1 ? '1px solid var(--border-color)' : 'none', color: '#F39C12' }}>
-                        ⚠️ <strong>{item.name}</strong> inventory running low ({item.quantity !== undefined ? item.quantity : item.stock} {item.unit} left, min {item.reorderLevel !== undefined ? item.reorderLevel : item.minStock} {item.unit}).
-                      </div>
-                )
-                }
-                </div>
+                {renderNotificationList()}
               </div>
             }
           </div>
           {/* Avatar Dropdown */}
-          <div className="profile-dropdown-container" style={{ position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
             <div className="mh-avatar" onClick={handleProfileClick}>
               {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
             </div>
-            {renderProfileDropdown()}
+            {profileDropdownOpen && !['admin', 'owner'].includes(userRole) &&
+            <div style={{
+              position: 'absolute',
+              top: '50px',
+              right: 0,
+              width: '180px',
+              backgroundColor: '#1E1E1E',
+              border: '1px solid #333',
+              borderRadius: '10px',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+              padding: '8px 0',
+              zIndex: 700
+            }}>
+                <div style={{
+                padding: '8px 16px',
+                fontSize: '12px',
+                color: '#888',
+                borderBottom: '1px solid #2d2d2d',
+                marginBottom: '4px'
+              }}>
+                  {user.email}
+                </div>
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setProfileDropdownOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '10px 16px',
+                    textAlign: 'left',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#EF4444',
+                    fontSize: '13.5px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    transition: 'background-color 0.2s, padding-left 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                    e.currentTarget.style.paddingLeft = '20px';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.paddingLeft = '16px';
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>🚪</span>
+                  <span>Log Out</span>
+                </button>
+              </div>
+            }
           </div>
         </div>
       </header>
@@ -790,7 +672,7 @@ const SaaSLayout = ({ children }) => {
       <aside className="desktop-sidebar" style={{
         width: sidebarCollapsed ? '70px' : '260px',
         backgroundColor: 'var(--bg-secondary)',
-        borderRight: '1px solid var(--border-color)',
+        borderRight: '1px solid #2d2d2d',
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
@@ -802,7 +684,7 @@ const SaaSLayout = ({ children }) => {
         {/* Brand/Logo Header (Fixed) */}
         <div style={{
           padding: sidebarCollapsed ? '20px 8px' : '20px 16px',
-          borderBottom: '1px solid var(--border-color)',
+          borderBottom: '1px solid #2d2d2d',
           display: 'flex',
           flexDirection: sidebarCollapsed ? 'column' : 'row',
           alignItems: 'center',
@@ -812,13 +694,17 @@ const SaaSLayout = ({ children }) => {
           minHeight: '70px',
           overflow: 'hidden'
         }}>
-          {/* Logo and Name */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            justifyContent: sidebarCollapsed ? 'center' : 'flex-start'
-          }}>
+          <div 
+            onClick={() => navigate('/')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+              cursor: 'pointer'
+            }}
+            title="Go to Home"
+          >
             <div style={{
               width: '36px',
               height: '36px',
@@ -830,21 +716,17 @@ const SaaSLayout = ({ children }) => {
               fontSize: '18px',
               flexShrink: 0
             }}>
-              {cafeInfo?.logoUrl ? (
-                <img src={cafeInfo.logoUrl} alt="logo" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
-                  <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
-                  <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
-                  <line x1="6" y1="1" x2="6" y2="4"></line>
-                  <line x1="10" y1="1" x2="10" y2="4"></line>
-                  <line x1="14" y1="1" x2="14" y2="4"></line>
-                </svg>
-              )}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
+                <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+                <line x1="6" y1="1" x2="6" y2="4"></line>
+                <line x1="10" y1="1" x2="10" y2="4"></line>
+                <line x1="14" y1="1" x2="14" y2="4"></line>
+              </svg>
             </div>
             {!sidebarCollapsed &&
-            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)', letterSpacing: '-0.5px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} title={cafeInfo?.name}>
-                {cafeInfo?.name || "Cypher's Café"}
+            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
+                Dr. Chai Cafe
               </span>
             }
           </div>
@@ -881,6 +763,19 @@ const SaaSLayout = ({ children }) => {
           </button>
         </div>
 
+        {/* Branch Switcher in Sidebar (owner/admin only) */}
+        {['admin', 'owner'].includes(userRole) && (
+          <div style={{
+            padding: sidebarCollapsed ? '8px 6px' : '10px 12px',
+            borderBottom: '1px solid #2d2d2d',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: sidebarCollapsed ? 'center' : 'flex-start'
+          }}>
+            <BranchSwitcher collapsed={sidebarCollapsed} />
+          </div>
+        )}
+
         {/* Navigation Items (Scrollable) */}
         <nav style={{
           padding: '20px 10px',
@@ -898,12 +793,25 @@ const SaaSLayout = ({ children }) => {
                 key={index}
                 onClick={() => navigate(item.path)}
                 title={sidebarCollapsed ? item.label : ''}
-                className={`sidebar-menu-btn ${isActive ? 'active' : ''}`}
                 style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: sidebarCollapsed ? '0' : '12px',
                   justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
-                  gap: sidebarCollapsed ? '0' : '12px'
-                }}
-              >
+                  padding: '12px 14px',
+                  borderRadius: sidebarCollapsed ? '8px' : '10px',
+                  border: 'none',
+                  borderLeft: isActive ? '4px solid var(--color-primary)' : '4px solid transparent',
+                  background: isActive ? 'rgba(143, 168, 155, 0.12)' : 'transparent',
+                  color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  fontSize: '14.5px',
+                  fontWeight: isActive ? 800 : 500,
+                  cursor: 'pointer',
+                  width: '100%',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'left'
+                }}>
+                
                 <span style={{ fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {renderSvgIcon(item.label, isActive) || item.icon}
                 </span>
@@ -918,28 +826,41 @@ const SaaSLayout = ({ children }) => {
       <div className="saas-main-pane" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Desktop Top Header (Hidden on Mobile/Tablet via CSS) */}
         <header className="desktop-top-header" style={{
-          height: '72px',
-          padding: '16px 24px',
-          gap: '16px',
-          borderBottom: '1px solid var(--border-color)',
-          background: 'var(--bg-card)',
+          height: '70px',
+          backgroundColor: 'var(--bg-secondary)',
+          borderBottom: '1px solid #2d2d2d',
+          padding: '0 24px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           zIndex: 90,
           position: 'sticky',
           top: 0,
-          flexShrink: 0,
-          boxSizing: 'border-box'
+          flexShrink: 0
         }}>
-          {/* Left: Page Title & Subtitle */}
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <h1 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {getHeaderInfo().title}
-            </h1>
-            <p style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {getHeaderInfo().subtitle}
-            </p>
+          {/* Left: Branch Switcher + Live Indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {['admin', 'owner'].includes(userRole) && <BranchSwitcher collapsed={false} />}
+            {!['admin', 'owner'].includes(userRole) && (
+              <>
+                <span style={{
+                  background: 'rgba(46, 204, 113, 0.12)',
+                  color: '#2ecc71',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  fontSize: '12.5px',
+                  fontWeight: 800,
+                  letterSpacing: '0.5px'
+                }}>
+                  ● LIVE
+                </span>
+                {user.cafeId && (
+                  <span style={{ fontSize: '13.5px', color: '#A0826C', fontWeight: 600 }}>
+                    Cafe ID: <strong style={{ color: 'var(--color-text-primary)' }}>{user.cafeId}</strong>
+                  </span>
+                )}
+              </>
+            )}
           </div>
 
           {/* Right: Actions */}
@@ -947,7 +868,6 @@ const SaaSLayout = ({ children }) => {
             {/* Notification Bell */}
             <div style={{ position: 'relative' }}>
               <button
-                ref={mobileBellButtonRef}
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
                 style={{
                   background: 'rgba(0, 0, 0, 0.04)',
@@ -966,7 +886,7 @@ const SaaSLayout = ({ children }) => {
                 }}>
                 
                 🔔
-                {lowStockAlerts.length > 0 &&
+                {unreadCount > 0 &&
                 <span style={{
                   position: 'absolute',
                   top: '-2px',
@@ -982,147 +902,34 @@ const SaaSLayout = ({ children }) => {
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                    {lowStockAlerts.length}
+                    {unreadCount}
                   </span>
                 }
               </button>
 
               {notificationsOpen &&
-              <div ref={notificationRef} style={{
+              <div style={{
                 position: 'absolute',
                 top: '50px',
                 right: 0,
                 width: '300px',
-                backgroundColor: 'var(--bg-card)',
-                border: '1px solid var(--border-color)',
+                backgroundColor: '#1E1E1E',
+                border: '1px solid #333',
                 borderRadius: '12px',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
                 padding: '16px',
                 zIndex: 200
               }}>
                   <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: 'var(--color-text-primary)' }}>
                     Notifications & Alerts
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', maxHeight: '250px', overflowY: 'auto' }}>
-                    {lowStockAlerts.length === 0 ?
-                  <>
-                        <div style={{ padding: '6px 0', borderBottom: '1px solid var(--border-color)', color: 'var(--color-text-secondary)' }}>
-                          🟢 System active and monitoring heartbeat.
-                        </div>
-                        <div style={{ padding: '6px 0', color: 'var(--color-text-secondary)' }}>
-                          📋 Chef Dashboard synced with Kitchen Queue.
-                        </div>
-                      </> :
-
-                  lowStockAlerts.map((item, idx) =>
-                  <div key={idx} style={{ padding: '8px 0', borderBottom: idx < lowStockAlerts.length - 1 ? '1px solid var(--border-color)' : 'none', color: '#F39C12' }}>
-                          ⚠️ <strong>{item.name}</strong> inventory running low ({item.quantity !== undefined ? item.quantity : item.stock} {item.unit} left, min {item.reorderLevel !== undefined ? item.reorderLevel : item.minStock} {item.unit}).
-                        </div>
-                  )
-                  }
-                  </div>
+                  {renderNotificationList()}
                 </div>
               }
             </div>
 
-            {/* Theme Dropdown Toggle */}
-            <div className="theme-dropdown-container" style={{ position: 'relative' }}>
-              <button
-                onClick={() => setThemeMenuOpen(!themeMenuOpen)}
-                title="Change Theme"
-                style={{
-                  background: 'rgba(0, 0, 0, 0.04)',
-                  border: '1px solid rgba(0, 0, 0, 0.06)',
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  color: 'var(--color-text-secondary)',
-                  transition: 'all 0.2s',
-                  position: 'relative'
-                }}>
-                {theme === 'light' ? '🌞' : theme === 'dark' ? '🌙' : '💻'}
-              </button>
-              {themeMenuOpen && (
-                <div style={{
-                  position: 'absolute',
-                  top: '50px',
-                  right: 0,
-                  width: '150px',
-                  backgroundColor: 'var(--bg-card)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '8px',
-                  boxShadow: 'var(--shadow-md)',
-                  padding: '4px 0',
-                  zIndex: 700
-                }}>
-                  <button
-                    onClick={() => { setTheme('light'); setThemeMenuOpen(false); }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      width: '100%',
-                      padding: '8px 12px',
-                      background: theme === 'light' ? 'rgba(212, 144, 115, 0.15)' : 'transparent',
-                      border: 'none',
-                      color: 'var(--color-text-primary)',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '13.5px',
-                      fontWeight: theme === 'light' ? 'bold' : 'normal'
-                    }}
-                  >
-                    <span>🌞</span> Light Mode
-                  </button>
-                  <button
-                    onClick={() => { setTheme('dark'); setThemeMenuOpen(false); }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      width: '100%',
-                      padding: '8px 12px',
-                      background: theme === 'dark' ? 'rgba(212, 144, 115, 0.15)' : 'transparent',
-                      border: 'none',
-                      color: 'var(--color-text-primary)',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '13.5px',
-                      fontWeight: theme === 'dark' ? 'bold' : 'normal'
-                    }}
-                  >
-                    <span>🌙</span> Dark Mode
-                  </button>
-                  <button
-                    onClick={() => { setTheme('system'); setThemeMenuOpen(false); }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      width: '100%',
-                      padding: '8px 12px',
-                      background: theme === 'system' ? 'rgba(212, 144, 115, 0.15)' : 'transparent',
-                      border: 'none',
-                      color: 'var(--color-text-primary)',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '13.5px',
-                      fontWeight: theme === 'system' ? 'bold' : 'normal'
-                    }}
-                  >
-                    <span>💻</span> System Default
-                  </button>
-                </div>
-              )}
-            </div>
-
             {/* Profile Dropdown Toggle */}
-            <div className="profile-dropdown-container" style={{ position: 'relative' }}>
+            <div style={{ position: 'relative' }}>
               <button
                 onClick={handleProfileClick}
                 style={{
@@ -1130,28 +937,90 @@ const SaaSLayout = ({ children }) => {
                   border: 'none',
                   display: 'flex',
                   alignItems: 'center',
+                  gap: '10px',
                   cursor: 'pointer',
                   padding: '4px',
-                  borderRadius: '50%'
+                  borderRadius: '8px'
                 }}>
+                
                 <div style={{
-                  width: '38px',
-                  height: '38px',
+                  width: '36px',
+                  height: '36px',
                   borderRadius: '50%',
-                  backgroundColor: 'var(--color-primary)',
+                  backgroundColor: '#3f3f3f',
                   color: '#FFFFFF',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 'bold',
-                  fontSize: '15px',
-                  border: '2px solid var(--color-border)',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                  fontSize: '14px',
+                  border: '2px solid #5C4331'
                 }}>
                   {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
                 </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
+                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{user.name}</span>
+                  <span style={{ fontSize: '11px', color: '#A0826C' }}>{formatRoleLabel(userRole)}</span>
+                </div>
+                {!['admin', 'owner'].includes(userRole) && <span style={{ fontSize: '10px', color: '#A0826C' }}>▼</span>}
               </button>
-              {renderProfileDropdown()}
+
+              {profileDropdownOpen && !['admin', 'owner'].includes(userRole) &&
+              <div style={{
+                position: 'absolute',
+                top: '50px',
+                right: 0,
+                width: '180px',
+                backgroundColor: '#1E1E1E',
+                border: '1px solid #333',
+                borderRadius: '10px',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                padding: '8px 0',
+                zIndex: 200
+              }}>
+                  <div style={{
+                  padding: '8px 16px',
+                  fontSize: '12px',
+                  color: '#888',
+                  borderBottom: '1px solid #2d2d2d',
+                  marginBottom: '4px'
+                }}>
+                    {user.email}
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setProfileDropdownOpen(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      width: '100%',
+                      padding: '10px 16px',
+                      textAlign: 'left',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#EF4444',
+                      fontSize: '13.5px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      transition: 'background-color 0.2s, padding-left 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                      e.currentTarget.style.paddingLeft = '20px';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.paddingLeft = '16px';
+                    }}
+                  >
+                    <span style={{ fontSize: '16px' }}>🚪</span>
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              }
             </div>
           </div>
         </header>
@@ -1216,7 +1085,7 @@ const SaaSLayout = ({ children }) => {
           right: 0,
           maxHeight: '75vh',
           backgroundColor: 'var(--bg-secondary)',
-          borderTop: '1px solid var(--border-color)',
+          borderTop: '1px solid #2d2d2d',
           borderRadius: '24px 24px 0 0',
           zIndex: 1200,
           transform: moreMenuOpen ? 'translateY(0)' : 'translateY(100%)',

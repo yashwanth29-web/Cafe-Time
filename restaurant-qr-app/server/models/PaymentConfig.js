@@ -4,16 +4,29 @@ const PaymentConfigSchema = new mongoose.Schema({
   cafeId: {
     type: String,
     required: true,
-    unique: true,
     trim: true
   },
-  razorpayKeyId: {
+  branchId: {
     type: String,
-    default: ''
+    required: true,
+    default: 'default',
+    trim: true
   },
-  razorpaySecretEncrypted: {
-    type: String,
-    default: ''
+  acceptCash: {
+    type: Boolean,
+    default: true
+  },
+  enableUpi: {
+    type: Boolean,
+    default: true
+  },
+  taxRate: {
+    type: Number,
+    default: 0
+  },
+  platformCharge: {
+    type: Number,
+    default: 0
   },
   upiId: {
     type: String,
@@ -35,14 +48,16 @@ const PaymentConfigSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
-  isVerified: {
-    type: Boolean,
-    default: false
+  paymentInstructions: {
+    type: String,
+    default: ''
   },
   createdAt: {
     type: Date,
     default: Date.now
   }
 });
+
+PaymentConfigSchema.index({ cafeId: 1, branchId: 1 }, { unique: true });
 
 module.exports = mongoose.model('PaymentConfig', PaymentConfigSchema);

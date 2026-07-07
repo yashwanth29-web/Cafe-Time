@@ -55,9 +55,10 @@ const AttendanceSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Present', 'Late', 'Absent'],
+    enum: ['Present', 'Late', 'Absent', 'Half Day', 'Leave', 'Holiday'],
     default: 'Present'
   },
+
   image: {
     type: String,
     default: ''
@@ -77,6 +78,25 @@ const AttendanceSchema = new mongoose.Schema({
   imageExpiredAt: {
     type: Date,
     default: null
+
+  workingHours: {
+    type: Number,
+    default: 0
+  },
+  overtimeHours: {
+    type: Number,
+    default: 0
+  },
+  isExtraWorkActive: {
+    type: Boolean,
+    default: false
+  },
+  extraWorkStartTime: {
+    type: Date
+  },
+  extraWorkEndTime: {
+    type: Date
+  },
   },
   createdAt: {
     type: Date,
@@ -88,5 +108,11 @@ const AttendanceSchema = new mongoose.Schema({
 
 // Compound index to prevent duplicate attendance on the same day for a staff member
 AttendanceSchema.index({ staffId: 1, date: 1 }, { unique: true });
+AttendanceSchema.index({ cafeId: 1, date: -1 });
+AttendanceSchema.index({ cafeId: 1, branchId: 1, date: -1 });
+
+
+// Optimize queries bounded by branch
+AttendanceSchema.index({ cafeId: 1, branchId: 1 });
 
 module.exports = mongoose.model('Attendance', AttendanceSchema);

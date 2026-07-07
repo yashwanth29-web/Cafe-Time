@@ -3,57 +3,21 @@ const User = require('../models/User');
 const Branch = require('../models/Branch');
 const Cafe = require('../models/Cafe');
 
-// Helper: Parse coordinates from Google Maps URLs or strings
 const parseCoordinates = (input) => {
   if (!input) return null;
   const str = String(input).trim();
-  
-  // 1. q=lat,lng
   const qMatch = str.match(/[?&](?:q|query)=([\d.-]+)\s*,\s*([\d.-]+)/i);
-  if (qMatch) {
-    return {
-      latitude: parseFloat(qMatch[1]),
-      longitude: parseFloat(qMatch[2])
-    };
-  }
-  
-  // 2. @lat,lng
+  if (qMatch) return { latitude: parseFloat(qMatch[1]), longitude: parseFloat(qMatch[2]) };
   const atMatch = str.match(/@([\d.-]+)\s*,\s*([\d.-]+)/);
-  if (atMatch) {
-    return {
-      latitude: parseFloat(atMatch[1]),
-      longitude: parseFloat(atMatch[2])
-    };
-  }
-
-  // 3. /place/lat,lng
+  if (atMatch) return { latitude: parseFloat(atMatch[1]), longitude: parseFloat(atMatch[2]) };
   const placeMatch = str.match(/\/place\/([\d.-]+)\s*,\s*([\d.-]+)/i);
-  if (placeMatch) {
-    return {
-      latitude: parseFloat(placeMatch[1]),
-      longitude: parseFloat(placeMatch[2])
-    };
-  }
-
-  // 4. simple lat,lng
+  if (placeMatch) return { latitude: parseFloat(placeMatch[1]), longitude: parseFloat(placeMatch[2]) };
   const simpleMatch = str.match(/^([\d.-]+)\s*,\s*([\d.-]+)$/);
-  if (simpleMatch) {
-    return {
-      latitude: parseFloat(simpleMatch[1]),
-      longitude: parseFloat(simpleMatch[2])
-    };
-  }
-
-  // 5. general fallback for any lat,lng in the string
+  if (simpleMatch) return { latitude: parseFloat(simpleMatch[1]), longitude: parseFloat(simpleMatch[2]) };
   const generalMatch = str.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
-  if (generalMatch) {
-    return {
-      latitude: parseFloat(generalMatch[1]),
-      longitude: parseFloat(generalMatch[2])
-    };
-  }
-
+  if (generalMatch) return { latitude: parseFloat(generalMatch[1]), longitude: parseFloat(generalMatch[2]) };
   return null;
+};
 };
 
 // Helper: Get IST Date String (YYYY-MM-DD)
@@ -104,14 +68,15 @@ const checkIn = async (req, res) => {
       branch = await Branch.findOne({ branchId: 'default', cafeId: staff.cafeId });
       if (!branch) {
         const cafe = await Cafe.findOne({ cafeId: staff.cafeId });
+        const { lat, lng } = parseCoords(cafe?.mapsLocation);
         branch = await Branch.create({
           branchId: 'default',
           branchName: 'Primary Location',
           cafeId: staff.cafeId,
           address: (cafe && cafe.address) || 'Default Address',
           manager: 'Owner',
-          latitude: 0,
-          longitude: 0,
+          latitude: lat,
+          longitude: lng,
           allowedRadius: 30,
           isActive: true
         });
@@ -131,10 +96,10 @@ const checkIn = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Assigned branch is currently inactive' });
     }
 
-    // 3. Distance Validation (Fallback/Double check with Cafe coordinates if user is far from branch)
+    // Distance Validation with fallback to Cafe coordinates
     let checkLat = branch.latitude;
     let checkLng = branch.longitude;
-    let allowedRadius = branch.allowedRadius || 30;
+    let allowedRadius = branch.allowedRadius || 100;
 
     const isBranchGeoConfigured = typeof checkLat === 'number' && checkLat !== 0 &&
                                   typeof checkLng === 'number' && checkLng !== 0;
@@ -142,7 +107,6 @@ const checkIn = async (req, res) => {
     let isGeoConfigured = isBranchGeoConfigured;
     let distance = 0;
 
-    // Fetch Cafe coordinates for fallback/double-check
     let cafeLat = 0;
     let cafeLng = 0;
     let isCafeGeoConfigured = false;
@@ -153,20 +117,11 @@ const checkIn = async (req, res) => {
         cafeLat = cafe.latitude;
         cafeLng = cafe.longitude;
         isCafeGeoConfigured = true;
-      } else if (cafe.mapsLocation) {
-        const coords = parseCoordinates(cafe.mapsLocation);
-        if (coords) {
-          cafeLat = coords.latitude;
-          cafeLng = coords.longitude;
-          isCafeGeoConfigured = true;
-        }
       }
     }
 
     if (isBranchGeoConfigured) {
       distance = calculateDistance(Number(latitude), Number(longitude), Number(checkLat), Number(checkLng));
-      
-      // Double check: if they are too far from branch, check if they are near the main cafe location
       if (distance > allowedRadius && isCafeGeoConfigured) {
         const distanceToCafe = calculateDistance(Number(latitude), Number(longitude), Number(cafeLat), Number(cafeLng));
         if (distanceToCafe <= allowedRadius) {
@@ -199,6 +154,7 @@ const checkIn = async (req, res) => {
         const autoCheckOutTime = new Date(session.checkInTime.getTime() + 8 * 60 * 60 * 1000);
         session.checkOutTime = autoCheckOutTime;
         session.totalDuration = 480; // 8 hours in minutes
+        session.workingHours = 8;
         await session.save();
       }
     }
@@ -217,11 +173,10 @@ const checkIn = async (req, res) => {
     // 5. Late Check-in detection (opening time + 15 mins grace period)
     let isLate = false;
     try {
-      const cafe = await Cafe.findOne({ cafeId: staff.cafeId });
-      if (cafe && cafe.openingTime) {
-        const timeStr = cafe.openingTime.replace(/\s*(AM|PM)\s*/i, '');
+      if (branch && branch.openingTime) {
+        const timeStr = branch.openingTime.replace(/\s*(AM|PM)\s*/i, '');
         const [opHour, opMin] = timeStr.split(':').map(Number);
-        const isPM = /PM/i.test(cafe.openingTime);
+        const isPM = /PM/i.test(branch.openingTime);
         
         const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
         const opHour24 = isPM && opHour < 12 ? opHour + 12 : (!isPM && opHour === 12 ? 0 : opHour);
@@ -303,11 +258,35 @@ const checkIn = async (req, res) => {
  */
 const checkOut = async (req, res) => {
   const staffId = req.user._id;
+  const { latitude, longitude } = req.body;
 
   try {
     const session = await Attendance.findOne({ staffId, checkOutTime: { $exists: false } });
     if (!session) {
       return res.status(400).json({ success: false, message: 'No active check-in session found for today.' });
+    }
+
+    // Strict Radius Validation for Check-out
+    if (latitude !== undefined && longitude !== undefined) {
+      const branch = await Branch.findOne({ branchId: session.branchId, cafeId: session.cafeId });
+      if (branch) {
+        const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
+                                typeof branch.longitude === 'number' && branch.longitude !== 0;
+        if (isGeoConfigured) {
+          const distance = calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude);
+          const allowedRadius = branch.allowedRadius || 100;
+          if (distance > allowedRadius) {
+            return res.status(400).json({
+              success: false,
+              message: `Checkout restricted. You are outside the allowed radius of ${allowedRadius} meters.`,
+              distance: Math.round(distance),
+              allowedRadius
+            });
+          }
+        }
+      }
+    } else {
+      return res.status(400).json({ success: false, message: 'GPS coordinates are required to check out.' });
     }
 
     const checkOutTime = new Date();
@@ -316,6 +295,7 @@ const checkOut = async (req, res) => {
 
     session.checkOutTime = checkOutTime;
     session.totalDuration = totalDuration;
+    session.workingHours = Number((totalDuration / 60).toFixed(2));
     await session.save();
 
     const hours = Math.floor(totalDuration / 60);
@@ -338,14 +318,71 @@ const checkOut = async (req, res) => {
 const getTodayStatus = async (req, res) => {
   const staffId = req.user._id;
   const todayStr = getISTDate();
+  const { latitude, longitude } = req.query;
 
   try {
+    const staff = await User.findById(staffId);
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    let branch = null;
+    if (staff.assignedBranch) {
+      branch = await Branch.findOne({ branchId: staff.assignedBranch, cafeId: staff.cafeId });
+    }
+
+    let distance = null;
+    let allowedRadius = 100;
+    let insideRadius = false;
+    let branchName = 'No branch assigned';
+    let branchLat = 0;
+    let branchLng = 0;
+
+    if (branch) {
+      branchName = branch.branchName;
+      allowedRadius = branch.allowedRadius || 100;
+      branchLat = branch.latitude;
+      branchLng = branch.longitude;
+
+      if (latitude !== undefined && longitude !== undefined) {
+        const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
+                                typeof branch.longitude === 'number' && branch.longitude !== 0;
+        if (isGeoConfigured) {
+          distance = calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude);
+          insideRadius = distance <= allowedRadius;
+        }
+      }
+    }
+
+    // Check if there is an active session that has reached 8 hours (480 minutes)
+    let session = await Attendance.findOne({ staffId, checkOutTime: { $exists: false } });
+    if (session) {
+      const now = new Date();
+      const diffMs = now.getTime() - session.checkInTime.getTime();
+      const durationMin = diffMs / 60000;
+      
+      if (durationMin >= 480) {
+        // Auto-checkout at exactly 8 hours
+        const autoCheckOutTime = new Date(session.checkInTime.getTime() + 8 * 60 * 60 * 1000);
+        session.checkOutTime = autoCheckOutTime;
+        session.totalDuration = 480;
+        session.workingHours = 8;
+        await session.save();
+      }
+    }
+
     const attendance = await Attendance.findOne({ staffId, date: todayStr });
     return res.status(200).json({
       success: true,
       checkedIn: !!attendance,
       checkedOut: attendance ? !!attendance.checkOutTime : false,
-      attendance
+      attendance,
+      branchName,
+      allowedRadius,
+      distance: distance !== null ? Math.round(distance) : null,
+      insideRadius,
+      latitude: branchLat,
+      longitude: branchLng
     });
   } catch (error) {
     console.error('getTodayStatus error:', error);
@@ -403,18 +440,42 @@ const getOwnerTodayDashboard = async (req, res) => {
   }
 
   try {
+    const activeBranch = req.branchId || 'default';
     // Get all active staff members
     const staffList = await User.find({
       cafeId,
+      assignedBranch: activeBranch,
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] },
       isActive: true
     });
 
-    const todayRecords = await Attendance.find({ cafeId, date: todayStr });
+    const todayRecords = await Attendance.find({ cafeId, branchId: activeBranch, date: todayStr }).lean();
+
+    // Fetch Cafe to get openingTime and check if shift has started
+    const cafe = await Cafe.findOne({ cafeId });
+    let isBeforeOpening = false;
+    if (cafe && cafe.openingTime) {
+      try {
+        const timeStr = cafe.openingTime.replace(/\s*(AM|PM)\s*/i, '');
+        const [opHour, opMin] = timeStr.split(':').map(Number);
+        const isPM = /PM/i.test(cafe.openingTime);
+        const opHour24 = isPM && opHour < 12 ? opHour + 12 : (!isPM && opHour === 12 ? 0 : opHour);
+        const opMinutes = opHour24 * 60 + (opMin || 0);
+
+        const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+        const currentMinutes = nowIST.getUTCHours() * 60 + nowIST.getUTCMinutes();
+
+        if (currentMinutes < opMinutes) {
+          isBeforeOpening = true;
+        }
+      } catch (err) {
+        console.warn('Error parsing cafe openingTime for absent count:', err);
+      }
+    }
 
     // Calculations
     const presentCount = todayRecords.length;
-    const absentCount = Math.max(0, staffList.length - presentCount);
+    const absentCount = isBeforeOpening ? 0 : Math.max(0, staffList.length - presentCount);
     const lateCount = todayRecords.filter(r => r.status === 'Late').length;
     const checkedOutCount = todayRecords.filter(r => !!r.checkOutTime).length;
     const currentlyWorkingCount = presentCount - checkedOutCount;
@@ -461,8 +522,10 @@ const getOwnerReports = async (req, res) => {
       startDate.setDate(startDate.getDate() - 1);
     }
 
+    const activeBranch = branchId || req.branchId || 'default';
     const query = {
       cafeId,
+      branchId: activeBranch,
       checkInTime: { $gte: startDate }
     };
 
@@ -472,10 +535,10 @@ const getOwnerReports = async (req, res) => {
     } else if (branchId) {
       query.branchId = branchId;
     }
-
-    const records = await Attendance.find(query).sort({ checkInTime: -1 });
+    const records = await Attendance.find(query).sort({ checkInTime: -1 }).lean();
     const staffCount = await User.countDocuments({
       cafeId,
+      assignedBranch: activeBranch,
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier'] },
       isActive: true
     });
@@ -532,11 +595,133 @@ const getOwnerReports = async (req, res) => {
   }
 };
 
+/**
+ * Start Extra Work (Overtime)
+ */
+const startExtraWork = async (req, res) => {
+  const staffId = req.user._id;
+  const { latitude, longitude } = req.body;
+
+  if (latitude === undefined || longitude === undefined) {
+    return res.status(400).json({ success: false, message: 'GPS coordinates are required' });
+  }
+
+  try {
+    const todayStr = getISTDate();
+    const attendance = await Attendance.findOne({ staffId, date: todayStr });
+
+    if (!attendance) {
+      return res.status(400).json({ success: false, message: 'You must check in first before starting extra work.' });
+    }
+
+    if (!attendance.checkOutTime) {
+      return res.status(400).json({ success: false, message: 'Your regular shift is still running. You must complete your regular shift first.' });
+    }
+
+    if (attendance.isExtraWorkActive) {
+      return res.status(400).json({ success: false, message: 'Extra work session is already active.' });
+    }
+
+    // Radius validation
+    const branch = await Branch.findOne({ branchId: attendance.branchId, cafeId: attendance.cafeId });
+    if (branch) {
+      const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
+                              typeof branch.longitude === 'number' && branch.longitude !== 0;
+      if (isGeoConfigured) {
+        const distance = calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude);
+        const allowedRadius = branch.allowedRadius || 100;
+        if (distance > allowedRadius) {
+          return res.status(400).json({
+            success: false,
+            message: `Extra work restricted. You are outside the allowed radius of ${allowedRadius} meters.`,
+            distance: Math.round(distance),
+            allowedRadius
+          });
+        }
+      }
+    }
+
+    // Activate extra work
+    attendance.isExtraWorkActive = true;
+    attendance.extraWorkStartTime = new Date();
+    await attendance.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Extra work started successfully.',
+      attendance
+    });
+  } catch (error) {
+    console.error('startExtraWork error:', error);
+    return res.status(500).json({ success: false, message: 'Server error starting extra work' });
+  }
+};
+
+/**
+ * Stop Extra Work (Overtime)
+ */
+const stopExtraWork = async (req, res) => {
+  const staffId = req.user._id;
+  const { latitude, longitude } = req.body;
+
+  if (latitude === undefined || longitude === undefined) {
+    return res.status(400).json({ success: false, message: 'GPS coordinates are required' });
+  }
+
+  try {
+    const todayStr = getISTDate();
+    const attendance = await Attendance.findOne({ staffId, date: todayStr });
+
+    if (!attendance || !attendance.isExtraWorkActive) {
+      return res.status(400).json({ success: false, message: 'No active extra work session found.' });
+    }
+
+    // Radius validation
+    const branch = await Branch.findOne({ branchId: attendance.branchId, cafeId: attendance.cafeId });
+    if (branch) {
+      const isGeoConfigured = typeof branch.latitude === 'number' && branch.latitude !== 0 &&
+                              typeof branch.longitude === 'number' && branch.longitude !== 0;
+      if (isGeoConfigured) {
+        const distance = calculateDistance(Number(latitude), Number(longitude), branch.latitude, branch.longitude);
+        const allowedRadius = branch.allowedRadius || 100;
+        if (distance > allowedRadius) {
+          return res.status(400).json({
+            success: false,
+            message: `Stop extra work restricted. You are outside the allowed radius of ${allowedRadius} meters.`,
+            distance: Math.round(distance),
+            allowedRadius
+          });
+        }
+      }
+    }
+
+    const now = new Date();
+    const diffMs = now.getTime() - attendance.extraWorkStartTime.getTime();
+    const overtimeHrs = Number((diffMs / 3600000).toFixed(2)); // in hours
+
+    attendance.isExtraWorkActive = false;
+    attendance.extraWorkEndTime = now;
+    attendance.overtimeHours = (attendance.overtimeHours || 0) + overtimeHrs;
+    await attendance.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Extra work stopped successfully. Overtime added: ${overtimeHrs} hours.`,
+      attendance
+    });
+  } catch (error) {
+    console.error('stopExtraWork error:', error);
+    return res.status(500).json({ success: false, message: 'Server error stopping extra work' });
+  }
+};
+
 module.exports = {
   checkIn,
   checkOut,
   getTodayStatus,
   getStaffHistory,
   getOwnerTodayDashboard,
-  getOwnerReports
+  getOwnerReports,
+  startExtraWork,
+  stopExtraWork
 };

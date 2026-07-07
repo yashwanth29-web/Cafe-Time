@@ -48,6 +48,10 @@ const CafeSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  uiPrimaryColor: {
+    type: String,
+    default: '#D47F46' // Default coffee orange color
+  },
   // V2 Setup fields
   logoUrl: {
     type: String,
@@ -81,6 +85,14 @@ const CafeSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  gstRate: {
+    type: Number,
+    default: 0
+  },
+  serviceChargeRate: {
+    type: Number,
+    default: 0
+  },
   supportNumber: {
     type: String,
     default: ''
@@ -107,10 +119,14 @@ const CafeSchema = new mongoose.Schema({
     type: Date,
     default: () => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
   },
+  requiredDailyHours: {
+    type: Number,
+    default: 8
+  },
   createdAt: {
     type: Date,
     default: Date.now
   }
-});
+}, { bypassBranchFilter: true });
 
-module.exports = mongoose.model('Cafe', CafeSchema);
+module.exports = mongoose.model('Cafe', CafeSchema, 'cafes');

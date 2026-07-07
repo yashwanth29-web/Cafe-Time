@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import API, { getMe, sendOtp, verifyOtp, logoutUser } from '../services/api';
+import API, { getMe, sendOtp, verifyOtp, logoutUser, loginWithGoogleApi } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -21,7 +21,7 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (err) {
       if (err.response?.status !== 401) {
-        console.log('Session validation failed:', err.message);
+        
       }
       localStorage.removeItem('token');
       setUser(null);
@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
       (response) => response,
       (error) => {
         if (error.response && error.response.status === 401) {
-          const isPublicPath = ['/', '/login', '/verify-otp', '/payment-demo'].includes(window.location.pathname);
+          const isPublicPath = ['/', '/login', '/payment-demo'].includes(window.location.pathname);
           const isMeEndpoint = error.config?.url?.includes('/auth/me');
 
           if (!isPublicPath && !isMeEndpoint) {
@@ -94,6 +94,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
+   * Login with Google credential
+   */
+  const loginWithGoogle = async (credential) => {
+    setError(null);
+    try {
+      const response = await loginWithGoogleApi(credential);
+      if (response.success && response.user) {
+        if (response.token) {
+          localStorage.setItem('token', response.token);
+        }
+        setUser(response.user);
+      }
+      return response;
+    } catch (err) {
+      const errMsg = err.response?.data?.message || 'Google authentication failed. Please try again.';
+      setError(errMsg);
+      throw new Error(errMsg);
+    }
+  };
+
+  /**
    * Log out the active session
    */
   const logout = async () => {
@@ -103,6 +124,8 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout request failed:', err);
     } finally {
       localStorage.removeItem('token');
+      localStorage.removeItem('activeBranchId');
+      localStorage.removeItem('recentBranches');
       setUser(null);
     }
   };
@@ -115,6 +138,7 @@ export const AuthProvider = ({ children }) => {
         error,
         initiateLogin,
         confirmOtp,
+        loginWithGoogle,
         logout,
         checkSession,
         setUser
@@ -133,4 +157,4 @@ export const useAuth = () => {
   return context;
 };
 
-export default AuthContext;
+

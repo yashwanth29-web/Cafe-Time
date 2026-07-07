@@ -1,23 +1,24 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getOrders, updateOrderStatus, getCafeInfo } from '../services/api';
+import { useBranch } from '../context/BranchContext';
+import { getOrders, updateOrderStatus, getCafeInfo, getAssetUrl } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
-import { useToast, confirm } from '../components/Toast';
-import { useSocket } from '../hooks/useSocket';
 
 const WaiterDashboard = () =>{
  const { user } = useAuth();
- const navigate = useNavigate();
- const toast = useToast();
- const { socket, reconnectTrigger } = useSocket();
+ const { activeBranchId, branches } = useBranch();
+ const currentBranch = branches?.find(b => b.branchId === activeBranchId) || null;
+ const seenPaidOrderIdsRef = useRef(new Set());
  
  const [cafeInfo, setCafeInfo] = useState(null);
  const [orders, setOrders] = useState([]);
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
- const [updatingOrders, setUpdatingOrders] = useState({});
+ const [refreshCountdown, setRefreshCountdown] = useState(12);
+
+ const [showTakeOrderModal, setShowTakeOrderModal] = useState(false);
+ const [takeOrderTable, setTakeOrderTable] = useState('');
 
  useEffect(() =>{
  const fetchCafe = async () =>{
@@ -35,154 +36,143 @@ const WaiterDashboard = () =>{
  fetchCafe();
  }, [user]);
 
-  const fetchOrders = useCallback(async (isSilent = false) => {
+  const playNotificationSound = () => {
     try {
-      const response = await getOrders();
-      if (response.success) {
-        const isStaff = ['waiter', 'chef', 'cashier', 'staff'].includes((user?.role || '').toLowerCase());
-        const staffBranchId = user?.assignedBranch || user?.branchId;
-        const cafeOrders = response.data.filter((order) => {
-          if (user?.cafeId && order.cafeId && order.cafeId !== user.cafeId) {
-            return false;
-          }
-          if (isStaff && staffBranchId && order.branchId) {
-            return String(order.branchId) === String(staffBranchId);
-          }
-          return true;
-        });
-        setOrders(cafeOrders);
-        setErrorMsg('');
-      } else {
-        setErrorMsg('Failed to refresh waiter orders.');
-      }
-    } catch (error) {
-      console.error('Error fetching waiter orders:', error);
-      setErrorMsg('Server connection issues.');
-    } finally {
-      if (!isSilent) setLoading(false);
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(587.33, audioContext.currentTime); // D5
+      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.15);
+      setTimeout(() => {
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880.00, audioContext.currentTime); // A5
+        gain2.gain.setValueAtTime(0.2, audioContext.currentTime);
+        osc2.start();
+        osc2.stop(audioContext.currentTime + 0.2);
+      }, 150);
+    } catch (e) {
+      
     }
-  }, [user?.cafeId, user?.role, user?.assignedBranch, user?.branchId]);
+  };
 
-  // Fetch initial orders and set up 30-second hybrid polling
-  useEffect(() => {
-    fetchOrders();
-
-    const pollingInterval = setInterval(() => {
-      console.log('[POLLING] Waiter Dashboard: Running 60s recovery check...');
-      fetchOrders(true);
-    }, 60000);
-
-    return () => {
-      clearInterval(pollingInterval);
-    };
-  }, [fetchOrders]);
-
-  // One-off REST sync on reconnect
-  useEffect(() => {
-    if (reconnectTrigger > 0) {
-      console.log('[SOCKET] Waiter Dashboard: Reconnection detected. Triggering recovery sync.');
-      fetchOrders(true);
+  const speakPaymentReceived = (order) => {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      const tableInfo = order.tableNumber && order.tableNumber !== 'Takeaway' && order.tableNumber !== 'Walk-in'
+        ? `for Table ${order.tableNumber}`
+        : 'for Takeaway';
+      const text = `Payment received ${tableInfo}. Amount: ${Math.round(order.totalAmount)} rupees.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech synthesis failed:', err);
     }
-  }, [reconnectTrigger, fetchOrders]);
+  };
 
-  // Socket Event Listeners with versioning and isolation checks
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleOrderCreated = (newOrder) => {
-      console.log('[SOCKET] Waiter received orderCreated:', newOrder);
-      if (!newOrder || !newOrder._id) return;
-
-      const staffBranchId = user?.assignedBranch || user?.branchId;
-      if (staffBranchId && String(newOrder.branchId) !== String(staffBranchId)) return;
-      if (user?.cafeId && newOrder.cafeId !== user.cafeId) return;
-
-      setOrders(prev => {
-        if (prev.find(o => o._id === newOrder._id)) return prev;
-        return [newOrder, ...prev];
+ const fetchOrders = async () =>{
+ try {
+ const response = await getOrders({ active: true, cafeId: user?.cafeId });
+ if (response.success) {
+ setOrders(response.data);
+ 
+ // Track paid status transition
+  const paidOrders = response.data.filter((o) => o.paymentStatus === 'Paid');
+  if (seenPaidOrderIdsRef.current.size === 0) {
+    paidOrders.forEach((o) => seenPaidOrderIdsRef.current.add(o._id));
+  } else {
+    const newPaidOrders = paidOrders.filter((o) => !seenPaidOrderIdsRef.current.has(o._id));
+    if (newPaidOrders.length > 0) {
+      playNotificationSound();
+      newPaidOrders.forEach((order) => {
+        speakPaymentReceived(order);
+        seenPaidOrderIdsRef.current.add(order._id);
       });
-    };
-
-    const handleOrderUpdated = (updatedOrder) => {
-      console.log('[SOCKET] Waiter received orderUpdated:', updatedOrder);
-      if (!updatedOrder || !updatedOrder._id) return;
-
-      const staffBranchId = user?.assignedBranch || user?.branchId;
-      if (staffBranchId && String(updatedOrder.branchId) !== String(staffBranchId)) return;
-      if (user?.cafeId && updatedOrder.cafeId !== user.cafeId) return;
-
-      setOrders(prev => {
-        return prev.map(o => {
-          if (o._id === updatedOrder._id) {
-            const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
-            const existingTime = new Date(o.updatedAt || 0).getTime();
-            if (incomingTime <= existingTime) {
-              console.log('[SOCKET] Waiter: Ignored stale event for:', updatedOrder._id);
-              return o;
-            }
-            return updatedOrder;
-          }
-          return o;
-        });
-      });
-    };
-
-    socket.on('orderCreated', handleOrderCreated);
-    socket.on('orderUpdated', handleOrderUpdated);
-    socket.on('paymentCompleted', handleOrderUpdated);
-
-    return () => {
-      socket.off('orderCreated', handleOrderCreated);
-      socket.off('orderUpdated', handleOrderUpdated);
-      socket.off('paymentCompleted', handleOrderUpdated);
-    };
-  }, [socket, user]);
-
-  const handleStatusUpdate = useCallback(async (id, newStatus) => {
-    try {
-      setUpdatingOrders(prev => ({ ...prev, [id]: true }));
-      const response = await updateOrderStatus(id, newStatus);
-      if (response.success) {
-        setOrders((prevOrders) =>
-          prevOrders.map((order) =>
-            order._id === id ? { ...order, status: newStatus } : order
-          )
-        );
-      }
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast.error('Error connecting to server.');
-    } finally {
-      setUpdatingOrders(prev => ({ ...prev, [id]: false }));
     }
-  }, [toast]);
+  }
 
-  const handleMarkPaid = useCallback(async (id) => {
-    if (!(await confirm('Confirm that you have received payment for this order?'))) {
-      return;
-    }
-    try {
-      setUpdatingOrders(prev => ({ ...prev, [id]: true }));
-      const response = await updateOrderStatus(id, { status: 'Completed', paymentStatus: 'Paid' });
-      if (response.success) {
-        setOrders((prevOrders) =>
-          prevOrders.map((order) =>
-            order._id === id ? { ...order, status: 'Completed', paymentStatus: 'Paid' } : order
-          )
-        );
-        toast.success('Payment marked as Completed successfully!');
-      }
-    } catch (error) {
-      console.error('Error marking paid:', error);
-      toast.error('Error updating payment status.');
-    } finally {
-      setUpdatingOrders(prev => ({ ...prev, [id]: false }));
-    }
-  }, [toast]);
+ setErrorMsg('');
+ } else {
+ setErrorMsg('Failed to refresh waiter orders.');
+ }
+ } catch (error) {
+ console.error('Error fetching waiter orders:', error);
+ setErrorMsg('Cannot connect to live server.');
+ } finally {
+ setLoading(false);
+ }
+ };
 
-  const pendingCooking = useMemo(() => orders.filter((o) => o.status === 'Placed' || o.status === 'Preparing'), [orders]);
-  const readyForService = useMemo(() => orders.filter((o) => o.status === 'Ready'), [orders]);
-  const awaitingPayments = useMemo(() => orders.filter((o) => o.paymentStatus === 'Pending' && o.status === 'Delivered'), [orders]);
+  useEffect(() =>{
+  // Immediately clear data states to prevent screen flash of previous branch data
+  setOrders([]);
+  setLoading(true);
+
+  fetchOrders();
+
+  const pollingInterval = setInterval(() =>{
+  fetchOrders();
+  setRefreshCountdown(12);
+  }, 12000);
+
+  const countdownInterval = setInterval(() =>{
+  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
+  }, 1000);
+
+  return () =>{
+  clearInterval(pollingInterval);
+  clearInterval(countdownInterval);
+  };
+  }, [user, activeBranchId]);
+
+ const handleStatusUpdate = async (id, newStatus) =>{
+ try {
+ const response = await updateOrderStatus(id, newStatus);
+ if (response.success) {
+ setOrders((prevOrders) =>
+ prevOrders.map((order) =>
+ order._id === id ? { ...order, status: newStatus } : order
+)
+);
+ }
+ } catch (error) {
+ console.error('Error updating status:', error);
+ alert('Error connecting to server.');
+ }
+ };
+
+ const handleMarkPaid = async (id) =>{
+ if (!window.confirm('Confirm that you have received payment for this order?')) {
+ return;
+ }
+ try {
+ const response = await updateOrderStatus(id, { status: 'Completed', paymentStatus: 'Paid' });
+ if (response.success) {
+ setOrders((prevOrders) =>
+ prevOrders.map((order) =>
+ order._id === id ? { ...order, status: 'Completed', paymentStatus: 'Paid' } : order
+)
+);
+ alert('Payment marked as Completed successfully!');
+ }
+ } catch (error) {
+ console.error('Error marking paid:', error);
+ alert('Error updating payment status.');
+ }
+ };
+
+ const pendingCooking = orders.filter((o) =>o.status === 'Placed' || o.status === 'Preparing');
+ const readyForService = orders.filter((o) =>o.status === 'Ready');
+ const awaitingPayments = orders.filter((o) =>o.paymentStatus === 'Pending' && o.status === 'Delivered');
 
  return (
 <div className="fade-in">
@@ -197,13 +187,88 @@ const WaiterDashboard = () =>{
  flexWrap: 'wrap',
  gap: '12px'
  }}>
- <div>
+<div>
 <h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>
  Live Order Pipeline
 </h2>
 
 </div>
  
+<div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+  <button
+    onClick={() => setShowTakeOrderModal(true)}
+    style={{
+      background: 'var(--color-primary)',
+      color: 'white',
+      border: 'none',
+      padding: '10px 16px',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    }}
+  >
+    <span style={{ fontSize: '1.2rem' }}>+</span>
+    Take Order
+  </button>
+</div>
+
+{showTakeOrderModal && (
+  <div style={{
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+    display: 'flex', justifyContent: 'center', alignItems: 'center'
+  }}>
+    <div style={{
+      background: 'var(--bg-card)', padding: '24px', borderRadius: '12px',
+      width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)' }}>Take New Order</h3>
+      <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+        Enter Table Number (leave blank for Takeaway):
+      </p>
+      <input
+        autoFocus
+        type="text"
+        placeholder="e.g. 5"
+        value={takeOrderTable}
+        onChange={(e) => setTakeOrderTable(e.target.value)}
+        style={{
+          width: '100%', padding: '12px', borderRadius: '8px',
+          border: '1px solid var(--color-border)', marginBottom: '20px',
+          background: 'rgba(0,0,0,0.05)', color: 'var(--color-text-primary)'
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`;
+          }
+        }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        <button
+          onClick={() => setShowTakeOrderModal(false)}
+          style={{
+            padding: '10px 16px', borderRadius: '8px', border: 'none',
+            background: 'var(--color-border)', cursor: 'pointer', fontWeight: 'bold'
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`}
+          style={{
+            padding: '10px 16px', borderRadius: '8px', border: 'none',
+            background: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 'bold'
+          }}
+        >
+          Open Menu
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 </div>
 
  {errorMsg &&
@@ -279,17 +344,35 @@ const WaiterDashboard = () =>{
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '4px' }}>
  Order #{order._id.substring(order._id.length - 4).toUpperCase()} | Total:<strong style={{ color: '#2ecc71' }}>₹{order.totalAmount}</strong>
 </span>
-<span style={{ fontSize: '0.8rem', color: 'var(--color-text-primary)', display: 'block', marginTop: '2px' }}>
- {order.items.map((it) =>`${it.quantity}x ${it.name}`).join(', ')}
-</span>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+  {order.items.map((it, idx) => {
+    const displayImage = it.image ? getAssetUrl(it.image) : '/images/default-food.png';
+    return (
+      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+        <img
+          src={displayImage}
+          alt={it.name}
+          style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+          onError={(e) => { e.target.src = '/images/default-food.png'; }}
+        />
+        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+          {it.quantity}x
+        </span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+          {it.name}
+        </span>
+      </div>
+    );
+  })}
+</div>
 </div>
 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
 <button
- onClick={() =>printPOSReceipt(order, user, cafeInfo)}
+ onClick={() =>printPOSReceipt(order, user, cafeInfo, currentBranch)}
  className="touch-btn"
  style={{
  background: '#2980B9',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 12px',
  borderRadius: '8px',
  fontSize: '12px',
@@ -303,20 +386,18 @@ const WaiterDashboard = () =>{
 <button
  onClick={() =>handleMarkPaid(order._id)}
  className="touch-btn"
- disabled={updatingOrders[order._id]}
  style={{
  background: '#27AE60',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 16px',
  borderRadius: '8px',
  fontSize: '12.5px',
- cursor: updatingOrders[order._id] ? 'not-allowed' : 'pointer',
+ cursor: 'pointer',
  fontWeight: 'bold',
  border: 'none',
- minHeight: '44px',
- opacity: updatingOrders[order._id] ? 0.7 : 1
+ minHeight: '44px'
  }}>
- {updatingOrders[order._id] ? 'Saving...' : 'Mark Paid'}
+  Mark Paid
 </button>
 </div>
 </div>
@@ -368,14 +449,35 @@ const WaiterDashboard = () =>{
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '3px' }}>
  Order #{order._id.substring(order._id.length - 4).toUpperCase()} | {order.items.length} items
 </span>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+  {order.items.map((it, idx) => {
+    const displayImage = it.image ? getAssetUrl(it.image) : '/images/default-food.png';
+    return (
+      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+        <img
+          src={displayImage}
+          alt={it.name}
+          style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+          onError={(e) => { e.target.src = '/images/default-food.png'; }}
+        />
+        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+          {it.quantity}x
+        </span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+          {it.name}
+        </span>
+      </div>
+    );
+  })}
+</div>
 </div>
 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
 <button
- onClick={() =>printKOT(order, user, cafeInfo)}
+ onClick={() =>printKOT(order, user, cafeInfo, currentBranch)}
  className="touch-btn"
  style={{
  background: '#34495E',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 12px',
  borderRadius: '8px',
  fontSize: '12px',
@@ -388,11 +490,11 @@ const WaiterDashboard = () =>{
   KOT
 </button>
 <button
- onClick={() =>printPOSReceipt(order, user, cafeInfo)}
+ onClick={() =>printPOSReceipt(order, user, cafeInfo, currentBranch)}
  className="touch-btn"
  style={{
  background: '#2980B9',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 12px',
  borderRadius: '8px',
  fontSize: '12px',
@@ -407,20 +509,19 @@ const WaiterDashboard = () =>{
 <button
  onClick={() =>handleStatusUpdate(order._id, 'Delivered')}
  className="touch-btn"
- disabled={updatingOrders[order._id]}
  style={{
  background: '#27AE60',
- color: 'var(--color-text-primary)',
+ color: '#ffffff',
  padding: '10px 16px',
  borderRadius: '8px',
  fontSize: '12.5px',
- cursor: updatingOrders[order._id] ? 'not-allowed' : 'pointer',
+ cursor: 'pointer',
  fontWeight: 'bold',
  border: 'none',
- minHeight: '44px',
- opacity: updatingOrders[order._id] ? 0.7 : 1
+ minHeight: '44px'
  }}>
- {updatingOrders[order._id] ? 'Serving...' : 'Serve'}
+ 
+ Serve
 </button>
 </div>
 </div>
@@ -470,10 +571,31 @@ const WaiterDashboard = () =>{
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '3px' }}>
  Order #{order._id.substring(order._id.length - 4).toUpperCase()} | Status: {order.status === 'Placed' ? 'Placed' : 'Preparing...'}
 </span>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+  {order.items.map((it, idx) => {
+    const displayImage = it.image ? getAssetUrl(it.image) : '/images/default-food.png';
+    return (
+      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+        <img
+          src={displayImage}
+          alt={it.name}
+          style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+          onError={(e) => { e.target.src = '/images/default-food.png'; }}
+        />
+        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+          {it.quantity}x
+        </span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+          {it.name}
+        </span>
+      </div>
+    );
+  })}
+</div>
 </div>
 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
 <button
- onClick={() =>printKOT(order, user, cafeInfo)}
+ onClick={() =>printKOT(order, user, cafeInfo, currentBranch)}
  className="touch-btn"
  style={{
  background: '#34495E',

@@ -1,13 +1,15 @@
-import { toast } from '../components/Toast';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CartItem from '../components/CartItem';
-import RazorpayPayment from '../components/RazorpayPayment';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
+import { useAuth } from '../context/AuthContext';
+import socket, { connectSocket } from '../socket';
 
-const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId, branchId }) => {
+const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isStaff = sessionStorage.getItem('orderSource') === 'staff';
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -103,7 +105,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   const speakThankYou = () => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cafeNameStr = cafeInfo?.name || 'CoffeeDay Cafe';
+      const cafeNameStr = cafeInfo?.name || 'Dr. Chai Cafe';
       const text = `Payment successful. Thank you for visiting ${cafeNameStr}! Have a wonderful day.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.95;
@@ -186,76 +188,51 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
     fetchActiveOrders();
   }, []);
 
-  // Poll order status if order was successfully placed
+  // Real-time order status updates via Socket.IO
   useEffect(() => {
-    if (!success || activeOrders.length === 0 && completedOrders.length === 0) return;
+    if (!success || (activeOrders.length === 0 && completedOrders.length === 0)) return;
+    
+    // Auto-connect to cafe room
+    connectSocket(cafeId, localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId') || 'default');
 
-    const pollInterval = setInterval(async () => {
+    const handleOrderUpdated = (updatedOrder) => {
+      // Check if this updated order belongs to this customer's session
       const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-      if (activeIds.length === 0 && activeOrders.length === 0) {
-        return;
-      }
-
-      let changed = false;
-      const updatedList = [];
-      const newlyCompleted = [];
-      let updatedIds = [...activeIds];
       const currentCompIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
-      let updatedCompIds = [...currentCompIds];
-
-      for (const order of activeOrders) {
-        try {
-          const res = await getOrderById(order._id);
-          if (res.success) {
-            if (res.data.paymentStatus === 'Paid' || res.data.status === 'Completed') {
-              updatedIds = updatedIds.filter((x) => x !== order._id);
-              if (!updatedCompIds.includes(order._id)) updatedCompIds.push(order._id);
-              newlyCompleted.push(res.data);
-              changed = true;
-              triggerPaidFeedback(order._id);
-              // Clear customer details on completion
-              localStorage.removeItem('customerName');
-              localStorage.removeItem('customerEmail');
-              localStorage.removeItem('customerPhone');
-            } else {
-              updatedList.push(res.data);
-              if (
-              res.data.status !== order.status ||
-              res.data.paymentStatus !== order.paymentStatus ||
-              res.data.paymentMethod !== order.paymentMethod)
-              {
-                changed = true;
-              }
-            }
-          } else {
-            updatedList.push(order);
+      
+      if (activeIds.includes(updatedOrder._id) || currentCompIds.includes(updatedOrder._id)) {
+        if (updatedOrder.paymentStatus === 'Paid' || updatedOrder.status === 'Completed') {
+          // Move from active to completed
+          const newActiveIds = activeIds.filter((x) => x !== updatedOrder._id);
+          sessionStorage.setItem('activeOrderIds', JSON.stringify(newActiveIds));
+          
+          if (!currentCompIds.includes(updatedOrder._id)) {
+            sessionStorage.setItem('completedOrderIds', JSON.stringify([...currentCompIds, updatedOrder._id]));
           }
-        } catch (error) {
-          console.error('Error polling order:', order._id, error);
-          updatedList.push(order);
-        }
-      }
+          
+          triggerPaidFeedback(updatedOrder._id);
+          localStorage.removeItem('customerName');
+          localStorage.removeItem('customerEmail');
+          localStorage.removeItem('customerPhone');
 
-      if (changed || newlyCompleted.length > 0) {
-        sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
-        sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
-        if (updatedList.length > 0) {
-          setActiveOrders(updatedList);
-        } else {
-          setActiveOrders([]);
-        }
-        if (newlyCompleted.length > 0) {
-          setCompletedOrders((prev) => {
-            const ids = prev.map((o) => o._id);
-            const filteredNew = newlyCompleted.filter((o) => !ids.includes(o._id));
-            return [...prev, ...filteredNew];
+          setActiveOrders(prev => prev.filter(o => o._id !== updatedOrder._id));
+          setCompletedOrders(prev => {
+            if (prev.some(o => o._id === updatedOrder._id)) return prev;
+            return [...prev, updatedOrder];
           });
+        } else {
+          // Just update active order status
+          setActiveOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
         }
       }
-    }, 60000);
+    };
 
-    return () => clearInterval(pollInterval);
-  }, [success, activeOrders, completedOrders]);
+    socket.on('order_updated', handleOrderUpdated);
+
+    return () => {
+      socket.off('order_updated', handleOrderUpdated);
+    };
+  }, [success, activeOrders.length, completedOrders.length, cafeId]);
 
   const handleCounterPayRequest = async (orderId) => {
     setLoading(true);
@@ -294,15 +271,17 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   };
 
   // Totals calculations
-  const subtotalVal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
-  const subtotal = subtotalVal;
-  const tax = 0;
-  const grandTotal = subtotalVal;
+  const subtotal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
+  const gstRate = cafeInfo?.gstRate || 0;
+  const platformCharge = cafeInfo?.serviceChargeRate || 0;
+  const gstAmount = subtotal * (gstRate / 100);
+  const grandTotal = subtotal + gstAmount + platformCharge;
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
-    if (!customerName || !customerEmail || !customerPhone) {
-      toast.info('Please fill out your contact details before placing your order.');
+    
+    if (!isStaff && (!customerName || !customerPhone)) {
+      alert('Please fill out your name and contact number before placing your order.');
       return;
     }
 
@@ -314,28 +293,34 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         id: cartItem.item.id || cartItem.item._id,
         name: cartItem.item.name,
         price: cartItem.item.price,
-        quantity: cartItem.quantity
+        quantity: cartItem.quantity,
+        image: cartItem.item.image || '/images/default-food.png'
       }));
 
       const orderPayload = {
         tableNumber: tableNumber || 'Takeaway',
         items: itemsPayload,
         totalAmount: grandTotal,
-        subtotal: subtotal,
-        tax: tax,
-        grandTotal: grandTotal,
-        customerName,
-        customerEmail,
-        customerPhone,
+        customerName: customerName || (isStaff ? 'Walk-in Customer' : ''),
+        customerEmail: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
+        customerPhone: customerPhone || (isStaff ? '0000000000' : ''),
         specialInstructions,
-        cafeId: cafeId || 'CD001',
-        branchId: branchId || sessionStorage.getItem('branchId') || ''
+        cafeId: user?.cafeId || cafeId || 'CD001',
+        branchId: user?.assignedBranch || sessionStorage.getItem('branchId') || 'default',
+        source: isStaff ? 'STAFF' : 'QR',
+        staffId: isStaff && user ? user._id : undefined
       };
 
       const response = await placeOrder(orderPayload);
 
       if (response.success) {
         clearCart();
+        sessionStorage.removeItem('orderSource');
+
+        if (isStaff) {
+          window.location.href = '/staff/workspace';
+          return;
+        }
 
         // Add to activeOrderIds in sessionStorage
         const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
@@ -397,133 +382,123 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             </div>
 
             {/* Customer Details Section */}
-            <div className="customer-details-card" style={{
-            background: 'rgba(0, 0, 0, 0.02)',
-            border: '1px solid var(--color-border)',
-            padding: '16px',
-            borderRadius: '12px',
-            margin: '16px 0',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px'
-          }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h4 style={{ fontSize: '13px', fontWeight: '800', margin: '0', color: 'var(--color-text-primary)', letterSpacing: '0.5px' }}>
-                  👤 CONTACT INFORMATION
-                </h4>
-                {(customerName || customerEmail || customerPhone) &&
-              <button
-                type="button"
-                onClick={() => {
-                  setCustomerName('');
-                  setCustomerEmail('');
-                  setCustomerPhone('');
-                  localStorage.removeItem('customerName');
-                  localStorage.removeItem('customerEmail');
-                  localStorage.removeItem('customerPhone');
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--color-danger)',
-                  fontSize: '11px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  padding: '0'
-                }}>
+            {!isStaff && (
+              <div className="customer-details-card" style={{
+              background: 'rgba(0, 0, 0, 0.02)',
+              border: '1px solid var(--color-border)',
+              padding: '16px',
+              borderRadius: '12px',
+              margin: '16px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: '800', margin: '0', color: 'var(--color-text-primary)', letterSpacing: '0.5px' }}>
+                    👤 CONTACT INFORMATION
+                  </h4>
+                  {(customerName || customerPhone) &&
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomerName('');
+                    setCustomerPhone('');
+                    localStorage.removeItem('customerName');
+                    localStorage.removeItem('customerPhone');
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-danger)',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    padding: '0'
+                  }}>
+                  
+                      Reset Details
+                    </button>
+                }
+                </div>
                 
-                    Reset Details
-                  </button>
-              }
-              </div>
-              
-              <div>
-                <input
-                type="text"
-                placeholder="Full Name * (Required)"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                  fontSize: '13px'
-                }} />
-              
-              </div>
+                <div>
+                  <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'rgba(0,0,0,0.15)',
+                    color: 'var(--color-text-primary)',
+                    outline: 'none',
+                    fontSize: '13px'
+                  }} />
+                
+                </div>
 
-              <div>
-                <input
-                type="email"
-                placeholder="Email Address * (Required)"
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                  fontSize: '13px'
-                }} />
-              
-              </div>
+                <div>
+                  <input
+                  type="tel"
+                  placeholder="Contact Mobile Number"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'rgba(0,0,0,0.15)',
+                    color: 'var(--color-text-primary)',
+                    outline: 'none',
+                    fontSize: '13px'
+                  }} />
+                
+                </div>
 
-              <div>
-                <input
-                type="tel"
-                placeholder="Contact Mobile Number * (Required)"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                  fontSize: '13px'
-                }} />
-              
+                <div>
+                  <textarea
+                  placeholder="Special Instructions (e.g. Less sugar, make it spicy...)"
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'rgba(0,0,0,0.15)',
+                    color: 'var(--color-text-primary)',
+                    outline: 'none',
+                    fontSize: '13px',
+                    minHeight: '60px',
+                    resize: 'vertical'
+                  }} />
+                
+                </div>
               </div>
-
-              <div>
-                <textarea
-                placeholder="Special Instructions (e.g. Less sugar, make it spicy...)"
-                value={specialInstructions}
-                onChange={(e) => setSpecialInstructions(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                  fontSize: '13px',
-                  minHeight: '60px',
-                  resize: 'vertical'
-                }} />
-              
-              </div>
-            </div>
+            )}
 
             <div className="summary-row">
               <span>Items Total</span>
               <span>₹{subtotal.toFixed(2)}</span>
             </div>
             
-            <div className="summary-row">
-              <span>GST & Restaurant Charges</span>
-              <span>₹0.00</span>
-            </div>
+            {gstRate > 0 && (
+              <div className="summary-row">
+                <span>GST ({gstRate}%)</span>
+                <span>₹{gstAmount.toFixed(2)}</span>
+              </div>
+            )}
+
+            {platformCharge > 0 && (
+              <div className="summary-row">
+                <span>Platform Charge</span>
+                <span>₹{platformCharge.toFixed(2)}</span>
+              </div>
+            )}
 
             <div className="summary-row total">
               <span>Grand Total</span>
@@ -539,8 +514,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             <div style={{ marginTop: '24px' }}>
               <button
               onClick={handlePlaceOrder}
-              className={`btn btn-primary ${loading || cart.length === 0 || !customerName || !customerEmail || !customerPhone ? 'btn-disabled' : ''}`}
-              disabled={loading || cart.length === 0 || !customerName || !customerEmail || !customerPhone}
+              className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone)) ? 'btn-disabled' : ''}`}
+              disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone))}
               style={{
                 width: '100%',
                 padding: '14px 20px',
@@ -550,7 +525,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 border: 'none',
                 background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
                 color: 'var(--color-text-primary)',
-                cursor: loading || cart.length === 0 || !customerName || !customerEmail || !customerPhone ? 'not-allowed' : 'pointer'
+                cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone)) ? 'not-allowed' : 'pointer'
               }}>
               
                 {loading ?

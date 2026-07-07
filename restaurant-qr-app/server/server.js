@@ -7,20 +7,25 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 const express = require('express');
+const http = require('http');
 const dotenv = require('dotenv');
 const path = require('path');
 const http = require('http');
 const { initializeSocket } = require('./config/socket');
 
+// Trigger nodemon restart 4
 // Load environment variables immediately before routing imports
 dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
+
+const mongoose = require('mongoose');
+const multiBranchPlugin = require('./utils/multiBranchPlugin');
+mongoose.plugin(multiBranchPlugin);
 
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
 const orderRoutes = require('./routes/orderRoutes');
 const menuRoutes = require('./routes/menuRoutes');
-const paymentRoutes = require('./routes/paymentRoutes');
 const authRoutes = require('./routes/authRoutes');
 const superAdminRoutes = require('./routes/superAdminRoutes');
 const adminRoutes = require('./routes/adminRoutes');
@@ -30,6 +35,8 @@ const attendanceRoutes = require('./routes/attendanceRoutes');
 const workReportRoutes = require('./routes/workReportRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const cafeRoutes = require('./routes/cafeRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const payrollRoutes = require('./routes/payrollRoutes');
 
 // Create Express instance
 const app = express();
@@ -106,18 +113,26 @@ app.use((req, res, next) => {
 
 // Middlewares
 app.use(cors({
-  origin: (origin, callback) => {
-    // Dynamically mirror the request origin to support credential sharing across local networks/IPs
-    if (!origin) return callback(null, true);
-    callback(null, true);
-  },
-  credentials: true
+  origin: [
+    "http://localhost:5173", // Vite local
+    "http://localhost:3000", // Optional React local
+    process.env.CLIENT_URL, // Main frontend URL
+    "https://cafe-time-xi.vercel.app",
+    "https://cafe-time-d1ffjmio8-yashwanth29-webs-projects.vercel.app",
+    "https://cafe-time-git-main-yashwanth29-webs-projects.vercel.app"
+  ],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-branch-id", "x-cafe-id"]
 }));
 app.use(cookieParser());
 app.use(express.json()); // Body parser
 
 // Connect to Database
-connectDB();
+connectDB().then(() => {
+  const migrateData = require('./utils/migrate');
+  migrateData();
+});
 
 // Initialize Storage Maintenance Scheduled Jobs
 const { initStorageMaintenanceJobs } = require('./jobs/storageMaintenanceJob');
@@ -138,10 +153,13 @@ app.get('/uploads/:filename', (req, res) => {
 });
 app.use('/uploads', express.static(uploadsDir));
 
+// Attach branch context globally for all /api endpoints
+const { attachCafeAndBranch } = require('./middleware/branchMiddleware');
+app.use('/api', attachCafeAndBranch);
+
 // Mount Routes
 app.use('/api/orders', orderRoutes);
 app.use('/api/menu', menuRoutes);
-app.use('/api/payment', paymentRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/superadmin', superAdminRoutes);
 app.use('/api/admin', adminRoutes);
@@ -151,6 +169,8 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/work-reports', workReportRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/cafe', cafeRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/payroll', payrollRoutes);
 
 
 // Health check endpoint
@@ -159,15 +179,26 @@ app.get('/api/health', (req, res) => {
 });
 
 // Serve Static Assets in Production
-if (process.env.NODE_ENV === 'production') {
+const clientDistPath = path.join(__dirname, '../client/dist');
+const indexPath = path.join(clientDistPath, 'index.html');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(indexPath)) {
   // Set static folder
-  app.use(express.static(path.join(__dirname, '../client/dist')));
+  app.use(express.static(clientDistPath));
 
   // Direct all other unmatched requests to index.html (React Router)
   app.use((req, res) => {
-    res.sendFile(path.resolve(__dirname, '../client', 'dist', 'index.html'));
+    res.sendFile(indexPath);
+  });
+} else {
+  // Catch-all route for backend-only deployment
+  app.get('/', (req, res) => {
+    res.status(200).json({ success: true, message: 'Cafe-Time Backend API is running successfully' });
   });
 }
+
+// Global Error Handling Middleware
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
 
 // Configure Port
 const PORT = process.env.PORT || 5000;
@@ -179,10 +210,9 @@ setInterval(() => {
   runAutoCleanup();
 }, 3600000);
 
-// Create HTTP Server
+// Create HTTP Server and Initialize Socket.IO
 const server = http.createServer(app);
-
-// Initialize Socket.IO
+const { initializeSocket } = require('./config/socket');
 initializeSocket(server);
 
 // Start Listening

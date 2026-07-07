@@ -1,52 +1,111 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import API from '../services/api';
+import { useAuth } from './AuthContext';
 
-export const ThemeContext = createContext();
+const ThemeContext = createContext();
+
+export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setThemeState] = useState(() => {
-    return localStorage.getItem('theme') || 'system';
+  const { user } = useAuth();
+  
+  const [themeMode, setThemeMode] = useState(() => {
+    return localStorage.getItem('themeMode') || 'system';
   });
+  
+  const [primaryColor, setPrimaryColor] = useState('#D47F46'); // Default Coffee Brown
 
-  const [resolvedTheme, setResolvedTheme] = useState(() => {
-    const local = localStorage.getItem('theme') || 'system';
-    if (local === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // Fetch primary color from database on login/mount
+  useEffect(() => {
+    const fetchCafeTheme = async () => {
+      if (user && user.cafeId) {
+        try {
+          const res = await API.get(`/cafe/${user.cafeId}`);
+          if (res.data.success && res.data.data && res.data.data.uiPrimaryColor) {
+            setPrimaryColor(res.data.data.uiPrimaryColor);
+          }
+        } catch (err) {
+          console.error("Failed to fetch cafe theme:", err);
+        }
+      }
+    };
+    
+    // Only fetch if it's an admin/owner/staff role
+    if (user && user.role !== 'customer') {
+      fetchCafeTheme();
     }
-    return local;
-  });
+  }, [user]);
 
-  const setTheme = (newTheme) => {
-    localStorage.setItem('theme', newTheme);
-    setThemeState(newTheme);
-  };
+  // Apply Theme Mode (Light/Dark/System)
+  useEffect(() => {
+    const root = document.documentElement;
+    
+    let activeTheme = themeMode;
+    if (themeMode === 'system') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      activeTheme = prefersDark ? 'dark' : 'light';
+    }
 
+    if (activeTheme === 'dark') {
+      root.setAttribute('data-theme', 'dark');
+    } else {
+      root.removeAttribute('data-theme');
+    }
+
+    // Save preference
+    localStorage.setItem('themeMode', themeMode);
+  }, [themeMode]);
+
+  // Listen to system theme changes if mode is 'system'
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     
-    const updateTheme = () => {
-      let resolved = theme;
-      if (theme === 'system') {
-        resolved = mediaQuery.matches ? 'dark' : 'light';
-      }
-      setResolvedTheme(resolved);
-      
-      if (resolved === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
+    const handleChange = (e) => {
+      if (themeMode === 'system') {
+        const root = document.documentElement;
+        if (e.matches) {
+          root.setAttribute('data-theme', 'dark');
+        } else {
+          root.removeAttribute('data-theme');
+        }
       }
     };
 
-    updateTheme();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [themeMode]);
 
-    if (theme === 'system') {
-      mediaQuery.addEventListener('change', updateTheme);
-      return () => mediaQuery.removeEventListener('change', updateTheme);
+  // Apply Primary Color Variable
+  useEffect(() => {
+    if (primaryColor) {
+      document.documentElement.style.setProperty('--color-primary', primaryColor);
+      
+      // Calculate a slightly darker/lighter version for hover effects
+      // This is a simple approximation
+      document.documentElement.style.setProperty('--color-primary-hover', primaryColor + 'cc'); 
     }
-  }, [theme]);
+  }, [primaryColor]);
+
+  const updatePrimaryColor = async (color) => {
+    setPrimaryColor(color);
+    if (user && ['admin', 'owner'].includes(user.role)) {
+      try {
+        await API.put('/admin/theme', { uiPrimaryColor: color });
+      } catch (err) {
+        console.error("Failed to save theme color to DB:", err);
+      }
+    }
+  };
+
+  const value = {
+    themeMode,
+    setThemeMode,
+    primaryColor,
+    updatePrimaryColor
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolvedTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

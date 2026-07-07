@@ -1,41 +1,51 @@
-import { toast } from '../components/Toast';
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getOrders, updateOrderStatus, getInventory, getCafeInfo } from '../services/api';
+import { useBranch } from '../context/BranchContext';
+import { useSearchParams } from 'react-router-dom';
+import { getOrders, updateOrderStatus, getInventory, getCafeInfo, getPaymentInfo } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
+import { QRCodeSVG } from 'qrcode.react';
 import '../styles/App.css';
-import { useSocket } from '../hooks/useSocket';
 
 const CashierDashboard = () =>{
  const { logout, user } = useAuth();
- const navigate = useNavigate();
- const { socket, reconnectTrigger } = useSocket();
+ const { activeBranchId, branches } = useBranch();
+ const currentBranch = branches?.find(b => b.branchId === activeBranchId) || null;
+ const seenPaidOrderIdsRef = useRef(new Set());
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
  const [activeTab, setActiveTab] = useState(() =>{
  return tabParam || 'billing';
  });
- const [actionLoading, setActionLoading] = useState(false);
 
  const [inventory, setInventory] = useState([]);
  const [inventoryLoading, setInventoryLoading] = useState(false);
  const [cafeInfo, setCafeInfo] = useState(null);
 
+ const [paymentInfo, setPaymentInfo] = useState({ enableUpi: false, upiId: '' });
+ const [showUpiModal, setShowUpiModal] = useState(false);
+ const [upiOrder, setUpiOrder] = useState(null);
+
  useEffect(() =>{
- const fetchCafe = async () =>{
+ const fetchCafeAndPayment = async () =>{
  if (user?.cafeId) {
  try {
  const res = await getCafeInfo(user.cafeId);
  if (res.success) {
  setCafeInfo(res.data);
  }
+ if (activeBranchId) {
+ const payRes = await getPaymentInfo();
+ if (payRes.success && payRes.data) {
+ setPaymentInfo(payRes.data);
+ }
+ }
  } catch (e) {
- console.error('Error fetching cafe info:', e);
+ console.error('Error fetching cafe info or payment info:', e);
  }
  }
  };
- fetchCafe();
+ fetchCafeAndPayment();
  }, [user]);
 
  useEffect(() =>{
@@ -46,187 +56,147 @@ const CashierDashboard = () =>{
  }
  }, [tabParam]);
 
-  const fetchInventory = useCallback(async (isSilent = false) => {
-    if (!isSilent) setInventoryLoading(true);
+ const fetchInventory = async () =>{
+ setInventoryLoading(true);
+ try {
+ const response = await getInventory();
+ if (response && response.success) {
+ setInventory(response.data);
+ }
+ } catch (error) {
+ console.error('Error fetching inventory:', error);
+ } finally {
+ setInventoryLoading(false);
+ }
+ };
+
+ useEffect(() =>{
+ if (activeTab === 'inventory') {
+ fetchInventory();
+ }
+ }, [activeTab]);
+
+ const [orders, setOrders] = useState([]);
+ const [loading, setLoading] = useState(true);
+ const [errorMsg, setErrorMsg] = useState('');
+ const [selectedOrder, setSelectedOrder] = useState(null);
+ const [refreshCountdown, setRefreshCountdown] = useState(12);
+
+  const playNotificationSound = () => {
     try {
-      const response = await getInventory();
-      if (response && response.success) {
-        setInventory(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching inventory:', error);
-    } finally {
-      if (!isSilent) setInventoryLoading(false);
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(587.33, audioContext.currentTime); // D5
+      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.15);
+      setTimeout(() => {
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880.00, audioContext.currentTime); // A5
+        gain2.gain.setValueAtTime(0.2, audioContext.currentTime);
+        osc2.start();
+        osc2.stop(audioContext.currentTime + 0.2);
+      }, 150);
+    } catch (e) {
+      
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    if (activeTab === 'inventory') {
-      fetchInventory();
-    }
-  }, [activeTab, fetchInventory]);
-
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [selectedOrder, setSelectedOrder] = useState(null);
-
-  const fetchOrders = useCallback(async (isSilent = false) => {
+  const speakPaymentReceived = (order) => {
+    if (!('speechSynthesis' in window)) return;
     try {
-      const response = await getOrders();
-      if (response.success) {
-        const isStaff = ['waiter', 'chef', 'cashier', 'staff'].includes((user?.role || '').toLowerCase());
-        const staffBranchId = user?.assignedBranch || user?.branchId;
-        const cafeOrders = response.data.filter((order) => {
-          if (user?.cafeId && order.cafeId && order.cafeId !== user.cafeId) {
-            return false;
-          }
-          if (isStaff && staffBranchId && order.branchId) {
-            return String(order.branchId) === String(staffBranchId);
-          }
-          return true;
-        });
-        setOrders(cafeOrders);
-        setErrorMsg('');
-      } else {
-        setErrorMsg('Failed to refresh billing orders feed.');
-      }
-    } catch (error) {
-      console.error('Error fetching cashier orders:', error);
-      setErrorMsg('Cannot connect to billing server.');
-    } finally {
-      if (!isSilent) setLoading(false);
+      const tableInfo = order.tableNumber && order.tableNumber !== 'Takeaway' && order.tableNumber !== 'Walk-in'
+        ? `for Table ${order.tableNumber}`
+        : 'for Takeaway';
+      const text = `Payment received ${tableInfo}. Amount: ${Math.round(order.totalAmount)} rupees.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech synthesis failed:', err);
     }
-  }, [user?.cafeId, user?.role, user?.assignedBranch, user?.branchId]);
+  };
 
-  // Fetch initial orders and set up 30-second hybrid polling
-  useEffect(() => {
-    fetchOrders();
-    if (activeTab === 'inventory') fetchInventory();
-
-    const pollingInterval = setInterval(() => {
-      console.log('[POLLING] Cashier Dashboard: Running 60s recovery check...');
-      fetchOrders(true);
-      if (activeTab === 'inventory') {
-        fetchInventory(true);
-      }
-    }, 60000);
-
-    return () => {
-      clearInterval(pollingInterval);
-    };
-  }, [fetchOrders, fetchInventory, activeTab]);
-
-  // One-off REST sync on reconnect
-  useEffect(() => {
-    if (reconnectTrigger > 0) {
-      console.log('[SOCKET] Cashier Dashboard: Reconnection detected. Triggering recovery sync.');
-      fetchOrders(true);
-      fetchInventory(true);
+ const fetchOrders = async () =>{
+ try {
+ const today = new Date();
+ const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+ const response = await getOrders({ date: todayStr, cafeId: user?.cafeId, branchId: activeBranchId });
+ if (response.success) {
+ setOrders(response.data);
+ 
+  // Track paid status transition
+  const paidOrders = response.data.filter((o) => o.paymentStatus === 'Paid');
+  if (seenPaidOrderIdsRef.current.size === 0) {
+    paidOrders.forEach((o) => seenPaidOrderIdsRef.current.add(o._id));
+  } else {
+    const newPaidOrders = paidOrders.filter((o) => !seenPaidOrderIdsRef.current.has(o._id));
+    if (newPaidOrders.length > 0) {
+      playNotificationSound();
+      newPaidOrders.forEach((order) => {
+        speakPaymentReceived(order);
+        seenPaidOrderIdsRef.current.add(order._id);
+      });
     }
-  }, [reconnectTrigger, fetchOrders, fetchInventory]);
+  }
 
-  // Socket Event Listeners with versioning and isolation checks
-  useEffect(() => {
-    if (!socket) return;
+ setErrorMsg('');
+ } else {
+ setErrorMsg('Failed to refresh billing orders feed.');
+ }
+ } catch (error) {
+ console.error('Error fetching cashier orders:', error);
+ setErrorMsg('Cannot connect to billing server.');
+ } finally {
+ setLoading(false);
+ }
+ };
 
-    const handleOrderCreated = (newOrder) => {
-      console.log('[SOCKET] Cashier received orderCreated:', newOrder);
-      if (!newOrder || !newOrder._id) return;
+  useEffect(() =>{
+  // Immediately clear data states to prevent screen flash of previous branch data
+  setOrders([]);
+  setLoading(true);
 
-      const staffBranchId = user?.assignedBranch || user?.branchId;
-      if (staffBranchId && String(newOrder.branchId) !== String(staffBranchId)) return;
-      if (user?.cafeId && newOrder.cafeId !== user.cafeId) return;
+  fetchOrders();
 
-      setOrders(prev => {
-        if (prev.find(o => o._id === newOrder._id)) return prev;
-        return [newOrder, ...prev];
-      });
-    };
+  const pollingInterval = setInterval(() =>{
+  fetchOrders();
+  setRefreshCountdown(12);
+  }, 12000);
 
-    const handleOrderUpdated = (updatedOrder) => {
-      console.log('[SOCKET] Cashier received orderUpdated:', updatedOrder);
-      if (!updatedOrder || !updatedOrder._id) return;
+  const countdownInterval = setInterval(() =>{
+  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
+  }, 1000);
 
-      const staffBranchId = user?.assignedBranch || user?.branchId;
-      if (staffBranchId && String(updatedOrder.branchId) !== String(staffBranchId)) return;
-      if (user?.cafeId && updatedOrder.cafeId !== user.cafeId) return;
-
-      setOrders(prev => {
-        return prev.map(o => {
-          if (o._id === updatedOrder._id) {
-            const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
-            const existingTime = new Date(o.updatedAt || 0).getTime();
-            if (incomingTime <= existingTime) return o;
-            return updatedOrder;
-          }
-          return o;
-        });
-      });
-
-      setSelectedOrder(prev => {
-        if (prev && prev._id === updatedOrder._id) {
-          const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
-          const existingTime = new Date(prev.updatedAt || 0).getTime();
-          if (incomingTime <= existingTime) return prev;
-          return updatedOrder;
-        }
-        return prev;
-      });
-    };
-
-    const handleInventoryUpdated = (updatedItems) => {
-      console.log('[SOCKET] Cashier received inventoryUpdated:', updatedItems);
-      if (!Array.isArray(updatedItems)) return;
-
-      setInventory(prev => {
-        if (prev.length === 0) return prev;
-        return prev.map(item => {
-          const match = updatedItems.find(p => String(p._id) === String(item._id));
-          if (match) {
-            const incomingTime = new Date(match.updatedAt || 0).getTime();
-            const existingTime = new Date(item.updatedAt || 0).getTime();
-            if (incomingTime <= existingTime) return item;
-            return {
-              ...item,
-              quantity: match.quantity,
-              stock: match.quantity,
-              updatedAt: match.updatedAt
-            };
-          }
-          return item;
-        });
-      });
-    };
-
-    socket.on('orderCreated', handleOrderCreated);
-    socket.on('orderUpdated', handleOrderUpdated);
-    socket.on('paymentCompleted', handleOrderUpdated);
-    socket.on('inventoryUpdated', handleInventoryUpdated);
-
-    return () => {
-      socket.off('orderCreated', handleOrderCreated);
-      socket.off('orderUpdated', handleOrderUpdated);
-      socket.off('paymentCompleted', handleOrderUpdated);
-      socket.off('inventoryUpdated', handleInventoryUpdated);
-    };
-  }, [socket, user]);
+  return () =>{
+  clearInterval(pollingInterval);
+  clearInterval(countdownInterval);
+  };
+  }, [user, activeBranchId]);
 
  const handleProcessPayment = async (orderId, paymentMethod) =>{
  try {
- setActionLoading(true);
  const response = await updateOrderStatus(orderId, {
  status: 'Completed',
- paymentStatus: 'Paid'
+ paymentStatus: 'Paid',
+ paymentMethod: paymentMethod
  });
 
  if (response.success) {
- toast.info(`Payment of ₹${selectedOrder.totalAmount.toFixed(2)} processed via ${paymentMethod}!`);
+ alert(`Payment of ₹${selectedOrder.totalAmount.toFixed(2)} processed via ${paymentMethod}!`);
  // Update local list
  setOrders((prev) =>prev.map((o) =>o._id === orderId ? { ...o, paymentStatus: 'Paid', status: 'Completed' } : o));
  setSelectedOrder((prev) =>prev && prev._id === orderId ? { ...prev, paymentStatus: 'Paid', status: 'Completed' } : prev);
  } else {
- toast.error('Server failed to record payment.');
+ alert('Server failed to record payment.');
  }
  } catch (e) {
  console.error('Payment process error:', e);
@@ -235,14 +205,12 @@ const CashierDashboard = () =>{
  if (selectedOrder) {
  setSelectedOrder({ ...selectedOrder, paymentStatus: 'Paid', status: 'Completed' });
  }
- toast.info(`[Offline Mode] Payment processed via ${paymentMethod}.`);
- } finally {
- setActionLoading(false);
+ alert(`[Offline Mode] Payment processed via ${paymentMethod}.`);
  }
  };
 
-  const pendingPayments = useMemo(() => orders.filter((o) => o.paymentStatus !== 'Paid'), [orders]);
-  const paidPayments = useMemo(() => orders.filter((o) => o.paymentStatus === 'Paid'), [orders]);
+ const pendingPayments = orders.filter((o) =>o.paymentStatus !== 'Paid');
+ const paidPayments = orders.filter((o) =>o.paymentStatus === 'Paid');
 
  const renderPendingBills = () =>{
  return (
@@ -382,8 +350,8 @@ const CashierDashboard = () =>{
  boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
  }}>
 <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '15px', marginBottom: '15px' }}>
-<h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>{selectedOrder.branchName || cafeInfo?.name || 'Dr. Chai Cafe'}</h2>
-<p style={{ margin: '4px 0', fontSize: '0.8rem' }}>{selectedOrder.branchAddress || cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
+<h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>{cafeInfo?.name || 'Dr. Chai Cafe'}</h2>
+<p style={{ margin: '4px 0', fontSize: '0.8rem' }}>{cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
  {cafeInfo?.gstNumber &&<p style={{ margin: '2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
 <p style={{ margin: '2px 0', fontSize: '0.8rem' }}>Tel: {cafeInfo?.supportNumber || user?.phone || '+91 9876543210'}</p>
 </div>
@@ -415,9 +383,9 @@ const CashierDashboard = () =>{
 </table>
 
 <div style={{ borderTop: '1px dashed #33271c', paddingTop: '10px', textAlign: 'right', fontSize: '0.85rem' }}>
-<div>Subtotal (Tax Excl.): ₹{(selectedOrder.subtotal !== undefined ? selectedOrder.subtotal : (selectedOrder.totalAmount / 1.05)).toFixed(2)}</div>
-<div>CGST (2.5%): ₹{((selectedOrder.tax !== undefined ? selectedOrder.tax : (selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05)) / 2).toFixed(2)}</div>
-<div>SGST (2.5%): ₹{((selectedOrder.tax !== undefined ? selectedOrder.tax : (selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05)) / 2).toFixed(2)}</div>
+<div>Subtotal (Tax Excl.): ₹{(selectedOrder.totalAmount / 1.05).toFixed(2)}</div>
+<div>CGST (2.5%): ₹{((selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05) / 2).toFixed(2)}</div>
+<div>SGST (2.5%): ₹{((selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05) / 2).toFixed(2)}</div>
 <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginTop: '6px' }}>
  TOTAL AMOUNT: ₹{selectedOrder.totalAmount.toFixed(2)}
 </div>
@@ -439,16 +407,23 @@ const CashierDashboard = () =>{
 <button
  onClick={() =>handleProcessPayment(selectedOrder._id, 'Cash')}
  className="btn btn-primary touch-btn"
- disabled={actionLoading}
- style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px', opacity: actionLoading ? 0.7 : 1 }}>
- {actionLoading ? 'Processing...' : 'Settle with Cash'}
+ style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px' }}>
+ 
+ Settle with Cash
 </button>
 <button
- onClick={() =>handleProcessPayment(selectedOrder._id, 'Online Confirm')}
+ onClick={() => {
+   if (paymentInfo.enableUpi && paymentInfo.upiId) {
+     setUpiOrder(selectedOrder);
+     setShowUpiModal(true);
+   } else {
+     handleProcessPayment(selectedOrder._id, 'UPI');
+   }
+ }}
  className="btn btn-primary touch-btn"
- disabled={actionLoading}
- style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9', minHeight: '44px', opacity: actionLoading ? 0.7 : 1 }}>
- {actionLoading ? 'Processing...' : 'Confirm Online Pay'}
+ style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9', minHeight: '44px' }}>
+ 
+ Settle with UPI
 </button>
 </div>:
 
@@ -458,7 +433,7 @@ const CashierDashboard = () =>{
  }
  
 <button
- onClick={() =>printPOSReceipt(selectedOrder, user, cafeInfo)}
+ onClick={() =>printPOSReceipt(selectedOrder, user, cafeInfo, currentBranch)}
  className="btn btn-secondary touch-btn"
  style={{ width: '100%', padding: '12px', fontSize: '13px', minHeight: '44px' }}>
  
@@ -503,6 +478,7 @@ const CashierDashboard = () =>{
 </div>
  
 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+
 </div>
 </div>
 
@@ -618,8 +594,50 @@ const CashierDashboard = () =>{
 </div>
 </div>)
  }
-</div>);
 
+      {showUpiModal && upiOrder && paymentInfo.upiId && (
+        <div className="modal-overlay">
+          <div className="modal-content fade-in" style={{ maxWidth: '350px', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: '#27ae60' }}>Scan to Pay</h3>
+            <p style={{ fontSize: '13px', color: '#7f8c8d', marginBottom: '20px' }}>Ask the customer to scan this QR code with their UPI app (GPay, PhonePe, Paytm).</p>
+            
+            <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', display: 'inline-block', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
+              <QRCodeSVG 
+                value={`upi://pay?pa=${paymentInfo.upiId}&pn=${encodeURIComponent(cafeInfo?.name || 'Cafe')}&am=${upiOrder.totalAmount}&cu=INR&tn=Order%20${upiOrder.orderNumber}`} 
+                size={200} 
+                level="M" 
+                includeMargin={true}
+              />
+            </div>
+            
+            <div style={{ fontSize: '24px', fontWeight: '800', color: '#2c3e50', marginBottom: '8px' }}>
+              ₹{upiOrder.totalAmount.toFixed(2)}
+            </div>
+            <div style={{ fontSize: '14px', color: '#7f8c8d', marginBottom: '24px' }}>
+              Order #{upiOrder.orderNumber}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button 
+                onClick={() => {
+                  handleProcessPayment(upiOrder._id, 'UPI');
+                  setShowUpiModal(false);
+                }}
+                style={{ padding: '14px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '15px' }}>
+                Confirm Payment Received
+              </button>
+              <button 
+                onClick={() => setShowUpiModal(false)}
+                style={{ padding: '12px', background: '#ecf0f1', color: '#7f8c8d', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+ </div>
+ );
 };
 
 export default CashierDashboard;

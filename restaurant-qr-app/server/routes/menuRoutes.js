@@ -40,6 +40,10 @@ const upload = multer({
 });
 
 const { syncToGridFS } = require('../utils/gridfs');
+router.use((req, res, next) => {
+  console.log(`[MENU ROUTE DEBUG] ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 router.get('/', getMenuItems);
 router.post('/', protect, restrictTo('admin', 'owner', 'manager'), createMenuItem);
@@ -47,13 +51,11 @@ router.post('/upload-image', protect, restrictTo('admin', 'owner', 'manager'), u
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image file uploaded' });
   }
-  
-  // Sync to GridFS
-  await syncToGridFS(req.file);
-
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+const { syncToGridFS } = require('../utils/gridfs');
+router.use((req, res, next) => {
+  console.log(`[MENU ROUTE DEBUG] ${req.method} ${req.originalUrl}`);
+  next();
+});
   return res.status(200).json({
     success: true,
     imageUrl

@@ -6,7 +6,9 @@ const {
   getTodayStatus, 
   getStaffHistory,
   getOwnerTodayDashboard,
-  getOwnerReports
+  getOwnerReports,
+  startExtraWork,
+  stopExtraWork
 } = require('../controllers/attendanceController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -54,6 +56,8 @@ router.post('/check-in', upload.single('image'), checkIn);
 router.post('/check-out', checkOut);
 router.get('/today', getTodayStatus);
 router.get('/history', getStaffHistory);
+router.post('/extra-work/start', startExtraWork);
+router.post('/extra-work/stop', stopExtraWork);
 
 // Owner/Manager Attendance Endpoints
 router.get('/owner/today', restrictTo('admin', 'owner', 'manager'), getOwnerTodayDashboard);

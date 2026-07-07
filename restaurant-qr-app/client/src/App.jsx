@@ -1,39 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import CustomerMenu from './pages/CustomerMenu';
-import CartPage from './pages/CartPage';
-import OrderHistory from './pages/OrderHistory';
-import OwnerDashboard from './pages/OwnerDashboard';
-import PaymentDemo from './pages/PaymentDemo';
-import Login from './pages/Login';
-import VerifyOtp from './pages/VerifyOtp';
-import SuperAdminDashboard from './pages/SuperAdminDashboard';
-import StaffDashboard from './pages/StaffDashboard';
-import OwnerSetup from './pages/OwnerSetup';
-import OwnerProfilePage from './pages/OwnerProfilePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { SocketProvider } from './context/SocketContext';
-import KitchenDashboard from './pages/KitchenDashboard';
-import WaiterDashboard from './pages/WaiterDashboard';
-import CashierDashboard from './pages/CashierDashboard';
-import ManagerDashboard from './pages/ManagerDashboard';
-import ManualOrderPage from './pages/ManualOrderPage';
+import { BranchProvider, useBranch } from './context/BranchContext';
 import './styles/App.css';
 import SaaSLayout from './components/SaaSLayout';
-import Unauthorized from './pages/Unauthorized';
-import { ToastProvider } from './components/Toast';
-import { getCafeInfo } from './services/api';
+
+const CustomerMenu = React.lazy(() => import('./pages/CustomerMenu'));
+const CartPage = React.lazy(() => import('./pages/CartPage'));
+const OrderHistory = React.lazy(() => import('./pages/OrderHistory'));
+const OwnerDashboard = React.lazy(() => import('./pages/OwnerDashboard'));
+const Login = React.lazy(() => import('./pages/Login'));
+const SuperAdminDashboard = React.lazy(() => import('./pages/SuperAdminDashboard'));
+const StaffDashboard = React.lazy(() => import('./pages/StaffDashboard'));
+const OwnerSetup = React.lazy(() => import('./pages/OwnerSetup'));
+const OwnerProfilePage = React.lazy(() => import('./pages/OwnerProfilePage'));
+const KitchenDashboard = React.lazy(() => import('./pages/KitchenDashboard'));
+const WaiterDashboard = React.lazy(() => import('./pages/WaiterDashboard'));
+const CashierDashboard = React.lazy(() => import('./pages/CashierDashboard'));
+const ManagerDashboard = React.lazy(() => import('./pages/ManagerDashboard'));
+const EmployeePayrollPage = React.lazy(() => import('./pages/EmployeePayrollPage'));
+const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
+const StaffOrderWorkspace = React.lazy(() => import('./pages/StaffOrderWorkspace'));
 
 function AppContent() {
   const [cart, setCart] = useState([]);
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const { activeBranchId, switchBranch } = useBranch();
   const tableParam = searchParams.get('table');
   const cafeIdParam = searchParams.get('cafeId');
-  const branchParam = searchParams.get('branchId') || searchParams.get('branch');
+  const sourceParam = searchParams.get('source');
+  const branchIdParam = searchParams.get('branchId');
 
   // Synchronously initialize table number state from query param or session storage
   const [tableNumber, setTableNumber] = useState(() => {
@@ -47,15 +47,24 @@ function AppContent() {
 
   // Synchronously initialize branch ID state from query param or session storage
   const [branchId, setBranchId] = useState(() => {
-    return branchParam || sessionStorage.getItem('branchId') || '';
+    return branchIdParam || sessionStorage.getItem('branchId') || '';
   });
+
+  // Save source param to session storage if present
+  useEffect(() => {
+    if (sourceParam) {
+      sessionStorage.setItem('orderSource', sourceParam);
+    } else if (tableParam || cafeIdParam) {
+      sessionStorage.removeItem('orderSource');
+    }
+  }, [sourceParam, tableParam, cafeIdParam]);
 
   // Sync tableNumber state when search parameter changes reactively
   useEffect(() => {
     if (tableParam) {
       setTableNumber(tableParam);
       sessionStorage.setItem('tableNumber', tableParam);
-      console.log(`Updated table number from URL: ${tableParam}`);
+      
     }
   }, [tableParam]);
 
@@ -64,49 +73,23 @@ function AppContent() {
     if (cafeIdParam) {
       setCafeId(cafeIdParam);
       sessionStorage.setItem('cafeId', cafeIdParam);
-      console.log(`Updated cafe ID from URL: ${cafeIdParam}`);
+      
     }
   }, [cafeIdParam]);
 
   // Sync branchId state when search parameter changes reactively
   useEffect(() => {
-    if (branchParam) {
-      setBranchId(branchParam);
-      sessionStorage.setItem('branchId', branchParam);
-      console.log(`Updated branch ID from URL: ${branchParam}`);
+    if (branchIdParam) {
+      setBranchId(branchIdParam);
+      sessionStorage.setItem('branchId', branchIdParam);
     }
-  }, [branchParam]);
-
-  // Cafe Info state for branding
-  const [cafeInfo, setCafeInfo] = useState(null);
-
-  // Fetch cafe info on cafeId changes
-  useEffect(() => {
-    const fetchCafe = async () => {
-      const activeCafeId = cafeId || 'CD001';
-      try {
-        const res = await getCafeInfo(activeCafeId);
-        if (res.success) {
-          setCafeInfo(res.data);
-        }
-      } catch (err) {
-        console.error('Error fetching cafe info in AppContent:', err);
-      }
-    };
-    fetchCafe();
-  }, [cafeId]);
-
-  // Sync browser page title with cafe name
-  useEffect(() => {
-    if (cafeInfo?.name) {
-      document.title = `${cafeInfo.name} | QR Ordering`;
-    } else {
-      document.title = 'Dr.chai Café | QR Ordering';
+    if (branchIdParam && branchIdParam !== activeBranchId) {
+      switchBranch(branchIdParam);
     }
-  }, [cafeInfo]);
+  }, [branchIdParam, activeBranchId, switchBranch]);
 
   // Cart operations
-  const addToCart = (item) => {
+  const addToCart = useCallback((item) => {
     setCart((prevCart) => {
       const existing = prevCart.find((cartItem) => cartItem.item.id === item.id);
       if (existing) {
@@ -118,9 +101,9 @@ function AppContent() {
       }
       return [...prevCart, { item, quantity: 1 }];
     });
-  };
+  }, []);
 
-  const increaseQuantity = (id) => {
+  const increaseQuantity = useCallback((id) => {
     setCart((prevCart) =>
       prevCart.map((cartItem) =>
         cartItem.item.id === id
@@ -128,9 +111,9 @@ function AppContent() {
           : cartItem
       )
     );
-  };
+  }, []);
 
-  const decreaseQuantity = (id) => {
+  const decreaseQuantity = useCallback((id) => {
     setCart((prevCart) => {
       const existing = prevCart.find((cartItem) => cartItem.item.id === id);
       if (existing && existing.quantity === 1) {
@@ -143,18 +126,19 @@ function AppContent() {
           : cartItem
       );
     });
-  };
+  }, []);
 
-  const removeFromCart = (id) => {
+  const removeFromCart = useCallback((id) => {
     setCart((prevCart) => prevCart.filter((cartItem) => cartItem.item.id !== id));
-  };
+  }, []);
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setCart([]);
-  };
+  }, []);
 
-  const totalItemCount = cart.reduce((acc, curr) => acc + curr.quantity, 0);
+  const totalItemCount = useMemo(() => cart.reduce((acc, curr) => acc + curr.quantity, 0), [cart]);
 
+  // Determine if we are on an administrative or auth portal page to hide customer elements
   const isAdminOrAuthRoute = 
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/owner') ||
@@ -162,20 +146,20 @@ function AppContent() {
     location.pathname.startsWith('/staff') ||
     location.pathname.startsWith('/manager') ||
     location.pathname.startsWith('/kitchen') ||
-    location.pathname.startsWith('/cashier') ||
     location.pathname.startsWith('/waiter') ||
-    location.pathname.startsWith('/manual-order') ||
-    ['/login', '/verify-otp'].includes(location.pathname);
+    location.pathname.startsWith('/cashier') ||
+    location.pathname === '/login';
 
   return (
     <div className={`app-container${isAdminOrAuthRoute ? ' admin-no-padding' : ''}`}>
       {!isAdminOrAuthRoute && (
-        <Navbar tableNumber={tableNumber} cartItemCount={totalItemCount} cafeInfo={cafeInfo} />
+        <Navbar tableNumber={tableNumber} cartItemCount={totalItemCount} />
       )}
       
       <main className={`main-content${isAdminOrAuthRoute ? ' admin-full-width' : ''}`}>
-        <Routes>
-          {/* Customer / Ordering Flow */}
+        <Suspense fallback={<div className="app-loading-screen" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#e67e22', fontSize: '1.2rem'}}>Loading Dr. Chai Cafe...</div>}>
+          <Routes>
+            {/* Customer / Ordering Flow */}
           <Route 
             path="/" 
             element={
@@ -185,23 +169,6 @@ function AppContent() {
                   addToCart={addToCart}
                   increaseQuantity={increaseQuantity}
                   decreaseQuantity={decreaseQuantity}
-                  branchId={branchId}
-                />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            } 
-          />
-          <Route 
-            path="/menu" 
-            element={
-              tableNumber ? (
-                <CustomerMenu 
-                  cart={cart}
-                  addToCart={addToCart}
-                  increaseQuantity={increaseQuantity}
-                  decreaseQuantity={decreaseQuantity}
-                  branchId={branchId}
                 />
               ) : (
                 <Navigate to="/login" replace />
@@ -219,16 +186,13 @@ function AppContent() {
                 clearCart={clearCart}
                 tableNumber={tableNumber}
                 cafeId={cafeId}
-                branchId={branchId}
               />
             } 
           />
 
-          <Route path="/history" element={<OrderHistory cafeId={cafeIdParam || 'CD001'} branchId={branchId} />} />
+          <Route path="/history" element={<OrderHistory cafeId={cafeIdParam || 'CD001'} />} />
 
-          {/* Auth Flow */}
           <Route path="/login" element={<Login />} />
-          <Route path="/verify-otp" element={<VerifyOtp />} />
 
            {/* Role Protected Admin Dashboards */}
           <Route 
@@ -270,11 +234,17 @@ function AppContent() {
             } 
           />
           <Route 
-            path="/manual-order" 
+            path="/owner/payroll" 
             element={
-              <ProtectedRoute allowedRoles={['waiter', 'staff', 'cashier']}>
+              <Navigate to="/owner/dashboard?tab=staff&sub=salary" replace />
+            } 
+          />
+          <Route 
+            path="/employee/payroll" 
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'chef', 'cashier', 'staff']}>
                 <SaaSLayout>
-                  <ManualOrderPage />
+                  <EmployeePayrollPage />
                 </SaaSLayout>
               </ProtectedRoute>
             } 
@@ -290,35 +260,18 @@ function AppContent() {
             } 
           />
           <Route 
-            path="/kitchen/dashboard" 
+            path="/staff/workspace" 
             element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'chef']}>
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff']}>
                 <SaaSLayout>
-                  <KitchenDashboard />
+                  <StaffOrderWorkspace />
                 </SaaSLayout>
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/waiter/dashboard" 
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'staff']}>
-                <SaaSLayout>
-                  <WaiterDashboard />
-                </SaaSLayout>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/cashier/dashboard" 
-            element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'cashier']}>
-                <SaaSLayout>
-                  <CashierDashboard />
-                </SaaSLayout>
-              </ProtectedRoute>
-            } 
-          />
+          <Route path="/kitchen/dashboard" element={<Navigate to="/staff/workspace" replace />} />
+          <Route path="/waiter/dashboard" element={<Navigate to="/staff/workspace" replace />} />
+          <Route path="/cashier/dashboard" element={<Navigate to="/staff/workspace" replace />} />
           <Route 
             path="/staff/attendance" 
             element={
@@ -337,19 +290,16 @@ function AppContent() {
           {/* Shorthand / Compatibility Redirects */}
           <Route path="/super-admin" element={<Navigate to="/super-admin/dashboard" replace />} />
           <Route path="/admin" element={<Navigate to="/owner/dashboard" replace />} />
-          <Route path="/staff/dashboard" element={<Navigate to="/waiter/dashboard" replace />} />
-          <Route path="/staff" element={<Navigate to="/waiter/dashboard" replace />} />
+          <Route path="/staff/dashboard" element={<Navigate to="/staff/workspace" replace />} />
+          <Route path="/staff" element={<Navigate to="/staff/workspace" replace />} />
 
           {/* Legacy & Demo routes */}
-          <Route 
-            path="/payment-demo" 
-            element={<PaymentDemo />} 
-          />
           <Route 
             path="/dashboard" 
             element={<Navigate to="/admin" replace />} 
           />
-        </Routes>
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );
@@ -358,15 +308,13 @@ function AppContent() {
 function App() {
   return (
     <Router>
-      <ThemeProvider>
-        <AuthProvider>
-          <SocketProvider>
-            <ToastProvider>
-              <AppContent />
-            </ToastProvider>
-          </SocketProvider>
-        </AuthProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <BranchProvider>
+            <AppContent />
+          </BranchProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </Router>
   );
 }

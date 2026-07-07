@@ -3,6 +3,9 @@ const User = require('../models/User');
 const OtpVerification = require('../models/OtpVerification');
 const Cafe = require('../models/Cafe');
 const emailService = require('../services/emailService');
+const { OAuth2Client } = require('google-auth-library');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Cookie options helper
 const getCookieOptions = () => ({
@@ -27,11 +30,13 @@ const sendOTP = async (req, res) => {
   try {
     const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
 
-    // If not super admin, check if user exists in the database
     if (!isSuperAdmin) {
       const user = await User.findOne({ email: cleanEmail });
       if (!user) {
-        return res.status(404).json({ success: false, message: 'Account not found. Contact App Owner.' });
+        return res.status(400).json({ 
+          success: false, 
+          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
+        });
       }
       if (!user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
@@ -78,12 +83,14 @@ const sendOTP = async (req, res) => {
     console.log('Email:', cleanEmail, 'OTP:', otp);
     console.log('------------------------------------');
 
-    // Send email via Nodemailer
-    await emailService.sendOTP(cleanEmail, otp);
+    // Send email via Nodemailer in the background without waiting
+    emailService.sendOTP(cleanEmail, otp).catch(err => {
+      console.warn('Background email delivery failed:', err.message);
+    });
 
     return res.status(200).json({ 
       success: true, 
-      message: 'Verification code sent to your email successfully.' 
+      message: 'Verification code generated successfully.' 
     });
   } catch (error) {
     console.error('sendOTP controller error:', error);
@@ -145,10 +152,18 @@ const verifyOTP = async (req, res) => {
     } else {
       user = await User.findOne({ email: cleanEmail });
       if (!user) {
-        return res.status(404).json({ success: false, message: 'User account not found' });
-      }
-      if (!user.isActive) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
+        });
+      } else if (!user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
+      }
+
+      // Self-heal existing corrupted demo users who have an empty cafeId
+      if (user.role === 'owner' && !user.cafeId) {
+        user.cafeId = 'CD001';
+        await user.save();
       }
     }
 
@@ -168,13 +183,8 @@ const verifyOTP = async (req, res) => {
     // Save token in cookie
     res.cookie('token', token, getCookieOptions());
 
-    let setupCompleted = false;
-    if (user.cafeId) {
-      const cafe = await Cafe.findOne({ cafeId: user.cafeId });
-      if (cafe) {
-        setupCompleted = cafe.setupCompleted;
-      }
-    }
+    // In Demo Mode, always bypass the Setup Wizard
+    let setupCompleted = true;
 
     return res.status(200).json({
       success: true,
@@ -214,6 +224,20 @@ const resendOTP = async (req, res) => {
   const cleanEmail = email.trim().toLowerCase();
 
   try {
+    const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+    if (!isSuperAdmin) {
+      const user = await User.findOne({ email: cleanEmail });
+      if (!user) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
+        });
+      }
+      if (!user.isActive) {
+        return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
+      }
+    }
+
     const otpRecord = await OtpVerification.findOne({ email: cleanEmail });
     
     // Check if they exceed the resend count limit (max 3 resends)
@@ -304,8 +328,8 @@ const getMe = async (req, res) => {
       phone: req.user.phone,
       role: req.user.role,
       cafeId: req.user.cafeId,
-      assignedBranch: req.user.assignedBranch || '',
-      branchId: req.user.assignedBranch || '',
+        assignedBranch: user.assignedBranch || '',
+        branchId: user.assignedBranch || '',
       isActive: req.user.isActive,
       lastLogin: req.user.lastLogin,
       lastSeen: req.user.lastSeen,
@@ -314,10 +338,113 @@ const getMe = async (req, res) => {
   });
 };
 
+
+/**
+ * Google OAuth Login
+ */
+const googleLogin = async (req, res) => {
+  const { credential } = req.body;
+
+  if (!credential) {
+    return res.status(400).json({ success: false, message: 'Google credential is required' });
+  }
+
+  try {
+    // Verify the Google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const { email, name } = payload;
+    
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Could not extract email from Google token' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+
+    let user;
+
+    if (isSuperAdmin) {
+      user = await User.findOne({ email: cleanEmail });
+      if (!user) {
+        user = await User.create({
+          name: name || 'Super Admin',
+          email: cleanEmail,
+          phone: 'N/A',
+          role: 'super_admin',
+          cafeId: '',
+          isActive: true
+        });
+      }
+    } else {
+      user = await User.findOne({ email: cleanEmail });
+      if (!user) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
+        });
+      } else if (!user.isActive) {
+        return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
+      }
+
+      // Self-heal existing corrupted demo users who have an empty cafeId
+      if (user.role === 'owner' && !user.cafeId) {
+        user.cafeId = 'CD001';
+        await user.save();
+      }
+    }
+
+    // Update login timestamps
+    const now = new Date();
+    user.lastLogin = now;
+    user.lastSeen = now;
+    await user.save();
+
+    // Sign JWT token
+    const token = jwt.sign(
+      { id: user._id, role: user.role, cafeId: user.cafeId },
+      process.env.JWT_SECRET || 'super_secret_cafe_key_12345',
+      { expiresIn: '7d' }
+    );
+
+    // Save token in cookie
+    res.cookie('token', token, getCookieOptions());
+
+    let setupCompleted = true; // In demo mode, bypass setup wizard
+
+    return res.status(200).json({
+      success: true,
+      message: 'Logged in successfully with Google',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        cafeId: user.cafeId,
+        assignedBranch: user.assignedBranch,
+        isActive: user.isActive,
+        lastLogin: user.lastLogin,
+        lastSeen: user.lastSeen,
+        setupCompleted
+      },
+      token
+    });
+
+  } catch (error) {
+    console.error('googleLogin controller error:', error);
+    return res.status(401).json({ success: false, message: 'Google Authentication failed' });
+  }
+};
+
 module.exports = {
   sendOTP,
   verifyOTP,
   resendOTP,
   logout,
-  getMe
+  getMe,
+  googleLogin
 };

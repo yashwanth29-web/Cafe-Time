@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getAssetUrl } from '../services/api';
 
 const CartItem = ({ item, increaseQuantity, decreaseQuantity, removeFromCart }) => {
   const { id, name, image, price, category } = item.item;
@@ -32,6 +33,8 @@ const CartItem = ({ item, increaseQuantity, decreaseQuantity, removeFromCart }) 
     setImgFailed(!isValidUrl(image));
   }
 
+  const displayImage = getAssetUrl(image);
+
   return (
     <div className="cart-item-card">
       {imgFailed ? (
@@ -52,7 +55,7 @@ const CartItem = ({ item, increaseQuantity, decreaseQuantity, removeFromCart }) 
         </div>
       ) : (
         <img 
-          src={image} 
+          src={displayImage} 
           alt={name} 
           className="cart-item-img" 
           onError={() => setImgFailed(true)} 

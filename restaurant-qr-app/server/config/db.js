@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
   const primaryUri = process.env.MONGO_URI;
-  const fallbackUri = 'mongodb://127.0.0.1:27017/coffeedaycafe';
+  const fallbackUri = 'mongodb://127.0.0.1:27017/Dr. Chai Cafe';
 
   let connected = false;
 

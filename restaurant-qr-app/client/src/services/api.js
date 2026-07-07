@@ -3,53 +3,39 @@ import axios from 'axios';
 // Dynamically determine the backend API base URL for deployment/local IP testing
 const getBaseURL = () => {
   const envUrl = import.meta.env.VITE_API_URL;
-
-  // In production, ignore localhost VITE_API_URL and fallback to dynamic origin routing
-  if (import.meta.env.PROD) {
-    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-      return envUrl;
-    }
-    return `${window.location.origin}/api`;
-  }
-
   if (envUrl) return envUrl;
 
   // If in production or accessed via non-localhost, dynamically match the window origin
-  if (window.location.hostname !== 'localhost') {
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     return `${window.location.origin}/api`;
   }
   
   // Default to development local server port
-  return 'http://localhost:5000/api';
+  return `http://${window.location.hostname}:5000/api`;
 };
 
 // Helper to format absolute asset URLs to use the current host (useful when testing via local network IPs)
 export const getAssetUrl = (url) => {
   if (!url) return '';
+  
+  // If the URL is just a relative path like "/uploads/lassi.png", 
+  // we must prepend the backend server address if we are in local development.
   if (url.startsWith('/uploads')) {
     const envUrl = import.meta.env.VITE_API_URL;
-    let apiBase = '';
-
-    if (import.meta.env.PROD) {
-      if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-        apiBase = envUrl.replace(/\/api$/, '');
-      } else {
-        apiBase = window.location.origin;
-      }
-    } else {
-      apiBase = envUrl ? envUrl.replace(/\/api$/, '') : '';
+    if (envUrl) {
+      return envUrl.replace(/\/api$/, '') + url;
     }
-
-    const origin = apiBase || (window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin);
-    return `${origin}${url}`;
+    if ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && window.location.port === '5173') {
+      return `http://${window.location.hostname}:5000${url}`;
+    }
   }
-  if (url.includes('localhost:5000') && window.location.hostname !== 'localhost') {
+
+  if (url.includes('localhost:5000') && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     const backendHost = window.location.port === '5173' ? `${window.location.hostname}:5000` : window.location.host;
     return url.replace('localhost:5000', backendHost);
   }
   return url;
 };
-
 
 const API = axios.create({
   baseURL: getBaseURL(),
@@ -66,6 +52,21 @@ API.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    const isCustomerView = window.location.pathname === '/' || window.location.pathname === '/history';
+    
+    let activeBranchId;
+    if (isCustomerView) {
+      // In customer view, strictly prefer the branchId from the URL (which App.jsx puts in sessionStorage)
+      activeBranchId = sessionStorage.getItem('branchId') || localStorage.getItem('activeBranchId');
+    } else {
+      // In owner/staff dashboards, prefer the active branch from localStorage
+      activeBranchId = localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId');
+    }
+    
+    if (activeBranchId) {
+      config.headers['x-branch-id'] = activeBranchId;
+    }
     return config;
   },
   (error) => {
@@ -74,8 +75,8 @@ API.interceptors.request.use(
 );
 
 
-export const getOrders = async () => {
-  const response = await API.get('/orders');
+export const getOrders = async (params) => {
+  const response = await API.get('/orders', { params });
   return response.data;
 };
 
@@ -190,6 +191,11 @@ export const resendOtp = async (email) => {
 
 export const logoutUser = async () => {
   const response = await API.post('/auth/logout');
+  return response.data;
+};
+
+export const loginWithGoogleApi = async (credential) => {
+  const response = await API.post('/auth/google', { credential });
   return response.data;
 };
 
@@ -383,13 +389,80 @@ export const checkIn = async (attendanceData) => {
   return response.data;
 };
 
-export const checkOut = async () => {
-  const response = await API.post('/attendance/check-out');
+export const checkOut = async (attendanceData) => {
+  const response = await API.post('/attendance/check-out', attendanceData);
   return response.data;
 };
 
-export const getTodayAttendanceStatus = async () => {
-  const response = await API.get('/attendance/today');
+export const startExtraWork = async (attendanceData) => {
+  const response = await API.post('/attendance/extra-work/start', attendanceData);
+  return response.data;
+};
+
+export const stopExtraWork = async (attendanceData) => {
+  const response = await API.post('/attendance/extra-work/stop', attendanceData);
+  return response.data;
+};
+
+// Payroll APIs
+export const generatePayroll = async (weekStart, weekEnd) => {
+  const response = await API.post('/payroll/generate', { weekStart, weekEnd });
+  return response.data;
+};
+
+export const getPayrollList = async (params) => {
+  const response = await API.get('/payroll', { params });
+  return response.data;
+};
+
+export const getPayrollDetails = async (id) => {
+  const response = await API.get(`/payroll/${id}`);
+  return response.data;
+};
+
+export const getCurrentEmployeePayroll = async () => {
+  const response = await API.get('/payroll/current');
+  return response.data;
+};
+
+export const updatePayroll = async (id, payrollData) => {
+  const response = await API.patch(`/payroll/${id}`, payrollData);
+  return response.data;
+};
+
+export const payPayroll = async (id, paymentData) => {
+  const response = await API.patch(`/payroll/${id}/pay`, paymentData);
+  return response.data;
+};
+
+export const deletePayroll = async (id) => {
+  const response = await API.delete(`/payroll/${id}`);
+  return response.data;
+};
+
+export const getPayrollHistory = async () => {
+  const response = await API.get('/payroll/history');
+  return response.data;
+};
+
+export const getPayrollReport = async (params) => {
+  const response = await API.get('/payroll/report', { params });
+  return response.data;
+};
+
+// In-app Notifications APIs
+export const getNotifications = async () => {
+  const response = await API.get('/notifications');
+  return response.data;
+};
+
+export const markNotificationRead = async (id) => {
+  const response = await API.patch(`/notifications/${id}/read`);
+  return response.data;
+};
+
+export const getTodayAttendanceStatus = async (params) => {
+  const response = await API.get('/attendance/today', { params });
   return response.data;
 };
 
@@ -426,6 +499,11 @@ export const getWorkReports = async (params) => {
 // Cafe Public API
 export const getCafeInfo = async (cafeId) => {
   const response = await API.get(`/cafe/${cafeId}`);
+  return response.data;
+};
+
+export const getPaymentInfo = async () => {
+  const response = await API.get('/cafe/payment-info/config');
   return response.data;
 };
 

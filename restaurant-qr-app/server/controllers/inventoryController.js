@@ -1,6 +1,7 @@
 const Inventory = require('../models/Inventory');
 const InventoryLog = require('../models/InventoryLog');
 const OperationalConfig = require('../models/OperationalConfig');
+
 const Branch = require('../models/Branch');
 
 const emitInventoryUpdated = async (cafeId, branchId, itemsList) => {
@@ -40,8 +41,10 @@ const emitInventoryUpdated = async (cafeId, branchId, itemsList) => {
   }
 };
 
+const menuCache = require('../utils/menuCache');
+
 // Helper to seed default inventory items for a cafe if empty (using updated fields)
-const seedDefaultInventory = async (cafeId) => {
+const seedDefaultInventory = async (cafeId, branchId = 'default') => {
   const defaults = [
     // Tea Ingredients
     { name: 'Tea Leaves', quantity: 5000, reorderLevel: 1000, unit: 'g', costPrice: 0.5, category: 'Tea Ingredients', supplier: 'Dr. Chai Wholesale', branch: 'Main' },
@@ -107,7 +110,8 @@ const seedDefaultInventory = async (cafeId) => {
         itemsToCreate.push({
           ...item,
           cafeId,
-          branch: b.branchId
+          branch: b.branchId,
+          branchId: b.branchId
         });
       }
     }
@@ -116,7 +120,8 @@ const seedDefaultInventory = async (cafeId) => {
       itemsToCreate.push({
         ...item,
         cafeId,
-        branch: 'Main'
+        branch: branchId || 'default',
+        branchId: branchId || 'default'
       });
     }
   }
@@ -127,14 +132,25 @@ const seedDefaultInventory = async (cafeId) => {
 const getInventory = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    const totalItemsCount = await Inventory.countDocuments({ cafeId });
+    const reqBranchId = req.query.branchId || req.headers['x-branch-id'];
+    const query = { cafeId };
+    
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user.role || '').toLowerCase());
+    if (isStaff && req.user.assignedBranch) {
+      query.$or = [{ branch: req.user.assignedBranch }, { branchId: req.user.assignedBranch }];
+    } else if (reqBranchId) {
+      query.$or = [{ branch: reqBranchId }, { branchId: reqBranchId }];
+    }
+    
+    const totalItemsCount = await Inventory.countDocuments(query);
     const hasDemo = await Inventory.exists({ cafeId, name: { $in: ['Burger Buns', 'Chicken Patties', 'Coffee Beans'] } });
 
     // Auto-seed if database contains no inventory or contains old demo data
     if (totalItemsCount === 0 || hasDemo) {
       console.log('Clearing old demo inventory items and seeding actual Dr. Chai Cafe inventory...');
+      const seedBranch = reqBranchId || 'default';
       await Inventory.deleteMany({ cafeId });
-      await seedDefaultInventory(cafeId);
+      await seedDefaultInventory(cafeId, seedBranch);
     }
 
     // Now query the items
@@ -159,6 +175,7 @@ const getInventory = async (req, res) => {
 const createInventoryItem = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
     const { name, itemName, stock, quantity, minStock, reorderLevel, unit, cost, costPrice, sellingPrice, supplier, branch, category } = req.body;
 
     const finalName = (name || itemName || '').trim();
@@ -173,6 +190,7 @@ const createInventoryItem = async (req, res) => {
 
     const newItem = new Inventory({
       cafeId,
+      branchId,
       name: finalName,
       quantity: finalQuantity,
       unit: unit.trim(),
@@ -189,6 +207,7 @@ const createInventoryItem = async (req, res) => {
     // Create Initial Log
     await InventoryLog.create({
       cafeId,
+      branchId,
       itemId: savedItem._id,
       itemName: savedItem.name,
       type: 'Initial',
@@ -198,7 +217,8 @@ const createInventoryItem = async (req, res) => {
       userEmail: req.user?.email || 'admin@cafe.com'
     });
 
-    emitInventoryUpdated(cafeId, savedItem.branch || 'Main', savedItem);
+    emitInventoryUpdated(cafeId, savedItem.branchId || savedItem.branch || 'default', savedItem);
+    await updateMenuItemAvailabilityFromInventory(cafeId, null, savedItem.branchId || 'default');
     return res.status(201).json({ success: true, data: savedItem });
   } catch (error) {
     console.error('createInventoryItem error:', error);
@@ -213,8 +233,9 @@ const updateInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
     
-    const item = await Inventory.findOne({ _id: id, cafeId });
+    const item = await Inventory.findOne({ _id: id, cafeId, branchId });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Inventory item not found or unauthorized' });
     }
@@ -250,6 +271,7 @@ const updateInventoryItem = async (req, res) => {
       const difference = savedItem.quantity - oldQuantity;
       await InventoryLog.create({
         cafeId,
+        branchId,
         itemId: savedItem._id,
         itemName: savedItem.name,
         type: 'Adjustment',
@@ -261,7 +283,7 @@ const updateInventoryItem = async (req, res) => {
     }
 
     // Auto-update menu availability
-    await updateMenuItemAvailabilityFromInventory(cafeId);
+    await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
 
     return res.status(200).json({ success: true, data: savedItem });
   } catch (error) {
@@ -277,8 +299,9 @@ const deleteInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
 
-    const deletedItem = await Inventory.findOneAndDelete({ _id: id, cafeId });
+    const deletedItem = await Inventory.findOneAndDelete({ _id: id, cafeId, branchId });
     if (!deletedItem) {
       return res.status(404).json({ success: false, message: 'Inventory item not found or unauthorized' });
     }
@@ -296,7 +319,8 @@ const deleteInventoryItem = async (req, res) => {
 const getInventoryLogs = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    const logs = await InventoryLog.find({ cafeId }).sort({ createdAt: -1 });
+    const branchId = req.branchId || req.query.branchId || 'default';
+    const logs = await InventoryLog.find({ cafeId, branchId }).sort({ createdAt: -1 }).limit(200).lean();
     return res.status(200).json({ success: true, count: logs.length, data: logs });
   } catch (error) {
     console.error('getInventoryLogs error:', error);
@@ -310,13 +334,14 @@ const getInventoryLogs = async (req, res) => {
 const recordPurchase = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
     const { itemId, quantityAdded, costPrice, supplier, notes } = req.body;
 
     if (!itemId || !quantityAdded || quantityAdded <= 0) {
       return res.status(400).json({ success: false, message: 'Item ID and valid Quantity Added are required' });
     }
 
-    const item = await Inventory.findOne({ _id: itemId, cafeId });
+    const item = await Inventory.findOne({ _id: itemId, cafeId, branchId });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
@@ -333,6 +358,7 @@ const recordPurchase = async (req, res) => {
 
     const newLog = await InventoryLog.create({
       cafeId,
+      branchId,
       itemId: item._id,
       itemName: item.name,
       type: 'Purchase',
@@ -343,7 +369,7 @@ const recordPurchase = async (req, res) => {
     });
 
     // Auto-update menu availability
-    await updateMenuItemAvailabilityFromInventory(cafeId);
+    await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
 
     return res.status(200).json({ success: true, message: 'Purchase entry added successfully', data: item, log: newLog });
   } catch (error) {
@@ -358,13 +384,14 @@ const recordPurchase = async (req, res) => {
 const recordWastage = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
     const { itemId, quantityWasted, type, reason } = req.body;
 
     if (!itemId || !quantityWasted || quantityWasted <= 0 || !type) {
       return res.status(400).json({ success: false, message: 'Item ID, valid Quantity Wasted, and Type (Wastage/Damaged) are required' });
     }
 
-    const item = await Inventory.findOne({ _id: itemId, cafeId });
+    const item = await Inventory.findOne({ _id: itemId, cafeId, branchId });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
@@ -379,6 +406,7 @@ const recordWastage = async (req, res) => {
 
     const newLog = await InventoryLog.create({
       cafeId,
+      branchId,
       itemId: item._id,
       itemName: item.name,
       type: type === 'Damaged' ? 'Damaged' : 'Wastage',
@@ -389,7 +417,7 @@ const recordWastage = async (req, res) => {
     });
 
     // Auto-update menu availability
-    await updateMenuItemAvailabilityFromInventory(cafeId);
+    await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
 
     return res.status(200).json({ success: true, message: 'Wastage recorded successfully', data: item, log: newLog });
   } catch (error) {
@@ -404,13 +432,14 @@ const recordWastage = async (req, res) => {
 const reportShortage = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
+    const branchId = req.branchId || 'default';
     const { itemId, reason } = req.body;
 
     if (!itemId) {
       return res.status(400).json({ success: false, message: 'Item ID is required' });
     }
 
-    const item = await Inventory.findOne({ _id: itemId, cafeId });
+    const item = await Inventory.findOne({ _id: itemId, cafeId, branchId });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
@@ -422,6 +451,7 @@ const reportShortage = async (req, res) => {
 
     const newLog = await InventoryLog.create({
       cafeId,
+      branchId,
       itemId: item._id,
       itemName: item.name,
       type: 'Shortage',
@@ -444,7 +474,8 @@ const reportShortage = async (req, res) => {
 const getWastageReport = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    const logs = await InventoryLog.find({ cafeId, type: { $in: ['Wastage', 'Damaged'] } }).sort({ createdAt: -1 });
+    const branchId = req.branchId || req.query.branchId || 'default';
+    const logs = await InventoryLog.find({ cafeId, branchId, type: { $in: ['Wastage', 'Damaged'] } }).sort({ createdAt: -1 });
     
     const totalCost = logs.reduce((sum, log) => sum + (log.cost || 0), 0);
     const count = logs.length;
@@ -462,7 +493,8 @@ const getWastageReport = async (req, res) => {
 const getConsumptionReport = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    const logs = await InventoryLog.find({ cafeId, type: 'Deduction' }).sort({ createdAt: -1 });
+    const branchId = req.branchId || req.query.branchId || 'default';
+    const logs = await InventoryLog.find({ cafeId, branchId, type: 'Deduction' }).sort({ createdAt: -1 });
 
     const totalCost = logs.reduce((sum, log) => sum + (log.cost || 0), 0);
     const count = logs.length;
@@ -506,48 +538,44 @@ const RECIPES = {
   ]
 };
 
-// Auto-update menu item availability based on ingredient stock levels (optimized with batch queries)
-const updateMenuItemAvailabilityFromInventory = async (cafeId, affectedIngredients = null) => {
+const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, branchId = 'default') => {
   try {
     const MenuItem = require('../models/MenuItem');
-    
-    // Build query to fetch only relevant menu items if affected ingredients list is provided
-    const query = {};
-    if (affectedIngredients && affectedIngredients.length > 0) {
-      query['recipe.name'] = { $in: affectedIngredients };
+    const allInventory = await Inventory.find({ cafeId }).lean();
+    const invMap = {};
+    for (const inv of allInventory) {
+      const key = `${inv.branchId || inv.branch || 'default'}_${inv.name.toLowerCase()}`;
+      invMap[key] = inv.quantity !== undefined ? inv.quantity : inv.stock;
     }
-    
+
+    const query = itemId ? { _id: itemId, cafeId } : { cafeId };
     const menuItems = await MenuItem.find(query);
-    if (menuItems.length === 0) return;
-
-    // Collect all unique ingredient names from recipes to perform a single batch fetch
-    const ingredientNamesSet = new Set();
-    menuItems.forEach(item => {
-      if (item.recipe) {
-        item.recipe.forEach(ing => {
-          ingredientNamesSet.add(ing.name);
-        });
+    
+    for (const item of menuItems) {
+      const activeBId = item.branchId || branchId || 'default';
+      if (item.recipe && item.recipe.length > 0) {
+        let shouldBeAvailable = true;
+        for (const ing of item.recipe) {
+          const key = `${activeBId}_${ing.name.toLowerCase()}`;
+          const currentQty = invMap[key] || 0;
+          if (currentQty < ing.quantity) {
+            shouldBeAvailable = false;
+            break;
+          }
+        }
+        if (item.available !== shouldBeAvailable) {
+          item.available = shouldBeAvailable;
+          await item.save();
+        }
       }
-    });
-
-    const ingredientNames = Array.from(ingredientNamesSet);
-    const inventoryItems = await Inventory.find({
-      cafeId,
-      name: { $in: ingredientNames }
-    }).lean();
-
-    const inventoryMap = new Map();
-    inventoryItems.forEach(inv => {
-      inventoryMap.set(inv.name, inv);
-    });
+    }
     
     for (const item of menuItems) {
       if (item.recipe && item.recipe.length > 0) {
         let shouldBeAvailable = true;
         
         for (const ing of item.recipe) {
-          const invItem = inventoryMap.get(ing.name);
-          if (!invItem || invItem.quantity <= 0) {
+          const invItem = allInventory.find(i => i.name.toLowerCase() === ing.name.toLowerCase() && (i.branchId === activeBId || i.branch === activeBId));
             shouldBeAvailable = false;
             break;
           }
@@ -556,6 +584,7 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, affectedIngredien
         if (item.available !== shouldBeAvailable) {
           item.available = shouldBeAvailable;
           await item.save();
+<<<<<<< HEAD
           console.log(`Auto-updated menu item "${item.name}" availability to ${shouldBeAvailable} based on inventory levels.`);
           
           try {
@@ -571,9 +600,14 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, affectedIngredien
           } catch (socketErr) {
             console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', socketErr.message);
           }
+=======
+>>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
         }
       }
     }
+    
+    // Clear menu cache since availability status might have changed
+    menuCache.clearMenu();
   } catch (err) {
     console.error('Error auto-updating menu item availability:', err);
   }
@@ -591,10 +625,16 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
       return;
     }
 
+<<<<<<< HEAD
     const opConfig = await OperationalConfig.findOne({ cafeId }).lean();
+=======
+    const branchId = order.branchId || 'default';
+    const opConfig = await OperationalConfig.findOne({ cafeId, branchId });
+>>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
     const isEnabled = opConfig ? opConfig.inventoryEnabled : true;
     if (!isEnabled) return;
 
+<<<<<<< HEAD
     // Batch fetch menu items for the ordered items to resolve recipes in one roundtrip
     const itemIds = items.map(item => item.id).filter(id => mongoose.isValidObjectId(id));
     const itemNames = items.map(item => item.name);
@@ -605,6 +645,13 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
         { name: { $in: itemNames } }
       ]
     }).lean();
+=======
+        // Fetch dynamic recipe from database
+        const menuItem = (await MenuItem.findOne({ _id: item.id, cafeId, branchId })) || (await MenuItem.findOne({ name: item.name, cafeId, branchId }));
+        let matchedRecipe = menuItem && menuItem.recipe && menuItem.recipe.length > 0 
+          ? menuItem.recipe 
+          : null;
+>>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
 
     const menuItemMap = new Map();
     menuItems.forEach(mi => {
@@ -612,6 +659,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
       menuItemMap.set(mi.name, mi);
     });
 
+<<<<<<< HEAD
     const ingredientDeductionList = [];
     const ingredientNamesSet = new Set();
 
@@ -631,6 +679,29 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
           if (itemNameLower.includes(key)) {
             matchedRecipe = ingredients;
             break;
+=======
+        if (matchedRecipe) {
+          for (const ing of matchedRecipe) {
+            const invItem = await Inventory.findOne({ cafeId, branchId, name: ing.name });
+            if (invItem) {
+              const deductionQty = ing.quantity * orderQty;
+              invItem.quantity = Math.max(0, invItem.quantity - deductionQty);
+              await invItem.save();
+
+              // Record deduction log
+              await InventoryLog.create({
+                cafeId,
+                branchId,
+                itemId: invItem._id,
+                itemName: invItem.name,
+                type: 'Deduction',
+                quantityChanged: -deductionQty,
+                cost: (invItem.costPrice || 0) * deductionQty,
+                reason: `Sold ${orderQty} x ${item.name}`,
+                userEmail: 'system-auto-deduct'
+              });
+            }
+>>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
           }
         }
       }
@@ -652,6 +723,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     if (ingredientDeductionList.length === 0) {
       order.inventoryDeducted = true;
       await order.save();
+<<<<<<< HEAD
       return;
     }
 
@@ -725,6 +797,11 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     // Auto-update availability only for menu items containing the affected ingredients
     if (affectedIngredients.length > 0) {
       await updateMenuItemAvailabilityFromInventory(cafeId, affectedIngredients);
+=======
+      
+      // Auto-update menu availability
+      await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
+>>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
     }
   } catch (err) {
     console.error('deductInventoryForOrder helper error:', err);

@@ -3,6 +3,7 @@ const Cafe = require('../models/Cafe');
 const PaymentConfig = require('../models/PaymentConfig');
 const OperationalConfig = require('../models/OperationalConfig');
 const Branch = require('../models/Branch');
+const Order = require('../models/Order');
 const emailService = require('../services/emailService');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Razorpay = require('razorpay');
@@ -10,60 +11,32 @@ const Razorpay = require('razorpay');
 const parseCoordinates = (input) => {
   if (!input) return null;
   const str = String(input).trim();
-  
-  // 1. q=lat,lng
   const qMatch = str.match(/[?&](?:q|query)=([\d.-]+)\s*,\s*([\d.-]+)/i);
-  if (qMatch) {
-    return {
-      latitude: parseFloat(qMatch[1]),
-      longitude: parseFloat(qMatch[2])
-    };
-  }
-  
-  // 2. @lat,lng
+  if (qMatch) return { latitude: parseFloat(qMatch[1]), longitude: parseFloat(qMatch[2]) };
   const atMatch = str.match(/@([\d.-]+)\s*,\s*([\d.-]+)/);
-  if (atMatch) {
-    return {
-      latitude: parseFloat(atMatch[1]),
-      longitude: parseFloat(atMatch[2])
-    };
-  }
-
-  // 3. /place/lat,lng
+  if (atMatch) return { latitude: parseFloat(atMatch[1]), longitude: parseFloat(atMatch[2]) };
   const placeMatch = str.match(/\/place\/([\d.-]+)\s*,\s*([\d.-]+)/i);
-  if (placeMatch) {
-    return {
-      latitude: parseFloat(placeMatch[1]),
-      longitude: parseFloat(placeMatch[2])
-    };
-  }
-
-  // 4. simple lat,lng
+  if (placeMatch) return { latitude: parseFloat(placeMatch[1]), longitude: parseFloat(placeMatch[2]) };
   const simpleMatch = str.match(/^([\d.-]+)\s*,\s*([\d.-]+)$/);
-  if (simpleMatch) {
-    return {
-      latitude: parseFloat(simpleMatch[1]),
-      longitude: parseFloat(simpleMatch[2])
-    };
-  }
-
-  // 5. general fallback for any lat,lng in the string
+  if (simpleMatch) return { latitude: parseFloat(simpleMatch[1]), longitude: parseFloat(simpleMatch[2]) };
   const generalMatch = str.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
-  if (generalMatch) {
-    return {
-      latitude: parseFloat(generalMatch[1]),
-      longitude: parseFloat(generalMatch[2])
-    };
-  }
-
+  if (generalMatch) return { latitude: parseFloat(generalMatch[1]), longitude: parseFloat(generalMatch[2]) };
   return null;
+};
+const parseCoords = (locationStr) => {
+  const coords = parseCoordinates(locationStr);
+  return coords ? { lat: coords.latitude, lng: coords.longitude } : { lat: 0, lng: 0 };
+};
 };
 
 /**
  * Register a new Staff member bound to the Owner's cafe
  */
 const createStaff = async (req, res) => {
-  const { name, email, phone, staffRole, assignedBranch, isActive } = req.body;
+  const { 
+    name, email, phone, staffRole, assignedBranch, isActive,
+    salaryType, dailyRate, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
+  } = req.body;
   const cafeId = req.user.cafeId;
 
   if (!name || !phone || !staffRole) {
@@ -97,6 +70,16 @@ const createStaff = async (req, res) => {
       targetRole = sRoleLower;
     }
 
+    if (assignedBranch) {
+      const branchExists = await Branch.findOne({ branchId: assignedBranch, cafeId });
+      if (!branchExists) {
+        return res.status(400).json({
+          success: false,
+          message: `The assigned branch "${assignedBranch}" does not exist or does not belong to your cafe.`
+        });
+      }
+    }
+
     // Auto-generate unique Employee ID
     let employeeId;
     let exists = true;
@@ -113,9 +96,17 @@ const createStaff = async (req, res) => {
       role: targetRole,
       staffRole: staffRole.trim(),
       employeeId,
-      assignedBranch: assignedBranch || '',
+      assignedBranch: assignedBranch || req.branchId || 'default',
       cafeId,
-      isActive: isActive !== undefined ? isActive : true
+      isActive: isActive !== undefined ? isActive : true,
+      salaryType: salaryType || 'DAILY',
+      dailyRate: dailyRate !== undefined ? Number(dailyRate) : 0,
+      hourlyRate: hourlyRate !== undefined ? Number(hourlyRate) : 0,
+      weeklyRate: weeklyRate !== undefined ? Number(weeklyRate) : 0,
+      monthlyRate: monthlyRate !== undefined ? Number(monthlyRate) : 0,
+      weeklyOff: weeklyOff || 'Sunday',
+      joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
+      salaryStatus: salaryStatus || 'ACTIVE'
     });
 
     if (cleanEmail) {
@@ -158,11 +149,87 @@ const getStaff = async (req, res) => {
         query.assignedBranch = req.user.assignedBranch;
       }
       query._id = { $ne: req.user._id };
+    } else {
+      query.assignedBranch = req.branchId || 'default';
     }
 
-    const staff = await User.find(query).sort({ createdAt: -1 });
+    const staff = await User.find(query).select('-password').sort({ createdAt: -1 }).lean();
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(now.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+
+    const Attendance = require('../models/Attendance');
+    const attendancesThisWeek = await Attendance.find({
+      cafeId,
+      createdAt: { $gte: monday }
+    }).lean();
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    const staffWithOrders = await Promise.all(staff.map(async (s) => {
+      const ordersCount = await Order.countDocuments({
+        cafeId,
+        staffId: s._id,
+        source: 'STAFF',
+        createdAt: { $gte: todayStart }
+      });
+      
+      const sAttendances = attendancesThisWeek.filter(a => a.staffId.toString() === s._id.toString());
+      const weeklyBreakdown = {
+        'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0, 'Friday': 0, 'Saturday': 0, 'Sunday': 0
+      };
+      let currentWeekSalary = 0;
+
+      sAttendances.forEach(att => {
+        const attDate = new Date(att.date || att.createdAt);
+        const dayName = dayNames[attDate.getDay()];
+        
+        let durationMin = att.totalDuration || 0;
+        if (!att.checkOutTime && att.checkInTime) {
+          durationMin = Math.max(0, Math.floor((Date.now() - new Date(att.checkInTime).getTime()) / 60000));
+        }
+
+        const overtimeHours = att.overtimeHours || 0;
+        let earnings = 0;
+        const sType = s.salaryType || 'DAILY';
+
+        if (sType === 'DAILY') {
+          if (durationMin >= 480) { earnings = s.dailyRate || 0; }
+          else if (durationMin >= 240) { earnings = (s.dailyRate || 0) * 0.5; }
+          const otRate = s.hourlyRate || ((s.dailyRate || 0) / 8);
+          earnings += overtimeHours * otRate;
+        } else if (sType === 'HOURLY') {
+          earnings = (durationMin / 60) * (s.hourlyRate || 0) + (overtimeHours * (s.hourlyRate || 0));
+        } else if (sType === 'WEEKLY') {
+          earnings = (s.weeklyRate || 0) / 6;
+          const otRate = s.hourlyRate || ((s.weeklyRate || 0) / 40);
+          earnings += overtimeHours * otRate;
+        } else if (sType === 'MONTHLY') {
+          earnings = (s.monthlyRate || 0) / 26;
+          const otRate = s.hourlyRate || ((s.monthlyRate || 0) / 160);
+          earnings += overtimeHours * otRate;
+        }
+
+        earnings = Number(earnings.toFixed(2));
+        weeklyBreakdown[dayName] = earnings;
+        currentWeekSalary += earnings;
+      });
+
+      return {
+        ...s,
+        ordersHandledToday: ordersCount,
+        weeklyBreakdown,
+        currentWeekSalary: Number(currentWeekSalary.toFixed(2))
+      };
+    }));
     
-    return res.status(200).json({ success: true, staff });
+    return res.status(200).json({ success: true, staff: staffWithOrders });
   } catch (error) {
     console.error('getStaff error:', error);
     return res.status(500).json({ success: false, message: 'Server error retrieving staff list' });
@@ -174,7 +241,10 @@ const getStaff = async (req, res) => {
  */
 const updateStaff = async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, staffRole, assignedBranch, isActive } = req.body;
+  const { 
+    name, email, phone, staffRole, assignedBranch, isActive,
+    salaryType, dailyRate, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
+  } = req.body;
   const cafeId = req.user.cafeId;
 
   if (!cafeId) {
@@ -185,6 +255,16 @@ const updateStaff = async (req, res) => {
     const staffMember = await User.findOne({ _id: id, cafeId });
     if (!staffMember) {
       return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
+    }
+
+    if (assignedBranch !== undefined) {
+      const branchExists = await Branch.findOne({ branchId: assignedBranch, cafeId });
+      if (!branchExists) {
+        return res.status(400).json({
+          success: false,
+          message: `The assigned branch "${assignedBranch}" does not exist or does not belong to your cafe.`
+        });
+      }
     }
 
     if (name) staffMember.name = name.trim();
@@ -217,6 +297,14 @@ const updateStaff = async (req, res) => {
     if (isActive !== undefined) {
       staffMember.isActive = isActive;
     }
+    if (salaryType) staffMember.salaryType = salaryType;
+    if (dailyRate !== undefined) staffMember.dailyRate = Number(dailyRate);
+    if (hourlyRate !== undefined) staffMember.hourlyRate = Number(hourlyRate);
+    if (weeklyRate !== undefined) staffMember.weeklyRate = Number(weeklyRate);
+    if (monthlyRate !== undefined) staffMember.monthlyRate = Number(monthlyRate);
+    if (weeklyOff) staffMember.weeklyOff = weeklyOff;
+    if (joiningDate) staffMember.joiningDate = new Date(joiningDate);
+    if (salaryStatus) staffMember.salaryStatus = salaryStatus;
 
     await staffMember.save();
 
@@ -243,10 +331,14 @@ const deleteStaff = async (req, res) => {
   }
 
   try {
-    const staffMember = await User.findOneAndDelete({ _id: id, cafeId });
+    const staffMember = await User.findOne({ _id: id, cafeId });
     if (!staffMember) {
       return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
     }
+
+
+
+    await User.deleteOne({ _id: id });
 
     return res.status(200).json({
       success: true,
@@ -262,32 +354,10 @@ const deleteStaff = async (req, res) => {
  * Test and verify Razorpay keys for a Cafe
  */
 const verifyRazorpay = async (req, res) => {
-  const { keyId, secret } = req.body;
-
-  if (!keyId || !secret) {
-    return res.status(400).json({ success: false, message: 'Key ID and Secret Key are required.' });
-  }
-
-  try {
-    const rzp = new Razorpay({
-      key_id: keyId,
-      key_secret: secret
-    });
-
-    // Attempt to list orders (limit 1) to test if key/secret are valid
-    await rzp.orders.all({ count: 1 });
-
-    return res.status(200).json({
-      success: true,
-      message: 'Razorpay keys verified successfully.'
-    });
-  } catch (error) {
-    console.error('verifyRazorpay error:', error);
-    return res.status(400).json({
-      success: false,
-      message: `Razorpay verification failed: ${error.message || 'Check key and secret credentials'}`
-    });
-  }
+  return res.status(200).json({
+    success: true,
+    message: 'UPI Payment mode active. Razorpay connection bypassed.'
+  });
 };
 
 /**
@@ -306,26 +376,23 @@ const getSetupData = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Cafe not found' });
     }
 
-    const paymentConfig = await PaymentConfig.findOne({ cafeId });
-    const operationalConfig = await OperationalConfig.findOne({ cafeId });
-
-    // Decrypt Razorpay Secret for editing in wizard (if configured)
-    let decryptedSecret = '';
-    if (paymentConfig && paymentConfig.razorpaySecretEncrypted) {
-      decryptedSecret = decrypt(paymentConfig.razorpaySecretEncrypted);
-    }
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+    const paymentConfig = await PaymentConfig.findOne({ cafeId, branchId: activeBranch });
+    const operationalConfig = await OperationalConfig.findOne({ cafeId, branchId: activeBranch });
 
     return res.status(200).json({
       success: true,
       cafe,
       paymentConfig: paymentConfig ? {
-        razorpayKeyId: paymentConfig.razorpayKeyId,
-        razorpaySecret: decryptedSecret,
+        acceptCash: paymentConfig.acceptCash,
+        enableUpi: paymentConfig.enableUpi,
         upiId: paymentConfig.upiId,
         bankHolderName: paymentConfig.bankHolderName,
         accountNumber: paymentConfig.accountNumber,
         ifscCode: paymentConfig.ifscCode,
-        isVerified: paymentConfig.isVerified
+        taxRate: paymentConfig.taxRate,
+        platformCharge: paymentConfig.platformCharge,
+        paymentInstructions: paymentConfig.paymentInstructions
       } : null,
       operationalConfig
     });
@@ -342,12 +409,14 @@ const saveSetupData = async (req, res) => {
   const cafeId = req.user.cafeId;
   const {
     name, businessType, branchCount, city, state, pincode,
-    logoUrl, address, mapsLocation, latitude, longitude, openingTime, closingTime, gstNumber, supportNumber,
+    logoUrl, address, mapsLocation, latitude, longitude, openingTime, closingTime, gstNumber, supportNumber, uiPrimaryColor,
     paymentConfig,
     operationalConfig,
     staffList,
     gstRate,
-    serviceChargeRate
+    taxRate,
+    serviceChargeRate,
+    serviceCharge
   } = req.body;
 
   if (!cafeId) {
@@ -361,6 +430,8 @@ const saveSetupData = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Cafe not found' });
     }
 
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+
     if (name) cafe.name = name;
     if (businessType) cafe.businessType = businessType;
     if (branchCount !== undefined) cafe.branchCount = branchCount;
@@ -369,7 +440,6 @@ const saveSetupData = async (req, res) => {
     if (pincode) cafe.pincode = pincode;
     if (logoUrl) cafe.logoUrl = logoUrl;
     if (address) cafe.address = address;
-
     let latVal = cafe.latitude || 0;
     let lngVal = cafe.longitude || 0;
 
@@ -392,9 +462,9 @@ const saveSetupData = async (req, res) => {
     cafe.latitude = latVal;
     cafe.longitude = lngVal;
 
-    // Sync default branch coordinates immediately
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     await Branch.findOneAndUpdate(
-      { branchId: 'default', cafeId },
+      { branchId: activeBranch, cafeId },
       {
         branchName: cafe.name || name || 'Primary Location',
         latitude: latVal,
@@ -405,30 +475,35 @@ const saveSetupData = async (req, res) => {
       },
       { upsert: true }
     );
-
     if (openingTime) cafe.openingTime = openingTime;
     if (closingTime) cafe.closingTime = closingTime;
     if (gstNumber) cafe.gstNumber = gstNumber;
     if (supportNumber) cafe.supportNumber = supportNumber;
-    if (gstRate !== undefined) cafe.gstRate = Number(gstRate);
-    if (serviceChargeRate !== undefined) cafe.serviceChargeRate = Number(serviceChargeRate);
+    if (uiPrimaryColor) cafe.uiPrimaryColor = uiPrimaryColor;
+    const finalGst = gstRate !== undefined ? gstRate : taxRate;
+    const finalSc = serviceChargeRate !== undefined ? serviceChargeRate : serviceCharge;
+    if (finalGst !== undefined) cafe.gstRate = Number(finalGst);
+    if (finalSc !== undefined) cafe.serviceChargeRate = Number(finalSc);
     cafe.setupCompleted = true; // Complete setup flag!
     await cafe.save();
 
-    // 2. Save PaymentConfig (Encrypting the Razorpay Secret)
+    // 2. Save PaymentConfig
     if (paymentConfig) {
-      const encryptedSecret = encrypt(paymentConfig.razorpaySecret);
+      const updateData = {
+        acceptCash: paymentConfig.acceptCash !== undefined ? paymentConfig.acceptCash : true,
+        enableUpi: paymentConfig.enableUpi !== undefined ? paymentConfig.enableUpi : true,
+        upiId: (paymentConfig.upiId || '').trim(),
+        bankHolderName: (paymentConfig.bankHolderName || '').trim(),
+        accountNumber: (paymentConfig.accountNumber || '').trim(),
+        ifscCode: (paymentConfig.ifscCode || '').trim(),
+        taxRate: paymentConfig.taxRate !== undefined ? Number(paymentConfig.taxRate) : 0,
+        platformCharge: paymentConfig.platformCharge !== undefined ? Number(paymentConfig.platformCharge) : 0,
+        paymentInstructions: (paymentConfig.paymentInstructions || '').trim()
+      };
+
       await PaymentConfig.findOneAndUpdate(
-        { cafeId },
-        {
-          razorpayKeyId: paymentConfig.razorpayKeyId,
-          razorpaySecretEncrypted: encryptedSecret,
-          upiId: paymentConfig.upiId,
-          bankHolderName: paymentConfig.bankHolderName,
-          accountNumber: paymentConfig.accountNumber,
-          ifscCode: paymentConfig.ifscCode,
-          isVerified: paymentConfig.isVerified || false
-        },
+        { cafeId, branchId: activeBranch },
+        updateData,
         { upsert: true, returnDocument: 'after' }
       );
     }
@@ -436,7 +511,7 @@ const saveSetupData = async (req, res) => {
     // 3. Save OperationalConfig
     if (operationalConfig) {
       await OperationalConfig.findOneAndUpdate(
-        { cafeId },
+        { cafeId, branchId: activeBranch },
         {
           tables: operationalConfig.tables || [],
           printerEnabled: operationalConfig.printerEnabled || false,
@@ -531,7 +606,12 @@ const getBranches = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
   try {
-    const branches = await Branch.find({ cafeId }).sort({ createdAt: -1 });
+    const role = (req.user.role || '').toLowerCase();
+    const query = { cafeId };
+    if (['manager', 'chef', 'waiter', 'cashier', 'staff'].includes(role)) {
+      query.branchId = req.user.assignedBranch || 'default';
+    }
+    const branches = await Branch.find(query).sort({ createdAt: -1 });
     return res.status(200).json({ success: true, branches });
   } catch (error) {
     console.error('getBranches error:', error);
@@ -544,7 +624,7 @@ const getBranches = async (req, res) => {
  */
 const createBranch = async (req, res) => {
   const cafeId = req.user.cafeId;
-  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius } = req.body;
+  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
   if (!branchName || !address) {
     return res.status(400).json({ success: false, message: 'Branch Name and Address are required' });
   }
@@ -562,9 +642,6 @@ const createBranch = async (req, res) => {
         if (latStr.includes('http') || latStr.includes('maps')) {
           const coords = parseCoordinates(latStr);
           return coords ? coords.latitude : 0;
-        } else if (lngStr.includes('http') || lngStr.includes('maps')) {
-          const coords = parseCoordinates(lngStr);
-          return coords ? coords.latitude : 0;
         }
         return latitude !== undefined && latitude !== '' ? Number(latitude) : 0;
       })(),
@@ -574,14 +651,18 @@ const createBranch = async (req, res) => {
         if (latStr.includes('http') || latStr.includes('maps')) {
           const coords = parseCoordinates(latStr);
           return coords ? coords.longitude : 0;
-        } else if (lngStr.includes('http') || lngStr.includes('maps')) {
-          const coords = parseCoordinates(lngStr);
-          return coords ? coords.longitude : 0;
         }
         return longitude !== undefined && longitude !== '' ? Number(longitude) : 0;
       })(),
-      allowedRadius: allowedRadius !== undefined ? Number(allowedRadius) : 30,
-      isActive: isActive !== undefined ? isActive : true
+      allowedRadius: allowedRadius !== undefined ? Number(allowedRadius) : 100,
+      city: (city || '').trim(),
+      state: (state || '').trim(),
+      pincode: (pincode || '').trim(),
+      googleMapsUrl: (googleMapsUrl || '').trim(),
+      openingTime: (openingTime || '09:00 AM').trim(),
+      closingTime: (closingTime || '10:00 PM').trim(),
+      isActive: isActive !== undefined ? isActive : true,
+      unifiedStaffMode: req.body.unifiedStaffMode !== undefined ? !!req.body.unifiedStaffMode : false
     });
     return res.status(201).json({ success: true, branch: newBranch });
   } catch (error) {
@@ -598,9 +679,11 @@ const getStaffSummary = async (req, res) => {
   if (!cafeId) {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
+  const activeBranchId = req.branchId || 'default';
   try {
     const staffMembers = await User.find({
       cafeId,
+      assignedBranch: activeBranchId,
       role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] }
     });
 
@@ -645,10 +728,7 @@ const uploadLogo = async (req, res) => {
   } catch (err) {
     console.error('Error syncing logo to GridFS:', err);
   }
-
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const logoUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  const logoUrl = `/uploads/${req.file.filename}`;
 
   return res.status(200).json({
     success: true,
@@ -662,7 +742,7 @@ const uploadLogo = async (req, res) => {
 const updateBranch = async (req, res) => {
   const { id } = req.params;
   const cafeId = req.user.cafeId;
-  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius } = req.body;
+  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
 
   if (!cafeId) {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
@@ -717,6 +797,13 @@ const updateBranch = async (req, res) => {
     }
     if (allowedRadius !== undefined) branch.allowedRadius = Number(allowedRadius);
     if (isActive !== undefined) branch.isActive = isActive;
+    if (city !== undefined) branch.city = city.trim();
+    if (state !== undefined) branch.state = state.trim();
+    if (pincode !== undefined) branch.pincode = pincode.trim();
+    if (googleMapsUrl !== undefined) branch.googleMapsUrl = googleMapsUrl.trim();
+    if (openingTime !== undefined) branch.openingTime = openingTime.trim();
+    if (closingTime !== undefined) branch.closingTime = closingTime.trim();
+    if (req.body.unifiedStaffMode !== undefined) branch.unifiedStaffMode = !!req.body.unifiedStaffMode;
 
     await branch.save();
 
@@ -759,8 +846,6 @@ const deleteBranch = async (req, res) => {
 };
 
 /**
- * Retrieve Storage Health stats
- */
 const getStorageHealth = async (req, res) => {
   try {
     const { getStorageHealthData } = require('../services/storageCleanupService');
@@ -769,6 +854,23 @@ const getStorageHealth = async (req, res) => {
   } catch (error) {
     console.error('getStorageHealth error:', error);
     return res.status(500).json({ success: false, message: 'Server error retrieving storage health stats' });
+  }
+};
+const updateCafeTheme = async (req, res) => {
+  const { uiPrimaryColor } = req.body;
+  const cafeId = req.user.cafeId;
+  if (!cafeId) return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  try {
+    const cafe = await Cafe.findOne({ cafeId });
+    if (!cafe) return res.status(404).json({ success: false, message: 'Cafe not found' });
+    if (uiPrimaryColor) cafe.uiPrimaryColor = uiPrimaryColor;
+    await cafe.save();
+    return res.status(200).json({ success: true, message: 'Theme color updated successfully', cafe });
+  } catch (error) {
+    console.error('updateCafeTheme error:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating theme' });
+  }
+};
   }
 };
 
@@ -787,5 +889,6 @@ module.exports = {
   deleteBranch,
   getStaffSummary,
   uploadLogo,
-  getStorageHealth
+  getStorageHealth,
+  updateCafeTheme
 };

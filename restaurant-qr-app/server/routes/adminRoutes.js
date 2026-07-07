@@ -9,7 +9,6 @@ const {
   getStaff, 
   updateStaff,
   deleteStaff,
-  verifyRazorpay, 
   getSetupData, 
   saveSetupData, 
   updateOwnerProfile,
@@ -19,7 +18,8 @@ const {
   deleteBranch,
   getStaffSummary,
   uploadLogo,
-  getStorageHealth
+  getStorageHealth,
+  updateCafeTheme
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -67,7 +67,7 @@ router.delete('/staff/:id', restrictTo('admin', 'owner'), deleteStaff);
 router.get('/staff-summary', restrictTo('admin', 'owner', 'manager'), getStaffSummary);
 
 // Branches Management Routes
-router.get('/branches', restrictTo('admin', 'owner'), getBranches);
+router.get('/branches', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), getBranches);
 router.post('/branches', restrictTo('admin', 'owner'), createBranch);
 router.put('/branches/:id', restrictTo('admin', 'owner'), updateBranch);
 router.delete('/branches/:id', restrictTo('admin', 'owner'), deleteBranch);
@@ -78,8 +78,8 @@ router.put('/profile/owner', restrictTo('admin', 'owner'), updateOwnerProfile);
 // Onboarding Setup routes
 router.get('/setup', restrictTo('admin', 'owner'), getSetupData);
 router.post('/setup', restrictTo('admin', 'owner'), saveSetupData);
-router.post('/verify-razorpay', restrictTo('admin', 'owner'), verifyRazorpay);
 router.post('/upload-logo', restrictTo('admin', 'owner'), upload.single('logo'), uploadLogo);
+router.put('/theme', restrictTo('admin', 'owner'), updateCafeTheme);
 
 // Storage Health Route
 router.get('/storage-health', restrictTo('admin', 'owner'), getStorageHealth);

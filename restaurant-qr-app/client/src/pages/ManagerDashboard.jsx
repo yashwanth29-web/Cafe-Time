@@ -1,16 +1,15 @@
-import { toast } from '../components/Toast';
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { useBranch } from '../context/BranchContext';
 import { getOrders, getStaff, getInventory, updateInventoryItem, recordPurchase, recordWastage, getMenu, updateMenuItem, getCafeInfo } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
-import { useSocket } from '../hooks/useSocket';
 
 const ManagerDashboard = () =>{
  const { logout, user } = useAuth();
- const navigate = useNavigate();
- const { socket, reconnectTrigger } = useSocket();
+  const { activeBranchId, branches } = useBranch();
+  const currentBranch = branches?.find(b => b.branchId === activeBranchId) || null;
  const [orders, setOrders] = useState([]);
  const [staffList, setStaffList] = useState([]);
  const [loading, setLoading] = useState(true);
@@ -68,59 +67,53 @@ const ManagerDashboard = () =>{
  const [showPriceModal, setShowPriceModal] = useState(false);
  const [newPrice, setNewPrice] = useState('');
 
- const [actionLoading, setActionLoading] = useState(false);
-
  // Search states
  const [menuSearch, setMenuSearch] = useState('');
  const [inventorySearch, setInventorySearch] = useState('');
 
-  const filteredInventory = useMemo(() => inventory.filter((item) =>
-    item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-    (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
-  ), [inventory, inventorySearch]);
+ const filteredInventory = inventory.filter((item) =>
+ item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+ (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
+);
 
-  const filteredMenuItems = useMemo(() => menuItems.filter((item) =>
-    item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
-    (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
-  ), [menuItems, menuSearch]);
+ const filteredMenuItems = menuItems.filter((item) =>
+ item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+ (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
+);
 
-  const fetchMenu = useCallback(async (isSilent = false) => {
-    if (!isSilent) setMenuLoading(true);
-    try {
-      const response = await getMenu();
-      if (response.success) {
-        setMenuItems(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching menu:', error);
-    } finally {
-      if (!isSilent) setMenuLoading(false);
-    }
-  }, []);
+ const fetchMenu = async () =>{
+ setMenuLoading(true);
+ try {
+ const response = await getMenu();
+ if (response.success) {
+ setMenuItems(response.data);
+ }
+ } catch (error) {
+ console.error('Error fetching menu:', error);
+ } finally {
+ setMenuLoading(false);
+ }
+ };
 
  const handleToggleAvailability = async (item) =>{
  try {
- setActionLoading(true);
  const response = await updateMenuItem(item.id, { available: !item.available });
  if (response.success) {
  setMenuItems((prev) =>prev.map((m) =>m.id === item.id ? response.data : m));
  }
  } catch (err) {
  console.error('Error toggling availability:', err);
- toast.error('Error updating availability.');
- } finally {
- setActionLoading(false);
+ alert('Error updating availability.');
  }
  };
 
  const handleUpdatePrice = async (e) =>{
  e.preventDefault();
  if (!newPrice || parseFloat(newPrice)<= 0) {
- toast.info('Please enter a valid price.');
+ alert('Please enter a valid price.');
  return;
  }
  try {
- setActionLoading(true);
  const response = await updateMenuItem(updatingItem.id, { price: parseFloat(newPrice) });
  if (response.success) {
  setMenuItems((prev) =>prev.map((m) =>m.id === updatingItem.id ? response.data : m));
@@ -130,34 +123,28 @@ const ManagerDashboard = () =>{
  }
  } catch (err) {
  console.error('Error updating price:', err);
- toast.error('Error updating price.');
- } finally {
- setActionLoading(false);
+ alert('Error updating price.');
  }
  };
 
  const handleUpdateStock = async (e) =>{
  e.preventDefault();
  try {
- setActionLoading(true);
  const response = await updateInventoryItem(selectedItem._id, { quantity: stockForm.quantity });
  if (response && response.success) {
- toast.success('Stock quantity updated successfully.');
+ alert('Stock quantity updated successfully.');
  setShowUpdateStockModal(false);
  fetchInitialData(); // reload list
  }
  } catch (error) {
  console.error('Error updating stock:', error);
- toast.error('Error updating stock quantity.');
- } finally {
- setActionLoading(false);
+ alert('Error updating stock quantity.');
  }
  };
 
  const handleRecordPurchase = async (e) =>{
  e.preventDefault();
  try {
- setActionLoading(true);
  const response = await recordPurchase({
  itemId: selectedItem._id,
  quantityAdded: Number(purchaseForm.quantityAdded),
@@ -166,22 +153,19 @@ const ManagerDashboard = () =>{
  notes: purchaseForm.notes
  });
  if (response && response.success) {
- toast.success('Purchase recorded successfully.');
+ alert('Purchase recorded successfully.');
  setShowPurchaseModal(false);
  fetchInitialData(); // reload list
  }
  } catch (error) {
  console.error('Error recording purchase:', error);
- toast.error(error.response?.data?.message || 'Error recording purchase.');
- } finally {
- setActionLoading(false);
+ alert(error.response?.data?.message || 'Error recording purchase.');
  }
  };
 
  const handleRecordWastage = async (e) =>{
  e.preventDefault();
  try {
- setActionLoading(true);
  const response = await recordWastage({
  itemId: selectedItem._id,
  quantityWasted: Number(wastageForm.quantityWasted),
@@ -189,235 +173,69 @@ const ManagerDashboard = () =>{
  reason: wastageForm.reason
  });
  if (response && response.success) {
- toast.success('Wastage entry recorded successfully.');
+ alert('Wastage entry recorded successfully.');
  setShowWastageModal(false);
  fetchInitialData(); // reload list
  }
  } catch (error) {
  console.error('Error recording wastage:', error);
- toast.error(error.response?.data?.message || 'Error recording wastage.');
- } finally {
- setActionLoading(false);
+ alert(error.response?.data?.message || 'Error recording wastage.');
  }
  };
 
-  const fetchInitialData = useCallback(async (isSilent = false) => {
-    try {
-      const ordersRes = await getOrders();
-      if (ordersRes.success) {
-        const staffBranchId = user?.assignedBranch || user?.branchId;
-        const cafeOrders = ordersRes.data.filter((order) => {
-          if (user?.cafeId && order.cafeId && order.cafeId !== user.cafeId) {
-            return false;
-          }
-          if (staffBranchId && order.branchId) {
-            return String(order.branchId) === String(staffBranchId);
-          }
-          return true;
-        });
-        setOrders(cafeOrders);
-      }
+  const fetchInitialData = async () =>{
+  try {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const ordersRes = await getOrders({ date: todayStr, cafeId: user?.cafeId });
+  if (ordersRes.success) {
+  setOrders(ordersRes.data);
+  }
 
-      const staffRes = await getStaff();
-      if (staffRes.success) {
-        const staffBranchId = user?.assignedBranch || user?.branchId;
-        const filteredStaff = staffBranchId 
-          ? staffRes.staff.filter(member => member.assignedBranch && String(member.assignedBranch) === String(staffBranchId))
-          : staffRes.staff;
-        setStaffList(filteredStaff);
-        // Initialize attendance to Present by default if not already set
-        setAttendance((prev) => {
-          const updated = { ...prev };
-          filteredStaff.forEach((member) => {
-            if (updated[member._id] === undefined) {
-              updated[member._id] = 'Present';
-            }
-          });
-          return updated;
-        });
-      }
+  const staffRes = await getStaff();
+  if (staffRes.success) {
+  setStaffList(staffRes.staff);
+  // Initialize attendance to Present by default
+  const initialAttendance = {};
+  staffRes.staff.forEach((member) =>{
+  initialAttendance[member._id] = 'Present';
+  });
+  setAttendance(initialAttendance);
+  }
 
-      // Fetch actual inventory from backend
-      const inventoryRes = await getInventory();
-      if (inventoryRes.success) {
-        const staffBranchId = user?.assignedBranch || user?.branchId;
-        const filteredInventory = staffBranchId
-          ? inventoryRes.data.filter(item => item.branch && String(item.branch) === String(staffBranchId))
-          : inventoryRes.data;
-        setInventory(filteredInventory);
-      }
+  // Fetch actual inventory from backend
+  const inventoryRes = await getInventory();
+  if (inventoryRes.success) {
+  setInventory(inventoryRes.data);
+  }
 
-      // Fetch menu items
-      await fetchMenu(isSilent);
-    } catch (e) {
-      console.error('Error fetching manager dashboard data:', e);
-      if (!isSilent) setErrorMsg('Could not fetch operational data from backend.');
-    } finally {
-      if (!isSilent) setLoading(false);
-    }
-  }, [user?.cafeId, user?.role, user?.assignedBranch, user?.branchId, fetchMenu]);
+  // Fetch menu items
+  await fetchMenu();
+  } catch (e) {
+  console.error('Error fetching manager dashboard data:', e);
+  setErrorMsg('Could not fetch operational data from backend.');
+  } finally {
+  setLoading(false);
+  }
+  };
 
-  const pollManagerData = useCallback(async () => {
-    try {
-      const ordersRes = await getOrders();
-      if (ordersRes.success) {
-        const staffBranchId = user?.assignedBranch || user?.branchId;
-        const cafeOrders = ordersRes.data.filter((order) => {
-          if (user?.cafeId && order.cafeId && order.cafeId !== user.cafeId) {
-            return false;
-          }
-          if (staffBranchId && order.branchId) {
-            return String(order.branchId) === String(staffBranchId);
-          }
-          return true;
-        });
-        setOrders(cafeOrders);
-      }
-    } catch (e) {
-      console.error('Error polling manager data:', e);
-    }
-  }, [user?.cafeId, user?.assignedBranch, user?.branchId]);
+  useEffect(() =>{
+  // Immediately clear data states to prevent screen flash of previous branch data
+  setOrders([]);
+  setStaffList([]);
+  setInventory([]);
+  setMenuItems([]);
+  setLoading(true);
 
-  // Fetch initial data and set up 30-second hybrid polling
-  useEffect(() => {
-    fetchInitialData();
+  fetchInitialData();
 
-    // Poll orders every 60 seconds (recovery fallback)
-    const pollingInterval = setInterval(() => {
-      console.log('[POLLING] Manager Dashboard: Running 60s recovery check...');
-      pollManagerData();
-    }, 60000);
+  // Polling every 15 seconds for updates
+  const pollingInterval = setInterval(() =>{
+  fetchInitialData();
+  }, 15000);
 
-    // Poll inventory every 60 seconds
-    const inventoryInterval = setInterval(async () => {
-      try {
-        const inventoryRes = await getInventory();
-        if (inventoryRes.success) {
-          const staffBranchId = user?.assignedBranch || user?.branchId;
-          const filteredInventory = staffBranchId
-            ? inventoryRes.data.filter(item => item.branch && String(item.branch) === String(staffBranchId))
-            : inventoryRes.data;
-          setInventory(filteredInventory);
-        }
-      } catch (e) {
-        console.error('Error polling inventory data:', e);
-      }
-    }, 60000);
-
-    return () => {
-      clearInterval(pollingInterval);
-      clearInterval(inventoryInterval);
-    };
-  }, [fetchInitialData, pollManagerData, user]);
-
-  // One-off REST sync on reconnect
-  useEffect(() => {
-    if (reconnectTrigger > 0) {
-      console.log('[SOCKET] Manager Dashboard: Reconnection detected. Triggering recovery sync.');
-      fetchInitialData(true);
-    }
-  }, [reconnectTrigger, fetchInitialData]);
-
-  // Socket Event Listeners with versioning and isolation checks
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleOrderCreated = (newOrder) => {
-      console.log('[SOCKET] Manager received orderCreated:', newOrder);
-      if (!newOrder || !newOrder._id) return;
-
-      const staffBranchId = user?.assignedBranch || user?.branchId;
-      if (staffBranchId && String(newOrder.branchId) !== String(staffBranchId)) return;
-      if (user?.cafeId && newOrder.cafeId !== user.cafeId) return;
-
-      setOrders(prev => {
-        if (prev.find(o => o._id === newOrder._id)) return prev;
-        return [newOrder, ...prev];
-      });
-    };
-
-    const handleOrderUpdated = (updatedOrder) => {
-      console.log('[SOCKET] Manager received orderUpdated:', updatedOrder);
-      if (!updatedOrder || !updatedOrder._id) return;
-
-      const staffBranchId = user?.assignedBranch || user?.branchId;
-      if (staffBranchId && String(updatedOrder.branchId) !== String(staffBranchId)) return;
-      if (user?.cafeId && updatedOrder.cafeId !== user.cafeId) return;
-
-      setOrders(prev => {
-        return prev.map(o => {
-          if (o._id === updatedOrder._id) {
-            const incomingTime = new Date(updatedOrder.updatedAt || 0).getTime();
-            const existingTime = new Date(o.updatedAt || 0).getTime();
-            if (incomingTime <= existingTime) return o;
-            return updatedOrder;
-          }
-          return o;
-        });
-      });
-    };
-
-    const handleInventoryUpdated = (updatedItems) => {
-      console.log('[SOCKET] Manager received inventoryUpdated:', updatedItems);
-      if (!Array.isArray(updatedItems)) return;
-
-      setInventory(prev => {
-        if (prev.length === 0) return prev;
-        return prev.map(item => {
-          const match = updatedItems.find(p => String(p._id) === String(item._id));
-          if (match) {
-            const incomingTime = new Date(match.updatedAt || 0).getTime();
-            const existingTime = new Date(item.updatedAt || 0).getTime();
-            if (incomingTime <= existingTime) return item;
-            return {
-              ...item,
-              quantity: match.quantity,
-              stock: match.quantity,
-              updatedAt: match.updatedAt
-            };
-          }
-          return item;
-        });
-      });
-    };
-
-    const handleMenuAvailabilityUpdated = (payload) => {
-      console.log('[SOCKET] Manager received menuAvailabilityUpdated:', payload);
-      if (!payload || !payload._id) return;
-
-      setMenuItems(prev => {
-        if (prev.length === 0) return prev;
-        return prev.map(item => {
-          if (String(item._id) === String(payload._id)) {
-            const incomingTime = new Date(payload.updatedAt || 0).getTime();
-            const existingTime = new Date(item.updatedAt || 0).getTime();
-            if (incomingTime <= existingTime) return item;
-            return {
-              ...item,
-              available: payload.available,
-              price: payload.price !== undefined ? payload.price : item.price,
-              updatedAt: payload.updatedAt
-            };
-          }
-          return item;
-        });
-      });
-    };
-
-    socket.on('orderCreated', handleOrderCreated);
-    socket.on('orderUpdated', handleOrderUpdated);
-    socket.on('paymentCompleted', handleOrderUpdated);
-    socket.on('inventoryUpdated', handleInventoryUpdated);
-    socket.on('menuAvailabilityUpdated', handleMenuAvailabilityUpdated);
-
-    return () => {
-      socket.off('orderCreated', handleOrderCreated);
-      socket.off('orderUpdated', handleOrderUpdated);
-      socket.off('paymentCompleted', handleOrderUpdated);
-      socket.off('inventoryUpdated', handleInventoryUpdated);
-      socket.off('menuAvailabilityUpdated', handleMenuAvailabilityUpdated);
-    };
-  }, [socket, user]);
+  return () =>clearInterval(pollingInterval);
+  }, [user, activeBranchId]);
 
  const handleAttendanceChange = (staffId, status) =>{
  setAttendance((prev) =>({ ...prev, [staffId]: status }));
@@ -431,7 +249,7 @@ const ManagerDashboard = () =>{
  }
  } catch (error) {
  console.error('Error restocking item:', error);
- toast.error('Error updating inventory stock');
+ alert('Error updating inventory stock');
  }
  };
 
@@ -458,15 +276,15 @@ const ManagerDashboard = () =>{
  flexWrap: 'wrap',
  gap: '12px'
  }}>
- <div>
- <h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>
-  Manager Station
- </h2>
- <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
-  Monitor sales revenue, active cooking queue, stock alerts, and employee attendance rosters.
- </p>
- </div>
- </div>
+<div>
+<h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.5rem', fontWeight: 800 }}>
+ Manager Station
+</h2>
+<p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+ Monitor sales revenue, active cooking queue, stock alerts, and employee attendance rosters.
+</p>
+</div>
+</div>
 
  {errorMsg &&
 <div style={{
@@ -514,10 +332,10 @@ const ManagerDashboard = () =>{
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
 <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1.2rem' }}>Live Order Records</h3>
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-orders" style={{ display: 'none', overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem', minWidth: '750px' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', backgroundColor: 'var(--bg-card)' }}>
+<div className="desktop-tablet-manager-orders" style={{ display: 'none', overflowX: 'auto' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+<thead>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
 <th style={{ padding: '8px' }}>Order ID</th>
 <th style={{ padding: '8px' }}>Table</th>
 <th style={{ padding: '8px' }}>Amount</th>
@@ -559,8 +377,8 @@ const ManagerDashboard = () =>{
 </td>
 <td style={{ padding: '10px 8px' }}>
 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-<button onClick={() =>printKOT(order, user, cafeInfo)} style={{ background: '#34495E', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
-<button onClick={() =>printPOSReceipt(order, user, cafeInfo)} style={{ background: '#2980B9', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
+<button onClick={() =>printKOT(order, user, cafeInfo, currentBranch)} style={{ background: '#34495E', color: '#ffffff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>KOT</button>
+<button onClick={() =>printPOSReceipt(order, user, cafeInfo, currentBranch)} style={{ background: '#2980B9', color: '#ffffff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>POS</button>
 </div>
 </td>
 </tr>
@@ -605,8 +423,8 @@ const ManagerDashboard = () =>{
 </div>
 </div>
 <div style={{ display: 'flex', gap: '8px', borderTop: '1px dashed var(--color-border)', paddingTop: '10px' }}>
-<button onClick={() =>printKOT(order, user, cafeInfo)} style={{ flex: 1, background: '#34495E', color: 'var(--color-text-primary)', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> KOT</button>
-<button onClick={() =>printPOSReceipt(order, user, cafeInfo)} style={{ flex: 1, background: '#2980B9', color: 'var(--color-text-primary)', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> POS Bill</button>
+<button onClick={() =>printKOT(order, user, cafeInfo, currentBranch)} style={{ flex: 1, background: '#34495E', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> KOT</button>
+<button onClick={() =>printPOSReceipt(order, user, cafeInfo, currentBranch)} style={{ flex: 1, background: '#2980B9', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', minHeight: '44px' }}> POS Bill</button>
 </div>
 </div>
 )}
@@ -625,10 +443,10 @@ const ManagerDashboard = () =>{
 
 <>
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-attendance" style={{ display: 'none', overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem', minWidth: '700px' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', backgroundColor: 'var(--bg-card)' }}>
+<div className="desktop-tablet-manager-attendance" style={{ display: 'none', overflowX: 'auto' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+<thead>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
 <th style={{ padding: '8px' }}>Staff Name</th>
 <th style={{ padding: '8px' }}>Designated Role</th>
 <th style={{ padding: '8px' }}>Contact</th>
@@ -734,10 +552,10 @@ const ManagerDashboard = () =>{
 </div>
 
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-inventory" style={{ display: 'none', overflow: 'auto', maxHeight: '500px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
-<table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--bg-card)' }}>
+<div className="desktop-tablet-manager-inventory" style={{ display: 'none', overflowX: 'auto' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<thead>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
 <th style={{ padding: '8px' }}>Ingredient Name</th>
 <th style={{ padding: '8px' }}>Category</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
@@ -1007,7 +825,7 @@ const ManagerDashboard = () =>{
 
 <div className="menu-grid-admin" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
  {filteredMenuItems.map((item) =>
-<div key={item.id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`} style={{
+<div key={item._id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`} style={{
  background: '#1F140E',
  border: '1px solid var(--color-border)',
  borderRadius: '10px',
@@ -1090,9 +908,7 @@ const ManagerDashboard = () =>{
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowUpdateStockModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
-  {actionLoading ? 'Saving...' : 'Save Changes'}
-</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Changes</button>
 </div>
 </form>
 </div>
@@ -1133,9 +949,7 @@ const ManagerDashboard = () =>{
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowPurchaseModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
-  {actionLoading ? 'Saving...' : 'Save Entry'}
-</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Entry</button>
 </div>
 </form>
 </div>
@@ -1175,9 +989,7 @@ const ManagerDashboard = () =>{
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowWastageModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
-  {actionLoading ? 'Saving...' : 'Save Entry'}
-</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Entry</button>
 </div>
 </form>
 </div>
@@ -1204,9 +1016,7 @@ const ManagerDashboard = () =>{
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>{setShowPriceModal(false);setUpdatingItem(null);}} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={actionLoading}>
-  {actionLoading ? 'Saving...' : 'Save Price'}
-</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Price</button>
 </div>
 </form>
 </div>

@@ -1,19 +1,21 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { confirm } from '../components/Toast';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import {
  checkIn,
  checkOut,
  getTodayAttendanceStatus,
  getStaffAttendanceHistory,
- submitWorkReport } from
+ submitWorkReport,
+ startExtraWork,
+ stopExtraWork } from
 '../services/api';
 import '../styles/App.css';
 
 const StaffDashboard = () => {
  const { logout, user } = useAuth();
- const navigate = useNavigate();
+ const { activeBranchId } = useBranch();
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
 
@@ -40,6 +42,8 @@ const StaffDashboard = () => {
 
  const [loading, setLoading] = useState(true);
  const [actionLoading, setActionLoading] = useState(false);
+ const [showTakeOrderModal, setShowTakeOrderModal] = useState(false);
+ const [takeOrderTable, setTakeOrderTable] = useState('');
  const [errorMsg, setErrorMsg] = useState('');
  const [successMsg, setSuccessMsg] = useState('');
  const [coords, setCoords] = useState(null);
@@ -56,50 +60,61 @@ const StaffDashboard = () => {
  const timerRef = useRef(null);
 
  // Fetch initial data
- const fetchData = async (isSilent = false) => {
-   try {
-     if (!isSilent) {
-       setLoading(true);
-       setErrorMsg('');
-     }
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setErrorMsg('');
 
-     const todayRes = await getTodayAttendanceStatus();
-     if (todayRes.success) {
-       setTodayStatus(todayRes);
-     }
+      let coordsParam = {};
+      if (navigator.geolocation) {
+        const getCoords = () => new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 5000 }
+          );
+        });
+        const currentCoords = await getCoords();
+        if (currentCoords) {
+          coordsParam = currentCoords;
+          setCoords(currentCoords);
+        }
+      }
 
-     const historyRes = await getStaffAttendanceHistory();
-     if (historyRes.success) {
-       setHistoryData(historyRes.history || []);
-       setSummary(historyRes.summary || {
-         totalWorkingHours: 0,
-         attendancePercentage: 0,
-         lateDays: 0,
-         presentDays: 0
-       });
-     }
-   } catch (error) {
-     console.error('Error fetching staff attendance data:', error);
-     if (!isSilent) {
-       setErrorMsg('Failed to sync attendance details with server.');
-     }
-   } finally {
-     if (!isSilent) {
-       setLoading(false);
-     }
-   }
+      const todayRes = await getTodayAttendanceStatus(coordsParam);
+      if (todayRes.success) {
+        setTodayStatus(todayRes);
+      }
+
+ const historyRes = await getStaffAttendanceHistory();
+ if (historyRes.success) {
+ setHistoryData(historyRes.history || []);
+ setSummary(historyRes.summary || {
+ totalWorkingHours: 0,
+ attendancePercentage: 0,
+ lateDays: 0,
+ presentDays: 0
+ });
+ }
+ } catch (error) {
+ console.error('Error fetching staff attendance data:', error);
+ setErrorMsg('Failed to sync attendance details with server.');
+ } finally {
+ setLoading(false);
+ }
  };
 
- useEffect(() => {
-   fetchData();
-   const intervalId = setInterval(() => {
-     fetchData(true);
-   }, 5000);
-   return () => {
-     clearInterval(intervalId);
-     if (timerRef.current) clearInterval(timerRef.current);
-   };
- }, []);
+  useEffect(() => {
+    // Immediately clear data states to prevent screen flash of previous branch data
+    setTodayStatus(null);
+    setHistoryData([]);
+    setLoading(true);
+
+    fetchData();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [activeBranchId]);
 
  // Update live shift duration timer
  useEffect(() => {
@@ -167,7 +182,7 @@ const StaffDashboard = () => {
 
  if (res.success) {
  setSuccessMsg(res.message || 'Check-in registered successfully!');
- fetchData(true);
+ fetchData();
  } else {
  setErrorMsg(res.message || 'Check-in validation failed.');
  }
@@ -183,47 +198,206 @@ const StaffDashboard = () => {
  setActionLoading(false);
  switch (error.code) {
  case error.PERMISSION_DENIED:
- setErrorMsg('GPS location access denied. Please grant location permissions in your browser to check in.');
+ setErrorMsg(
+   <div>
+     <strong>GPS Location Blocked:</strong> Please allow location access to check in.
+     <div style={{ marginTop: '8px', fontSize: '0.75rem', opacity: 0.85, lineHeight: '1.4' }}>
+       👉 <strong>Chrome (Mobile/Desktop):</strong> Tap the lock or settings icon next to the address bar, reset/allow "Location".
+       <br />
+       👉 <strong>Safari (iPhone):</strong> Open iOS Settings &gt; Privacy &gt; Location Services &gt; Safari, and select "While Using the App".
+     </div>
+   </div>
+ );
  break;
  case error.POSITION_UNAVAILABLE:
- setErrorMsg('GPS location information is unavailable. Try turning on device location services.');
+ setErrorMsg('GPS location is unavailable. Please check if location services/GPS are enabled on your device and you have network connectivity.');
  break;
  case error.TIMEOUT:
- setErrorMsg('GPS request timed out. Please try again.');
+ setErrorMsg('GPS request timed out while getting location lock. Please try again in an area with a clear view of the sky or connect to local Wi-Fi.');
  break;
  default:
- setErrorMsg('An unknown location error occurred.');
+ setErrorMsg('An unknown location error occurred. Please try again or check device location permission settings.');
  }
  },
  { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
  );
  };
 
- // Perform Check-Out
- const handleCheckOut = async () => {
- if (!(await confirm('Are you sure you want to check out from your shift?'))) {
- return;
- }
+  // Perform Check-Out with GPS location checks
+  const handleCheckOut = () => {
+    if (!window.confirm('Are you sure you want to check out from your shift?')) {
+      return;
+    }
 
- setActionLoading(true);
- setErrorMsg('');
- setSuccessMsg('');
+    setErrorMsg('');
+    setSuccessMsg('');
 
- try {
- const res = await checkOut();
- if (res.success) {
- setSuccessMsg(res.message || 'Check-out registered successfully!');
- fetchData(true);
- } else {
- setErrorMsg(res.message || 'Check-out request failed.');
- }
- } catch (err) {
- console.error('Check-out error:', err);
- setErrorMsg(err.response?.data?.message || 'Server error processing check-out.');
- } finally {
- setActionLoading(false);
- }
- };
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setActionLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoords({ latitude, longitude });
+
+        try {
+          const res = await checkOut({ latitude, longitude });
+          if (res.success) {
+            setSuccessMsg(res.message || 'Check-out registered successfully!');
+            fetchData();
+          } else {
+            setErrorMsg(res.message || 'Check-out request failed.');
+          }
+        } catch (err) {
+          console.error('Check-out error:', err);
+          setErrorMsg(err.response?.data?.message || 'Check-out request failed. Are you within the cafe geofence?');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      (error) => {
+        console.error('Checkout location error:', error);
+        setActionLoading(false);
+        setErrorMsg('GPS location is required to check out. Please allow location access.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  // Start Extra Work (Overtime)
+  const handleStartExtraWork = () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setActionLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoords({ latitude, longitude });
+
+        try {
+          const res = await startExtraWork({ latitude, longitude });
+          if (res.success) {
+            setSuccessMsg(res.message || 'Extra work session started successfully!');
+            fetchData();
+          } else {
+            setErrorMsg(res.message || 'Failed to start extra work.');
+          }
+        } catch (err) {
+          console.error('Start extra work error:', err);
+          setErrorMsg(err.response?.data?.message || 'Failed to start extra work. Are you within the cafe geofence?');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      (error) => {
+        console.error('Extra work location error:', error);
+        setActionLoading(false);
+        setErrorMsg('GPS location is required to start extra work. Please allow location access.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  // Stop Extra Work (Overtime)
+  const handleStopExtraWork = () => {
+    if (!window.confirm('Are you sure you want to stop your extra work session?')) {
+      return;
+    }
+
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!navigator.geolocation) {
+      setErrorMsg('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setActionLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setCoords({ latitude, longitude });
+
+        try {
+          const res = await stopExtraWork({ latitude, longitude });
+          if (res.success) {
+            setSuccessMsg(res.message || 'Extra work session stopped successfully!');
+            fetchData();
+          } else {
+            setErrorMsg(res.message || 'Failed to stop extra work.');
+          }
+        } catch (err) {
+          console.error('Stop extra work error:', err);
+          setErrorMsg(err.response?.data?.message || 'Failed to stop extra work. Are you within the cafe geofence?');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+      (error) => {
+        console.error('Extra work location error:', error);
+        setActionLoading(false);
+        setErrorMsg('GPS location is required to stop extra work. Please allow location access.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  // Calculate dynamic estimated earnings for today
+  const getTodayEarnings = () => {
+    if (!todayStatus?.checkedIn || !user) return 0;
+    
+    const att = todayStatus.attendance;
+    const sType = user.salaryType || 'DAILY';
+    
+    // Get total regular working duration so far
+    let durationMin = att?.totalDuration || 0;
+    if (todayStatus.checkedIn && !todayStatus.checkedOut) {
+      const checkInDate = new Date(att.checkInTime);
+      const diffMs = Date.now() - checkInDate.getTime();
+      durationMin = Math.max(0, Math.floor(diffMs / 60000));
+    }
+    
+    const overtimeHours = att?.overtimeHours || 0;
+    let earnings = 0;
+
+    if (sType === 'DAILY') {
+      if (durationMin >= 480) { // Completed day
+        earnings = user.dailyRate || 0;
+      } else if (durationMin >= 240) { // Half day
+        earnings = (user.dailyRate || 0) * 0.5;
+      } else {
+        earnings = 0;
+      }
+      const otRate = user.hourlyRate || ((user.dailyRate || 0) / 8);
+      earnings += overtimeHours * otRate;
+    } else if (sType === 'HOURLY') {
+      const activeHours = durationMin / 60;
+      earnings = activeHours * (user.hourlyRate || 0);
+      earnings += overtimeHours * (user.hourlyRate || 0);
+    } else if (sType === 'WEEKLY') {
+      earnings = (user.weeklyRate || 0) / 6; // Pro-rated for 6 working days
+      const otRate = user.hourlyRate || ((user.weeklyRate || 0) / 40);
+      earnings += overtimeHours * otRate;
+    } else if (sType === 'MONTHLY') {
+      earnings = (user.monthlyRate || 0) / 26; // Pro-rated for 26 working days
+      const otRate = user.hourlyRate || ((user.monthlyRate || 0) / 160);
+      earnings += overtimeHours * otRate;
+    }
+    
+    return Number(earnings.toFixed(2));
+  };
 
  // File Upload Handlers for Daily Work Report
  const handleFileChange = (e) => {
@@ -343,10 +517,83 @@ const StaffDashboard = () => {
  </div>
  
  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+ <button
+    onClick={() => setShowTakeOrderModal(true)}
+    style={{
+      background: 'var(--color-primary)',
+      color: 'white',
+      border: 'none',
+      padding: '8px 14px',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    }}
+  >
+    <span style={{ fontSize: '1.2rem' }}>+</span>
+    Take Order
+  </button>
  <div style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', background: 'rgba(0, 0, 0,0.03)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
  Assigned Branch: <strong style={{ color: 'var(--color-text-primary)' }}>{user?.assignedBranch || 'Primary Location'}</strong>
  </div>
  </div>
+
+{showTakeOrderModal && (
+  <div style={{
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+    display: 'flex', justifyContent: 'center', alignItems: 'center'
+  }}>
+    <div style={{
+      background: 'var(--bg-card)', padding: '24px', borderRadius: '12px',
+      width: '90%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+    }}>
+      <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)' }}>Take New Order</h3>
+      <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+        Enter Table Number (leave blank for Takeaway):
+      </p>
+      <input
+        autoFocus
+        type="text"
+        placeholder="e.g. 5"
+        value={takeOrderTable}
+        onChange={(e) => setTakeOrderTable(e.target.value)}
+        style={{
+          width: '100%', padding: '12px', borderRadius: '8px',
+          border: '1px solid var(--color-border)', marginBottom: '20px',
+          background: 'rgba(0,0,0,0.05)', color: 'var(--color-text-primary)'
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`;
+          }
+        }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+        <button
+          onClick={() => setShowTakeOrderModal(false)}
+          style={{
+            padding: '10px 16px', borderRadius: '8px', border: 'none',
+            background: 'var(--color-border)', cursor: 'pointer', fontWeight: 'bold'
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}`}
+          style={{
+            padding: '10px 16px', borderRadius: '8px', border: 'none',
+            background: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 'bold'
+          }}
+        >
+          Open Menu
+        </button>
+      </div>
+    </div>
+  </div>
+)}
  </div>
 
  {/* Tabs Menu removed to prevent duplicate navigation */}
@@ -455,12 +702,48 @@ const StaffDashboard = () => {
  </span>
  </div>
 
- <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', paddingBottom: '6px' }}>
- <span style={{ color: 'var(--color-text-secondary)' }}>GPS Distance</span>
- <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
- {todayStatus?.checkedIn ? `${todayStatus.attendance.distanceFromCafe} meters from Cafe` : 'N/A'}
- </span>
- </div>
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)' }}>Assigned Branch</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+      {todayStatus?.branchName || 'N/A'}
+    </span>
+  </div>
+
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)' }}>Allowed Radius</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+      {todayStatus?.allowedRadius ? `${todayStatus.allowedRadius} meters` : '--'}
+    </span>
+  </div>
+
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)' }}>Current Distance</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+      {todayStatus?.checkedIn 
+        ? `${todayStatus.attendance.distanceFromCafe} meters` 
+        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined 
+          ? `${todayStatus.distance} meters` 
+          : 'Acquiring GPS...')}
+    </span>
+  </div>
+
+  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)' }}>Inside Allowed Area</span>
+    <span style={{ 
+      color: todayStatus?.checkedIn 
+        ? '#2ecc71' 
+        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
+          ? (todayStatus.insideRadius ? '#2ecc71' : '#e74c3c')
+          : 'var(--color-text-secondary)'),
+      fontWeight: 'bold' 
+    }}>
+      {todayStatus?.checkedIn 
+        ? 'Inside Allowed Area' 
+        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
+          ? (todayStatus.insideRadius ? '✅ Yes (Inside Area)' : '❌ No (Outside Area)')
+          : 'Checking location...')}
+    </span>
+  </div>
  </div>
  </div>
 
@@ -574,6 +857,117 @@ const StaffDashboard = () => {
  </div>
  </div>
 
+ {/* Today's Estimated Earnings Card */}
+ <div style={{
+    background: 'var(--bg-card, #1A1A1A)',
+    border: '1px solid var(--color-border)',
+    padding: '24px',
+    borderRadius: '16px',
+    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between'
+  }}>
+    <div>
+      <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '10px' }}>
+        Today's Work & Earnings
+      </h3>
+      
+      <div style={{ textAlign: 'center', margin: '15px 0' }}>
+        <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Estimated Earnings Today
+        </span>
+        <strong style={{ fontSize: '2.4rem', color: 'var(--color-primary, #ff6b08)', display: 'block', margin: '8px 0' }}>
+          ₹{getTodayEarnings()}
+        </strong>
+        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+          Salary Type: <strong style={{ textTransform: 'capitalize' }}>{(user?.salaryType || 'DAILY').toLowerCase()}</strong>
+          {user?.salaryType === 'DAILY' && ` (₹${user.dailyRate}/day)`}
+          {user?.salaryType === 'HOURLY' && ` (₹${user.hourlyRate}/hour)`}
+          {user?.salaryType === 'WEEKLY' && ` (₹${user.weeklyRate}/week)`}
+          {user?.salaryType === 'MONTHLY' && ` (₹${user.monthlyRate}/month)`}
+        </span>
+      </div>
+
+      {todayStatus?.attendance && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', marginTop: '16px', borderTop: '1px dashed rgba(255, 255, 255, 0.1)', paddingTop: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Hours Worked:</span>
+            <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+              {todayStatus.attendance.workingHours || (todayStatus.attendance.totalDuration ? (todayStatus.attendance.totalDuration / 60).toFixed(2) : '0.00')} hrs
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Overtime Hours:</span>
+            <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+              {todayStatus.attendance.overtimeHours || 0} hrs
+            </span>
+          </div>
+          {todayStatus.attendance.isExtraWorkActive && (
+            <div style={{ color: '#10B981', fontWeight: 'bold', fontSize: '0.8rem', marginTop: '4px', textAlign: 'center' }}>
+              ⚡ Extra Work Session in Progress
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+
+    {/* Overtime/Extra Work Controls */}
+    {todayStatus?.checkedIn && todayStatus?.checkedOut && (
+      <div style={{ marginTop: '16px' }}>
+        {!todayStatus.attendance?.isExtraWorkActive ? (
+          <button
+            onClick={handleStartExtraWork}
+            disabled={actionLoading}
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '12px',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 4px 10px rgba(16, 185, 129, 0.2)',
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            ➕ Start Extra Work (Overtime)
+          </button>
+        ) : (
+          <button
+            onClick={handleStopExtraWork}
+            disabled={actionLoading}
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '12px',
+              borderRadius: '8px',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 4px 10px rgba(239, 68, 68, 0.2)',
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            ⏹️ Stop Extra Work
+          </button>
+        )}
+      </div>
+    )}
+  </div>
+
  {/* Attendance Analytics Card */}
  <div style={{
  background: 'var(--bg-card, #1A1A1A)',
@@ -663,10 +1057,10 @@ const StaffDashboard = () => {
  No attendance logs found for the last 30 days.
  </div> :
 
- <div style={{ overflow: 'auto', maxHeight: '400px', border: '1px solid var(--color-border)', borderRadius: '12px', WebkitOverflowScrolling: 'touch' }}>
- <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left', minWidth: '700px' }}>
- <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 2, boxShadow: '0 2px 2px -1px rgba(0,0,0,0.1)' }}>
- <tr style={{ borderBottom: '1px solid rgba(0, 0, 0,0.08)', backgroundColor: 'var(--bg-card)' }}>
+ <div style={{ overflowX: 'auto' }}>
+ <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
+ <thead>
+ <tr style={{ borderBottom: '1px solid rgba(0, 0, 0,0.08)' }}>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Date</th>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Branch</th>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Check In</th>
@@ -819,7 +1213,7 @@ const StaffDashboard = () => {
  }}
  disabled={reportLoading} />
  
- <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📤</div>
+ <div style={{ fontSize: '2rem', marginBottom: '8px' }}></div>
  <strong style={{ color: 'var(--color-text-primary)', display: 'block', fontSize: '0.9rem' }}>
  Tap to upload photos
  </strong>

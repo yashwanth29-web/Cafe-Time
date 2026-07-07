@@ -1,6 +1,6 @@
 import React from 'react';
 
-const OrderCard = ({ order, onStatusUpdate }) => {
+const OrderCard = React.memo(({ order, onStatusUpdate }) => {
   const { _id, tableNumber, items, totalAmount, status, createdAt } = order;
 
   // Format time
@@ -64,7 +64,6 @@ const OrderCard = ({ order, onStatusUpdate }) => {
         }
       </div>
     </div>);
-
-};
+});
 
 export default OrderCard;

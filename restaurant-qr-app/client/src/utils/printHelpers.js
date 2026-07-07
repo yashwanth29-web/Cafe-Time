@@ -1,18 +1,28 @@
-import { toast } from '../components/Toast';
-export const printPOSReceipt = (order, user = null, cafe = null) => {
-  const printWindow = window.open('', '_blank', 'width=450,height=700');
-  if (!printWindow) {
-    toast.warning('Popup blocker prevented printing receipt. Please allow popups.');
-    return;
+export const printPOSReceipt = (order, user = null, cafe = null, branch = null) => {
+  let iframe = document.getElementById('receipt-print-iframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'receipt-print-iframe';
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    document.body.appendChild(iframe);
   }
 
-  // Use immutable values stored on the order document
-  const grandTotal = order.grandTotal !== undefined ? order.grandTotal : (order.totalAmount || 0);
-  const subtotal = order.subtotal !== undefined ? order.subtotal : (grandTotal / 1.05);
-  const gstAmount = order.tax !== undefined ? order.tax : (grandTotal - subtotal);
+  const gstRate = cafe?.gstRate || 0;
+  const platformCharge = cafe?.serviceChargeRate || 0;
+  const itemsSubtotal = order.items.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
+  const gstAmount = itemsSubtotal * (gstRate / 100);
+  const grandTotal = order.totalAmount || (itemsSubtotal + gstAmount + platformCharge);
 
-  const cafeName = order.branchName || cafe?.name || 'Dr. Chai Cafe';
-  const cafeAddress = order.branchAddress || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const cafeName = cafe?.name || 'Dr. Chai Cafe';
+  const displayBranchName = branch?.branchName || 'Main Branch';
+  const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
+  const logoUrl = cafe?.logoUrl || (cafe?.logo ? `http://localhost:5000/uploads/${cafe.logo}` : '');
   const cafeGST = cafe?.gstNumber || '36AAAAA1111A1Z1';
 
   const itemsHtml = order.items.map(item => `
@@ -24,9 +34,12 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
     </tr>
   `).join('');
 
-  printWindow.document.write(`
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(`
     <html>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Invoice - ${order._id.toUpperCase()}</title>
         <style>
           @page { size: auto; margin: 5mm; }
@@ -38,21 +51,15 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
             padding: 10px;
             font-size: 12px;
             line-height: 1.4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
           }
           .invoice-box {
+            width: 100%;
             max-width: 80mm;
-            margin: 0 auto;
             padding: 5px;
-          }
-          /* A4 scale support */
-          @media screen and (min-width: 600px) {
-            .invoice-box {
-              max-width: 100mm;
-              border: 1px solid #ccc;
-              padding: 20px;
-              border-radius: 5px;
-              margin-top: 20px;
-            }
+            box-sizing: border-box;
           }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
@@ -69,41 +76,16 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
           .totals td { padding: 2px 0; }
           .footer { border-top: 1px dashed #000; padding-top: 8px; margin-top: 12px; font-size: 10px; }
           .footer p { margin: 3px 0; }
-          
-          /* Control panel for screen preview */
-          .no-print {
-            background: #f1f1f1;
-            padding: 10px;
-            text-align: center;
-            border-bottom: 1px solid #ccc;
-            margin-bottom: 15px;
-          }
-          .print-btn {
-            background: #27ae60;
-            color: #fff;
-            border: none;
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-          }
-          .print-btn:hover { background: #2196f3; }
-          @media print {
-            .no-print { display: none; }
-            body { padding: 0; }
-            .invoice-box { border: none; max-width: 100%; padding: 0; }
-          }
         </style>
       </head>
       <body>
-        <div class="no-print">
-          <button class="print-btn" onclick="window.print()">🖨️ Print / Download PDF</button>
-        </div>
         <div class="invoice-box">
           <div class="header text-center">
-            <h2>${cafeName}</h2>
-            <p>${cafeAddress}</p>
+            ${logoUrl ? `<div style="margin-bottom: 8px;"><img src="${logoUrl}" style="max-height: 45px; border-radius: 50%; object-fit: cover;" /></div>` : ''}
+            <h2 style="font-size: 14px; margin-bottom: 2px;">${cafeName}</h2>
+            <h3 style="font-size: 12px; margin: 0 0 4px 0; font-weight: normal;">${displayBranchName}</h3>
+            <p>${displayAddress}</p>
+            ${displayContact ? `<p>Contact: ${displayContact}</p>` : ''}
             <p class="bold">GSTIN: ${cafeGST}</p>
           </div>
 
@@ -151,17 +133,25 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
 
           <table class="totals" style="width: 100%;">
             <tr>
-              <td>Subtotal (Tax Excl.):</td>
-              <td class="text-right">₹${subtotal.toFixed(2)}</td>
+              <td>Subtotal:</td>
+              <td class="text-right">₹${itemsSubtotal.toFixed(2)}</td>
             </tr>
+            ${gstRate > 0 ? `
             <tr>
-              <td>CGST (2.5%):</td>
+              <td>CGST (${(gstRate / 2).toFixed(1)}%):</td>
               <td class="text-right">₹${(gstAmount / 2).toFixed(2)}</td>
             </tr>
             <tr>
-              <td>SGST (2.5%):</td>
+              <td>SGST (${(gstRate / 2).toFixed(1)}%):</td>
               <td class="text-right">₹${(gstAmount / 2).toFixed(2)}</td>
             </tr>
+            ` : ''}
+            ${platformCharge > 0 ? `
+            <tr>
+              <td>Platform Charge:</td>
+              <td class="text-right">₹${platformCharge.toFixed(2)}</td>
+            </tr>
+            ` : ''}
             <tr class="bold" style="font-size: 13px;">
               <td style="border-top: 1px dashed #000; padding-top: 4px;">GRAND TOTAL:</td>
               <td class="text-right" style="border-top: 1px dashed #000; padding-top: 4px;">₹${grandTotal.toFixed(2)}</td>
@@ -183,18 +173,33 @@ export const printPOSReceipt = (order, user = null, cafe = null) => {
       </body>
     </html>
   `);
-  printWindow.document.close();
+  iframeDoc.close();
+
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }, 300);
 };
 
-export const printKOT = (order, user = null, cafe = null) => {
-  const printWindow = window.open('', '_blank', 'width=450,height=600');
-  if (!printWindow) {
-    toast.warning('Popup blocker prevented printing KOT. Please allow popups.');
-    return;
+export const printKOT = (order, user = null, cafe = null, branch = null) => {
+  let iframe = document.getElementById('kot-print-iframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'kot-print-iframe';
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    document.body.appendChild(iframe);
   }
 
   const cafeName = cafe?.name || 'Dr. Chai Cafe';
-  const branchName = order.branchName || user?.assignedBranch || cafe?.city || 'Main Branch';
+  const displayBranchName = branch?.branchName || 'Main Branch';
+  const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
+  const logoUrl = cafe?.logoUrl || (cafe?.logo ? `http://localhost:5000/uploads/${cafe.logo}` : '');
 
   const itemsHtml = order.items.map(item => `
     <tr>
@@ -203,9 +208,12 @@ export const printKOT = (order, user = null, cafe = null) => {
     </tr>
   `).join('');
 
-  printWindow.document.write(`
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(`
     <html>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>KOT - ${order._id.slice(-6).toUpperCase()}</title>
         <style>
           @page { size: auto; margin: 5mm; }
@@ -216,17 +224,14 @@ export const printKOT = (order, user = null, cafe = null) => {
             margin: 0; 
             padding: 10px;
             font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
           }
           .kot-box {
+            width: 100%;
             max-width: 80mm;
-            margin: 0 auto;
-          }
-          @media screen and (min-width: 600px) {
-            .kot-box {
-              max-width: 90mm;
-              border: 2px solid #000;
-              padding: 15px;
-            }
+            box-sizing: border-box;
           }
           .text-center { text-align: center; }
           .bold { font-weight: bold; }
@@ -244,39 +249,17 @@ export const printKOT = (order, user = null, cafe = null) => {
             margin-top: 10px;
             font-size: 12px;
           }
-          .no-print {
-            background: #f1f1f1;
-            padding: 10px;
-            text-align: center;
-            border-bottom: 1px solid #ccc;
-            margin-bottom: 15px;
-          }
-          .print-btn {
-            background: #000;
-            color: #fff;
-            border: none;
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-          }
-          @media print {
-            .no-print { display: none; }
-            body { padding: 0; }
-            .kot-box { border: none; max-width: 100%; padding: 0; }
-          }
         </style>
       </head>
       <body>
-        <div class="no-print">
-          <button class="print-btn" onclick="window.print()">🖨️ Print KOT</button>
-        </div>
         <div class="kot-box">
           <div class="header text-center">
             <h2>KITCHEN ORDER TICKET (KOT)</h2>
-            <p class="bold" style="font-size: 14px;">${cafeName}</p>
-            <p>${branchName ? `Branch: ${branchName}` : ''}</p>
+            <p class="bold" style="font-size: 14px; margin: 4px 0 2px 0;">${cafeName}</p>
+            <p class="bold" style="font-size: 12px; margin: 0 0 4px 0;">${displayBranchName}</p>
+            <p style="font-size: 9px; color: #555; margin: 2px 0;">${displayAddress}</p>
+            ${displayContact ? `<p style="font-size: 9px; color: #555; margin: 2px 0;">Contact: ${displayContact}</p>` : ''}
+            ${logoUrl ? `<div style="margin-top: 6px;"><img src="${logoUrl}" style="max-height: 35px; border-radius: 50%; object-fit: cover;" /></div>` : ''}
           </div>
 
           <table class="meta-table">
@@ -324,5 +307,10 @@ export const printKOT = (order, user = null, cafe = null) => {
       </body>
     </html>
   `);
-  printWindow.document.close();
+  iframeDoc.close();
+
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }, 300);
 };
