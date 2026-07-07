@@ -153,13 +153,7 @@ const getInventory = async (req, res) => {
       await seedDefaultInventory(cafeId, seedBranch);
     }
 
-    // Now query the items
-    const query = { cafeId };
-    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user.role || '').toLowerCase());
-    if (isStaff && req.user.assignedBranch) {
-      query.branch = req.user.assignedBranch;
-    }
-
+    // Reuse the exact same branch-aware query to find items, sorting them alphabetically
     const items = await Inventory.find(query).sort({ name: 1 });
 
     return res.status(200).json({ success: true, count: items.length, data: items });
@@ -319,8 +313,17 @@ const deleteInventoryItem = async (req, res) => {
 const getInventoryLogs = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    const branchId = req.branchId || req.query.branchId || 'default';
-    const logs = await InventoryLog.find({ cafeId, branchId }).sort({ createdAt: -1 }).limit(200).lean();
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
+    const queryBranch = req.query.branchId || req.headers['x-branch-id'];
+    
+    const query = { cafeId };
+    if (isStaff && req.user?.assignedBranch) {
+      query.branchId = req.user.assignedBranch;
+    } else if (queryBranch) {
+      query.branchId = queryBranch;
+    }
+
+    const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).limit(200).lean();
     return res.status(200).json({ success: true, count: logs.length, data: logs });
   } catch (error) {
     console.error('getInventoryLogs error:', error);
@@ -474,9 +477,17 @@ const reportShortage = async (req, res) => {
 const getWastageReport = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    const branchId = req.branchId || req.query.branchId || 'default';
-    const logs = await InventoryLog.find({ cafeId, branchId, type: { $in: ['Wastage', 'Damaged'] } }).sort({ createdAt: -1 });
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
+    const queryBranch = req.query.branchId || req.headers['x-branch-id'];
     
+    const query = { cafeId, type: { $in: ['Wastage', 'Damaged'] } };
+    if (isStaff && req.user?.assignedBranch) {
+      query.branchId = req.user.assignedBranch;
+    } else if (queryBranch) {
+      query.branchId = queryBranch;
+    }
+
+    const logs = await InventoryLog.find(query).sort({ createdAt: -1 });
     const totalCost = logs.reduce((sum, log) => sum + (log.cost || 0), 0);
     const count = logs.length;
 
@@ -493,9 +504,17 @@ const getWastageReport = async (req, res) => {
 const getConsumptionReport = async (req, res) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
-    const branchId = req.branchId || req.query.branchId || 'default';
-    const logs = await InventoryLog.find({ cafeId, branchId, type: 'Deduction' }).sort({ createdAt: -1 });
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
+    const queryBranch = req.query.branchId || req.headers['x-branch-id'];
+    
+    const query = { cafeId, type: 'Deduction' };
+    if (isStaff && req.user?.assignedBranch) {
+      query.branchId = req.user.assignedBranch;
+    } else if (queryBranch) {
+      query.branchId = queryBranch;
+    }
 
+    const logs = await InventoryLog.find(query).sort({ createdAt: -1 });
     const totalCost = logs.reduce((sum, log) => sum + (log.cost || 0), 0);
     const count = logs.length;
 
@@ -563,45 +582,33 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, br
             break;
           }
         }
-        if (item.available !== shouldBeAvailable) {
-          item.available = shouldBeAvailable;
-          await item.save();
-        }
-      }
-    }
-    
-    for (const item of menuItems) {
-      if (item.recipe && item.recipe.length > 0) {
-        let shouldBeAvailable = true;
-        
-        for (const ing of item.recipe) {
-          const invItem = allInventory.find(i => i.name.toLowerCase() === ing.name.toLowerCase() && (i.branchId === activeBId || i.branch === activeBId));
-            shouldBeAvailable = false;
-            break;
-          }
-        }
         
         if (item.available !== shouldBeAvailable) {
           item.available = shouldBeAvailable;
           await item.save();
-<<<<<<< HEAD
+
           console.log(`Auto-updated menu item "${item.name}" availability to ${shouldBeAvailable} based on inventory levels.`);
           
           try {
             const { getIO } = require('../config/socket');
             const io = getIO();
-            io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
-              _id: String(item._id),
-              name: item.name,
-              available: shouldBeAvailable,
-              updatedAt: item.updatedAt || new Date().toISOString()
-            });
-            console.log(`[SOCKET] Broadcasted menuAvailabilityUpdated for "${item.name}"`);
+            if (io) {
+              io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
+                _id: String(item._id),
+                name: item.name,
+                available: shouldBeAvailable,
+                updatedAt: item.updatedAt || new Date().toISOString()
+              });
+              io.to(`cafe_${cafeId}`).emit('menuAvailabilityUpdated', {
+                _id: String(item._id),
+                name: item.name,
+                available: shouldBeAvailable,
+                updatedAt: item.updatedAt || new Date().toISOString()
+              });
+            }
           } catch (socketErr) {
             console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', socketErr.message);
           }
-=======
->>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
         }
       }
     }
@@ -625,16 +632,11 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
       return;
     }
 
-<<<<<<< HEAD
-    const opConfig = await OperationalConfig.findOne({ cafeId }).lean();
-=======
     const branchId = order.branchId || 'default';
     const opConfig = await OperationalConfig.findOne({ cafeId, branchId });
->>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
     const isEnabled = opConfig ? opConfig.inventoryEnabled : true;
     if (!isEnabled) return;
 
-<<<<<<< HEAD
     // Batch fetch menu items for the ordered items to resolve recipes in one roundtrip
     const itemIds = items.map(item => item.id).filter(id => mongoose.isValidObjectId(id));
     const itemNames = items.map(item => item.name);
@@ -643,15 +645,9 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
       $or: [
         { _id: { $in: itemIds } },
         { name: { $in: itemNames } }
-      ]
+      ],
+      cafeId
     }).lean();
-=======
-        // Fetch dynamic recipe from database
-        const menuItem = (await MenuItem.findOne({ _id: item.id, cafeId, branchId })) || (await MenuItem.findOne({ name: item.name, cafeId, branchId }));
-        let matchedRecipe = menuItem && menuItem.recipe && menuItem.recipe.length > 0 
-          ? menuItem.recipe 
-          : null;
->>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
 
     const menuItemMap = new Map();
     menuItems.forEach(mi => {
@@ -659,7 +655,6 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
       menuItemMap.set(mi.name, mi);
     });
 
-<<<<<<< HEAD
     const ingredientDeductionList = [];
     const ingredientNamesSet = new Set();
 
@@ -679,29 +674,6 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
           if (itemNameLower.includes(key)) {
             matchedRecipe = ingredients;
             break;
-=======
-        if (matchedRecipe) {
-          for (const ing of matchedRecipe) {
-            const invItem = await Inventory.findOne({ cafeId, branchId, name: ing.name });
-            if (invItem) {
-              const deductionQty = ing.quantity * orderQty;
-              invItem.quantity = Math.max(0, invItem.quantity - deductionQty);
-              await invItem.save();
-
-              // Record deduction log
-              await InventoryLog.create({
-                cafeId,
-                branchId,
-                itemId: invItem._id,
-                itemName: invItem.name,
-                type: 'Deduction',
-                quantityChanged: -deductionQty,
-                cost: (invItem.costPrice || 0) * deductionQty,
-                reason: `Sold ${orderQty} x ${item.name}`,
-                userEmail: 'system-auto-deduct'
-              });
-            }
->>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
           }
         }
       }
@@ -723,7 +695,6 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     if (ingredientDeductionList.length === 0) {
       order.inventoryDeducted = true;
       await order.save();
-<<<<<<< HEAD
       return;
     }
 
@@ -731,6 +702,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     const ingredientNames = Array.from(ingredientNamesSet);
     const inventoryItems = await Inventory.find({
       cafeId,
+      branchId,
       name: { $in: ingredientNames }
     });
 
@@ -771,11 +743,12 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
 
         logsToCreate.push({
           cafeId,
+          branchId,
           itemId: invItem._id,
           itemName: invItem.name,
           type: 'Deduction',
           quantityChanged: -deductionQty,
-          cost: (invItem.costPrice || 0) * deductionQty,
+          cost: (invItem.costPrice || invItem.cost || 0) * deductionQty,
           reason: `Sold ${ded.orderQty} x ${ded.itemName}`,
           userEmail: 'system-auto-deduct'
         });
@@ -788,7 +761,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     if (bulkOps.length > 0) {
       await Inventory.bulkWrite(bulkOps);
       await InventoryLog.insertMany(logsToCreate);
-      emitInventoryUpdated(cafeId, order.branchId || 'Main', inventoryItems);
+      emitInventoryUpdated(cafeId, branchId, inventoryItems);
     }
 
     order.inventoryDeducted = true;
@@ -796,12 +769,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     
     // Auto-update availability only for menu items containing the affected ingredients
     if (affectedIngredients.length > 0) {
-      await updateMenuItemAvailabilityFromInventory(cafeId, affectedIngredients);
-=======
-      
-      // Auto-update menu availability
       await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
->>>>>>> f7b50e146b93011a2a9bf0efd0e675b5fe7ad4a9
     }
   } catch (err) {
     console.error('deductInventoryForOrder helper error:', err);
