@@ -4,6 +4,10 @@ const PaymentConfig = require('../models/PaymentConfig');
 const OperationalConfig = require('../models/OperationalConfig');
 const Branch = require('../models/Branch');
 const Order = require('../models/Order');
+const Attendance = require('../models/Attendance');
+const Payroll = require('../models/Payroll');
+const Inventory = require('../models/Inventory');
+const InventoryLog = require('../models/InventoryLog');
 const emailService = require('../services/emailService');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Razorpay = require('razorpay');
@@ -26,7 +30,6 @@ const parseCoordinates = (input) => {
 const parseCoords = (locationStr) => {
   const coords = parseCoordinates(locationStr);
   return coords ? { lat: coords.latitude, lng: coords.longitude } : { lat: 0, lng: 0 };
-};
 };
 
 /**
@@ -462,7 +465,6 @@ const saveSetupData = async (req, res) => {
     cafe.latitude = latVal;
     cafe.longitude = lngVal;
 
-    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
     await Branch.findOneAndUpdate(
       { branchId: activeBranch, cafeId },
       {
@@ -846,6 +848,8 @@ const deleteBranch = async (req, res) => {
 };
 
 /**
+ * Get storage health details
+ */
 const getStorageHealth = async (req, res) => {
   try {
     const { getStorageHealthData } = require('../services/storageCleanupService');
@@ -871,6 +875,287 @@ const updateCafeTheme = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error updating theme' });
   }
 };
+
+/**
+ * Generate POS/ERP reports dynamically
+ */
+const getReports = async (req, res) => {
+  const cafeId = req.user.cafeId;
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  const { type, branchId, startDate, endDate } = req.query;
+  if (!type) {
+    return res.status(400).json({ success: false, message: 'Report type is required' });
+  }
+
+  try {
+    let dateFilter = {};
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter = { $gte: start, $lte: end };
+    }
+
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
+    const finalBranchId = isStaff ? req.user.assignedBranch : (branchId === 'all' ? null : branchId);
+
+    const orderQuery = { cafeId };
+    if (finalBranchId) orderQuery.branchId = finalBranchId;
+    if (startDate && endDate) orderQuery.createdAt = dateFilter;
+
+    const logQuery = { cafeId };
+    if (finalBranchId) logQuery.branchId = finalBranchId;
+    if (startDate && endDate) logQuery.createdAt = dateFilter;
+
+    const inventoryQuery = { cafeId };
+    if (finalBranchId) inventoryQuery.branchId = finalBranchId;
+
+    const attendanceQuery = { cafeId };
+    if (finalBranchId) attendanceQuery.branchId = finalBranchId;
+    if (startDate && endDate) attendanceQuery.date = { $gte: startDate, $lte: endDate };
+
+    const payrollQuery = { cafeId };
+    if (finalBranchId) payrollQuery.branchId = finalBranchId;
+
+    let reportData = [];
+
+    switch (type) {
+      case 'revenue': {
+        const query = { ...orderQuery, paymentStatus: 'Paid' };
+        const orders = await Order.find(query).sort({ createdAt: -1 }).lean();
+        reportData = orders.map(o => ({
+          orderId: o._id.toString(),
+          invoiceNumber: o.invoiceNumber || o.orderNumber || o._id.toString().slice(-6).toUpperCase(),
+          date: o.createdAt,
+          branch: o.branchId || 'default',
+          paymentMethod: o.paymentMethod || 'UPI',
+          paymentStatus: o.paymentStatus,
+          subtotal: (o.totalAmount || 0) - (o.gstAmount || 0) - (o.serviceCharge || 0) + (o.discount || 0),
+          discount: o.discount || 0,
+          tax: o.gstAmount || 0,
+          netRevenue: (o.totalAmount || 0) - (o.gstAmount || 0),
+          grandTotal: o.totalAmount || 0
+        }));
+        break;
+      }
+
+      case 'orders': {
+        const orders = await Order.find(orderQuery).sort({ createdAt: -1 }).lean();
+        reportData = orders.map(o => ({
+          orderId: o._id.toString(),
+          customer: o.customerName || 'Anonymous',
+          table: o.tableNumber || 'N/A',
+          items: (o.items || []).map(i => `${i.name} x${i.quantity}`).join(', '),
+          quantity: (o.items || []).reduce((sum, i) => sum + (i.quantity || 0), 0),
+          status: o.status || 'Pending',
+          createdTime: o.createdAt,
+          completedTime: o.updatedAt || o.createdAt,
+          paymentStatus: o.paymentStatus || 'Pending',
+          grandTotal: o.totalAmount || 0
+        }));
+        break;
+      }
+
+      case 'inventory': {
+        const items = await Inventory.find(inventoryQuery).sort({ name: 1 }).lean();
+        reportData = items.map(item => ({
+          ingredient: item.name,
+          category: item.category || 'General',
+          currentStock: item.quantity || 0,
+          minimumStock: item.minStock || 0,
+          maximumStock: item.maxStock || 'N/A',
+          unit: item.unit || 'units',
+          unitCost: item.cost || 0,
+          inventoryValue: (item.quantity || 0) * (item.cost || 0),
+          supplier: item.supplier || 'N/A'
+        }));
+        break;
+      }
+
+      case 'inventory_consumption': {
+        const query = { ...logQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } };
+        const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).lean();
+        const grouped = {};
+        for (const log of logs) {
+          const name = log.itemName;
+          if (!grouped[name]) {
+            grouped[name] = {
+              ingredient: name,
+              consumedQuantity: 0,
+              consumedCost: 0,
+              logCount: 0
+            };
+          }
+          const qty = Math.abs(log.quantityChanged || 0);
+          grouped[name].consumedQuantity += qty;
+          grouped[name].consumedCost += log.cost || 0;
+          grouped[name].logCount += 1;
+        }
+        reportData = Object.values(grouped);
+        break;
+      }
+
+      case 'purchases': {
+        const query = { ...logQuery, type: 'Purchase' };
+        const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).lean();
+        reportData = logs.map(log => ({
+          supplier: log.reason || 'N/A',
+          purchaseDate: log.createdAt,
+          ingredient: log.itemName,
+          quantity: log.quantityChanged || 0,
+          unitCost: (log.quantityChanged || 0) > 0 ? (log.cost || 0) / log.quantityChanged : 0,
+          totalCost: log.cost || 0
+        }));
+        break;
+      }
+
+      case 'attendance': {
+        const records = await Attendance.find(attendanceQuery).sort({ date: -1 }).lean();
+        const grouped = {};
+        for (const r of records) {
+          const key = r.userEmail || r.userId?.toString() || 'Unknown';
+          if (!grouped[key]) {
+            grouped[key] = {
+              employee: r.userName || r.userEmail || 'Staff Member',
+              present: 0,
+              absent: 0,
+              late: 0,
+              workingHours: 0,
+              overtime: 0
+            };
+          }
+          if (r.status === 'Present') {
+            grouped[key].present += 1;
+          } else if (r.status === 'Absent') {
+            grouped[key].absent += 1;
+          }
+          if (r.isLate) {
+            grouped[key].late += 1;
+          }
+          grouped[key].workingHours += r.workingHours || 0;
+          grouped[key].overtime += r.overtime || 0;
+        }
+        reportData = Object.values(grouped);
+        break;
+      }
+
+      case 'payroll': {
+        const payrolls = await Payroll.find(payrollQuery).sort({ createdAt: -1 }).lean();
+        reportData = payrolls.map(p => ({
+          employee: p.userName || 'Employee',
+          role: p.userRole || 'Staff',
+          workingDays: p.workingDays || 0,
+          actualHours: p.workingHours || 0,
+          requiredHours: p.requiredHours || 0,
+          dailyWage: p.dailyWage || 0,
+          calculatedSalary: p.salary || 0,
+          weeklySalary: (p.salary || 0) / 4,
+          monthlySalary: p.salary || 0
+        }));
+        break;
+      }
+
+      case 'top_selling': {
+        const query = { ...orderQuery, paymentStatus: 'Paid' };
+        const orders = await Order.find(query).lean();
+        const selling = {};
+        for (const o of orders) {
+          for (const item of o.items || []) {
+            const name = item.name;
+            if (!selling[name]) {
+              selling[name] = {
+                menuItem: name,
+                quantitySold: 0,
+                revenue: 0,
+                avgDailySales: 0
+              };
+            }
+            selling[name].quantitySold += item.quantity || 0;
+            selling[name].revenue += (item.price || 0) * (item.quantity || 0);
+          }
+        }
+        reportData = Object.values(selling).sort((a, b) => b.quantitySold - a.quantitySold);
+        break;
+      }
+
+      case 'low_stock': {
+        const items = await Inventory.find(inventoryQuery).lean();
+        const lowStockItems = items.filter(item => (item.quantity || 0) <= (item.minStock || 0));
+        reportData = lowStockItems.map(item => ({
+          ingredient: item.name,
+          currentStock: item.quantity || 0,
+          minimumStock: item.minStock || 0,
+          estimatedRemainingDays: (item.quantity || 0) > 0 ? Math.ceil((item.quantity || 0) / 5) : 0
+        }));
+        break;
+      }
+
+      case 'payment': {
+        const query = { ...orderQuery, paymentStatus: 'Paid' };
+        const orders = await Order.find(query).lean();
+        const payments = {};
+        for (const o of orders) {
+          const method = o.paymentMethod || 'UPI';
+          if (!payments[method]) {
+            payments[method] = {
+              paymentMethod: method,
+              orderCount: 0,
+              netRevenue: 0,
+              tax: 0,
+              grandTotal: 0
+            };
+          }
+          payments[method].orderCount += 1;
+          payments[method].netRevenue += (o.totalAmount || 0) - (o.gstAmount || 0);
+          payments[method].tax += o.gstAmount || 0;
+          payments[method].grandTotal += o.totalAmount || 0;
+        }
+        reportData = Object.values(payments);
+        break;
+      }
+
+      case 'profit_summary': {
+        const queryOrders = { ...orderQuery, paymentStatus: 'Paid' };
+        const orders = await Order.find(queryOrders).lean();
+        const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+        const ingredients = await Inventory.find(inventoryQuery).lean();
+        const inventoryValue = ingredients.reduce((sum, item) => sum + (item.quantity || 0) * (item.cost || 0), 0);
+
+        const queryDeductions = { ...logQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } };
+        const logsDeduction = await InventoryLog.find(queryDeductions).lean();
+        const inventoryConsumption = logsDeduction.reduce((sum, log) => sum + (log.cost || 0), 0);
+
+        const queryPurchases = { ...logQuery, type: 'Purchase' };
+        const logsPurchases = await InventoryLog.find(queryPurchases).lean();
+        const purchaseCost = logsPurchases.reduce((sum, log) => sum + (log.cost || 0), 0);
+
+        const grossProfit = totalRevenue - inventoryConsumption;
+        const netProfit = grossProfit;
+
+        reportData = [{
+          revenue: totalRevenue,
+          inventoryCost: inventoryValue,
+          inventoryConsumption,
+          purchaseCost,
+          grossProfit,
+          netProfit
+        }];
+        break;
+      }
+
+      default:
+        return res.status(400).json({ success: false, message: 'Invalid report type' });
+    }
+
+    return res.status(200).json({ success: true, type, count: reportData.length, data: reportData });
+  } catch (error) {
+    console.error('getReports error:', error);
+    return res.status(500).json({ success: false, message: 'Server error generating report data', error: error.message });
   }
 };
 
@@ -890,5 +1175,6 @@ module.exports = {
   getStaffSummary,
   uploadLogo,
   getStorageHealth,
-  updateCafeTheme
+  updateCafeTheme,
+  getReports
 };

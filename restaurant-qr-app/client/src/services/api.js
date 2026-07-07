@@ -325,6 +325,11 @@ export const verifyRazorpayKeys = async (keyId, secret) => {
   return response.data;
 };
 
+export const getReports = async (params) => {
+  const response = await API.get('/admin/reports', { params });
+  return response.data;
+};
+
 export const uploadLogo = async (file) => {
   const formData = new FormData();
   formData.append('logo', file);

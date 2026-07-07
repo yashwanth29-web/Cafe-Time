@@ -38,13 +38,15 @@ import {
  getOwnerAttendanceReports,
  getWorkReports,
  getReviews,
- getAssetUrl } from
+ getAssetUrl,
+ getReports } from
 '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import socket, { connectSocket } from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
 import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const AdminMenuImage = ({ item }) =>{
  const isValidUrl = (url) =>{
@@ -113,22 +115,23 @@ const OwnerDashboard = () =>{
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
 
- // Navigation Tabs
- const [activeTab, setActiveTab] = useState(() =>{
- const tab = tabParam || location.state?.activeTab || 'analytics';
- if (tab === 'reviews') return 'menu';
- if (tab === 'reports' || tab === 'attendance') return 'staff';
- if (tab === 'settings' || tab === 'config') return 'analytics'; // will redirect in useEffect
- return tab;
- });
+  // Navigation Tabs
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = tabParam || location.state?.activeTab || 'analytics';
+    if (tab === 'reviews') return 'menu';
+    if (tab === 'attendance') return 'staff';
+    if (tab === 'reports') return 'reports';
+    if (tab === 'settings' || tab === 'config') return 'analytics'; // will redirect in useEffect
+    return tab;
+  });
 
- const [menuSubTab, setMenuSubTab] = useState(() =>{
- return tabParam === 'reviews' ? 'reviews' : 'dishes';
- });
+  const [menuSubTab, setMenuSubTab] = useState(() => {
+    return tabParam === 'reviews' ? 'reviews' : 'dishes';
+  });
 
   const [staffSubTab, setStaffSubTab] = useState(() => {
     const subParam = searchParams.get('sub');
-    if (tabParam === 'reports') return 'reports';
+    if (subParam === 'reports') return 'reports';
     if (tabParam === 'attendance') return 'attendance';
     if (subParam === 'salary') return 'salary';
     return 'roster';
@@ -140,8 +143,7 @@ const OwnerDashboard = () =>{
         setActiveTab('menu');
         setMenuSubTab('reviews');
       } else if (tabParam === 'reports') {
-        setActiveTab('staff');
-        setStaffSubTab('reports');
+        setActiveTab('reports');
       } else if (tabParam === 'attendance') {
         setActiveTab('staff');
         setStaffSubTab('attendance');
@@ -156,6 +158,8 @@ const OwnerDashboard = () =>{
           const subParam = searchParams.get('sub');
           if (subParam === 'salary') {
             setStaffSubTab('salary');
+          } else if (subParam === 'reports') {
+            setStaffSubTab('reports');
           } else {
             setStaffSubTab('roster');
           }
@@ -181,9 +185,139 @@ const OwnerDashboard = () =>{
  const [menuError, setMenuError] = useState('');
  const [staff, setStaff] = useState([]);
  const [staffLoading, setStaffLoading] = useState(false);
- const [staffError, setStaffError] = useState('');
+  const [staffError, setStaffError] = useState('');
 
- // Branch & Attendance States
+  // POS/ERP Reports States
+  const [reportType, setReportType] = useState('revenue');
+  const [reportBranchId, setReportBranchId] = useState('all');
+  const [reportDateRange, setReportDateRange] = useState('today');
+  const [reportStartDate, setReportStartDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [reportEndDate, setReportEndDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
+  const [reportData, setReportData] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
+
+  const loadReportData = async () => {
+    setReportLoading(true);
+    setReportError('');
+    try {
+      let start = reportStartDate;
+      let end = reportEndDate;
+      const today = new Date();
+
+      if (reportDateRange === 'today') {
+        const dStr = today.toISOString().split('T')[0];
+        start = dStr;
+        end = dStr;
+      } else if (reportDateRange === 'yesterday') {
+        const yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+        const dStr = yesterday.toISOString().split('T')[0];
+        start = dStr;
+        end = dStr;
+      } else if (reportDateRange === 'this_week') {
+        const dayOfWeek = today.getDay();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - dayOfWeek);
+        start = startOfWeek.toISOString().split('T')[0];
+        end = today.toISOString().split('T')[0];
+      } else if (reportDateRange === 'last_week') {
+        const dayOfWeek = today.getDay();
+        const startOfLastWeek = new Date(today);
+        startOfLastWeek.setDate(today.getDate() - dayOfWeek - 7);
+        const endOfLastWeek = new Date(today);
+        endOfLastWeek.setDate(today.getDate() - dayOfWeek - 1);
+        start = startOfLastWeek.toISOString().split('T')[0];
+        end = endOfLastWeek.toISOString().split('T')[0];
+      } else if (reportDateRange === 'this_month') {
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        start = startOfMonth.toISOString().split('T')[0];
+        end = today.toISOString().split('T')[0];
+      } else if (reportDateRange === 'last_month') {
+        const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        start = startOfLastMonth.toISOString().split('T')[0];
+        end = endOfLastMonth.toISOString().split('T')[0];
+      } else if (reportDateRange === 'this_year') {
+        const startOfYear = new Date(today.getFullYear(), 0, 1);
+        start = startOfYear.toISOString().split('T')[0];
+        end = today.toISOString().split('T')[0];
+      }
+
+      const res = await getReports({
+        type: reportType,
+        branchId: reportBranchId,
+        startDate: start,
+        endDate: end
+      });
+
+      if (res.success) {
+        setReportData(res.data);
+      } else {
+        setReportError(res.message || 'Failed to load report data');
+      }
+    } catch (err) {
+      console.error('Error loading reports:', err);
+      setReportError(err.response?.data?.message || 'Error communicating with reports API');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'reports') {
+      loadReportData();
+    }
+  }, [activeTab, reportType, reportBranchId, reportDateRange, reportStartDate, reportEndDate]);
+
+  const handleDownloadExcel = () => {
+    if (!reportData || reportData.length === 0) return;
+
+    try {
+      const formatted = reportData.map((row, idx) => {
+        const clean = { 'S.No': idx + 1 };
+        Object.keys(row).forEach(key => {
+          let friendlyKey = key.replace(/([A-Z])/g, ' $1').trim();
+          friendlyKey = friendlyKey.charAt(0).toUpperCase() + friendlyKey.slice(1);
+          let val = row[key];
+          if (key === 'date' || key === 'createdAt' || key === 'purchaseDate' || key === 'createdTime' || key === 'completedTime') {
+            val = new Date(val).toLocaleString();
+          }
+          clean[friendlyKey] = val;
+        });
+        return clean;
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(formatted);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
+
+      const maxColWidths = [];
+      formatted.forEach(row => {
+        Object.keys(row).forEach((key, colIdx) => {
+          const valStr = String(row[key] || '');
+          const keyStr = String(key || '');
+          const maxLen = Math.max(valStr.length, keyStr.length, 10);
+          maxColWidths[colIdx] = Math.max(maxColWidths[colIdx] || 0, maxLen);
+        });
+      });
+      worksheet['!cols'] = maxColWidths.map(w => ({ wch: w + 2 }));
+
+      const fileName = `${reportType}_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+    } catch (err) {
+      console.error('Error exporting excel:', err);
+      alert('Failed to export report to Excel.');
+    }
+  };
+
+  // Branch & Attendance States
  // Note: branches & branchesLoading come from BranchContext via useBranch()
  const [showAddBranchModal, setShowAddBranchModal] = useState(false);
  const [showEditBranchModal, setShowEditBranchModal] = useState(false);
@@ -4176,7 +4310,192 @@ const exportStaffToCSV = () => {
 </div>
 
 </div>
- }
+  }
+
+  {/* TAB 8: POS/ERP REPORTS SYSTEM */}
+  {activeTab === 'reports' && (
+    <div className="fade-in">
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', gap: '20px', flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>POS/ERP Reports & Financial Analytics</h3>
+            <p style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+              Generate, preview, and download compliance-ready Excel reports for your business operations.
+            </p>
+          </div>
+          <button 
+            onClick={handleDownloadExcel} 
+            disabled={!reportData || reportData.length === 0} 
+            className="btn btn-primary" 
+            style={{ 
+              width: 'auto', 
+              padding: '12px 24px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px',
+              fontSize: '14.5px',
+              fontWeight: 700,
+              opacity: (!reportData || reportData.length === 0) ? 0.6 : 1,
+              cursor: (!reportData || reportData.length === 0) ? 'not-allowed' : 'pointer'
+            }}
+          >
+            <span>📥</span> Download Excel (.xlsx)
+          </button>
+        </div>
+
+        {/* Filter Toolbar */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '25px', paddingBottom: '20px', borderBottom: '1px solid var(--color-border)' }}>
+          {/* Report Type */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Report Category</label>
+            <select 
+              value={reportType} 
+              onChange={(e) => setReportType(e.target.value)}
+              className="form-input"
+              style={{ minHeight: '44px' }}
+            >
+              <option value="revenue">Revenue Statement</option>
+              <option value="orders">All Orders Log</option>
+              <option value="inventory">Current Stock Valuation</option>
+              <option value="inventory_consumption">Stock Consumption Report</option>
+              <option value="purchases">Suppliers & Purchase Log</option>
+              <option value="attendance">Staff Attendance Summary</option>
+              <option value="payroll">Staff Payroll Audit</option>
+              <option value="top_selling">Top Selling Menu Items</option>
+              <option value="low_stock">Low Stock Alerts</option>
+              <option value="payment">Payment Mode Breakdown</option>
+              <option value="profit_summary">Gross/Net Profit Summary</option>
+            </select>
+          </div>
+
+          {/* Branch Filter */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Branch Filter</label>
+            <select 
+              value={reportBranchId} 
+              onChange={(e) => setReportBranchId(e.target.value)}
+              className="form-input"
+              style={{ minHeight: '44px' }}
+            >
+              <option value="all">All Branches (Cafe-wide)</option>
+              {branches.map(b => (
+                <option key={b._id} value={b.branchId || b._id}>{b.branchName}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Range Preset */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Time Frame</label>
+            <select 
+              value={reportDateRange} 
+              onChange={(e) => setReportDateRange(e.target.value)}
+              className="form-input"
+              style={{ minHeight: '44px' }}
+            >
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="this_week">This Week</option>
+              <option value="last_week">Last Week</option>
+              <option value="this_month">This Month</option>
+              <option value="last_month">Last Month</option>
+              <option value="this_year">This Year</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+          </div>
+
+          {/* Custom Date Picker Range */}
+          {reportDateRange === 'custom' && (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Start Date</label>
+                <input 
+                  type="date" 
+                  value={reportStartDate} 
+                  onChange={(e) => setReportStartDate(e.target.value)} 
+                  className="form-input" 
+                  style={{ minHeight: '44px' }} 
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>End Date</label>
+                <input 
+                  type="date" 
+                  value={reportEndDate} 
+                  onChange={(e) => setReportEndDate(e.target.value)} 
+                  className="form-input" 
+                  style={{ minHeight: '44px' }} 
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Live Preview Console */}
+        <h4 style={{ color: 'var(--color-text-primary)', marginBottom: '15px', fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>👁️</span> Compliance Report Preview
+        </h4>
+
+        {reportLoading ? (
+          <div style={{ textAlign: 'center', padding: '50px 0' }}>
+            <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Fetching data from POS database...</p>
+          </div>
+        ) : reportError ? (
+          <div style={{ padding: '20px', background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.2)', color: '#e74c3c', borderRadius: '8px', fontSize: '14px' }}>
+            {reportError}
+          </div>
+        ) : !reportData || reportData.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--bg-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px', color: 'var(--color-text-secondary)' }}>
+            <p style={{ fontSize: '15px', fontWeight: 600 }}>No entries matching filter parameters</p>
+            <p style={{ fontSize: '13px', marginTop: '4px' }}>Try choosing a wider date range or switching branches.</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+            <table className="modern-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13.5px' }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-secondary)', borderBottom: '2px solid var(--color-border)' }}>
+                  <th style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>S.No</th>
+                  {Object.keys(reportData[0]).map((key) => {
+                    let friendlyKey = key.replace(/([A-Z])/g, ' $1').trim();
+                    friendlyKey = friendlyKey.charAt(0).toUpperCase() + friendlyKey.slice(1);
+                    return (
+                      <th key={key} style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                        {friendlyKey}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {reportData.map((row, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
+                    <td style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}>{idx + 1}</td>
+                    {Object.keys(row).map((key) => {
+                      let val = row[key];
+                      if (key === 'date' || key === 'createdAt' || key === 'purchaseDate' || key === 'createdTime' || key === 'completedTime') {
+                        val = new Date(val).toLocaleString();
+                      }
+                      if (typeof val === 'number') {
+                        if (key.toLowerCase().includes('revenue') || key.toLowerCase().includes('total') || key.toLowerCase().includes('salary') || key.toLowerCase().includes('wage') || key.toLowerCase().includes('cost') || key.toLowerCase().includes('profit') || key === 'subtotal' || key === 'tax' || key === 'discount' || key === 'inventoryValue') {
+                          val = `₹${val.toFixed(2)}`;
+                        }
+                      }
+                      return (
+                        <td key={key} style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}>
+                          {val}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
 
  {/* MODAL 1: ADD NEW MENU ITEM */}
  {showAddModal &&

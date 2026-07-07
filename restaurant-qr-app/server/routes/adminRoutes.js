@@ -19,7 +19,8 @@ const {
   getStaffSummary,
   uploadLogo,
   getStorageHealth,
-  updateCafeTheme
+  updateCafeTheme,
+  getReports
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -83,5 +84,8 @@ router.put('/theme', restrictTo('admin', 'owner'), updateCafeTheme);
 
 // Storage Health Route
 router.get('/storage-health', restrictTo('admin', 'owner'), getStorageHealth);
+
+// Reports Route
+router.get('/reports', restrictTo('admin', 'owner'), getReports);
 
 module.exports = router;

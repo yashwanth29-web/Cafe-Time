@@ -186,7 +186,8 @@ const SaaSLayout = ({ children }) => {
         { label: 'Menu & Reviews', icon: '🍽️', path: '/owner/dashboard?tab=menu' },
         { label: 'Staff & Reports', icon: '👥', path: '/owner/dashboard?tab=staff' },
         { label: 'Inventory', icon: '📦', path: '/owner/dashboard?tab=inventory' },
-        { label: 'Monitor Orders', icon: '👁️', path: '/owner/dashboard?tab=orders' }];
+        { label: 'Monitor Orders', icon: '👁️', path: '/owner/dashboard?tab=orders' },
+        { label: 'Reports', icon: '📊', path: '/owner/dashboard?tab=reports' }];
 
       case 'manager':
         return [
