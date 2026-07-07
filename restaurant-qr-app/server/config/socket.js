@@ -22,7 +22,8 @@ const initializeSocket = (server) => {
         callback(null, true);
       },
       credentials: true
-    }
+    },
+    transports: ['websocket', 'polling'] // Support standard websocket upgrades
   });
 
   // Socket.IO Handshake Authentication Middleware
@@ -157,6 +158,20 @@ const initializeSocket = (server) => {
         console.log(`[SOCKET] Socket ${socket.id} joined rooms cafe:${targetCafe} and branch:${targetBranch}`);
       } catch (err) {
         console.error('[SOCKET] join_room error:', err.message);
+      }
+    });
+
+    // Support client leave_branch_rooms event on branch switches
+    socket.on('leave_branch_rooms', async ({ cafeId, branchId }) => {
+      try {
+        const targetCafe = cafeId || 'CD001';
+        if (branchId) {
+          socket.leave(`branch:${branchId}`);
+          socket.leave(`branch_${targetCafe}_${branchId}`);
+          console.log(`[SOCKET] Socket ${socket.id} left rooms for branch:${branchId}`);
+        }
+      } catch (err) {
+        console.error('[SOCKET] leave_branch_rooms error:', err.message);
       }
     });
 

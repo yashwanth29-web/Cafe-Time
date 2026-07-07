@@ -14,26 +14,62 @@ const getSocketUrl = () => {
 const SOCKET_URL = getSocketUrl();
 
 const socket = io(SOCKET_URL, {
-  autoConnect: false, // Don't connect until we have cafeId/branchId
+  autoConnect: false,
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
-  reconnectionAttempts: Infinity
+  reconnectionAttempts: Infinity,
+  transports: ['websocket'] // Force WebSocket to bypass HTTP 400 Bad Request / sticky session issues on Render
+});
+
+// Cache for room tracking
+let currentRoomContext = { cafeId: null, branchId: null };
+
+// Auto re-join rooms on reconnect
+socket.on('connect', () => {
+  console.log('[SOCKET] Connected to real-time sync layer. Socket ID:', socket.id);
+  if (currentRoomContext.cafeId) {
+    socket.emit('join_room', currentRoomContext);
+  }
+});
+
+socket.on('disconnect', (reason) => {
+  console.warn('[SOCKET] Disconnected:', reason);
+  if (reason === 'io server disconnect') {
+    // If the server disconnected us, connect again manually
+    socket.connect();
+  }
+});
+
+socket.on('connect_error', (error) => {
+  console.error('[SOCKET] Connection Error:', error.message);
 });
 
 export const connectSocket = (cafeId, branchId = null) => {
   const token = localStorage.getItem('token');
   socket.auth = { token };
+
+  const previousBranch = currentRoomContext.branchId;
+  const isSameContext = currentRoomContext.cafeId === cafeId && currentRoomContext.branchId === branchId;
+  currentRoomContext = { cafeId, branchId };
+
   if (!socket.connected) {
     socket.connect();
+  } else if (!isSameContext) {
+    // If already connected and the branch has switched, tell the server to leave the previous branch rooms
+    if (previousBranch && previousBranch !== branchId) {
+      console.log(`[SOCKET] Branch changed from ${previousBranch} to ${branchId}. Leaving old rooms...`);
+      socket.emit('leave_branch_rooms', { cafeId, branchId: previousBranch });
+    }
+    socket.emit('join_room', currentRoomContext);
   }
-  socket.emit('join_room', { cafeId, branchId });
 };
 
 export const disconnectSocket = () => {
   if (socket.connected) {
     socket.disconnect();
   }
+  currentRoomContext = { cafeId: null, branchId: null };
 };
 
 export default socket;
