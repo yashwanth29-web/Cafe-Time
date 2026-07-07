@@ -1,7 +1,17 @@
 import { io } from 'socket.io-client';
 
-// VITE_API_URL includes '/api' for Axios; Socket.IO needs the server root
-const SOCKET_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/api\/?$/, '');
+// Determine Socket URL dynamically based on environment or window location
+const getSocketUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return envUrl.replace(/\/api\/?$/, '');
+  
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return window.location.origin;
+  }
+  return `http://${window.location.hostname}:5000`;
+};
+
+const SOCKET_URL = getSocketUrl();
 
 const socket = io(SOCKET_URL, {
   autoConnect: false, // Don't connect until we have cafeId/branchId
