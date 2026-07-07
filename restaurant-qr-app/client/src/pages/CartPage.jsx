@@ -322,11 +322,17 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
           return;
         }
 
-        // Add to activeOrderIds in sessionStorage
+        // Add to activeOrderIds in sessionStorage and localStorage
         const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
         if (!activeIds.includes(response.data._id)) {
           activeIds.push(response.data._id);
           sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
+          
+          const c = sessionStorage.getItem('cafeId') || 'CD001';
+          const b = sessionStorage.getItem('branchId') || 'default';
+          const t = sessionStorage.getItem('tableNumber') || 'default';
+          const activeKey = `activeOrderIds_${c}_${b}_${t}`;
+          localStorage.setItem(activeKey, JSON.stringify(activeIds));
         }
 
         navigate('/history');

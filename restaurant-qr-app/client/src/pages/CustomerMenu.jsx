@@ -15,6 +15,37 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
+    // Sync session with localStorage to restore tracking on tab reload/re-scan
+    const syncSessionWithLocalStorage = () => {
+      const c = sessionStorage.getItem('cafeId') || 'CD001';
+      const b = sessionStorage.getItem('branchId') || 'default';
+      const t = sessionStorage.getItem('tableNumber') || 'default';
+      const activeKey = `activeOrderIds_${c}_${b}_${t}`;
+      const completedKey = `completedOrderIds_${c}_${b}_${t}`;
+      
+      let activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+      if (activeIds.length === 0) {
+        activeIds = JSON.parse(localStorage.getItem(activeKey) || '[]');
+        if (activeIds.length > 0) {
+          sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
+        }
+      } else {
+        localStorage.setItem(activeKey, JSON.stringify(activeIds));
+      }
+
+      let completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
+      if (completedIds.length === 0) {
+        completedIds = JSON.parse(localStorage.getItem(completedKey) || '[]');
+        if (completedIds.length > 0) {
+          sessionStorage.setItem('completedOrderIds', JSON.stringify(completedIds));
+        }
+      } else {
+        localStorage.setItem(completedKey, JSON.stringify(completedIds));
+      }
+    };
+
+    syncSessionWithLocalStorage();
+
     const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
     const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
     if (activeIds.length > 0 || completedIds.length > 0) setHasHistory(true);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
+import socket, { connectSocket } from '../socket';
 
 const OrderHistory = ({ cafeId }) => {
   const navigate = useNavigate();
@@ -123,6 +124,37 @@ const OrderHistory = ({ cafeId }) => {
   // Fetch active orders on mount
   useEffect(() => {
     const fetchActiveOrders = async () => {
+      // Sync session with localStorage to restore tracking on tab reload/re-scan
+      const syncSessionWithLocalStorage = () => {
+        const c = sessionStorage.getItem('cafeId') || 'CD001';
+        const b = sessionStorage.getItem('branchId') || 'default';
+        const t = sessionStorage.getItem('tableNumber') || 'default';
+        const activeKey = `activeOrderIds_${c}_${b}_${t}`;
+        const completedKey = `completedOrderIds_${c}_${b}_${t}`;
+        
+        let activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+        if (activeIds.length === 0) {
+          activeIds = JSON.parse(localStorage.getItem(activeKey) || '[]');
+          if (activeIds.length > 0) {
+            sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
+          }
+        } else {
+          localStorage.setItem(activeKey, JSON.stringify(activeIds));
+        }
+
+        let completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
+        if (completedIds.length === 0) {
+          completedIds = JSON.parse(localStorage.getItem(completedKey) || '[]');
+          if (completedIds.length > 0) {
+            sessionStorage.setItem('completedOrderIds', JSON.stringify(completedIds));
+          }
+        } else {
+          localStorage.setItem(completedKey, JSON.stringify(completedIds));
+        }
+      };
+
+      syncSessionWithLocalStorage();
+
       const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
       const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
       if (activeIds.length === 0 && completedIds.length === 0) {
@@ -171,6 +203,12 @@ const OrderHistory = ({ cafeId }) => {
 
       sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
       sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
+      
+      const c = sessionStorage.getItem('cafeId') || 'CD001';
+      const b = sessionStorage.getItem('branchId') || 'default';
+      const t = sessionStorage.getItem('tableNumber') || 'default';
+      localStorage.setItem(`activeOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedIds));
+      localStorage.setItem(`completedOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedCompIds));
 
       if (fetchedActive.length > 0 || fetchedCompleted.length > 0) {
         if (fetchedActive.length > 0) setActiveOrders(fetchedActive);
@@ -185,7 +223,72 @@ const OrderHistory = ({ cafeId }) => {
     fetchActiveOrders();
   }, []);
 
-  // Poll order status if order was successfully placed
+  // Socket listener for real-time order status and payment updates
+  useEffect(() => {
+    const c = sessionStorage.getItem('cafeId') || 'CD001';
+    const b = sessionStorage.getItem('branchId') || 'default';
+    const t = sessionStorage.getItem('tableNumber') || 'default';
+    connectSocket(c, b);
+
+    const handleOrderUpdated = (updatedOrder) => {
+      console.log('[SOCKET] Customer OrderHistory received orderUpdated:', updatedOrder);
+      
+      // Update activeOrders list reactively
+      setActiveOrders((prevActive) => {
+        const orderExists = prevActive.some((o) => o._id === updatedOrder._id);
+        
+        // If order transitioned to paid or completed, move it to completed list
+        if (updatedOrder.paymentStatus === 'Paid' || updatedOrder.status === 'Completed') {
+          const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+          const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
+          
+          const filteredActive = activeIds.filter((x) => x !== updatedOrder._id);
+          if (!completedIds.includes(updatedOrder._id)) completedIds.push(updatedOrder._id);
+
+          sessionStorage.setItem('activeOrderIds', JSON.stringify(filteredActive));
+          sessionStorage.setItem('completedOrderIds', JSON.stringify(completedIds));
+
+          const activeKey = `activeOrderIds_${c}_${b}_${t}`;
+          const completedKey = `completedOrderIds_${c}_${b}_${t}`;
+          localStorage.setItem(activeKey, JSON.stringify(filteredActive));
+          localStorage.setItem(completedKey, JSON.stringify(completedIds));
+
+          setCompletedOrders((prevComp) => {
+            if (prevComp.some((o) => o._id === updatedOrder._id)) {
+              return prevComp.map((o) => o._id === updatedOrder._id ? updatedOrder : o);
+            }
+            return [...prevComp, updatedOrder];
+          });
+          
+          if (!voicedOrderIds.includes(updatedOrder._id)) {
+            triggerPaidFeedback(updatedOrder._id);
+          }
+          return prevActive.filter((o) => o._id !== updatedOrder._id);
+        }
+
+        if (orderExists) {
+          return prevActive.map((o) => o._id === updatedOrder._id ? updatedOrder : o);
+        }
+        return prevActive;
+      });
+    };
+
+    socket.on('orderUpdated', handleOrderUpdated);
+    socket.on('order_updated', handleOrderUpdated);
+
+    // Join room for order tracking
+    const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+    activeIds.forEach(id => {
+      socket.emit('trackOrder', { orderId: id });
+    });
+
+    return () => {
+      socket.off('orderUpdated', handleOrderUpdated);
+      socket.off('order_updated', handleOrderUpdated);
+    };
+  }, [voicedOrderIds]);
+
+  // Poll order status if order was successfully placed (fallback / safety net)
   useEffect(() => {
     if (!success || activeOrders.length === 0 && completedOrders.length === 0) return;
 
@@ -238,6 +341,13 @@ const OrderHistory = ({ cafeId }) => {
       if (changed || newlyCompleted.length > 0) {
         sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
         sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
+        
+        const c = sessionStorage.getItem('cafeId') || 'CD001';
+        const b = sessionStorage.getItem('branchId') || 'default';
+        const t = sessionStorage.getItem('tableNumber') || 'default';
+        localStorage.setItem(`activeOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedIds));
+        localStorage.setItem(`completedOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedCompIds));
+
         if (updatedList.length > 0) {
           setActiveOrders(updatedList);
         } else {
@@ -251,7 +361,7 @@ const OrderHistory = ({ cafeId }) => {
           });
         }
       }
-    }, 5000);
+    }, 10000); // reduced frequency since we have live sockets now
 
     return () => clearInterval(pollInterval);
   }, [success, activeOrders, completedOrders]);

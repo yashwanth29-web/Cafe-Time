@@ -1,18 +1,20 @@
 const Order = require('../models/Order');
 const Branch = require('../models/Branch');
 const mongoose = require('mongoose');
-const { deductInventoryForOrder } = require('./inventoryController');
+const { deductInventoryForOrder, updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
 const socket = require('../socket');
-const Branch = require('../models/Branch');
 
+// helper to emit order updates over Socket.io
 const emitOrderUpdated = async (order) => {
   if (!order) return;
   try {
     const { getIO } = require('../config/socket');
     const io = getIO();
-    const mongoose = require('mongoose');
-    const Branch = require('../models/Branch');
-    
+    if (!io) {
+      console.warn('[SOCKET] io not initialized, skipping real-time emit');
+      return;
+    }
+
     let branchStr = String(order.branchId || '');
     if (mongoose.isValidObjectId(branchStr)) {
       const branchDoc = await Branch.findById(branchStr).lean();
@@ -21,22 +23,40 @@ const emitOrderUpdated = async (order) => {
       }
     }
     const orderIdStr = String(order._id || '');
-    
+    const cafeId = order.cafeId || 'CD001';
+
+    // Broadcast standard events (camelCase) to standard room names
     if (branchStr) {
+      io.to(`branch:${branchStr}`).emit('orderCreated', order);
       io.to(`branch:${branchStr}`).emit('orderUpdated', order);
     }
-    io.to(`cafe:${order.cafeId}:owner`).emit('orderUpdated', order);
+    io.to(`cafe:${cafeId}:owner`).emit('orderCreated', order);
+    io.to(`cafe:${cafeId}:owner`).emit('orderUpdated', order);
     io.to(`order:${orderIdStr}`).emit('orderUpdated', order);
-    
+
+    // Broadcast compatibility events (snake_case) to compatibility room names
+    if (branchStr) {
+      io.to(`branch_${cafeId}_${branchStr}`).emit('order_created', order);
+      io.to(`branch_${cafeId}_${branchStr}`).emit('order_updated', order);
+    }
+    io.to(`cafe_${cafeId}`).emit('order_created', order);
+    io.to(`cafe_${cafeId}`).emit('order_updated', order);
+    io.to(`cafe_${cafeId}_owner`).emit('order_created', order);
+    io.to(`cafe_${cafeId}_owner`).emit('order_updated', order);
+    io.to(`order_${orderIdStr}`).emit('order_updated', order);
+
+    // If order payment is paid, broadcast payment events
     if (order.paymentStatus === 'Paid') {
       if (branchStr) {
         io.to(`branch:${branchStr}`).emit('paymentCompleted', order);
+        io.to(`branch_${cafeId}_${branchStr}`).emit('payment_completed', order);
       }
-      io.to(`cafe:${order.cafeId}:owner`).emit('paymentCompleted', order);
+      io.to(`cafe:${cafeId}:owner`).emit('paymentCompleted', order);
+      io.to(`cafe_${cafeId}_owner`).emit('payment_completed', order);
       io.to(`order:${orderIdStr}`).emit('paymentCompleted', order);
+      io.to(`order_${orderIdStr}`).emit('payment_completed', order);
     }
-    
-    console.log(`[SOCKET] Broadcasted update events for order ${orderIdStr} to branch:${branchStr}`);
+    console.log(`[SOCKET] Broadcasted updates for order ${orderIdStr}`);
   } catch (err) {
     console.error('[SOCKET] Error emitting order updates:', err.message);
   }
@@ -78,7 +98,7 @@ const appendLegacyFallback = async (order, branchMap = null) => {
       };
       if (branchMap) branchMap.set(targetCafeId, defaultBranch);
     }
-    orderObj.branchId = orderObj.branchId || defaultBranch._id;
+    orderObj.branchId = orderObj.branchId || defaultBranch.branchId || 'default';
     orderObj.branchName = orderObj.branchName || defaultBranch.branchName;
     orderObj.branchAddress = orderObj.branchAddress || defaultBranch.address;
   }
@@ -97,7 +117,27 @@ const appendLegacyFallback = async (order, branchMap = null) => {
 // @access  Public
 const createOrder = async (req, res) => {
   try {
-      await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
+    const { 
+      cafeId, 
+      branchId, 
+      tableNumber, 
+      items, 
+      totalAmount, 
+      customerName, 
+      customerEmail, 
+      customerPhone, 
+      specialInstructions, 
+      source, 
+      staffId, 
+      paymentStatus, 
+      paymentMethod, 
+      orderSource, 
+      createdBy, 
+      createdByRole,
+      subtotal,
+      tax,
+      grandTotal
+    } = req.body;
 
     // Simple validation
     if (!tableNumber) {
@@ -109,11 +149,11 @@ const createOrder = async (req, res) => {
     if (totalAmount === undefined || totalAmount === null) {
       return res.status(400).json({ success: false, message: 'Total amount is required' });
     }
-
-    // Branch validation
     if (!branchId) {
       return res.status(400).json({ success: false, message: 'Branch information missing' });
     }
+
+    const activeCafeId = cafeId || 'CD001';
 
     // Find the branch
     const resolvedBranch = await Branch.findOne({
@@ -121,20 +161,23 @@ const createOrder = async (req, res) => {
         { branchId: branchId },
         { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
       ],
-      cafeId: cafeId || 'CD001'
+      cafeId: activeCafeId
     }).lean();
 
     if (!resolvedBranch) {
       return res.status(404).json({ success: false, message: 'Branch not found' });
     }
 
-    const finalSubtotal = req.body.subtotal !== undefined ? req.body.subtotal : totalAmount;
-    const finalTax = req.body.tax !== undefined ? req.body.tax : 0;
-    const finalGrandTotal = req.body.grandTotal !== undefined ? req.body.grandTotal : totalAmount;
+    const finalSubtotal = subtotal !== undefined ? subtotal : Number((totalAmount / 1.05).toFixed(2));
+    const finalTax = tax !== undefined ? tax : Number((totalAmount - finalSubtotal).toFixed(2));
+    const finalGrandTotal = grandTotal !== undefined ? grandTotal : totalAmount;
 
+    // Build the order document
     const newOrder = new Order({
-      cafeId: cafeId || 'CD001',
-      branchId: branchId || req.branchId || 'default',
+      cafeId: activeCafeId,
+      branchId: resolvedBranch ? String(resolvedBranch._id) : (branchId || 'default'),
+      branchName: resolvedBranch ? resolvedBranch.branchName : 'Main Branch',
+      branchAddress: resolvedBranch ? resolvedBranch.address : '',
       tableNumber,
       items,
       totalAmount,
@@ -143,27 +186,35 @@ const createOrder = async (req, res) => {
       customerEmail: customerEmail || '',
       customerPhone: customerPhone || '',
       specialInstructions: specialInstructions || '',
-    const { cafeId, branchId, tableNumber, items, totalAmount, customerName, customerEmail, customerPhone, specialInstructions, source, staffId, paymentStatus, paymentMethod, orderSource, createdBy, createdByRole } = req.body;
+      paymentStatus: paymentStatus || 'Pending',
+      paymentMethod: paymentMethod || 'Pending',
+      orderSource: orderSource || source || 'QR',
+      createdBy: createdBy || '',
+      createdByRole: createdByRole || '',
+      subtotal: finalSubtotal,
+      tax: finalTax,
+      grandTotal: finalGrandTotal,
+      source: source || orderSource || 'QR',
+      staffId: staffId || null
     });
 
     const savedOrder = await newOrder.save();
     
     // Auto deduct inventory stock
-    await deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items);
+    try {
+      await deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items);
+      const activeBId = resolvedBranch ? resolvedBranch.branchId : 'default';
+      await updateMenuItemAvailabilityFromInventory(activeCafeId, null, activeBId);
+    } catch (invErr) {
+      console.warn('Inventory deduction warning during order creation:', invErr.message);
+    }
 
-      paymentStatus: req.body.paymentStatus || 'Pending',
-      paymentMethod: req.body.paymentMethod || 'Pending',
-      orderSource: req.body.orderSource || source || 'QR',
-      createdBy: req.body.createdBy || '',
-      createdByRole: req.body.createdByRole || '',
-      branchId: resolvedBranch ? String(resolvedBranch._id) : (branchId || 'default'),
-      branchName: resolvedBranch ? resolvedBranch.branchName : 'Main Branch',
-      branchAddress: resolvedBranch ? resolvedBranch.address : '',
-      subtotal: finalSubtotal || Number((totalAmount / 1.05).toFixed(2)),
-      tax: finalTax || Number((totalAmount - (totalAmount / 1.05)).toFixed(2)),
-      grandTotal: finalGrandTotal || totalAmount,
-      source: source || req.body.orderSource || 'QR',
-      staffId: staffId || null
+    const formattedOrder = await appendLegacyFallback(savedOrder);
+
+    // Broadcast the new order over socket
+    await emitOrderUpdated(formattedOrder);
+
+    return res.status(201).json({ success: true, data: formattedOrder });
   } catch (error) {
     console.error('Error creating order:', error);
     return res.status(500).json({ success: false, message: 'Server error while placing order', error: error.message });
@@ -175,33 +226,6 @@ const createOrder = async (req, res) => {
 // @access  Public (Owner/Staff Dashboards)
 const getOrders = async (req, res) => {
   try {
-    const formattedOrder = await appendLegacyFallback(savedOrder);
-    try {
-      const { getIO } = require('../config/socket');
-      const io = getIO();
-      const branchIdStr = String(formattedOrder.branchId || '');
-      if (branchIdStr) {
-        io.to(`branch:${branchIdStr}`).emit('orderCreated', formattedOrder);
-        io.to(`branch_${formattedOrder.cafeId}_${branchIdStr}`).emit('order_created', formattedOrder);
-      }
-      io.to(`cafe:${formattedOrder.cafeId}:owner`).emit('orderCreated', formattedOrder);
-      io.to(`cafe_${formattedOrder.cafeId}`).emit('order_created', formattedOrder);
-    } catch (err) {
-      console.error('[SOCKET] Error emitting orderCreated:', err.message);
-    }
-    return res.status(201).json({ success: true, data: formattedOrder });
-  } catch (error) {
-    console.error('Error fetching orders:', error);
-    return res.status(500).json({ success: false, message: 'Server error while fetching orders', error: error.message });
-  }
-};
-
-// @desc    Get order by ID
-// @route   GET /api/orders/:id
-// @access  Public (Customer Live Tracker)
-const getOrderById = async (req, res) => {
-  try {
-    const { id } = req.params;
     const filterQuery = {};
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
     if (cafeId) filterQuery.cafeId = cafeId;
@@ -212,15 +236,15 @@ const getOrderById = async (req, res) => {
     if (isStaff && req.user?.assignedBranch) {
       filterQuery.branchId = req.user.assignedBranch;
     } else if (queryBranch) {
-      // If owner filters by a branch
+      // If owner/admin filters by a branch
       filterQuery.branchId = queryBranch;
     } // If owner requests all branches (no queryBranch), don't restrict branchId!
 
     if (req.query.active === 'true') {
       filterQuery.status = { $ne: 'Completed' };
     }
-    if (status) {
-      filterQuery.status = status;
+    if (req.query.status) {
+      filterQuery.status = req.query.status;
     }
 
     if (req.query.date) {
@@ -249,11 +273,27 @@ const getOrderById = async (req, res) => {
     }
 
     return res.status(200).json({ success: true, count: formattedOrders.length, data: formattedOrders });
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found under this branch context' });
-    }
-    const cafeId = req.cafeId || req.query.cafeId || 'CD001';
+  } catch (error) {
+    console.error('Error fetching orders:', error);
+    return res.status(500).json({ success: false, message: 'Server error while fetching orders', error: error.message });
+  }
+};
+
+// @desc    Get order by ID
+// @route   GET /api/orders/:id
+// @access  Public (Customer Live Tracker)
+const getOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cafeId = req.query.cafeId || req.cafeId || 'CD001';
+    
     let order = await Order.findOne({ _id: id, cafeId }).lean();
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found under this cafe context' });
+    }
+    
+    const formattedOrder = await appendLegacyFallback(order);
+    return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {
     console.error('Error fetching single order:', error);
     return res.status(500).json({ success: false, message: 'Server error while retrieving order status', error: error.message });
@@ -268,19 +308,34 @@ const updateOrderStatus = async (req, res) => {
     const { status, paymentStatus, paymentMethod } = req.body;
     const { id } = req.params;
 
-    // Strict Branch Isolation Query
-    const order = await Order.findOne({ _id: id, cafeId: req.cafeId, branchId: req.branchId });
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isOwnerOrAdmin = ['owner', 'admin', 'super_admin'].includes(userRole);
+
+    // 1. Strict Branch/Cafe Isolation Query
+    const query = { _id: id, cafeId: req.cafeId || 'CD001' };
+    if (!isOwnerOrAdmin) {
+      query.branchId = req.branchId || 'default';
+    }
+
+    const order = await Order.findOne(query);
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found in this branch context' });
     }
 
-    // Load Branch config for Unified Staff Mode check
-    const branch = await Branch.findOne({ branchId: req.branchId, cafeId: req.cafeId });
+    // 2. Load Branch config for Unified Staff Mode check
+    const activeBranchId = order.branchId || req.branchId || 'default';
+    const branch = await Branch.findOne({ 
+      $or: [
+        { branchId: activeBranchId },
+        { _id: mongoose.isValidObjectId(activeBranchId) ? activeBranchId : undefined }
+      ],
+      cafeId: req.cafeId || 'CD001'
+    });
+    
     const isUnified = branch ? !!branch.unifiedStaffMode : false;
-    const userRole = (req.user.role || '').toLowerCase();
 
     // Check role permissions if Unified Staff Mode is disabled
-    if (!isUnified && !['admin', 'owner', 'manager', 'super_admin'].includes(userRole)) {
+    if (!isUnified && !isOwnerOrAdmin && !['manager'].includes(userRole)) {
       if (status === 'Preparing' || status === 'Ready') {
         if (userRole !== 'chef') {
           return res.status(403).json({ success: false, message: 'Access Denied: Only Kitchen staff (Chefs) can prepare orders or mark them as ready.' });
@@ -333,11 +388,16 @@ const updateOrderStatus = async (req, res) => {
         return res.status(400).json({ success: false, message: `Invalid paymentStatus. Must be one of: ${allowedPaymentStatuses.join(', ')}` });
       }
       updateFields.paymentStatus = paymentStatus;
+      if (paymentStatus === 'Paid') {
+        updateFields.paidAt = new Date();
+        if (paymentMethod) {
+          updateFields.paymentMethod = paymentMethod;
+        }
+      }
     }
 
     if (paymentMethod !== undefined) {
-    const formattedOrder = await appendLegacyFallback(order);
-    return res.status(200).json({ success: true, data: formattedOrder });
+      const allowedPaymentMethods = ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card'];
       if (!allowedPaymentMethods.includes(paymentMethod)) {
         return res.status(400).json({ success: false, message: `Invalid paymentMethod. Must be one of: ${allowedPaymentMethods.join(', ')}` });
       }
@@ -348,18 +408,34 @@ const updateOrderStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No valid fields provided for update. Must be status, paymentStatus, or paymentMethod.' });
     }
 
-      const allowedPaymentMethods = ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card'];
+    const updatedOrder = await Order.findOneAndUpdate(
+      { _id: id },
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    ).lean();
 
     if (!updatedOrder) {
       return res.status(404).json({ success: false, message: 'Order update failed or order not found' });
     }
 
+    // Auto deduct inventory if moving to Ready/Completed/Delivered and not already deducted
     if (['Ready', 'Completed', 'Delivered'].includes(updatedOrder.status) && !updatedOrder.inventoryDeducted) {
-    const updatedOrder = await Order.findOneAndUpdate(
-      { _id: id, cafeId: req.cafeId || 'CD001' },
-      { $set: updateFields },
-      { new: true, runValidators: true }
-    ).lean();
+      try {
+        await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
+        const activeBId = branch ? branch.branchId : 'default';
+        await updateMenuItemAvailabilityFromInventory(updatedOrder.cafeId, null, activeBId);
+      } catch (err) {
+        console.warn('Inventory deduction warning during status update:', err.message);
+      }
+    }
+
+    const latestOrder = await Order.findById(id).lean();
+    const formattedOrder = await appendLegacyFallback(latestOrder || updatedOrder);
+
+    // Broadcast update events over sockets
+    await emitOrderUpdated(formattedOrder);
+
+    return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {
     console.error('Error updating order status:', error);
     return res.status(500).json({ success: false, message: 'Server error while updating order status', error: error.message });
@@ -381,7 +457,7 @@ const updateOrderPaymentMethod = async (req, res) => {
 
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
-      { paymentMethod, paymentStatus: 'Paid' },
+      { paymentMethod, paymentStatus: 'Paid', paidAt: new Date() },
       { new: true, runValidators: true }
     ).lean();
 
@@ -389,29 +465,25 @@ const updateOrderPaymentMethod = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-      try {
-        await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
-      } catch (err) {
-        console.warn('Inventory deduction warning during status update:', err.message);
-      }
-      const latestOrder = await Order.findById(id).lean();
-      const formattedLatest = await appendLegacyFallback(latestOrder || updatedOrder);
-      const io = socket.getIO();
-      if (io) {
-        const bIdStr = String(formattedLatest.branchId || '');
-        io.to(`branch:${bIdStr}`).emit('orderUpdated', formattedLatest);
-        io.to(`branch_${formattedLatest.cafeId}_${bIdStr}`).emit('order_updated', formattedLatest);
-      }
-      return res.status(200).json({ success: true, data: formattedLatest });
+    // Deduct inventory if not done already
+    try {
+      await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
+      
+      // Get branch ID to sync menu items
+      let bId = 'default';
+      const Branch = require('../models/Branch');
+      const branchDoc = await Branch.findById(updatedOrder.branchId).lean();
+      if (branchDoc) bId = branchDoc.branchId;
+      await updateMenuItemAvailabilityFromInventory(updatedOrder.cafeId, null, bId);
+    } catch (err) {
+      console.warn('Inventory deduction warning during payment update:', err.message);
     }
 
     const formattedOrder = await appendLegacyFallback(updatedOrder);
-    const io = socket.getIO();
-    if (io) {
-      const bIdStr = String(formattedOrder.branchId || '');
-      io.to(`branch:${bIdStr}`).emit('orderUpdated', formattedOrder);
-      io.to(`branch_${formattedOrder.cafeId}_${bIdStr}`).emit('order_updated', formattedOrder);
-    }
+
+    // Broadcast socket updates
+    await emitOrderUpdated(formattedOrder);
+
     return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {
     console.error('Error updating order payment method:', error);

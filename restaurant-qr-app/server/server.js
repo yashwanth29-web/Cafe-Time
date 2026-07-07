@@ -10,7 +10,6 @@ const express = require('express');
 const http = require('http');
 const dotenv = require('dotenv');
 const path = require('path');
-const http = require('http');
 const { initializeSocket } = require('./config/socket');
 
 // Trigger nodemon restart 4
@@ -43,7 +42,6 @@ const app = express();
 
 // Enable compression and profiling middleware
 const compression = require('compression');
-const mongoose = require('mongoose');
 const { AsyncLocalStorage } = require('async_hooks');
 
 const requestStore = new AsyncLocalStorage();
@@ -212,7 +210,6 @@ setInterval(() => {
 
 // Create HTTP Server and Initialize Socket.IO
 const server = http.createServer(app);
-const { initializeSocket } = require('./config/socket');
 initializeSocket(server);
 
 // Start Listening
