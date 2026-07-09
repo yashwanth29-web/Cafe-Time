@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -622,7 +622,7 @@ const OwnerProfilePage = () => {
           {/* Banner */}
           <div className="pp-banner">
             <div className="pp-avatar-wrap">
-              <div className="pp-avatar">{cafeData?.logoUrl ? <img src={getAssetUrl(cafeData.logoUrl)} alt="cafe" /> : '☕'}</div>
+              <div className="pp-avatar"><img src="/logo.png" alt="Dr. Chai Cafe Logo" /></div>
               <div className="pp-identity">
                 <h2>{cafeData?.name || 'My Cafe'}</h2>
                 <p>{cafeData?.cafeId} · {cafeData?.businessType || 'Cafe'}</p>

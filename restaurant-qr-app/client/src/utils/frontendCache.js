@@ -29,3 +29,4 @@ export const frontendCache = {
 };
 
 export default frontendCache;
+

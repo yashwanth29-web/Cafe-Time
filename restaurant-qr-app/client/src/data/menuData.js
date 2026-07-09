@@ -48,3 +48,4 @@ const menuData = [
 
 export default menuData;
 export const categories = ['All', 'Burgers', 'Pizzas', 'Pasta', 'Drinks', 'Sandwiches'];
+

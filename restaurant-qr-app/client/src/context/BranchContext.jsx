@@ -21,7 +21,7 @@ export const BranchProvider = ({ children }) => {
   // Ref to hold branch-switch listeners
   const switchListeners = useRef([]);
 
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
   const loadBranches = useCallback(async (currentUser) => {
     if (!currentUser) return;
@@ -35,7 +35,7 @@ export const BranchProvider = ({ children }) => {
         if (['super_admin', 'admin', 'owner'].includes(role)) {
           const stored = localStorage.getItem(STORAGE_KEY);
           const ids = res.branches.map(b => b.branchId);
-          if (stored && ids.includes(stored)) {
+          if (stored && (ids.includes(stored) || stored === 'all')) {
             setActiveBranchId(stored);
           } else if (res.branches.length > 0) {
             const firstId = res.branches[0].branchId;
@@ -59,6 +59,7 @@ export const BranchProvider = ({ children }) => {
 
   // Sync with user authentication state
   useEffect(() => {
+    if (loading) return;
     if (user) {
       // Determine initial active branch ID from database assignment before API call finishes
       const role = (user.role || '').toLowerCase();
@@ -87,7 +88,7 @@ export const BranchProvider = ({ children }) => {
         disconnectSocket();
       } catch (e) {}
     }
-  }, [user, loadBranches]);
+  }, [user, loading, loadBranches]);
 
   // Connect socket only after branch initialization
   useEffect(() => {

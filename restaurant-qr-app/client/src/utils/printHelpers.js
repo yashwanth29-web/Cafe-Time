@@ -316,3 +316,4 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
     iframe.contentWindow.print();
   }, 300);
 };
+

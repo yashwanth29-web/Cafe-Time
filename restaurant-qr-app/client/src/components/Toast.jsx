@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext } from 'react';
 
 const ToastContext = createContext();
 
@@ -233,3 +233,4 @@ const ToastItem = ({ toast, onClose }) => {
     </div>
   );
 };
+

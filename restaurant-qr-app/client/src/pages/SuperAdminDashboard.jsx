@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { createOwner, getCafes, updateCafe, deleteCafe, getTickets, updateTicketStatus } from '../services/api';
@@ -1661,3 +1662,4 @@ const SuperAdminDashboard = () => {
 };
 
 export default SuperAdminDashboard;
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Coffee, CupSoda, Utensils, UtensilsCrossed, Cake, LayoutGrid } from 'lucide-react';
 import { getMenu, getCategories, getAssetUrl } from '../services/api';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSetupData, getBranches } from '../services/api';
@@ -53,3 +53,4 @@ const OwnerLayout = ({ children }) => {
 };
 
 export default OwnerLayout;
+

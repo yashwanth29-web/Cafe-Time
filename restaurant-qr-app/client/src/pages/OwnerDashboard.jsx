@@ -45,7 +45,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import socket, { connectSocket } from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
-import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3 } from 'lucide-react';
+import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3, Coffee, CupSoda, UtensilsCrossed, Sandwich, Pizza, Cake, Utensils } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const AdminMenuImage = ({ item }) =>{
@@ -120,7 +120,7 @@ const OwnerDashboard = () =>{
     const tab = tabParam || location.state?.activeTab || 'analytics';
     if (tab === 'reviews') return 'menu';
     if (tab === 'attendance') return 'staff';
-    if (tab === 'reports') return 'reports';
+    if (tab === 'reports' || tab === 'financial_reports') return 'reports';
     if (tab === 'settings' || tab === 'config') return 'analytics'; // will redirect in useEffect
     return tab;
   });
@@ -142,8 +142,9 @@ const OwnerDashboard = () =>{
       if (tabParam === 'reviews') {
         setActiveTab('menu');
         setMenuSubTab('reviews');
-      } else if (tabParam === 'reports') {
+      } else if (tabParam === 'reports' || tabParam === 'financial_reports') {
         setActiveTab('reports');
+        if (tabParam === 'financial_reports') setReportType('financial_summary');
       } else if (tabParam === 'attendance') {
         setActiveTab('staff');
         setStaffSubTab('attendance');
@@ -188,7 +189,9 @@ const OwnerDashboard = () =>{
   const [staffError, setStaffError] = useState('');
 
   // POS/ERP Reports States
-  const [reportType, setReportType] = useState('revenue');
+  const [reportType, setReportType] = useState(() => {
+    return tabParam === 'financial_reports' ? 'financial_summary' : 'revenue';
+  });
   const [reportBranchId, setReportBranchId] = useState('all');
   const [reportDateRange, setReportDateRange] = useState('today');
   const [reportStartDate, setReportStartDate] = useState(() => {
@@ -203,8 +206,8 @@ const OwnerDashboard = () =>{
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState('');
 
-  const loadReportData = async () => {
-    setReportLoading(true);
+  const loadReportData = async (isSilent = false) => {
+    if (!isSilent) if (!isSilent) setReportLoading(true);
     setReportError('');
     try {
       let start = reportStartDate;
@@ -847,7 +850,7 @@ const OwnerDashboard = () =>{
 
  // Fetch Inventory Categories
  const fetchInventoryCategories = async () =>{
- setInvCategoryLoading(true);
+ if (!isSilent) setInvCategoryLoading(true);
  try {
  const response = await getInventoryCategories();
  if (response && response.success) {
@@ -904,7 +907,7 @@ const OwnerDashboard = () =>{
 
  // Fetch Staff
  const fetchStaffList = async () =>{
- setStaffLoading(true);
+ if (!isSilent) setStaffLoading(true);
  try {
  const response = await getStaff();
  if (response.success) {
@@ -923,7 +926,7 @@ const OwnerDashboard = () =>{
 
  // Fetch Attendance Today Dashboard
  const fetchAttendanceToday = async () =>{
- setAttendanceLoading(true);
+ if (!isSilent) setAttendanceLoading(true);
  try {
  const res = await getOwnerTodayAttendance();
  if (res.success) {
@@ -939,7 +942,7 @@ const OwnerDashboard = () =>{
 
  // Fetch Attendance Reports
  const fetchAttendanceReportsData = async () =>{
- setAttendanceLoading(true);
+ if (!isSilent) setAttendanceLoading(true);
  try {
  const res = await getOwnerAttendanceReports({ range: reportRange, branchId: reportBranch });
  if (res.success) {
@@ -953,7 +956,7 @@ const OwnerDashboard = () =>{
  };
 
  const fetchWorkReports = async () =>{
- setReportsLoading(true);
+ if (!isSilent) setReportsLoading(true);
  setReportsError('');
  try {
  const params = {};
@@ -976,7 +979,7 @@ const OwnerDashboard = () =>{
  };
 
  const fetchReviewsData = async () =>{
- setReviewsLoading(true);
+ if (!isSilent) setReviewsLoading(true);
  setReviewsError('');
  try {
  const params = {};
@@ -1080,18 +1083,18 @@ const OwnerDashboard = () =>{
       setMenuLoading(true);
       setInventoryList([]);
       setInventoryLogs([]);
-      setInventoryLoading(true);
+      if (!isSilent) setInventoryLoading(true);
       setCategories([]);
       setCategoryLoading(true);
       setInventoryCategories([]);
-      setInvCategoryLoading(true);
+      if (!isSilent) setInvCategoryLoading(true);
       setStaff([]);
-      setStaffLoading(true);
+      if (!isSilent) setStaffLoading(true);
       setAttendanceRecords([]);
-      setAttendanceLoading(true);
+      if (!isSilent) setAttendanceLoading(true);
       setAttendanceReports(null);
       setWorkReports([]);
-      setReportsLoading(true);
+      if (!isSilent) setReportsLoading(true);
 
       // Fetch data relevant to the currently active tab
       fetchOrders();
@@ -1118,7 +1121,7 @@ const OwnerDashboard = () =>{
  return;
  }
  try {
- setStaffLoading(true);
+ if (!isSilent) setStaffLoading(true);
  const response = await createStaff({
    ...newStaff,
    dailyRate: Number(newStaff.dailyRate || 0)
@@ -1145,7 +1148,7 @@ const OwnerDashboard = () =>{
  return;
  }
  try {
- setStaffLoading(true);
+ if (!isSilent) setStaffLoading(true);
  const response = await updateStaff(editingStaff._id, {
  name: editingStaff.name,
  email: editingStaff.email,
@@ -1172,7 +1175,7 @@ const OwnerDashboard = () =>{
  // Delete staff
   const handleSaveWage = async (staffId, wage) => {
     try {
-      setStaffLoading(true);
+      if (!isSilent) setStaffLoading(true);
       const target = staff.find(s => s._id === staffId);
       if (!target) return;
       const response = await updateStaff(staffId, {
@@ -1241,7 +1244,7 @@ const exportStaffToCSV = () => {
  return;
  }
  try {
- setStaffLoading(true);
+ if (!isSilent) setStaffLoading(true);
  const response = await deleteStaff(id);
  if (response.success) {
  alert(response.message || 'Staff member deleted successfully.');
@@ -1489,8 +1492,8 @@ const exportStaffToCSV = () => {
  };
 
  // Fetch Inventory List
- async function fetchInventoryList() {
- setInventoryLoading(true);
+ async function fetchInventoryList(isSilent = false) {
+ if (!isSilent) setInventoryLoading(true);
  try {
  const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
  getInventory(),
@@ -4358,13 +4361,8 @@ const exportStaffToCSV = () => {
               <option value="orders">All Orders Log</option>
               <option value="inventory">Current Stock Valuation</option>
               <option value="inventory_consumption">Stock Consumption Report</option>
-              <option value="purchases">Suppliers & Purchase Log</option>
-              <option value="attendance">Staff Attendance Summary</option>
-              <option value="payroll">Staff Payroll Audit</option>
-              <option value="top_selling">Top Selling Menu Items</option>
-              <option value="low_stock">Low Stock Alerts</option>
               <option value="payment">Payment Mode Breakdown</option>
-              <option value="profit_summary">Gross/Net Profit Summary</option>
+              <option value="financial_summary">Comprehensive Financial Summary</option>
             </select>
           </div>
 

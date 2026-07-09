@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useBranch } from '../context/BranchContext';
 import { getCurrentEmployeePayroll } from '../services/api';
 
@@ -175,3 +175,4 @@ const EmployeePayrollPage = () => {
 };
 
 export default EmployeePayrollPage;
+

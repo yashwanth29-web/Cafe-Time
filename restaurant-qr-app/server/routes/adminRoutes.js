@@ -20,7 +20,8 @@ const {
   uploadLogo,
   getStorageHealth,
   updateCafeTheme,
-  getReports
+  getReports,
+  getDashboardStats
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -87,5 +88,9 @@ router.get('/storage-health', restrictTo('admin', 'owner'), getStorageHealth);
 
 // Reports Route
 router.get('/reports', restrictTo('admin', 'owner'), getReports);
+
+
+// Dashboard Stats Route
+router.get('/dashboard-stats', restrictTo('admin', 'owner'), getDashboardStats);
 
 module.exports = router;

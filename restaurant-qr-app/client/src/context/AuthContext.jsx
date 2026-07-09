@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import { createContext, useState, useEffect, useContext } from 'react';
 import API, { getMe, sendOtp, verifyOtp, logoutUser, loginWithGoogleApi } from '../services/api';
 
 const AuthContext = createContext();
@@ -156,5 +156,6 @@ export const useAuth = () => {
   }
   return context;
 };
+
 
 

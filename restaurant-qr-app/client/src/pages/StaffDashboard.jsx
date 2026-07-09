@@ -60,13 +60,14 @@ const StaffDashboard = () => {
  const timerRef = useRef(null);
 
  // Fetch initial data
-  const fetchData = async () => {
+  const fetchData = async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       setErrorMsg('');
 
-      let coordsParam = {};
-      if (navigator.geolocation) {
+      
+      let coordsParam = coords || {};
+      if (!isSilent && navigator.geolocation) {
         const getCoords = () => new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
             (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
@@ -100,7 +101,7 @@ const StaffDashboard = () => {
  console.error('Error fetching staff attendance data:', error);
  setErrorMsg('Failed to sync attendance details with server.');
  } finally {
- setLoading(false);
+ if (!isSilent) setLoading(false);
  }
  };
 

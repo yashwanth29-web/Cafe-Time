@@ -33,7 +33,7 @@ export const getAssetUrl = (url) => {
     } else if (envUrl) {
       origin = envUrl.replace(/\/api$/, '');
     } else {
-      origin = window.location.origin;
+      origin = 'http://localhost:5000';
     }
     
     // Support protocol matching
@@ -548,5 +548,12 @@ export const getReviews = async (params) => {
 
 export default API;
 
+
+
+
+export const getDashboardStats = async (params) => {
+  const response = await API.get('/admin/dashboard-stats', { params });
+  return response.data;
+};
 
 

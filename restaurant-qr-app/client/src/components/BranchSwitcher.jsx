@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useBranch } from '../context/BranchContext';
 
 /* ─── Helpers ─────────────────────────────────────────────────────────── */
@@ -451,3 +451,4 @@ const BranchSwitcher = ({ collapsed = false }) => {
 };
 
 export default BranchSwitcher;
+

@@ -51,11 +51,10 @@ router.post('/upload-image', protect, restrictTo('admin', 'owner', 'manager'), u
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image file uploaded' });
   }
-const { syncToGridFS } = require('../utils/gridfs');
-router.use((req, res, next) => {
-  console.log(`[MENU ROUTE DEBUG] ${req.method} ${req.originalUrl}`);
-  next();
-});
+  
+  const imageUrl = `/uploads/${req.file.filename}`;
+  await syncToGridFS(req.file.path, req.file.filename);
+  
   return res.status(200).json({
     success: true,
     imageUrl

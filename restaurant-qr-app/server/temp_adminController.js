@@ -879,52 +879,57 @@ const updateCafeTheme = async (req, res) => {
 /**
  * Generate POS/ERP reports dynamically
  */
-
-
-
 const getReports = async (req, res) => {
   const cafeId = req.user.cafeId;
-  if (!cafeId) return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
 
   const { type, branchId, startDate, endDate } = req.query;
-  if (!type) return res.status(400).json({ success: false, message: 'Report type is required' });
+  if (!type) {
+    return res.status(400).json({ success: false, message: 'Report type is required' });
+  }
 
   try {
     let dateFilter = {};
     if (startDate && endDate) {
-      const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-      const end = new Date(endDate); end.setHours(23, 59, 59, 999);
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
       dateFilter = { $gte: start, $lte: end };
     }
 
     const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
     const finalBranchId = isStaff ? req.user.assignedBranch : (branchId === 'all' ? null : branchId);
 
-    const matchQuery = { cafeId };
-    if (finalBranchId) matchQuery.branchId = finalBranchId;
-    
-    const dateMatchQuery = { ...matchQuery };
-    if (startDate && endDate) dateMatchQuery.createdAt = dateFilter;
-    
-    const attendanceMatch = { ...matchQuery };
-    if (startDate && endDate) attendanceMatch.date = dateFilter;
+    const orderQuery = { cafeId };
+    if (finalBranchId) orderQuery.branchId = finalBranchId;
+    if (startDate && endDate) orderQuery.createdAt = dateFilter;
+
+    const logQuery = { cafeId };
+    if (finalBranchId) logQuery.branchId = finalBranchId;
+    if (startDate && endDate) logQuery.createdAt = dateFilter;
+
+    const inventoryQuery = { cafeId };
+    if (finalBranchId) inventoryQuery.branchId = finalBranchId;
+
+    const attendanceQuery = { cafeId };
+    if (finalBranchId) attendanceQuery.branchId = finalBranchId;
+    if (startDate && endDate) attendanceQuery.date = { $gte: startDate, $lte: endDate };
+
+    const payrollQuery = { cafeId };
+    if (finalBranchId) payrollQuery.branchId = finalBranchId;
 
     let reportData = [];
 
     switch (type) {
       case 'revenue': {
-        const pipeline = [
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
-          { $project: {
-            invoiceNumber: { $cond: [{ $ifNull: ['$invoiceNumber', false] }, '$invoiceNumber', { $substr: [{ $toString: '$_id' }, 18, 6] }] },
-            createdAt: 1, branchId: 1, paymentMethod: 1, paymentStatus: 1, totalAmount: 1, gstAmount: 1, discount: 1, serviceCharge: 1
-          }},
-          { $sort: { createdAt: -1 } }
-        ];
-        const orders = await Order.aggregate(pipeline);
+        const query = { ...orderQuery, paymentStatus: 'Paid' };
+        const orders = await Order.find(query).sort({ createdAt: -1 }).lean();
         reportData = orders.map(o => ({
           orderId: o._id.toString(),
-          invoiceNumber: (o.invoiceNumber || '').toUpperCase(),
+          invoiceNumber: o.invoiceNumber || o.orderNumber || o._id.toString().slice(-6).toUpperCase(),
           date: o.createdAt,
           branch: o.branchId || 'default',
           paymentMethod: o.paymentMethod || 'UPI',
@@ -937,17 +942,14 @@ const getReports = async (req, res) => {
         }));
         break;
       }
+
       case 'orders': {
-        const pipeline = [
-          { $match: dateMatchQuery },
-          { $sort: { createdAt: -1 } }
-        ];
-        const orders = await Order.aggregate(pipeline);
+        const orders = await Order.find(orderQuery).sort({ createdAt: -1 }).lean();
         reportData = orders.map(o => ({
           orderId: o._id.toString(),
           customer: o.customerName || 'Anonymous',
           table: o.tableNumber || 'N/A',
-          items: (o.items || []).map(i => i.name + ' x' + i.quantity).join(', '),
+          items: (o.items || []).map(i => `${i.name} x${i.quantity}`).join(', '),
           quantity: (o.items || []).reduce((sum, i) => sum + (i.quantity || 0), 0),
           status: o.status || 'Pending',
           createdTime: o.createdAt,
@@ -957,17 +959,15 @@ const getReports = async (req, res) => {
         }));
         break;
       }
+
       case 'inventory': {
-        const pipeline = [
-          { $match: matchQuery },
-          { $sort: { name: 1 } }
-        ];
-        const items = await Inventory.aggregate(pipeline);
+        const items = await Inventory.find(inventoryQuery).sort({ name: 1 }).lean();
         reportData = items.map(item => ({
           ingredient: item.name,
           category: item.category || 'General',
           currentStock: item.quantity || 0,
           minimumStock: item.minStock || 0,
+          maximumStock: item.maxStock || 'N/A',
           unit: item.unit || 'units',
           unitCost: item.cost || 0,
           inventoryValue: (item.quantity || 0) * (item.cost || 0),
@@ -975,32 +975,33 @@ const getReports = async (req, res) => {
         }));
         break;
       }
+
       case 'inventory_consumption': {
-        const pipeline = [
-          { $match: { ...dateMatchQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } } },
-          { $group: {
-            _id: '$itemName',
-            consumedQuantity: { $sum: { $abs: '$quantityChanged' } },
-            consumedCost: { $sum: '$cost' },
-            logCount: { $sum: 1 }
-          }},
-          { $sort: { consumedCost: -1 } }
-        ];
-        const logs = await InventoryLog.aggregate(pipeline);
-        reportData = logs.map(log => ({
-          ingredient: log._id,
-          consumedQuantity: log.consumedQuantity,
-          consumedCost: log.consumedCost,
-          logCount: log.logCount
-        }));
+        const query = { ...logQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } };
+        const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).lean();
+        const grouped = {};
+        for (const log of logs) {
+          const name = log.itemName;
+          if (!grouped[name]) {
+            grouped[name] = {
+              ingredient: name,
+              consumedQuantity: 0,
+              consumedCost: 0,
+              logCount: 0
+            };
+          }
+          const qty = Math.abs(log.quantityChanged || 0);
+          grouped[name].consumedQuantity += qty;
+          grouped[name].consumedCost += log.cost || 0;
+          grouped[name].logCount += 1;
+        }
+        reportData = Object.values(grouped);
         break;
       }
+
       case 'purchases': {
-        const pipeline = [
-          { $match: { ...dateMatchQuery, type: 'Purchase' } },
-          { $sort: { createdAt: -1 } }
-        ];
-        const logs = await InventoryLog.aggregate(pipeline);
+        const query = { ...logQuery, type: 'Purchase' };
+        const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).lean();
         reportData = logs.map(log => ({
           supplier: log.reason || 'N/A',
           purchaseDate: log.createdAt,
@@ -1011,70 +1012,79 @@ const getReports = async (req, res) => {
         }));
         break;
       }
+
       case 'attendance': {
-        const records = await Attendance.find(attendanceMatch).sort({ date: -1 }).lean();
+        const records = await Attendance.find(attendanceQuery).sort({ date: -1 }).lean();
         const grouped = {};
         for (const r of records) {
           const key = r.userEmail || r.userId?.toString() || 'Unknown';
           if (!grouped[key]) {
-            grouped[key] = { employee: r.userName || r.userEmail || 'Staff Member', present: 0, absent: 0, late: 0, workingHours: 0, overtime: 0 };
+            grouped[key] = {
+              employee: r.userName || r.userEmail || 'Staff Member',
+              present: 0,
+              absent: 0,
+              late: 0,
+              workingHours: 0,
+              overtime: 0
+            };
           }
-          if (r.status === 'Present') grouped[key].present += 1;
-          else if (r.status === 'Absent') grouped[key].absent += 1;
-          if (r.isLate) grouped[key].late += 1;
+          if (r.status === 'Present') {
+            grouped[key].present += 1;
+          } else if (r.status === 'Absent') {
+            grouped[key].absent += 1;
+          }
+          if (r.isLate) {
+            grouped[key].late += 1;
+          }
           grouped[key].workingHours += r.workingHours || 0;
           grouped[key].overtime += r.overtime || 0;
         }
         reportData = Object.values(grouped);
         break;
       }
+
       case 'payroll': {
-        const payrolls = await Payroll.find(matchQuery).sort({ createdAt: -1 }).lean();
+        const payrolls = await Payroll.find(payrollQuery).sort({ createdAt: -1 }).lean();
         reportData = payrolls.map(p => ({
           employee: p.userName || 'Employee',
           role: p.userRole || 'Staff',
           workingDays: p.workingDays || 0,
           actualHours: p.workingHours || 0,
+          requiredHours: p.requiredHours || 0,
           dailyWage: p.dailyWage || 0,
           calculatedSalary: p.salary || 0,
+          weeklySalary: (p.salary || 0) / 4,
           monthlySalary: p.salary || 0
         }));
         break;
       }
+
       case 'top_selling': {
-        const pipeline = [
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
-          { $unwind: '$items' },
-          { $group: {
-            _id: '$items.name',
-            quantitySold: { $sum: '$items.quantity' },
-            revenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
-            ordersCount: { $addToSet: '$_id' }
-          }},
-          { $sort: { quantitySold: -1 } }
-        ];
-        const topSelling = await Order.aggregate(pipeline);
-        reportData = topSelling.map(item => ({
-          menuItem: item._id,
-          quantitySold: item.quantitySold,
-          revenue: item.revenue,
-          ordersCount: item.ordersCount.length
-        }));
+        const query = { ...orderQuery, paymentStatus: 'Paid' };
+        const orders = await Order.find(query).lean();
+        const selling = {};
+        for (const o of orders) {
+          for (const item of o.items || []) {
+            const name = item.name;
+            if (!selling[name]) {
+              selling[name] = {
+                menuItem: name,
+                quantitySold: 0,
+                revenue: 0,
+                avgDailySales: 0
+              };
+            }
+            selling[name].quantitySold += item.quantity || 0;
+            selling[name].revenue += (item.price || 0) * (item.quantity || 0);
+          }
+        }
+        reportData = Object.values(selling).sort((a, b) => b.quantitySold - a.quantitySold);
         break;
       }
-            case 'low_stock': {
-        const Inventory = require('../models/Inventory');
-        const reqBranchId = req.query.branchId || 'all';
-        const pipeline = [
-          { $match: { cafeId: req.user.cafeId } }
-        ];
-        if (reqBranchId && reqBranchId !== 'all') {
-          pipeline[0].$match.$or = [{ branch: reqBranchId }, { branchId: reqBranchId }];
-        }
-        
-        const items = await Inventory.aggregate(pipeline);
+
+      case 'low_stock': {
+        const items = await Inventory.find(inventoryQuery).lean();
         const lowStockItems = items.filter(item => (item.quantity || 0) <= (item.minStock || 0));
-        
         reportData = lowStockItems.map(item => ({
           ingredient: item.name,
           currentStock: item.quantity || 0,
@@ -1083,261 +1093,73 @@ const getReports = async (req, res) => {
         }));
         break;
       }
+
       case 'payment': {
-        const pipeline = [
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
-          { $group: {
-            _id: { $ifNull: ['$paymentMethod', 'UPI'] },
-            orderCount: { $sum: 1 },
-            netRevenue: { $sum: { $subtract: ['$totalAmount', { $ifNull: ['$gstAmount', 0] }] } },
-            tax: { $sum: { $ifNull: ['$gstAmount', 0] } },
-            grandTotal: { $sum: '$totalAmount' }
-          }},
-          { $sort: { grandTotal: -1 } }
-        ];
-        const payments = await Order.aggregate(pipeline);
-        reportData = payments.map(p => ({
-          paymentMethod: p._id,
-          orderCount: p.orderCount,
-          netRevenue: p.netRevenue,
-          tax: p.tax,
-          grandTotal: p.grandTotal
-        }));
+        const query = { ...orderQuery, paymentStatus: 'Paid' };
+        const orders = await Order.find(query).lean();
+        const payments = {};
+        for (const o of orders) {
+          const method = o.paymentMethod || 'UPI';
+          if (!payments[method]) {
+            payments[method] = {
+              paymentMethod: method,
+              orderCount: 0,
+              netRevenue: 0,
+              tax: 0,
+              grandTotal: 0
+            };
+          }
+          payments[method].orderCount += 1;
+          payments[method].netRevenue += (o.totalAmount || 0) - (o.gstAmount || 0);
+          payments[method].tax += o.gstAmount || 0;
+          payments[method].grandTotal += o.totalAmount || 0;
+        }
+        reportData = Object.values(payments);
         break;
       }
+
       case 'profit_summary': {
-        const revenueAgg = await Order.aggregate([
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
-          { $group: { _id: null, totalRevenue: { $sum: '$totalAmount' } } }
-        ]);
-        const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].totalRevenue : 0;
-        
-        const inventoryAgg = await Inventory.aggregate([
-          { $match: matchQuery },
-          { $group: { _id: null, inventoryValue: { $sum: { $multiply: ['$quantity', '$cost'] } } } }
-        ]);
-        const inventoryValue = inventoryAgg.length > 0 ? inventoryAgg[0].inventoryValue : 0;
+        const queryOrders = { ...orderQuery, paymentStatus: 'Paid' };
+        const orders = await Order.find(queryOrders).lean();
+        const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
-        const consumptionAgg = await InventoryLog.aggregate([
-          { $match: { ...dateMatchQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } } },
-          { $group: { _id: null, totalConsumption: { $sum: '$cost' } } }
-        ]);
-        const inventoryConsumption = consumptionAgg.length > 0 ? consumptionAgg[0].totalConsumption : 0;
+        const ingredients = await Inventory.find(inventoryQuery).lean();
+        const inventoryValue = ingredients.reduce((sum, item) => sum + (item.quantity || 0) * (item.cost || 0), 0);
 
-        const purchasesAgg = await InventoryLog.aggregate([
-          { $match: { ...dateMatchQuery, type: 'Purchase' } },
-          { $group: { _id: null, totalPurchase: { $sum: '$cost' } } }
-        ]);
-        const purchaseCost = purchasesAgg.length > 0 ? purchasesAgg[0].totalPurchase : 0;
+        const queryDeductions = { ...logQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } };
+        const logsDeduction = await InventoryLog.find(queryDeductions).lean();
+        const inventoryConsumption = logsDeduction.reduce((sum, log) => sum + (log.cost || 0), 0);
+
+        const queryPurchases = { ...logQuery, type: 'Purchase' };
+        const logsPurchases = await InventoryLog.find(queryPurchases).lean();
+        const purchaseCost = logsPurchases.reduce((sum, log) => sum + (log.cost || 0), 0);
 
         const grossProfit = totalRevenue - inventoryConsumption;
         const netProfit = grossProfit;
-        const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
         reportData = [{
-          grossRevenue: totalRevenue,
+          revenue: totalRevenue,
           inventoryCost: inventoryValue,
           inventoryConsumption,
           purchaseCost,
           grossProfit,
-          netProfit,
-          profitMarginPercent: profitMargin
+          netProfit
         }];
         break;
       }
-      case 'financial_summary': {
-        const orderAgg = Order.aggregate([
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
-          { $group: {
-            _id: null,
-            grossRevenue: { $sum: '$totalAmount' },
-            taxes: { $sum: { $ifNull: ['$gstAmount', 0] } },
-            discounts: { $sum: { $ifNull: ['$discount', 0] } }
-          }}
-        ]);
 
-        const inventoryPurchaseAgg = InventoryLog.aggregate([
-          { $match: { ...dateMatchQuery, type: 'Purchase' } },
-          { $group: { _id: null, totalPurchaseCost: { $sum: '$cost' } } }
-        ]);
-
-        const inventoryWastageAgg = InventoryLog.aggregate([
-          { $match: { ...dateMatchQuery, type: { $in: ['Wastage', 'Damaged', 'Shortage', 'Deduction'] } } },
-          { $group: { _id: null, totalWastageCost: { $sum: '$cost' } } }
-        ]);
-
-        const payrollAgg = Payroll.aggregate([
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
-          { $group: { _id: null, totalLaborCost: { $sum: '$netSalary' } } }
-        ]);
-
-        const [orderRes, purchaseRes, wastageRes, payrollRes] = await Promise.all([
-          orderAgg, inventoryPurchaseAgg, inventoryWastageAgg, payrollAgg
-        ]);
-
-        const o = orderRes[0] || { grossRevenue: 0, taxes: 0, discounts: 0 };
-        const grossRevenue = o.grossRevenue || 0;
-        const taxes = o.taxes || 0;
-        const discounts = o.discounts || 0;
-        const netRevenue = grossRevenue - taxes;
-
-        const purchaseCost = purchaseRes[0]?.totalPurchaseCost || 0;
-        const wastageCost = wastageRes[0]?.totalWastageCost || 0;
-        const laborCost = payrollRes[0]?.totalLaborCost || 0;
-
-        const grossProfit = netRevenue - (purchaseCost + laborCost);
-
-        reportData = [{
-          grossRevenue: grossRevenue,
-          taxesCollected: taxes,
-          discountsGiven: discounts,
-          netRevenue: netRevenue,
-          inventoryPurchaseCost: purchaseCost,
-          inventoryWastageCost: wastageCost,
-          laborCost: laborCost,
-          grossProfit: grossProfit
-        }];
-        break;
-      }
       default:
         return res.status(400).json({ success: false, message: 'Invalid report type' });
     }
 
     return res.status(200).json({ success: true, type, count: reportData.length, data: reportData });
   } catch (error) {
-    console.error('Get reports error:', error);
-    return res.status(500).json({ success: false, message: 'Server error generating reports' });
+    console.error('getReports error:', error);
+    return res.status(500).json({ success: false, message: 'Server error generating report data', error: error.message });
   }
 };
-
-
-
-const getDashboardStats = async (req, res) => {
-  try {
-    const cafeId = req.user.cafeId;
-    if (!cafeId) return res.status(400).json({ success: false, message: 'No cafe assignment found.' });
-    
-    const branchId = req.query.branchId || null;
-    
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    
-    const orderMatchQuery = { cafeId, paymentStatus: 'Paid' };
-    if (branchId && branchId !== 'all') orderMatchQuery.branchId = branchId;
-    
-    const revenueStats = await Order.aggregate([
-      { $match: orderMatchQuery },
-      { 
-        $group: {
-          _id: null,
-          totalRevenueAllTime: { $sum: '$totalAmount' },
-          todayRevenue: { 
-            $sum: { 
-              $cond: [ { $gte: ['$createdAt', startOfToday] }, '$totalAmount', 0 ] 
-            } 
-          },
-          monthlyRevenue: { 
-            $sum: { 
-              $cond: [ 
-                { $and: [ { $gte: ['$createdAt', startOfMonth] }, { $lte: ['$createdAt', endOfMonth] } ] }, 
-                '$totalAmount', 0 
-              ] 
-            } 
-          }
-        }
-      }
-    ]);
-    
-    const revenueData = revenueStats.length > 0 ? revenueStats[0] : { totalRevenueAllTime: 0, todayRevenue: 0, monthlyRevenue: 0 };
-    
-    const sourceStats = await Order.aggregate([
-      { $match: orderMatchQuery },
-      { $group: { _id: '$orderSource', count: { $sum: 1 } } }
-    ]);
-    
-    const orderSourceData = { QR: 0, POS: 0, Counter: 0 };
-    sourceStats.forEach(stat => {
-      if (stat._id === 'QR') orderSourceData.QR = stat.count;
-      else if (stat._id === 'Staff POS' || stat._id === 'Waiter' || stat._id === 'POS') orderSourceData.POS += stat.count;
-      else orderSourceData.Counter += stat.count;
-    });
-    
-    const topSellingItems = await Order.aggregate([
-      { $match: { ...orderMatchQuery, createdAt: { $gte: startOfMonth, $lte: endOfMonth } } },
-      { $unwind: '$items' },
-      { 
-        $group: {
-          _id: '$items.name',
-          quantity: { $sum: '$items.quantity' },
-          revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } }
-        }
-      },
-      { $sort: { quantity: -1 } },
-      { $limit: 5 }
-    ]);
-    
-    const formattedTopSelling = topSellingItems.map(item => ({
-      name: item._id,
-      quantity: item.quantity,
-      revenue: item.revenue
-    }));
-    
-    const invMatchQuery = { cafeId };
-    if (branchId && branchId !== 'all') invMatchQuery.branchId = branchId;
-    
-    const inventoryValueAgg = await Inventory.aggregate([
-      { $match: invMatchQuery },
-      { $group: { _id: null, totalValue: { $sum: { $multiply: ['$quantity', '$cost'] } } } }
-    ]);
-    const inventoryValue = inventoryValueAgg.length > 0 ? inventoryValueAgg[0].totalValue : 0;
-    
-    const invLogMatch = { cafeId };
-    if (branchId && branchId !== 'all') invLogMatch.branchId = branchId;
-    
-    const inventoryLogStats = await InventoryLog.aggregate([
-      { $match: invLogMatch },
-      {
-        $group: {
-          _id: '$type',
-          totalCost: { $sum: '$cost' }
-        }
-      }
-    ]);
-    
-    let totalInventoryCost = 0;
-    let totalInventoryConsumption = 0;
-    
-    inventoryLogStats.forEach(stat => {
-      if (stat._id === 'Purchase') totalInventoryCost += stat.totalCost;
-      else if (stat._id === 'Deduction' || stat._id === 'Wastage') totalInventoryConsumption += stat.totalCost;
-    });
-    
-    return res.status(200).json({
-      success: true,
-      data: {
-        todayRevenue: revenueData.todayRevenue,
-        monthlyRevenue: revenueData.monthlyRevenue,
-        orderSourceData,
-        topSellingItems: formattedTopSelling,
-        inventory: {
-          value: inventoryValue,
-          cost: totalInventoryCost,
-          consumption: totalInventoryConsumption
-        }
-      }
-    });
-    
-  } catch (error) {
-    console.error('Error calculating dashboard stats:', error);
-    res.status(500).json({ success: false, message: 'Server Error calculating stats' });
-  }
-};
-
 
 module.exports = {
-  getDashboardStats,
   createStaff,
   getStaff,
   updateStaff,

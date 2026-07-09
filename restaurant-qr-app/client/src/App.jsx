@@ -1,4 +1,5 @@
-import React, { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
+import React from 'react';
+import { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -157,7 +158,7 @@ function AppContent() {
       )}
       
       <main className={`main-content${isAdminOrAuthRoute ? ' admin-full-width' : ''}`}>
-        <Suspense fallback={<div className="app-loading-screen" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#e67e22', fontSize: '1.2rem'}}>Loading Dr. Chai Cafe...</div>}>
+        <Suspense fallback={<div className="initial-splash"><img src="/logo.png" alt="Loading Dr. Chai Cafe..." /></div>}>
           <Routes>
             {/* Customer / Ordering Flow */}
           <Route 
@@ -320,3 +321,5 @@ function App() {
 }
 
 export default App;
+
+

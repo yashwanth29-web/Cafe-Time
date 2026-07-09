@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useState } from 'react';
 import { Coffee, CupSoda, UtensilsCrossed, Pizza, Sandwich, Cake, Utensils } from 'lucide-react';
 import { getAssetUrl } from '../services/api';
 
@@ -82,3 +83,5 @@ const MenuCard = React.memo(({ item, cartItem, addToCart, increaseQuantity, decr
 });
 
 export default MenuCard;
+
+

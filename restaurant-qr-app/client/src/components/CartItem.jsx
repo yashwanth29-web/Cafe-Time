@@ -100,3 +100,4 @@ const CartItem = ({ item, increaseQuantity, decreaseQuantity, removeFromCart }) 
 };
 
 export default CartItem;
+
