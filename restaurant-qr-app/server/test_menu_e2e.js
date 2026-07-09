@@ -38,7 +38,7 @@ async function runTests() {
     await Branch.findOneAndUpdate(
       { cafeId: TEST_CAFE, branchId: TEST_BRANCH },
       { name: 'Test Branch', isActive: true },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
     
     const dummyUser = await User.findOne({ cafeId: TEST_CAFE });

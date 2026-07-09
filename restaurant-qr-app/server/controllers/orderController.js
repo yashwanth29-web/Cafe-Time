@@ -411,7 +411,7 @@ const updateOrderStatus = async (req, res) => {
     const updatedOrder = await Order.findOneAndUpdate(
       { _id: id },
       { $set: updateFields },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     ).lean();
 
     if (!updatedOrder) {
@@ -458,7 +458,7 @@ const updateOrderPaymentMethod = async (req, res) => {
     const updatedOrder = await Order.findByIdAndUpdate(
       id,
       { paymentMethod, paymentStatus: 'Paid', paidAt: new Date() },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     ).lean();
 
     if (!updatedOrder) {
