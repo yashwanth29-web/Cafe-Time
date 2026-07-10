@@ -10,7 +10,7 @@ const Login = () => {
   const { loginWithGoogle, user } = useAuth();
   const navigate = useNavigate();
   
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'placeholder_client_id_please_replace_me.apps.googleusercontent.com';
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '917526894572-tdkv70jedfnqcpn9o2q93ho2f7o4qnc8.apps.googleusercontent.com';
 
   // If already logged in, redirect to the appropriate dashboard
   useEffect(() => {
