@@ -495,8 +495,21 @@ const StaffDashboard = () => {
  return d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
  };
 
- return (
- <div style={{ padding: '10px 0', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
+  return (
+  <div style={{ padding: '10px 0', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
+    <style>{`
+      .attendance-grid-container {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+      @media (min-width: 600px) {
+        .attendance-grid-container {
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 24px;
+        }
+      }
+    `}</style>
  {/* Title Header */}
  <div style={{
  display: 'flex',
@@ -642,7 +655,7 @@ const StaffDashboard = () => {
  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
  
  {/* Main Action Block and Stats Block */}
- <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
+ <div className="attendance-grid-container">
  
  {/* Today's Shift Status Card */}
  <div style={{
