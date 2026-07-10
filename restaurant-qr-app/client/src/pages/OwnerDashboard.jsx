@@ -39,7 +39,8 @@ import {
  getWorkReports,
  getReviews,
  getAssetUrl,
- getReports } from
+ getReports,
+ getDashboardStats } from
 '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
@@ -204,7 +205,9 @@ const OwnerDashboard = () =>{
   });
   const [reportData, setReportData] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
-  const [reportError, setReportError] = useState('');
+  const [statsData, setStatsData] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState('');
 
   const loadReportData = async (isSilent = false) => {
     if (!isSilent) if (!isSilent) setReportLoading(true);
@@ -270,6 +273,24 @@ const OwnerDashboard = () =>{
       setReportError(err.response?.data?.message || 'Error communicating with reports API');
     } finally {
       setReportLoading(false);
+    }
+  };
+
+  const fetchDashboardStats = async (isSilent = false) => {
+    if (!isSilent) setStatsLoading(true);
+    setStatsError('');
+    try {
+      const response = await getDashboardStats({ branchId: activeBranchId === 'all' ? null : activeBranchId });
+      if (response.success) {
+        setStatsData(response.data);
+      } else {
+        setStatsError(response.message || 'Failed to load dashboard metrics');
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard stats:', err);
+      setStatsError(err.response?.data?.message || 'Error fetching dashboard metrics');
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -1022,10 +1043,11 @@ const OwnerDashboard = () =>{
  }
  }, [reportsFilterRange, reportsFilterStaff, reportsFilterBranch, activeTab, staffSubTab]);
 
- useEffect(() =>{
- fetchOrders();
- fetchMenu();
- loadSetupConfig();
+  useEffect(() =>{
+  fetchOrders();
+  fetchMenu();
+  loadSetupConfig();
+  fetchDashboardStats(true);
 
  if (activeTab === 'staff') {
  fetchStaffList();
@@ -1103,6 +1125,7 @@ const OwnerDashboard = () =>{
       fetchCategories();
       fetchInventoryCategories();
       loadSetupConfig();
+      fetchDashboardStats(true);
       if (activeTab === 'staff') {
         fetchStaffList();
         if (staffSubTab === 'attendance') fetchAttendanceToday();
@@ -1695,10 +1718,10 @@ const exportStaffToCSV = () => {
  const completedOrders = orders.filter((o) =>o.paymentStatus === 'Paid');
 
  const todayOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfToday);
- const todayRevenue = todayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
+ const todayRevenue = statsData ? statsData.todayRevenue : todayOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
 
  const monthlyOrders = completedOrders.filter((o) =>new Date(o.createdAt) >= startOfMonth);
- const monthlyRevenue = monthlyOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
+ const monthlyRevenue = statsData ? statsData.monthlyRevenue : monthlyOrders.reduce((acc, o) =>acc + o.totalAmount, 0);
 
  const totalOrdersCount = orders.length;
 

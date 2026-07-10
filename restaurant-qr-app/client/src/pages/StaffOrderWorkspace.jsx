@@ -255,7 +255,7 @@ const StaffOrderWorkspace = () => {
       if (res.success) {
         setOrders((prev) =>
           prev.map((o) => (o._id === orderId ? { ...o, ...res.data } : o))
-          .filter((o) => o.status !== 'Completed' && o.paymentStatus !== 'Paid')
+          .filter((o) => o.status !== 'Completed' || o.paymentStatus === 'Pending')
         );
       } else {
         alert(res.message || 'Status transition failed.');
@@ -310,7 +310,7 @@ const StaffOrderWorkspace = () => {
       if (subTabParam === 'placed') return o.status === 'Placed';
       if (subTabParam === 'preparing') return o.status === 'Preparing';
       if (subTabParam === 'ready') return o.status === 'Ready';
-      if (subTabParam === 'unpaid') return o.status === 'Delivered' && o.paymentStatus === 'Pending';
+      if (subTabParam === 'unpaid') return (o.status === 'Delivered' || o.status === 'Completed') && o.paymentStatus === 'Pending';
       return true;
     });
   }, [orders, subTabParam]);
@@ -321,7 +321,7 @@ const StaffOrderWorkspace = () => {
       placed: orders.filter((o) => o.status === 'Placed').length,
       preparing: orders.filter((o) => o.status === 'Preparing').length,
       ready: orders.filter((o) => o.status === 'Ready').length,
-      unpaid: orders.filter((o) => o.status === 'Delivered' && o.paymentStatus === 'Pending').length,
+      unpaid: orders.filter((o) => (o.status === 'Delivered' || o.status === 'Completed') && o.paymentStatus === 'Pending').length,
       all: orders.length
     };
   }, [orders]);

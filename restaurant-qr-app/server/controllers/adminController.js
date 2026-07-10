@@ -914,7 +914,7 @@ const getReports = async (req, res) => {
     switch (type) {
       case 'revenue': {
         const pipeline = [
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
+          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
           { $project: {
             invoiceNumber: { $cond: [{ $ifNull: ['$invoiceNumber', false] }, '$invoiceNumber', { $substr: [{ $toString: '$_id' }, 18, 6] }] },
             createdAt: 1, branchId: 1, paymentMethod: 1, paymentStatus: 1, totalAmount: 1, gstAmount: 1, discount: 1, serviceCharge: 1
@@ -1043,7 +1043,7 @@ const getReports = async (req, res) => {
       }
       case 'top_selling': {
         const pipeline = [
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
+          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
           { $unwind: '$items' },
           { $group: {
             _id: '$items.name',
@@ -1085,7 +1085,7 @@ const getReports = async (req, res) => {
       }
       case 'payment': {
         const pipeline = [
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
+          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
           { $group: {
             _id: { $ifNull: ['$paymentMethod', 'UPI'] },
             orderCount: { $sum: 1 },
@@ -1107,7 +1107,7 @@ const getReports = async (req, res) => {
       }
       case 'profit_summary': {
         const revenueAgg = await Order.aggregate([
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
+          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
           { $group: { _id: null, totalRevenue: { $sum: '$totalAmount' } } }
         ]);
         const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].totalRevenue : 0;
@@ -1147,7 +1147,7 @@ const getReports = async (req, res) => {
       }
       case 'financial_summary': {
         const orderAgg = Order.aggregate([
-          { $match: { ...dateMatchQuery, paymentStatus: 'Paid' } },
+          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
           { $group: {
             _id: null,
             grossRevenue: { $sum: '$totalAmount' },
@@ -1224,7 +1224,7 @@ const getDashboardStats = async (req, res) => {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     
-    const orderMatchQuery = { cafeId, paymentStatus: 'Paid' };
+    const orderMatchQuery = { cafeId, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] };
     if (branchId && branchId !== 'all') orderMatchQuery.branchId = branchId;
     
     const revenueStats = await Order.aggregate([
