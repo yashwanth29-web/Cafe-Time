@@ -666,7 +666,9 @@ const StaffDashboard = () => {
  display: 'flex',
  flexDirection: 'column',
  justifyContent: 'space-between',
- boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
+ boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+ boxSizing: 'border-box',
+ width: '100%'
  }}>
  <div>
  <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(0, 0, 0,0.06)', paddingBottom: '10px' }}>
@@ -741,15 +743,19 @@ const StaffDashboard = () => {
     </span>
   </div>
 
-  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', paddingBottom: '6px' }}>
-    <span style={{ color: 'var(--color-text-secondary)' }}>Inside Allowed Area</span>
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Inside Allowed Area</span>
     <span style={{ 
       color: todayStatus?.checkedIn 
         ? '#2ecc71' 
         : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
           ? (todayStatus.insideRadius ? '#2ecc71' : '#e74c3c')
           : 'var(--color-text-secondary)'),
-      fontWeight: 'bold' 
+      fontWeight: 'bold',
+      textAlign: 'right',
+      wordBreak: 'break-word',
+      whiteSpace: 'normal',
+      minWidth: 0
     }}>
       {todayStatus?.checkedIn 
         ? 'Inside Allowed Area' 
@@ -880,7 +886,9 @@ const StaffDashboard = () => {
     boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    boxSizing: 'border-box',
+    width: '100%'
   }}>
     <div>
       <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '10px' }}>
@@ -991,7 +999,9 @@ const StaffDashboard = () => {
  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
  display: 'flex',
  flexDirection: 'column',
- justifyContent: 'space-between'
+ justifyContent: 'space-between',
+ boxSizing: 'border-box',
+ width: '100%'
  }}>
  <div>
  <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(0, 0, 0,0.06)', paddingBottom: '10px' }}>
@@ -1060,7 +1070,9 @@ const StaffDashboard = () => {
  border: '1px solid var(--color-border)',
  padding: '24px',
  borderRadius: '16px',
- boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
+ boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
+ boxSizing: 'border-box',
+ width: '100%'
  }}>
  <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(0, 0, 0,0.06)', paddingBottom: '10px' }}>
  Last 30 Days Shift Log
