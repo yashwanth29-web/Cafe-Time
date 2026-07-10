@@ -686,9 +686,10 @@ const StaffDashboard = () => {
  '#e74c3c',
  boxShadow: todayStatus?.checkedIn && !todayStatus?.checkedOut ?
  '0 0 10px #2ecc71' :
- 'none'
+ 'none',
+ flexShrink: 0
  }} />
- <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+ <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text-secondary)', wordBreak: 'break-word', whiteSpace: 'normal', minWidth: 0, flex: 1 }}>
  Status: {
  todayStatus?.checkedIn ?
  todayStatus?.checkedOut ?
@@ -696,77 +697,78 @@ const StaffDashboard = () => {
  todayStatus?.attendance?.status === 'Late' ?
  'Working (Late Arrival)' :
  'Currently Working / Present' :
-
+ 
  'Absent / Not Checked In'
  }
  </span>
  </div>
-
+ 
  {/* Session Timestamps */}
  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
  <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Check In Time</span>
- <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right' }}>
+ <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word', whiteSpace: 'normal', minWidth: 0, flex: 1 }}>
  {todayStatus?.checkedIn ? formatTime(todayStatus.attendance.checkInTime) : '--:--'}
  </span>
  </div>
  
  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
  <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Check Out Time</span>
- <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right' }}>
+ <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word', whiteSpace: 'normal', minWidth: 0, flex: 1 }}>
  {todayStatus?.checkedOut ? formatTime(todayStatus.attendance.checkOutTime) : '--:--'}
  </span>
  </div>
-
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
-    <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Assigned Branch</span>
-    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word' }}>
-      {todayStatus?.branchName || 'N/A'}
-    </span>
-  </div>
-
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
-    <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Allowed Radius</span>
-    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right' }}>
-      {todayStatus?.allowedRadius ? `${todayStatus.allowedRadius} meters` : '--'}
-    </span>
-  </div>
-
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
-    <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Current Distance</span>
-    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word' }}>
-      {todayStatus?.checkedIn 
-        ? `${todayStatus.attendance.distanceFromCafe} meters` 
-        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined 
-          ? `${todayStatus.distance} meters` 
-          : 'Acquiring GPS...')}
-    </span>
-  </div>
-
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', paddingBottom: '6px' }}>
-    <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Inside Allowed Area</span>
-    <span style={{ 
-      color: todayStatus?.checkedIn 
-        ? '#2ecc71' 
-        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
-          ? (todayStatus.insideRadius ? '#2ecc71' : '#e74c3c')
-          : 'var(--color-text-secondary)'),
-      fontWeight: 'bold',
-      textAlign: 'right',
-      wordBreak: 'break-word',
-      whiteSpace: 'normal',
-      minWidth: 0
-    }}>
-      {todayStatus?.checkedIn 
-        ? 'Inside Allowed Area' 
-        : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
-          ? (todayStatus.insideRadius ? '✅ Yes (Inside Area)' : '❌ No (Outside Area)')
-          : 'Checking location...')}
-    </span>
-  </div>
+ 
+ <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+ <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Assigned Branch</span>
+ <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word', whiteSpace: 'normal', minWidth: 0, flex: 1 }}>
+ {todayStatus?.branchName || 'N/A'}
+ </span>
+ </div>
+ 
+ <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+ <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Allowed Radius</span>
+ <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word', whiteSpace: 'normal', minWidth: 0, flex: 1 }}>
+ {todayStatus?.allowedRadius ? `${todayStatus.allowedRadius} meters` : '--'}
+ </span>
+ </div>
+ 
+ <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+ <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Current Distance</span>
+ <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word', whiteSpace: 'normal', minWidth: 0, flex: 1 }}>
+ {todayStatus?.checkedIn 
+ ? `${todayStatus.attendance.distanceFromCafe} meters` 
+ : (todayStatus?.distance !== null && todayStatus?.distance !== undefined 
+ ? `${todayStatus.distance} meters` 
+ : 'Acquiring GPS...')}
+ </span>
+ </div>
+ 
+ <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', paddingBottom: '6px' }}>
+ <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Inside Allowed Area</span>
+ <span style={{ 
+ color: todayStatus?.checkedIn 
+ ? '#2ecc71' 
+ : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
+ ? (todayStatus.insideRadius ? '#2ecc71' : '#e74c3c')
+ : 'var(--color-text-secondary)'),
+ fontWeight: 'bold',
+ textAlign: 'right',
+ wordBreak: 'break-word',
+ whiteSpace: 'normal',
+ minWidth: 0,
+ flex: 1
+ }}>
+ {todayStatus?.checkedIn 
+ ? 'Inside Allowed Area' 
+ : (todayStatus?.distance !== null && todayStatus?.distance !== undefined
+ ? (todayStatus.insideRadius ? '✅ Yes (Inside Area)' : '❌ No (Outside Area)')
+ : 'Checking location...')}
+ </span>
  </div>
  </div>
-
+ </div>
+ 
  {/* Dynamic Action Button or Counter */}
  <div>
  {todayStatus?.checkedIn && !todayStatus?.checkedOut &&
@@ -776,7 +778,9 @@ const StaffDashboard = () => {
  border: '1px solid rgba(255, 107, 8, 0.2)',
  borderRadius: '12px',
  padding: '16px',
- marginBottom: '16px'
+ marginBottom: '16px',
+ boxSizing: 'border-box',
+ width: '100%'
  }}>
  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
  Active Shift Duration
@@ -786,7 +790,7 @@ const StaffDashboard = () => {
  </strong>
  </div>
  }
-
+ 
  {/* Primary Button */}
  {!todayStatus?.checkedIn ?
  <button
@@ -807,17 +811,18 @@ const StaffDashboard = () => {
  display: 'flex',
  alignItems: 'center',
  justifyContent: 'center',
- gap: '8px'
+ gap: '8px',
+ boxSizing: 'border-box'
  }}
  onMouseEnter={(e) => {e.currentTarget.style.transform = 'translateY(-2px)';}}
  onMouseLeave={(e) => {e.currentTarget.style.transform = 'translateY(0)';}}>
  
  {actionLoading ?
  <>
- <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', bordercolor: 'var(--color-text-primary)' }} />
+ <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderColor: 'var(--color-text-primary)' }} />
  <span>Verifying Location & Device...</span>
  </> :
-
+ 
  <span>Check In Now</span>
  }
  </button> :
@@ -840,21 +845,22 @@ const StaffDashboard = () => {
  display: 'flex',
  alignItems: 'center',
  justifyContent: 'center',
- gap: '8px'
+ gap: '8px',
+ boxSizing: 'border-box'
  }}
  onMouseEnter={(e) => {e.currentTarget.style.transform = 'translateY(-2px)';}}
  onMouseLeave={(e) => {e.currentTarget.style.transform = 'translateY(0)';}}>
  
  {actionLoading ?
  <>
- <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', bordercolor: 'var(--color-text-primary)' }} />
+ <div className="spinner" style={{ width: '20px', height: '20px', borderWidth: '2px', borderColor: 'var(--color-text-primary)' }} />
  <span>Checking Out...</span>
  </> :
-
+ 
  <span>Check Out Shift</span>
  }
  </button> :
-
+ 
  <div style={{
  textAlign: 'center',
  background: 'rgba(0, 0, 0, 0.02)',
@@ -863,14 +869,18 @@ const StaffDashboard = () => {
  borderRadius: '12px',
  color: 'var(--color-text-secondary)',
  fontSize: '0.9rem',
- fontWeight: 500
+ fontWeight: 500,
+ boxSizing: 'border-box',
+ width: '100%',
+ wordBreak: 'break-word',
+ whiteSpace: 'normal'
  }}>
  Shift complete. You are logged out for the day.
  </div>
  }
  
  {coords &&
- <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textAlign: 'center', marginTop: '10px' }}>
+ <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textAlign: 'center', marginTop: '10px', wordBreak: 'break-word', whiteSpace: 'normal' }}>
  GPS: {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
  </div>
  }
