@@ -144,11 +144,121 @@ const getPayrollDetails = async (req, res) => {
  */
 const getCurrentEmployeePayroll = async (req, res) => {
   const userId = req.user._id;
+  const user = req.user;
 
   try {
     const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
-    const payrolls = await Payroll.find({ employeeId: userId, branchId: activeBranch }).sort({ weekEnd: -1 });
-    return res.status(200).json({ success: true, data: payrolls });
+    const cafeId = req.user.cafeId || 'CD001';
+
+    // 1. Calculate current week's start (Monday) and end (Sunday) dates
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(now.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(sunday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const weekStartStr = monday.toISOString().split('T')[0];
+    const weekEndStr = sunday.toISOString().split('T')[0];
+
+    // 2. Fetch all attendance records for this employee within the current week range
+    const Attendance = require('../models/Attendance');
+    const attendanceRecords = await Attendance.find({
+      employeeId: userId,
+      cafeId,
+      branchId: activeBranch,
+      date: { $gte: weekStartStr, $lte: weekEndStr }
+    }).sort({ date: 1 }).lean();
+
+    // 3. Perform calculations
+    let presentDays = 0;
+    let absentDays = 0;
+    let halfDays = 0;
+    let actualHoursWorked = 0;
+    let overtimeHours = 0;
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const weeklyBreakdown = {
+      'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0, 'Friday': 0, 'Saturday': 0, 'Sunday': 0
+    };
+
+    const formattedAttendances = attendanceRecords.map(att => {
+      let durationMin = att.totalDuration || 0;
+      if (!att.checkOutTime && att.checkInTime) {
+        durationMin = Math.max(0, Math.floor((Date.now() - new Date(att.checkInTime).getTime()) / 60000));
+      }
+      
+      const workingHours = Number((durationMin / 60).toFixed(2));
+      const otHours = att.overtimeHours || 0;
+      
+      if (att.status === 'Present' || att.status === 'Late') {
+        presentDays += 1;
+      } else if (att.status === 'Half Day') {
+        halfDays += 1;
+      } else if (att.status === 'Absent') {
+        absentDays += 1;
+      }
+
+      actualHoursWorked += workingHours;
+      overtimeHours += otHours;
+
+      // Calculate daily salary for this attendance
+      let dailySalary = 0;
+      const sType = user.salaryType || 'DAILY';
+      if (sType === 'DAILY') {
+        if (att.status === 'Present' || att.status === 'Late') {
+          dailySalary = user.dailyRate || 0;
+        } else if (att.status === 'Half Day') {
+          dailySalary = (user.dailyRate || 0) * 0.5;
+        }
+        const otRate = user.hourlyRate || ((user.dailyRate || 0) / 8);
+        dailySalary += otHours * otRate;
+      } else if (sType === 'HOURLY') {
+        dailySalary = workingHours * (user.hourlyRate || 0);
+      } else if (sType === 'WEEKLY') {
+        dailySalary = (user.weeklyRate || 0) / 6;
+        const otRate = user.hourlyRate || ((user.weeklyRate || 0) / 40);
+        dailySalary += otHours * otRate;
+      } else if (sType === 'MONTHLY') {
+        dailySalary = (user.monthlyRate || 0) / 26;
+        const otRate = user.hourlyRate || ((user.monthlyRate || 0) / 160);
+        dailySalary += otHours * otRate;
+      }
+      
+      dailySalary = Number(dailySalary.toFixed(2));
+      const attDate = new Date(att.date || att.createdAt);
+      const dayName = dayNames[attDate.getDay()];
+      if (weeklyBreakdown.hasOwnProperty(dayName)) {
+        weeklyBreakdown[dayName] = dailySalary;
+      }
+
+      return {
+        date: att.date || new Date(att.createdAt).toISOString().split('T')[0],
+        checkInTime: att.checkInTime,
+        checkOutTime: att.checkOutTime,
+        workingHours,
+        dailySalary
+      };
+    });
+
+    const currentWeekSalary = Object.values(weeklyBreakdown).reduce((sum, val) => sum + val, 0);
+
+    const salaryData = {
+      currentWeekSalary: Number(currentWeekSalary.toFixed(2)),
+      weekStart: weekStartStr,
+      weekEnd: weekEndStr,
+      dailyRate: user.dailyRate || 0,
+      requiredHours: 8,
+      actualHoursWorked: Number(actualHoursWorked.toFixed(2)),
+      workingDays: presentDays + halfDays * 0.5,
+      weeklyBreakdown,
+      attendances: formattedAttendances
+    };
+
+    return res.status(200).json({ success: true, salaryData });
   } catch (error) {
     console.error('getCurrentEmployeePayroll error:', error);
     return res.status(500).json({ success: false, message: 'Server error retrieving employee payroll history' });
