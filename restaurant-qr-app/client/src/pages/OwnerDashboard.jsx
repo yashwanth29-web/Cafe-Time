@@ -205,6 +205,7 @@ const OwnerDashboard = () =>{
   });
   const [reportData, setReportData] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
   const [statsData, setStatsData] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState('');
