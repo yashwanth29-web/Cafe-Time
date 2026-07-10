@@ -10,6 +10,12 @@ export const AuthProvider = ({ children }) => {
 
   // Check if user has an active session cookie on app boot
   const checkSession = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const data = await getMe();

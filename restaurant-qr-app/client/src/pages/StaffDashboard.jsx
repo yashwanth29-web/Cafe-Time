@@ -642,13 +642,13 @@ const StaffDashboard = () => {
  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
  
  {/* Main Action Block and Stats Block */}
- <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+ <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
  
  {/* Today's Shift Status Card */}
  <div style={{
  background: 'var(--bg-card, #1A1A1A)',
  border: '1px solid var(--color-border)',
- padding: '24px',
+ padding: '20px',
  borderRadius: '16px',
  display: 'flex',
  flexDirection: 'column',
@@ -689,37 +689,37 @@ const StaffDashboard = () => {
 
  {/* Session Timestamps */}
  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
- <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
- <span style={{ color: 'var(--color-text-secondary)' }}>Check In Time</span>
- <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+ <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+ <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Check In Time</span>
+ <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right' }}>
  {todayStatus?.checkedIn ? formatTime(todayStatus.attendance.checkInTime) : '--:--'}
  </span>
  </div>
  
- <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
- <span style={{ color: 'var(--color-text-secondary)' }}>Check Out Time</span>
- <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+ <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+ <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Check Out Time</span>
+ <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right' }}>
  {todayStatus?.checkedOut ? formatTime(todayStatus.attendance.checkOutTime) : '--:--'}
  </span>
  </div>
 
-  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
-    <span style={{ color: 'var(--color-text-secondary)' }}>Assigned Branch</span>
-    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Assigned Branch</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word' }}>
       {todayStatus?.branchName || 'N/A'}
     </span>
   </div>
 
-  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
-    <span style={{ color: 'var(--color-text-secondary)' }}>Allowed Radius</span>
-    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Allowed Radius</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right' }}>
       {todayStatus?.allowedRadius ? `${todayStatus.allowedRadius} meters` : '--'}
     </span>
   </div>
 
-  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
-    <span style={{ color: 'var(--color-text-secondary)' }}>Current Distance</span>
-    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', fontSize: '0.9rem', borderBottom: '1px dashed rgba(0, 0, 0,0.05)', paddingBottom: '6px' }}>
+    <span style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}>Current Distance</span>
+    <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', textAlign: 'right', wordBreak: 'break-word' }}>
       {todayStatus?.checkedIn 
         ? `${todayStatus.attendance.distanceFromCafe} meters` 
         : (todayStatus?.distance !== null && todayStatus?.distance !== undefined 
