@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Cafe = require('../models/Cafe');
 const PaymentConfig = require('../models/PaymentConfig');
