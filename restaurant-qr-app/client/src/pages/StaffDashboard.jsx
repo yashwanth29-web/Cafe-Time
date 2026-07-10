@@ -496,63 +496,125 @@ const StaffDashboard = () => {
  };
 
   return (
-  <div style={{ padding: '10px 0', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
+  <div style={{ padding: '10px 16px', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Outfit', sans-serif", boxSizing: 'border-box' }}>
     <style>{`
       .attendance-grid-container {
         display: grid;
         grid-template-columns: 1fr;
         gap: 20px;
       }
+      .staff-dashboard-header {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        border-bottom: 1px solid var(--color-border);
+        padding-bottom: 16px;
+        margin-bottom: 24px;
+        gap: 16px;
+      }
+      .staff-dashboard-title {
+        color: var(--color-text-primary);
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 800;
+        line-height: 1.3;
+      }
+      .staff-dashboard-subtitle {
+        margin: 4px 0 0 0;
+        color: var(--color-text-secondary);
+        font-size: 0.82rem;
+      }
+      .staff-dashboard-actions {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 12px;
+      }
+      .staff-take-order-btn {
+        background: var(--color-primary);
+        color: white;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        box-sizing: border-box;
+        font-size: 14px;
+      }
+      .staff-branch-badge {
+        font-size: 13.5px;
+        color: var(--color-text-secondary);
+        background: rgba(0, 0, 0, 0.03);
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--color-border);
+        text-align: center;
+        width: 100%;
+        box-sizing: border-box;
+      }
       @media (min-width: 600px) {
         .attendance-grid-container {
           grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
           gap: 24px;
         }
+        .staff-dashboard-header {
+          flex-direction: row;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+        }
+        .staff-dashboard-title {
+          font-size: 1.6rem;
+        }
+        .staff-dashboard-subtitle {
+          font-size: 0.85rem;
+        }
+        .staff-dashboard-actions {
+          flex-direction: row;
+          width: auto;
+          align-items: center;
+          gap: 16px;
+        }
+        .staff-take-order-btn {
+          width: auto;
+          padding: 8px 14px;
+        }
+        .staff-branch-badge {
+          width: auto;
+          text-align: left;
+          padding: 8px 12px;
+        }
       }
     `}</style>
- {/* Title Header */}
- <div style={{
- display: 'flex',
- justifyContent: 'space-between',
- alignItems: 'center',
- borderBottom: '1px solid var(--color-border)',
- paddingBottom: '16px',
- marginBottom: '24px',
- flexWrap: 'wrap',
- gap: '12px'
- }}>
- <div>
- <h2 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.6rem', fontWeight: 800 }}>
- Staff Daily Activity Station
- </h2>
- <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
- Record attendance and submit daily operational work proof.
- </p>
- </div>
- 
- <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
- <button
-    onClick={() => setShowTakeOrderModal(true)}
-    style={{
-      background: 'var(--color-primary)',
-      color: 'white',
-      border: 'none',
-      padding: '8px 14px',
-      borderRadius: '8px',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px'
-    }}
-  >
-    <span style={{ fontSize: '1.2rem' }}>+</span>
-    Take Order
-  </button>
- <div style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', background: 'rgba(0, 0, 0,0.03)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
- Assigned Branch: <strong style={{ color: 'var(--color-text-primary)' }}>{user?.assignedBranch || 'Primary Location'}</strong>
- </div>
- </div>
+  {/* Title Header */}
+  <div className="staff-dashboard-header">
+  <div>
+  <h2 className="staff-dashboard-title">
+  Staff Daily Activity Station
+  </h2>
+  <p className="staff-dashboard-subtitle">
+  Record attendance and submit daily operational work proof.
+  </p>
+  </div>
+  
+  <div className="staff-dashboard-actions">
+  <button
+     onClick={() => setShowTakeOrderModal(true)}
+     className="staff-take-order-btn"
+   >
+     <span style={{ fontSize: '1.2rem' }}>+</span>
+     Take Order
+   </button>
+  <div className="staff-branch-badge">
+  Assigned Branch: <strong style={{ color: 'var(--color-text-primary)' }}>{user?.assignedBranch || 'Primary Location'}</strong>
+  </div>
+  </div>
+  </div>
 
 {showTakeOrderModal && (
   <div style={{
@@ -608,7 +670,6 @@ const StaffDashboard = () => {
     </div>
   </div>
 )}
- </div>
 
  {/* Tabs Menu removed to prevent duplicate navigation */}
 

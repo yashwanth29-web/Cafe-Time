@@ -1584,7 +1584,7 @@ textarea.form-input {
   .desktop-sidebar { display: none !important; }
   .desktop-top-header { display: none !important; }
   .saas-main-pane { padding-top: 60px !important; padding-bottom: calc(72px + env(safe-area-inset-bottom)) !important; }
-  .saas-content-inner { padding: 14px !important; }
+  .saas-content-inner { padding: 14px 14px 90px 14px !important; }
 
   /* Full screen / Drawer layout for modals on mobile */
   .modal-overlay {
@@ -1943,7 +1943,7 @@ textarea.form-input {
 
 
 .saas-content-inner {
-  padding: 12px !important;
+  padding: 12px 12px 90px 12px !important;
 }
 @media (min-width: 768px) {
   .saas-content-inner {
