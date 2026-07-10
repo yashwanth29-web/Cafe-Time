@@ -17,6 +17,10 @@ const StaffOrderWorkspace = () => {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
   
   const seenOrderIdsRef = useRef(new Set());
   const seenPaidOrderIdsRef = useRef(new Set());
@@ -39,7 +43,7 @@ const StaffOrderWorkspace = () => {
   const [paymentInfo, setPaymentInfo] = useState({ enableUpi: false, upiId: '' });
   const [showUpiModal, setShowUpiModal] = useState(false);
   const [upiOrder, setUpiOrder] = useState(null);
-
+  
   // Fetch Cafe Details & Payment Info
   useEffect(() => {
     const fetchCafeAndPayment = async () => {
@@ -62,10 +66,10 @@ const StaffOrderWorkspace = () => {
     };
     fetchCafeAndPayment();
   }, [user, activeBranchId]);
-
+  
   // Audio chimes
   const playNotificationSound = useCallback(() => {
-    if (!soundEnabled) return;
+    if (!soundEnabledRef.current) return;
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const oscillator = audioContext.createOscillator();
@@ -91,11 +95,11 @@ const StaffOrderWorkspace = () => {
     } catch (e) {
       console.warn('Audio feedback failed:', e);
     }
-  }, [soundEnabled]);
-
+  }, []);
+  
   // Web Speech synthesis
   const speakText = useCallback((text) => {
-    if (!soundEnabled || !('speechSynthesis' in window)) return;
+    if (!soundEnabledRef.current || !('speechSynthesis' in window)) return;
     try {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
@@ -104,14 +108,16 @@ const StaffOrderWorkspace = () => {
     } catch (e) {
       console.warn('Speech synthesis failed:', e);
     }
-  }, [soundEnabled]);
+  }, []);
+
+  const userCafeId = user?.cafeId;
 
   // Fetch initial orders
   const fetchWorkspaceOrders = useCallback(async () => {
-    if (!user?.cafeId || !activeBranchId) return;
+    if (!userCafeId || !activeBranchId) return;
     try {
       setErrorMsg('');
-      const response = await getOrders({ active: true, cafeId: user.cafeId, branchId: activeBranchId });
+      const response = await getOrders({ active: true, cafeId: userCafeId, branchId: activeBranchId });
       if (response.success) {
         setOrders(response.data);
         
@@ -134,7 +140,7 @@ const StaffOrderWorkspace = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, activeBranchId]);
+  }, [userCafeId, activeBranchId]);
 
   // Load inventory list
   const fetchInventory = useCallback(async () => {
@@ -181,8 +187,8 @@ const StaffOrderWorkspace = () => {
     setLoading(true);
     fetchWorkspaceOrders();
 
-    if (user?.cafeId && activeBranchId) {
-      connectSocket(user.cafeId, activeBranchId);
+    if (userCafeId && activeBranchId) {
+      connectSocket(userCafeId, activeBranchId);
 
       const handleOrderCreated = (newOrder) => {
         setOrders((prev) => {
@@ -246,22 +252,72 @@ const StaffOrderWorkspace = () => {
         clearInterval(pollTimer);
       };
     }
-  }, [user, activeBranchId, fetchWorkspaceOrders, playNotificationSound, speakText]);
+  }, [userCafeId, activeBranchId, fetchWorkspaceOrders, playNotificationSound, speakText]);
 
   // Status updates
   const handleStatusTransition = async (orderId, targetStatus, payload = {}) => {
+    let originalOrders;
+    
+    // Optimistic state update
+    setOrders((prev) => {
+      originalOrders = prev;
+      
+      return prev.map((o) => {
+        if (o._id === orderId) {
+          const updatedObj = { ...o, status: targetStatus, ...payload };
+          const nowStr = new Date().toISOString();
+          
+          if (targetStatus === 'Preparing') {
+            updatedObj.preparingBy = user?._id || null;
+            updatedObj.preparingByName = user?.name || 'Staff';
+            updatedObj.preparingAt = nowStr;
+          } else if (targetStatus === 'Ready') {
+            updatedObj.readyBy = user?._id || null;
+            updatedObj.readyByName = user?.name || 'Staff';
+            updatedObj.readyAt = nowStr;
+          } else if (targetStatus === 'Delivered') {
+            updatedObj.servedBy = user?._id || null;
+            updatedObj.servedByName = user?.name || 'Staff';
+            updatedObj.servedAt = nowStr;
+          } else if (targetStatus === 'Completed') {
+            updatedObj.paidBy = user?._id || null;
+            updatedObj.paidByName = user?.name || 'Staff';
+            updatedObj.paidAt = nowStr;
+            updatedObj.paymentStatus = 'Paid';
+            if (payload.paymentMethod) {
+              updatedObj.paymentMethod = payload.paymentMethod;
+            } else if (o.paymentMethod === 'Pending' || !o.paymentMethod) {
+              updatedObj.paymentMethod = 'Cash';
+            }
+          }
+          return updatedObj;
+        }
+        return o;
+      }).filter((o) => o.status !== 'Completed' || o.paymentStatus === 'Pending');
+    });
+
     try {
       const res = await updateOrderStatus(orderId, { status: targetStatus, ...payload });
       if (res.success) {
-        setOrders((prev) =>
-          prev.map((o) => (o._id === orderId ? { ...o, ...res.data } : o))
-          .filter((o) => o.status !== 'Completed' || o.paymentStatus === 'Pending')
-        );
+        setOrders((prev) => {
+          const isStillActive = res.data.status !== 'Completed' || res.data.paymentStatus === 'Pending';
+          if (isStillActive) {
+            if (prev.some((o) => o._id === orderId)) {
+              return prev.map((o) => (o._id === orderId ? { ...o, ...res.data } : o));
+            } else {
+              return [res.data, ...prev];
+            }
+          } else {
+            return prev.filter((o) => o._id !== orderId);
+          }
+        });
       } else {
+        if (originalOrders) setOrders(originalOrders);
         alert(res.message || 'Status transition failed.');
       }
     } catch (err) {
       console.error('Error changing status:', err);
+      if (originalOrders) setOrders(originalOrders);
       alert(err.response?.data?.message || 'Server permission error.');
     }
   };

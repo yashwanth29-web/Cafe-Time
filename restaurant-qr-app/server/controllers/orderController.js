@@ -4,8 +4,25 @@ const mongoose = require('mongoose');
 const { deductInventoryForOrder, updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
 const socket = require('../socket');
 
+// Active branches in-memory cache with 60s TTL
+const branchCache = new Map();
+const CACHE_TTL = 60000; // 60 seconds
+
+const getCachedBranch = async (cacheKey, queryFn) => {
+  const now = Date.now();
+  if (branchCache.has(cacheKey)) {
+    const entry = branchCache.get(cacheKey);
+    if (now - entry.timestamp < CACHE_TTL) {
+      return entry.data;
+    }
+  }
+  const result = await queryFn();
+  branchCache.set(cacheKey, { data: result, timestamp: now });
+  return result;
+};
+
 // helper to emit order updates over Socket.io
-const emitOrderUpdated = async (order) => {
+const emitOrderUpdated = async (order, branchMap = null) => {
   if (!order) return;
   try {
     const { getIO } = require('../config/socket');
@@ -17,7 +34,13 @@ const emitOrderUpdated = async (order) => {
 
     let branchStr = String(order.branchId || '');
     if (mongoose.isValidObjectId(branchStr)) {
-      const branchDoc = await Branch.findById(branchStr).lean();
+      let branchDoc;
+      if (branchMap && branchMap.has(branchStr)) {
+        branchDoc = branchMap.get(branchStr);
+      } else {
+        branchDoc = await getCachedBranch(`id:${branchStr}`, () => Branch.findById(branchStr).lean());
+        if (branchMap && branchDoc) branchMap.set(branchStr, branchDoc);
+      }
       if (branchDoc) {
         branchStr = branchDoc.branchId;
       }
@@ -74,7 +97,7 @@ const appendLegacyFallback = async (order, branchMap = null) => {
     if (branchMap && branchMap.has(branchIdStr)) {
       branchDoc = branchMap.get(branchIdStr);
     } else {
-      branchDoc = await Branch.findById(orderObj.branchId).lean();
+      branchDoc = await getCachedBranch(`id:${branchIdStr}`, () => Branch.findById(orderObj.branchId).lean());
       if (branchMap && branchDoc) branchMap.set(branchIdStr, branchDoc);
     }
     if (branchDoc) {
@@ -91,7 +114,7 @@ const appendLegacyFallback = async (order, branchMap = null) => {
     if (branchMap && branchMap.has(targetCafeId)) {
       defaultBranch = branchMap.get(targetCafeId);
     } else {
-      defaultBranch = await Branch.findOne({ cafeId: targetCafeId }).lean() || {
+      defaultBranch = await getCachedBranch(`cafe:${targetCafeId}`, () => Branch.findOne({ cafeId: targetCafeId }).lean()) || {
         _id: null,
         branchName: 'DR . Chai Cafe',
         address: 'Comrade Puchalapalli Sundarayya Road, Yerrapalem'
@@ -321,13 +344,13 @@ const updateOrderStatus = async (req, res) => {
 
     // 2. Load Branch config for Unified Staff Mode check
     const activeBranchId = order.branchId || req.branchId || 'default';
-    const branch = await Branch.findOne({ 
+    const branch = await getCachedBranch(`mode:${activeBranchId}:${req.cafeId || 'CD001'}`, () => Branch.findOne({ 
       $or: [
         { branchId: activeBranchId },
         { _id: mongoose.isValidObjectId(activeBranchId) ? activeBranchId : undefined }
       ],
       cafeId: req.cafeId || 'CD001'
-    });
+    }).lean());
     
     const isUnified = branch ? !!branch.unifiedStaffMode : false;
 
@@ -423,11 +446,16 @@ const updateOrderStatus = async (req, res) => {
         .catch(err => console.warn('Background inventory deduction warning during status update:', err.message));
     }
 
-    const latestOrder = await Order.findById(id).lean();
-    const formattedOrder = await appendLegacyFallback(latestOrder || updatedOrder);
+    const branchMap = new Map();
+    if (branch) {
+      if (branch._id) branchMap.set(String(branch._id), branch);
+      if (branch.branchId) branchMap.set(String(branch.branchId), branch);
+    }
+
+    const formattedOrder = await appendLegacyFallback(updatedOrder, branchMap);
 
     // Broadcast update events over sockets
-    await emitOrderUpdated(formattedOrder);
+    await emitOrderUpdated(formattedOrder, branchMap);
 
     return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {

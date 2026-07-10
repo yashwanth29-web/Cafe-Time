@@ -207,5 +207,6 @@ OrderSchema.index({ cafeId: 1, branchId: 1, status: 1 });
 OrderSchema.index({ cafeId: 1, branchId: 1, tableNumber: 1, status: 1 });
 OrderSchema.index({ status: 1 });
 OrderSchema.index({ paymentStatus: 1 });
+OrderSchema.index({ cafeId: 1, branchId: 1, paymentStatus: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Order', OrderSchema);

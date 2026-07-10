@@ -23,7 +23,7 @@ const waitDbConnection = async (timeoutMs = 5000) => {
   }
 };
 
-// Active branches in-memory cache with 5s TTL
+// Active branches in-memory cache with 60s TTL
 const branchCache = new Map(); // Keyed by `${cafeId}_${branchId}` -> { isActive, exists, expiresAt }
 
 const verifyBranchActive = async (cafeId, branchId) => {
@@ -39,7 +39,7 @@ const verifyBranchActive = async (cafeId, branchId) => {
   const result = {
     exists: !!branch,
     isActive: !!(branch && branch.isActive),
-    expiresAt: now + 5000 // 5 seconds cache TTL
+    expiresAt: now + 60000 // 60 seconds cache TTL
   };
   
   branchCache.set(cacheKey, result);

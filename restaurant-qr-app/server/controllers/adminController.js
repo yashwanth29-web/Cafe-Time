@@ -1212,6 +1212,69 @@ const getReports = async (req, res) => {
 
 
 
+// Active branches in-memory cache with 60s TTL for adminController
+const branchCache = new Map();
+const CACHE_TTL = 60000; // 60 seconds
+
+const getCachedBranch = async (cacheKey, queryFn) => {
+  const now = Date.now();
+  if (branchCache.has(cacheKey)) {
+    const entry = branchCache.get(cacheKey);
+    if (now - entry.timestamp < CACHE_TTL) {
+      return entry.data;
+    }
+  }
+  const result = await queryFn();
+  branchCache.set(cacheKey, { data: result, timestamp: now });
+  return result;
+};
+
+// Inline helper to append fallback values to legacy orders for recentOrders
+const appendLegacyFallback = async (order, branchMap = null) => {
+  if (!order) return order;
+  const orderObj = order.toObject ? order.toObject() : order;
+
+  if (orderObj.branchId && mongoose.isValidObjectId(orderObj.branchId)) {
+    let branchDoc;
+    const branchIdStr = String(orderObj.branchId);
+    if (branchMap && branchMap.has(branchIdStr)) {
+      branchDoc = branchMap.get(branchIdStr);
+    } else {
+      branchDoc = await getCachedBranch(`id:${branchIdStr}`, () => Branch.findById(orderObj.branchId).lean());
+      if (branchMap && branchDoc) branchMap.set(branchIdStr, branchDoc);
+    }
+    if (branchDoc) {
+      orderObj.branchObjectId = branchIdStr;
+      orderObj.branchId = branchDoc.branchId;
+    }
+  }
+
+  if (!orderObj.branchId || !orderObj.branchName) {
+    let defaultBranch;
+    const targetCafeId = orderObj.cafeId || 'CD001';
+    if (branchMap && branchMap.has(targetCafeId)) {
+      defaultBranch = branchMap.get(targetCafeId);
+    } else {
+      defaultBranch = await getCachedBranch(`cafe:${targetCafeId}`, () => Branch.findOne({ cafeId: targetCafeId }).lean()) || {
+        _id: null,
+        branchName: 'DR . Chai Cafe',
+        address: 'Comrade Puchalapalli Sundarayya Road, Yerrapalem'
+      };
+      if (branchMap) branchMap.set(targetCafeId, defaultBranch);
+    }
+    orderObj.branchId = orderObj.branchId || defaultBranch.branchId || 'default';
+    orderObj.branchName = orderObj.branchName || defaultBranch.branchName;
+    orderObj.branchAddress = orderObj.branchAddress || defaultBranch.address;
+  }
+
+  if (!orderObj.grandTotal) {
+    orderObj.grandTotal = orderObj.totalAmount || 0;
+    orderObj.subtotal = Number((orderObj.grandTotal / 1.05).toFixed(2));
+    orderObj.tax = Number((orderObj.grandTotal - orderObj.subtotal).toFixed(2));
+  }
+  return orderObj;
+};
+
 const getDashboardStats = async (req, res) => {
   try {
     const cafeId = req.user.cafeId;
@@ -1219,16 +1282,59 @@ const getDashboardStats = async (req, res) => {
     
     const branchId = req.query.branchId || null;
     
+    const orderMatchQuery = { cafeId };
+    
+    // Branch filtering (supports both ObjectId and String code)
+    let branchDoc = null;
+    if (branchId && branchId !== 'all') {
+      branchDoc = await getCachedBranch(`mode:${branchId}:${cafeId}`, () => Branch.findOne({ 
+        $or: [
+          { branchId: branchId },
+          { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
+        ],
+        cafeId
+      }).lean());
+      
+      if (branchDoc) {
+        orderMatchQuery.branchId = { 
+          $in: [
+            branchDoc.branchId, 
+            String(branchDoc._id),
+            branchDoc._id
+          ] 
+        };
+      } else {
+        orderMatchQuery.branchId = branchId;
+      }
+    }
+
+    // Timezone-aware date calculations for Indian Standard Time (IST, UTC+5:30)
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const istMillis = now.getTime() + (5.5 * 60 * 60 * 1000);
+    const istDate = new Date(istMillis);
     
-    const orderMatchQuery = { cafeId, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] };
-    if (branchId && branchId !== 'all') orderMatchQuery.branchId = branchId;
+    const startOfTodayIST = new Date(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate());
+    const startOfToday = new Date(startOfTodayIST.getTime() - (5.5 * 60 * 60 * 1000));
     
+    const day = istDate.getUTCDay();
+    const diffToMonday = day === 0 ? 6 : day - 1;
+    const startOfWeekIST = new Date(startOfTodayIST.getTime() - (diffToMonday * 24 * 60 * 60 * 1000));
+    const startOfWeek = new Date(startOfWeekIST.getTime() - (5.5 * 60 * 60 * 1000));
+    
+    const startOfMonthIST = new Date(istDate.getUTCFullYear(), istDate.getUTCMonth(), 1);
+    const startOfMonth = new Date(startOfMonthIST.getTime() - (5.5 * 60 * 60 * 1000));
+    
+    const startOfYearIST = new Date(istDate.getUTCFullYear(), 0, 1);
+    const startOfYear = new Date(startOfYearIST.getTime() - (5.5 * 60 * 60 * 1000));
+
+    // Completed & Paid orders for revenue calculations
+    const revenueMatch = {
+      ...orderMatchQuery,
+      $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ]
+    };
+
     const revenueStats = await Order.aggregate([
-      { $match: orderMatchQuery },
+      { $match: revenueMatch },
       { 
         $group: {
           _id: null,
@@ -1238,22 +1344,37 @@ const getDashboardStats = async (req, res) => {
               $cond: [ { $gte: ['$createdAt', startOfToday] }, '$totalAmount', 0 ] 
             } 
           },
+          weeklyRevenue: { 
+            $sum: { 
+              $cond: [ { $gte: ['$createdAt', startOfWeek] }, '$totalAmount', 0 ] 
+            } 
+          },
           monthlyRevenue: { 
             $sum: { 
-              $cond: [ 
-                { $and: [ { $gte: ['$createdAt', startOfMonth] }, { $lte: ['$createdAt', endOfMonth] } ] }, 
-                '$totalAmount', 0 
-              ] 
+              $cond: [ { $gte: ['$createdAt', startOfMonth] }, '$totalAmount', 0 ] 
             } 
-          }
+          },
+          yearlyRevenue: { 
+            $sum: { 
+              $cond: [ { $gte: ['$createdAt', startOfYear] }, '$totalAmount', 0 ] 
+            } 
+          },
+          completedOrdersCount: { $sum: 1 }
         }
       }
     ]);
     
-    const revenueData = revenueStats.length > 0 ? revenueStats[0] : { totalRevenueAllTime: 0, todayRevenue: 0, monthlyRevenue: 0 };
+    const revenueData = revenueStats.length > 0 ? revenueStats[0] : { 
+      totalRevenueAllTime: 0, 
+      todayRevenue: 0, 
+      weeklyRevenue: 0,
+      monthlyRevenue: 0, 
+      yearlyRevenue: 0,
+      completedOrdersCount: 0 
+    };
     
     const sourceStats = await Order.aggregate([
-      { $match: orderMatchQuery },
+      { $match: revenueMatch },
       { $group: { _id: '$orderSource', count: { $sum: 1 } } }
     ]);
     
@@ -1265,7 +1386,7 @@ const getDashboardStats = async (req, res) => {
     });
     
     const topSellingItems = await Order.aggregate([
-      { $match: { ...orderMatchQuery, createdAt: { $gte: startOfMonth, $lte: endOfMonth } } },
+      { $match: { ...revenueMatch, createdAt: { $gte: startOfMonth } } },
       { $unwind: '$items' },
       { 
         $group: {
@@ -1285,7 +1406,13 @@ const getDashboardStats = async (req, res) => {
     }));
     
     const invMatchQuery = { cafeId };
-    if (branchId && branchId !== 'all') invMatchQuery.branchId = branchId;
+    if (branchId && branchId !== 'all') {
+      if (branchDoc) {
+        invMatchQuery.branchId = { $in: [branchDoc.branchId, String(branchDoc._id)] };
+      } else {
+        invMatchQuery.branchId = branchId;
+      }
+    }
     
     const inventoryValueAgg = await Inventory.aggregate([
       { $match: invMatchQuery },
@@ -1294,7 +1421,13 @@ const getDashboardStats = async (req, res) => {
     const inventoryValue = inventoryValueAgg.length > 0 ? inventoryValueAgg[0].totalValue : 0;
     
     const invLogMatch = { cafeId };
-    if (branchId && branchId !== 'all') invLogMatch.branchId = branchId;
+    if (branchId && branchId !== 'all') {
+      if (branchDoc) {
+        invLogMatch.branchId = { $in: [branchDoc.branchId, String(branchDoc._id)] };
+      } else {
+        invLogMatch.branchId = branchId;
+      }
+    }
     
     const inventoryLogStats = await InventoryLog.aggregate([
       { $match: invLogMatch },
@@ -1313,14 +1446,91 @@ const getDashboardStats = async (req, res) => {
       if (stat._id === 'Purchase') totalInventoryCost += stat.totalCost;
       else if (stat._id === 'Deduction' || stat._id === 'Wastage') totalInventoryConsumption += stat.totalCost;
     });
+
+    // Orders Today, Completed Orders (overall), Pending Orders (overall)
+    const ordersToday = await Order.countDocuments({
+      ...orderMatchQuery,
+      createdAt: { $gte: startOfToday }
+    });
+
+    const completedOrders = await Order.countDocuments(revenueMatch);
+
+    const pendingOrders = await Order.countDocuments({
+      ...orderMatchQuery,
+      status: { $ne: 'Completed' },
+      paymentStatus: { $ne: 'Paid' }
+    });
+
+    const averageOrderValue = revenueData.completedOrdersCount > 0 
+      ? Number((revenueData.totalRevenueAllTime / revenueData.completedOrdersCount).toFixed(2)) 
+      : 0;
+
+    // Payment Summary (Grouped by payment method)
+    const paymentStats = await Order.aggregate([
+      { $match: revenueMatch },
+      { $group: { _id: '$paymentMethod', amount: { $sum: '$totalAmount' }, count: { $sum: 1 } } }
+    ]);
+
+    const paymentSummary = {};
+    paymentStats.forEach(p => {
+      const method = p._id || 'Pending';
+      paymentSummary[method] = { amount: p.amount, count: p.count };
+    });
+
+    // Weekly sales data (daily groupings for past 7 days)
+    const weeklySalesData = [];
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    for (let i = 6; i >= 0; i--) {
+      const dIST = new Date(startOfTodayIST.getTime() - (i * 24 * 60 * 60 * 1000));
+      const dayStartUTC = new Date(dIST.getTime() - (5.5 * 60 * 60 * 1000));
+      const dayEndUTC = new Date(dayStartUTC.getTime() + (24 * 60 * 60 * 1000));
+      
+      const dayOrders = await Order.find({
+        ...revenueMatch,
+        createdAt: { $gte: dayStartUTC, $lt: dayEndUTC }
+      }).select('totalAmount').lean();
+
+      const daySales = dayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      weeklySalesData.push({
+        day: i === 0 ? 'Today' : dayLabels[dIST.getUTCDay()],
+        sales: Math.round(daySales * 100) / 100
+      });
+    }
+
+    // Recent orders (Last 5 orders)
+    const recentOrders = await Order.find(orderMatchQuery)
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    const branchMap = new Map();
+    const allBranches = await Branch.find().lean();
+    allBranches.forEach(b => {
+      branchMap.set(String(b._id), b);
+      branchMap.set(String(b.branchId), b);
+    });
+
+    const formattedRecentOrders = [];
+    for (const order of recentOrders) {
+      formattedRecentOrders.push(await appendLegacyFallback(order, branchMap));
+    }
     
     return res.status(200).json({
       success: true,
       data: {
         todayRevenue: revenueData.todayRevenue,
+        weeklyRevenue: revenueData.weeklyRevenue,
         monthlyRevenue: revenueData.monthlyRevenue,
+        yearlyRevenue: revenueData.yearlyRevenue,
+        ordersToday,
+        completedOrders,
+        pendingOrders,
+        averageOrderValue,
+        paymentSummary,
         orderSourceData,
         topSellingItems: formattedTopSelling,
+        weeklySalesData,
+        recentOrders: formattedRecentOrders,
         inventory: {
           value: inventoryValue,
           cost: totalInventoryCost,
