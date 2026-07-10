@@ -200,14 +200,11 @@ const createOrder = async (req, res) => {
 
     const savedOrder = await newOrder.save();
     
-    // Auto deduct inventory stock
-    try {
-      await deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items);
-      const activeBId = resolvedBranch ? resolvedBranch.branchId : 'default';
-      await updateMenuItemAvailabilityFromInventory(activeCafeId, null, activeBId);
-    } catch (invErr) {
-      console.warn('Inventory deduction warning during order creation:', invErr.message);
-    }
+    // Auto deduct inventory stock (run asynchronously in background to not block response)
+    const activeBId = resolvedBranch ? resolvedBranch.branchId : 'default';
+    deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items)
+      .then(() => updateMenuItemAvailabilityFromInventory(activeCafeId, null, activeBId))
+      .catch(invErr => console.warn('Background inventory deduction warning during order creation:', invErr.message));
 
     const formattedOrder = await appendLegacyFallback(savedOrder);
 
@@ -418,15 +415,12 @@ const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order update failed or order not found' });
     }
 
-    // Auto deduct inventory if moving to Ready/Completed/Delivered and not already deducted
+    // Auto deduct inventory (run asynchronously in background to not block response)
     if (['Ready', 'Completed', 'Delivered'].includes(updatedOrder.status) && !updatedOrder.inventoryDeducted) {
-      try {
-        await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
-        const activeBId = branch ? branch.branchId : 'default';
-        await updateMenuItemAvailabilityFromInventory(updatedOrder.cafeId, null, activeBId);
-      } catch (err) {
-        console.warn('Inventory deduction warning during status update:', err.message);
-      }
+      const activeBId = branch ? branch.branchId : 'default';
+      deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items)
+        .then(() => updateMenuItemAvailabilityFromInventory(updatedOrder.cafeId, null, activeBId))
+        .catch(err => console.warn('Background inventory deduction warning during status update:', err.message));
     }
 
     const latestOrder = await Order.findById(id).lean();
@@ -465,19 +459,15 @@ const updateOrderPaymentMethod = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    // Deduct inventory if not done already
-    try {
-      await deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items);
-      
-      // Get branch ID to sync menu items
-      let bId = 'default';
-      const Branch = require('../models/Branch');
-      const branchDoc = await Branch.findById(updatedOrder.branchId).lean();
-      if (branchDoc) bId = branchDoc.branchId;
-      await updateMenuItemAvailabilityFromInventory(updatedOrder.cafeId, null, bId);
-    } catch (err) {
-      console.warn('Inventory deduction warning during payment update:', err.message);
-    }
+    // Deduct inventory (run asynchronously in background to not block response)
+    const Branch = require('../models/Branch');
+    Branch.findById(updatedOrder.branchId).lean()
+      .then(branchDoc => {
+        const bId = branchDoc ? branchDoc.branchId : 'default';
+        return deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items)
+          .then(() => updateMenuItemAvailabilityFromInventory(updatedOrder.cafeId, null, bId));
+      })
+      .catch(err => console.warn('Background inventory deduction warning during payment update:', err.message));
 
     const formattedOrder = await appendLegacyFallback(updatedOrder);
 

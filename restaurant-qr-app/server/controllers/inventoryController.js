@@ -570,6 +570,7 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, br
     const query = itemId ? { _id: itemId, cafeId } : { cafeId };
     const menuItems = await MenuItem.find(query);
     
+    const updatePromises = [];
     for (const item of menuItems) {
       const activeBId = item.branchId || branchId || 'default';
       if (item.recipe && item.recipe.length > 0) {
@@ -585,32 +586,36 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, br
         
         if (item.available !== shouldBeAvailable) {
           item.available = shouldBeAvailable;
-          await item.save();
-
-          console.log(`Auto-updated menu item "${item.name}" availability to ${shouldBeAvailable} based on inventory levels.`);
-          
-          try {
-            const { getIO } = require('../config/socket');
-            const io = getIO();
-            if (io) {
-              io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
-                _id: String(item._id),
-                name: item.name,
-                available: shouldBeAvailable,
-                updatedAt: item.updatedAt || new Date().toISOString()
-              });
-              io.to(`cafe_${cafeId}`).emit('menuAvailabilityUpdated', {
-                _id: String(item._id),
-                name: item.name,
-                available: shouldBeAvailable,
-                updatedAt: item.updatedAt || new Date().toISOString()
-              });
+          const savePromise = item.save().then(() => {
+            console.log(`Auto-updated menu item "${item.name}" availability to ${shouldBeAvailable} based on inventory levels.`);
+            try {
+              const { getIO } = require('../config/socket');
+              const io = getIO();
+              if (io) {
+                io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
+                  _id: String(item._id),
+                  name: item.name,
+                  available: shouldBeAvailable,
+                  updatedAt: item.updatedAt || new Date().toISOString()
+                });
+                io.to(`cafe_${cafeId}`).emit('menuAvailabilityUpdated', {
+                  _id: String(item._id),
+                  name: item.name,
+                  available: shouldBeAvailable,
+                  updatedAt: item.updatedAt || new Date().toISOString()
+                });
+              }
+            } catch (socketErr) {
+              console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', socketErr.message);
             }
-          } catch (socketErr) {
-            console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', socketErr.message);
-          }
+          });
+          updatePromises.push(savePromise);
         }
       }
+    }
+    
+    if (updatePromises.length > 0) {
+      await Promise.all(updatePromises);
     }
     
     // Clear menu cache since availability status might have changed
