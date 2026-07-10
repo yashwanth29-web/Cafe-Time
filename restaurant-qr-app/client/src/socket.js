@@ -18,6 +18,7 @@ const getSocketUrl = () => {
 };
 
 const SOCKET_URL = getSocketUrl();
+const isDev = import.meta.env.DEV;
 
 const socket = io(SOCKET_URL, {
   autoConnect: false,
@@ -25,7 +26,7 @@ const socket = io(SOCKET_URL, {
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
   reconnectionAttempts: Infinity,
-  transports: ['websocket'] // Force WebSocket to bypass HTTP 400 Bad Request / sticky session issues on Render
+  transports: ['websocket', 'polling'] // Support both transports to allow graceful fallback when WebSocket drops
 });
 
 // Cache for room tracking
@@ -33,14 +34,18 @@ let currentRoomContext = { cafeId: null, branchId: null };
 
 // Auto re-join rooms on reconnect
 socket.on('connect', () => {
-  console.log('[SOCKET] Connected to real-time sync layer. Socket ID:', socket.id);
+  if (isDev) {
+    console.log('[SOCKET] Connected to real-time sync layer. Socket ID:', socket.id);
+  }
   if (currentRoomContext.cafeId) {
     socket.emit('join_room', currentRoomContext);
   }
 });
 
 socket.on('disconnect', (reason) => {
-  console.warn('[SOCKET] Disconnected:', reason);
+  if (isDev) {
+    console.warn('[SOCKET] Disconnected:', reason);
+  }
   if (reason === 'io server disconnect') {
     // If the server disconnected us, connect again manually
     socket.connect();
@@ -48,7 +53,9 @@ socket.on('disconnect', (reason) => {
 });
 
 socket.on('connect_error', (error) => {
-  console.error('[SOCKET] Connection Error:', error.message);
+  if (isDev) {
+    console.error('[SOCKET] Connection Error:', error.message);
+  }
 });
 
 export const connectSocket = (cafeId, branchId = null) => {
@@ -64,7 +71,9 @@ export const connectSocket = (cafeId, branchId = null) => {
   } else if (!isSameContext) {
     // If already connected and the branch has switched, tell the server to leave the previous branch rooms
     if (previousBranch && previousBranch !== branchId) {
-      console.log(`[SOCKET] Branch changed from ${previousBranch} to ${branchId}. Leaving old rooms...`);
+      if (isDev) {
+        console.log(`[SOCKET] Branch changed from ${previousBranch} to ${branchId}. Leaving old rooms...`);
+      }
       socket.emit('leave_branch_rooms', { cafeId, branchId: previousBranch });
     }
     socket.emit('join_room', currentRoomContext);

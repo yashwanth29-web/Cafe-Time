@@ -15,6 +15,8 @@ const parseCookies = (cookieHeader) => {
 };
 
 const initializeSocket = (server) => {
+  const isDev = process.env.NODE_ENV === 'development';
+
   io = new Server(server, {
     cors: {
       origin: (origin, callback) => {
@@ -23,7 +25,9 @@ const initializeSocket = (server) => {
       },
       credentials: true
     },
-    transports: ['websocket', 'polling'] // Support standard websocket upgrades
+    transports: ['websocket', 'polling'], // Support standard websocket upgrades
+    pingInterval: 10000,                  // Heartbeat every 10s to keep cloud proxies (Railway/Render) alive
+    pingTimeout: 5000                     // Close connection if no reply within 5s
   });
 
   // Socket.IO Handshake Authentication Middleware
@@ -58,7 +62,9 @@ const initializeSocket = (server) => {
 
     if (!token) {
       // Connect as customer (anonymous) - don't fail handshake
-      console.log(`[SOCKET] Anonymous customer connection: ${socket.id}`);
+      if (isDev) {
+        console.log(`[SOCKET] Anonymous customer connection: ${socket.id}`);
+      }
       return next();
     }
 
@@ -78,7 +84,9 @@ const initializeSocket = (server) => {
 
       // Attach verified user to socket
       socket.user = user;
-      console.log(`[SOCKET] Authenticated user connected: ${user.name} (${user.role}) - Socket: ${socket.id}`);
+      if (isDev) {
+        console.log(`[SOCKET] Authenticated user connected: ${user.name} (${user.role}) - Socket: ${socket.id}`);
+      }
       next();
     } catch (err) {
       console.error('[SOCKET] Token verification failed:', err.message);
@@ -88,7 +96,9 @@ const initializeSocket = (server) => {
   });
 
   io.on('connection', async (socket) => {
-    console.log(`[SOCKET] Connection established: ${socket.id}`);
+    if (isDev) {
+      console.log(`[SOCKET] Connection established: ${socket.id}`);
+    }
 
     // If authenticated, join authorized rooms based on DB user profile (Never trust client input)
     if (socket.user) {
@@ -98,7 +108,9 @@ const initializeSocket = (server) => {
 
       // Join Cafe Room
       socket.join(`cafe:${cafeId}`);
-      console.log(`[SOCKET] Socket ${socket.id} joined room cafe:${cafeId} | Cafe: ${cafeId}`);
+      if (isDev) {
+        console.log(`[SOCKET] Socket ${socket.id} joined room cafe:${cafeId} | Cafe: ${cafeId}`);
+      }
 
       // Join Branch Room (standardized on Branch Code string, e.g. branch:BR002)
       if (branchId) {
@@ -117,7 +129,9 @@ const initializeSocket = (server) => {
           
           if (branchCode) {
             socket.join(`branch:${branchCode}`);
-            console.log(`[SOCKET] Socket ${socket.id} joined room branch:${branchCode} | Standardized Branch Code: ${branchCode}`);
+            if (isDev) {
+              console.log(`[SOCKET] Socket ${socket.id} joined room branch:${branchCode} | Standardized Branch Code: ${branchCode}`);
+            }
           }
         } catch (branchErr) {
           console.error('[SOCKET] Error resolving branch room code:', branchErr.message);
@@ -129,14 +143,18 @@ const initializeSocket = (server) => {
       // Join Role Room
       if (role) {
         socket.join(`role:${role}`);
-        console.log(`[SOCKET] Socket ${socket.id} joined room role:${role} | Role: ${role}`);
+        if (isDev) {
+          console.log(`[SOCKET] Socket ${socket.id} joined room role:${role} | Role: ${role}`);
+        }
       }
 
       // Join Cafe Owner Room
       if (role === 'owner') {
         socket.join(`cafe:${cafeId}:owner`);
         socket.join(`cafe_${cafeId}_owner`);
-        console.log(`[SOCKET] Socket ${socket.id} joined room cafe:${cafeId}:owner`);
+        if (isDev) {
+          console.log(`[SOCKET] Socket ${socket.id} joined room cafe:${cafeId}:owner`);
+        }
       }
     }
 
@@ -155,7 +173,9 @@ const initializeSocket = (server) => {
         socket.join(`branch:${targetBranch}`);
         socket.join(`branch_${targetCafe}_${targetBranch}`);
 
-        console.log(`[SOCKET] Socket ${socket.id} joined rooms cafe:${targetCafe} and branch:${targetBranch}`);
+        if (isDev) {
+          console.log(`[SOCKET] Socket ${socket.id} joined rooms cafe:${targetCafe} and branch:${targetBranch}`);
+        }
       } catch (err) {
         console.error('[SOCKET] join_room error:', err.message);
       }
@@ -168,7 +188,9 @@ const initializeSocket = (server) => {
         if (branchId) {
           socket.leave(`branch:${branchId}`);
           socket.leave(`branch_${targetCafe}_${branchId}`);
-          console.log(`[SOCKET] Socket ${socket.id} left rooms for branch:${branchId}`);
+          if (isDev) {
+            console.log(`[SOCKET] Socket ${socket.id} left rooms for branch:${branchId}`);
+          }
         }
       } catch (err) {
         console.error('[SOCKET] leave_branch_rooms error:', err.message);
@@ -176,7 +198,6 @@ const initializeSocket = (server) => {
     });
 
     // Allow customers to request tracking for a specific order.
-    // The server verifies the order exists in the DB before joining to prevent arbitrary room selection.
     socket.on('trackOrder', async ({ orderId }) => {
       try {
         const Order = require('../models/Order');
@@ -195,7 +216,9 @@ const initializeSocket = (server) => {
 
         socket.join(`order:${orderId}`);
         socket.join(`order_${orderId}`);
-        console.log(`[SOCKET] Socket ${socket.id} joined room order:${orderId} (Customer tracking)`);
+        if (isDev) {
+          console.log(`[SOCKET] Socket ${socket.id} joined room order:${orderId} (Customer tracking)`);
+        }
         socket.emit('tracking_confirmed', { orderId });
       } catch (err) {
         console.error('[SOCKET] Error joining order room:', err);
@@ -203,7 +226,9 @@ const initializeSocket = (server) => {
     });
 
     socket.on('disconnect', (reason) => {
-      console.log(`[SOCKET] Socket disconnected: ${socket.id} | Reason: ${reason}`);
+      if (isDev) {
+        console.log(`[SOCKET] Socket disconnected: ${socket.id} | Reason: ${reason}`);
+      }
     });
   });
 

@@ -19,8 +19,10 @@ const SaaSLayout = ({ children }) => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [notificationsDisabled, setNotificationsDisabled] = useState(false);
 
   const fetchNotifications = async () => {
+    if (notificationsDisabled) return;
     try {
       const res = await getNotifications();
       if (res && res.success) {
@@ -28,6 +30,11 @@ const SaaSLayout = ({ children }) => {
       }
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
+      // Disable polling if the endpoint returns terminal errors like 404 (Not Found), 403 (Forbidden) or 401 (Unauthorized)
+      if (err.response && [401, 403, 404].includes(err.response.status)) {
+        console.warn(`[NOTIFICATION] Disabling notification polling due to terminal HTTP status: ${err.response.status}`);
+        setNotificationsDisabled(true);
+      }
     }
   };
 
@@ -41,12 +48,12 @@ const SaaSLayout = ({ children }) => {
   };
 
   useEffect(() => {
-    if (user && activeBranchId) {
+    if (user && activeBranchId && !notificationsDisabled) {
       fetchNotifications();
       const interval = setInterval(fetchNotifications, 20000);
       return () => clearInterval(interval);
     }
-  }, [user, activeBranchId]);
+  }, [user, activeBranchId, notificationsDisabled]);
 
 
 
