@@ -849,7 +849,7 @@ const OwnerDashboard = () =>{
  };
 
  // Fetch Inventory Categories
- const fetchInventoryCategories = async () =>{
+ const fetchInventoryCategories = async (isSilent = false) =>{
  if (!isSilent) setInvCategoryLoading(true);
  try {
  const response = await getInventoryCategories();
@@ -906,7 +906,7 @@ const OwnerDashboard = () =>{
  };
 
  // Fetch Staff
- const fetchStaffList = async () =>{
+ const fetchStaffList = async (isSilent = false) =>{
  if (!isSilent) setStaffLoading(true);
  try {
  const response = await getStaff();
@@ -925,7 +925,7 @@ const OwnerDashboard = () =>{
  };
 
  // Fetch Attendance Today Dashboard
- const fetchAttendanceToday = async () =>{
+ const fetchAttendanceToday = async (isSilent = false) =>{
  if (!isSilent) setAttendanceLoading(true);
  try {
  const res = await getOwnerTodayAttendance();
@@ -941,7 +941,7 @@ const OwnerDashboard = () =>{
  };
 
  // Fetch Attendance Reports
- const fetchAttendanceReportsData = async () =>{
+ const fetchAttendanceReportsData = async (isSilent = false) =>{
  if (!isSilent) setAttendanceLoading(true);
  try {
  const res = await getOwnerAttendanceReports({ range: reportRange, branchId: reportBranch });
@@ -955,7 +955,7 @@ const OwnerDashboard = () =>{
  }
  };
 
- const fetchWorkReports = async () =>{
+ const fetchWorkReports = async (isSilent = false) =>{
  if (!isSilent) setReportsLoading(true);
  setReportsError('');
  try {
@@ -978,7 +978,7 @@ const OwnerDashboard = () =>{
  }
  };
 
- const fetchReviewsData = async () =>{
+ const fetchReviewsData = async (isSilent = false) =>{
  if (!isSilent) setReviewsLoading(true);
  setReviewsError('');
  try {
@@ -1083,18 +1083,18 @@ const OwnerDashboard = () =>{
       setMenuLoading(true);
       setInventoryList([]);
       setInventoryLogs([]);
-      if (!isSilent) setInventoryLoading(true);
+      setInventoryLoading(true);
       setCategories([]);
       setCategoryLoading(true);
       setInventoryCategories([]);
-      if (!isSilent) setInvCategoryLoading(true);
+      setInvCategoryLoading(true);
       setStaff([]);
-      if (!isSilent) setStaffLoading(true);
+      setStaffLoading(true);
       setAttendanceRecords([]);
-      if (!isSilent) setAttendanceLoading(true);
+      setAttendanceLoading(true);
       setAttendanceReports(null);
       setWorkReports([]);
-      if (!isSilent) setReportsLoading(true);
+      setReportsLoading(true);
 
       // Fetch data relevant to the currently active tab
       fetchOrders();
@@ -1121,7 +1121,7 @@ const OwnerDashboard = () =>{
  return;
  }
  try {
- if (!isSilent) setStaffLoading(true);
+ setStaffLoading(true);
  const response = await createStaff({
    ...newStaff,
    dailyRate: Number(newStaff.dailyRate || 0)
@@ -1148,7 +1148,7 @@ const OwnerDashboard = () =>{
  return;
  }
  try {
- if (!isSilent) setStaffLoading(true);
+ setStaffLoading(true);
  const response = await updateStaff(editingStaff._id, {
  name: editingStaff.name,
  email: editingStaff.email,
@@ -1175,7 +1175,7 @@ const OwnerDashboard = () =>{
  // Delete staff
   const handleSaveWage = async (staffId, wage) => {
     try {
-      if (!isSilent) setStaffLoading(true);
+      setStaffLoading(true);
       const target = staff.find(s => s._id === staffId);
       if (!target) return;
       const response = await updateStaff(staffId, {
@@ -1244,7 +1244,7 @@ const exportStaffToCSV = () => {
  return;
  }
  try {
- if (!isSilent) setStaffLoading(true);
+ setStaffLoading(true);
  const response = await deleteStaff(id);
  if (response.success) {
  alert(response.message || 'Staff member deleted successfully.');

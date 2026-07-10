@@ -89,6 +89,16 @@ const attachCafeAndBranch = async (req, res, next) => {
     }
 
     if (isExempt) {
+      if (user) {
+        cafeId = cafeId || user.cafeId || 'CD001';
+        const role = (user.role || '').toLowerCase();
+        if (['manager', 'chef', 'waiter', 'cashier', 'staff'].includes(role)) {
+          branchId = branchId || user.assignedBranch || 'default';
+        }
+      } else {
+        cafeId = cafeId || 'CD001';
+        branchId = branchId || 'default';
+      }
       runWithContext({ cafeId, branchId }, () => {
         req.cafeId = cafeId;
         req.branchId = branchId;
