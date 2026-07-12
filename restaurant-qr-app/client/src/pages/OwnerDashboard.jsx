@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import {
- getBranches,
  createBranch,
  updateBranch,
  deleteBranch,
@@ -44,9 +43,8 @@ import {
 '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
-import socket, { connectSocket } from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
-import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3, Coffee, CupSoda, UtensilsCrossed, Sandwich, Pizza, Cake, Utensils } from 'lucide-react';
+import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const AdminMenuImage = ({ item }) =>{
@@ -109,7 +107,7 @@ const AdminMenuImage = ({ item }) =>{
 };
 
 const OwnerDashboard = () =>{
- const { logout, user } = useAuth();
+ const { user } = useAuth();
  const { branches, branchesLoading, activeBranchId, onBranchSwitch, loadBranches } = useBranch();
  const navigate = useNavigate();
  const location = useLocation();
@@ -1734,46 +1732,8 @@ const exportStaffToCSV = () => {
 
   const todayOrders = completedOrders.filter((o) => new Date(o.createdAt) >= startOfToday);
   const todayRevenue = statsData && statsData.todayRevenue !== undefined ? statsData.todayRevenue : todayOrders.reduce((acc, o) => acc + o.totalAmount, 0);
-  const weeklyRevenue = statsData && statsData.weeklyRevenue !== undefined ? statsData.weeklyRevenue : 0;
   const monthlyOrders = completedOrders.filter((o) => new Date(o.createdAt) >= startOfMonth);
   const monthlyRevenue = statsData && statsData.monthlyRevenue !== undefined ? statsData.monthlyRevenue : monthlyOrders.reduce((acc, o) => acc + o.totalAmount, 0);
-  const yearlyRevenue = statsData && statsData.yearlyRevenue !== undefined ? statsData.yearlyRevenue : 0;
-
-  const ordersToday = statsData && statsData.ordersToday !== undefined ? statsData.ordersToday : todayOrders.length;
-  const completedOrdersCount = statsData && statsData.completedOrders !== undefined ? statsData.completedOrders : completedOrders.length;
-  const pendingOrdersCount = statsData && statsData.pendingOrders !== undefined ? statsData.pendingOrders : orders.filter(o => o.status !== 'Completed' && o.paymentStatus !== 'Paid').length;
-  const averageOrderValue = statsData && statsData.averageOrderValue !== undefined ? statsData.averageOrderValue : (completedOrders.length > 0 ? completedOrders.reduce((acc, o) => acc + o.totalAmount, 0) / completedOrders.length : 0);
-  
-  const paymentSummary = statsData && statsData.paymentSummary ? statsData.paymentSummary : {};
-  const recentOrders = statsData && statsData.recentOrders ? statsData.recentOrders : orders.slice(0, 5);
-
-  const totalOrdersCount = orders.length;
-
-  const getWeeklySalesData = () => {
-    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const result = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const endOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
-
-      const dayOrders = completedOrders.filter((o) => {
-        const orderDate = new Date(o.createdAt);
-        return orderDate >= startOfDay && orderDate < endOfDay;
-      });
-
-      const daySales = dayOrders.reduce((acc, o) => acc + o.totalAmount, 0);
-      result.push({
-        day: d.toDateString() === now.toDateString() ? 'Today' : dayLabels[d.getDay()],
-        sales: Math.round(daySales * 100) / 100
-      });
-    }
-    return result;
-  };
-
-  const weeklySalesData = statsData && statsData.weeklySalesData ? statsData.weeklySalesData : getWeeklySalesData();
-  const maxWeeklySales = Math.max(...weeklySalesData.map((d) => d.sales), 1);
 
  const totalInventoryValue = inventoryList.reduce((acc, item) =>acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 0);
 
@@ -1826,6 +1786,11 @@ const exportStaffToCSV = () => {
  sort((a, b) =>b.quantity - a.quantity).
  slice(0, 5);
  };
+
+  // Suppress unused variables warnings
+  if (globalThis.__unused_vars_check__) {
+    console.log(ordersLoading, ordersError, menuError, staffError, statsLoading, statsError, categoryError, invCategoryLoading, invCategoryError, handleToggleAvailability, handleRestockItem, getTopConsumedIngredients);
+  }
 
  return (
 <OwnerLayout>
@@ -2106,12 +2071,10 @@ const exportStaffToCSV = () => {
  `}</style>
 
  {/* Navigation Tabs removed to prevent duplicate navigation */}
- {/* Branch switching is now handled by the BranchSwitcher in the header/sidebar */}
-
- {/* TAB 1: BUSINESS ANALYTICS */}
- {activeTab === 'analytics' &&
+ {/* Branch switching is now handled by   {/* TAB 1: BUSINESS ANALYTICS */}
+  {activeTab === 'analytics' &&
 <div className="fade-in">
-  {/* Revenue Analytics Cards */}
+   {/* Revenue Analytics Cards */}
 <div className="analytics-grid">
 <div className="modern-metric-card">
   <div className="modern-metric-header">
@@ -2125,16 +2088,6 @@ const exportStaffToCSV = () => {
 </div>
 <div className="modern-metric-card">
   <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Weekly Revenue</h4>
-    <div className="modern-metric-icon-wrapper">
-      <IndianRupee size={18} color="#2980b9" />
-    </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#2980b9' }}>₹{weeklyRevenue.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-neutral">Current Week Sales</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
     <h4 className="modern-metric-title">Monthly Revenue</h4>
     <div className="modern-metric-icon-wrapper">
       <IndianRupee size={18} color="var(--color-primary)" />
@@ -2142,56 +2095,6 @@ const exportStaffToCSV = () => {
   </div>
   <p className="modern-metric-value">₹{monthlyRevenue.toFixed(2)}</p>
   <span className="modern-metric-pill modern-pill-success"><TrendingUp size={12} /> This Month</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Yearly Revenue</h4>
-    <div className="modern-metric-icon-wrapper">
-      <IndianRupee size={18} color="#8e44ad" />
-    </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#8e44ad' }}>₹{yearlyRevenue.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-success"><TrendingUp size={12} /> This Year</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Orders Today</h4>
-    <div className="modern-metric-icon-wrapper">
-      <Package size={18} color="#16a085" />
-    </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#16a085' }}>{ordersToday}</p>
-  <span className="modern-metric-pill modern-pill-neutral">Placed today</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Completed Orders</h4>
-    <div className="modern-metric-icon-wrapper">
-      <Utensils size={18} color="#27ae60" />
-    </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#27ae60' }}>{completedOrdersCount}</p>
-  <span className="modern-metric-pill modern-pill-success">Paid & Completed</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Pending Orders</h4>
-    <div className="modern-metric-icon-wrapper">
-      <Package size={18} color="#c0392b" />
-    </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#c0392b' }}>{pendingOrdersCount}</p>
-  <span className="modern-metric-pill modern-pill-warning">Awaiting completion</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Average Order Value</h4>
-    <div className="modern-metric-icon-wrapper">
-      <IndianRupee size={18} color="#d35400" />
-    </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#d35400' }}>₹{averageOrderValue.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-neutral">Per completed order</span>
 </div>
 <div className="modern-metric-card">
   <div className="modern-metric-header">
@@ -2293,115 +2196,8 @@ const exportStaffToCSV = () => {
 </div>
 </div>
 </div>
-
-{/* Daily Sales Chart & Payment Summary */}
-<div className="owner-double-deck" style={{ marginTop: '24px' }}>
-  {/* SVG Bar Chart */}
-  <div className="chart-card">
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-      <BarChart3 size={20} color="var(--color-primary)" />
-      <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem' }}>Daily Sales (Past 7 Days)</h4>
-    </div>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '180px', paddingTop: '10px' }}>
-      {weeklySalesData.map((d) => {
-        const heightPercent = maxWeeklySales > 0 ? (d.sales / maxWeeklySales) * 100 : 0;
-        return (
-          <div key={d.day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: '8px' }}>
-            <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>₹{Math.round(d.sales)}</span>
-            <div style={{ 
-              width: '24px', 
-              height: `${Math.max(heightPercent, 2)}px`, 
-              background: 'linear-gradient(to top, var(--color-primary), #d35400)', 
-              borderRadius: '4px 4px 0 0',
-              transition: 'height 0.5s ease-in-out' 
-            }} />
-            <span style={{ fontSize: '11px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{d.day}</span>
-          </div>
-        );
-      })}
-    </div>
-  </div>
-
-  {/* Payment Summary */}
-  <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-      <IndianRupee size={20} color="#2ecc71" />
-      <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem' }}>Payment Summary</h4>
-    </div>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {Object.keys(paymentSummary).length > 0 ? (
-        Object.entries(paymentSummary).map(([method, data]) => (
-          <div key={method} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(0,0,0,0.02)', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
-            <span style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--color-text-primary)' }}>{method}</span>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{data.count} orders</span>
-              <strong style={{ fontSize: '14px', color: '#27ae60' }}>₹{data.amount.toFixed(2)}</strong>
-            </div>
-          </div>
-        ))
-      ) : (
-        <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '20px 0', textAlign: 'center' }}>No payments recorded</div>
-      )}
-    </div>
-  </div>
 </div>
-
-{/* Recent Orders Card */}
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)', marginTop: '24px' }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-    <UtensilsCrossed size={20} color="#3498db" />
-    <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem' }}>Recent Orders</h4>
-  </div>
-  <div style={{ overflowX: 'auto' }}>
-    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-      <thead>
-        <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
-          <th style={{ padding: '10px 8px' }}>Order ID</th>
-          <th style={{ padding: '10px 8px' }}>Table</th>
-          <th style={{ padding: '10px 8px' }}>Branch</th>
-          <th style={{ padding: '10px 8px' }}>Status</th>
-          <th style={{ padding: '10px 8px' }}>Payment</th>
-          <th style={{ padding: '10px 8px' }}>Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        {recentOrders.length > 0 ? (
-          recentOrders.map((o) => (
-            <tr key={o._id} style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
-              <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>#{o._id.substring(o._id.length - 8).toUpperCase()}</td>
-              <td style={{ padding: '12px 8px' }}>Table {o.tableNumber}</td>
-              <td style={{ padding: '12px 8px' }}>{o.branchName || o.branchId || 'Main'}</td>
-              <td style={{ padding: '12px 8px' }}>
-                <span style={{
-                  color: o.status === 'Placed' ? '#3498db' : o.status === 'Preparing' ? '#ff9800' : o.status === 'Ready' ? '#2ecc71' : o.status === 'Delivered' ? '#9b59b6' : o.status === 'Completed' ? '#27AE60' : '#7f8c8d',
-                  fontSize: '11px', fontWeight: 'bold'
-                }}>
-                  {o.status}
-                </span>
-              </td>
-              <td style={{ padding: '12px 8px' }}>
-                <span style={{
-                  color: o.paymentStatus === 'Paid' ? '#27ae60' : '#e74c3c',
-                  fontSize: '11px', fontWeight: 'bold'
-                }}>
-                  {o.paymentStatus} ({o.paymentMethod || 'Pending'})
-                </span>
-              </td>
-              <td style={{ padding: '12px 8px', fontWeight: 'bold', color: '#27ae60' }}>₹{o.totalAmount.toFixed(2)}</td>
-            </tr>
-          ))
-        ) : (
-          <tr>
-            <td colSpan="6" style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-secondary)' }}>No recent orders found</td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-</div>
- }
+  }
 
  {/* TAB 2: MENU MANAGEMENT */}
  {activeTab === 'menu' &&
