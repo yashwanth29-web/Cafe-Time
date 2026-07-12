@@ -66,8 +66,9 @@ export const ToastProvider = ({ children }) => {
         <div style={{
           position: 'fixed', inset: 0, zIndex: 10000,
           background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifycontent: 'center',
-          alignItems: 'center', justifyContent: 'center',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           padding: '20px',
           animation: 'fadeIn 0.2s ease'
         }}>

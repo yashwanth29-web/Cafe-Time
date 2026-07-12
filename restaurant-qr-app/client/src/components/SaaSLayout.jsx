@@ -1144,7 +1144,6 @@ const SaaSLayout = ({ children }) => {
                   gap: '8px',
                   padding: '12px 8px',
                   borderRadius: '12px',
-                  border: 'none',
                   background: isActive ? 'rgba(143, 168, 155, 0.12)' : 'rgba(0, 0, 0, 0.02)',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                   cursor: 'pointer',

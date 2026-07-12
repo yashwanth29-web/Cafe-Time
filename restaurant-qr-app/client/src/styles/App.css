@@ -1760,6 +1760,7 @@ textarea.form-input {
   background-color: var(--bg-card) !important;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15) !important;
   transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+  min-width: 0 !important;
 }
 
 @media (min-width: 768px) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
@@ -14,7 +14,7 @@ import {
 import '../styles/App.css';
 
 const StaffDashboard = () => {
- const { logout, user } = useAuth();
+ const { user } = useAuth();
  const { activeBranchId } = useBranch();
  const [searchParams] = useSearchParams();
  const tabParam = searchParams.get('tab');
@@ -502,6 +502,26 @@ const StaffDashboard = () => {
         display: grid;
         grid-template-columns: 1fr;
         gap: 20px;
+        width: 100%;
+        min-width: 0;
+      }
+      .staff-dashboard-card {
+        background: var(--bg-card, #1A1A1A);
+        border: 1px solid var(--color-border);
+        padding: 16px;
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+      }
+      @media (min-width: 480px) {
+        .staff-dashboard-card {
+          padding: 24px;
+        }
       }
       .staff-dashboard-header {
         display: flex;
@@ -713,24 +733,13 @@ const StaffDashboard = () => {
  <p style={{ color: 'var(--color-text-secondary)' }}>Syncing attendance panel status...</p>
  </div> :
 
- <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+ <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', width: '100%', minWidth: 0 }}>
  
  {/* Main Action Block and Stats Block */}
  <div className="attendance-grid-container">
  
  {/* Today's Shift Status Card */}
- <div style={{
- background: 'var(--bg-card, #1A1A1A)',
- border: '1px solid var(--color-border)',
- padding: '20px',
- borderRadius: '16px',
- display: 'flex',
- flexDirection: 'column',
- justifyContent: 'space-between',
- boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
- boxSizing: 'border-box',
- width: '100%'
- }}>
+ <div className="staff-dashboard-card" style={{ padding: '20px' }}>
  <div>
  <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(0, 0, 0,0.06)', paddingBottom: '10px' }}>
  Today's Attendance Session
@@ -949,18 +958,7 @@ const StaffDashboard = () => {
  </div>
 
  {/* Today's Estimated Earnings Card */}
- <div style={{
-    background: 'var(--bg-card, #1A1A1A)',
-    border: '1px solid var(--color-border)',
-    padding: '24px',
-    borderRadius: '16px',
-    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    boxSizing: 'border-box',
-    width: '100%'
-  }}>
+ <div className="staff-dashboard-card">
     <div>
       <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: '10px' }}>
         Today's Work & Earnings
@@ -1062,18 +1060,7 @@ const StaffDashboard = () => {
   </div>
 
  {/* Attendance Analytics Card */}
- <div style={{
- background: 'var(--bg-card, #1A1A1A)',
- border: '1px solid var(--color-border)',
- padding: '24px',
- borderRadius: '16px',
- boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
- display: 'flex',
- flexDirection: 'column',
- justifyContent: 'space-between',
- boxSizing: 'border-box',
- width: '100%'
- }}>
+ <div className="staff-dashboard-card">
  <div>
  <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(0, 0, 0,0.06)', paddingBottom: '10px' }}>
  Monthly Performance (Last 30 Days)
@@ -1136,15 +1123,7 @@ const StaffDashboard = () => {
  </div>
 
  {/* 30-Day Attendance Logs */}
- <div style={{
- background: 'var(--bg-card, #1A1A1A)',
- border: '1px solid var(--color-border)',
- padding: '24px',
- borderRadius: '16px',
- boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
- boxSizing: 'border-box',
- width: '100%'
- }}>
+ <div className="staff-dashboard-card">
  <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, margin: '0 0 16px 0', borderBottom: '1px solid rgba(0, 0, 0,0.06)', paddingBottom: '10px' }}>
  Last 30 Days Shift Log
  </h3>
@@ -1154,8 +1133,8 @@ const StaffDashboard = () => {
  No attendance logs found for the last 30 days.
  </div> :
 
- <div style={{ overflowX: 'auto' }}>
- <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left' }}>
+ <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+ <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left', minWidth: '600px' }}>
  <thead>
  <tr style={{ borderBottom: '1px solid rgba(0, 0, 0,0.08)' }}>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Date</th>
@@ -1225,15 +1204,7 @@ const StaffDashboard = () => {
 
  {/* TAB 2: DAILY WORK REPORT SUBMISSION */}
  {activeTab === 'report' &&
- <div style={{
- background: 'var(--bg-card, #1A1A1A)',
- border: '1px solid var(--color-border)',
- padding: '28px',
- borderRadius: '16px',
- boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
- maxWidth: '800px',
- margin: '0 auto'
- }}>
+ <div className="staff-dashboard-card" style={{ maxWidth: '800px', margin: '0 auto' }}>
  <h3 style={{ color: 'var(--color-text-primary)', fontSize: '1.3rem', fontWeight: 800, margin: '0 0 10px 0' }}>
  Submit Daily Work Report
  </h3>

@@ -263,8 +263,24 @@ const ManagerDashboard = () =>{
  const activeCount = orders.filter((o) =>o.status === 'Placed' || o.status === 'Preparing').length;
  const lowStockItems = inventory.filter((item) =>item.stock< item.minStock);
 
- return (
-<div className="fade-in">
+  return (
+ <div className="fade-in">
+   <style>{`
+      .manager-dashboard-tab-card {
+        background: var(--bg-card);
+        border: 1px solid var(--color-border);
+        padding: 16px;
+        border-radius: 12px;
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+      }
+      @media (min-width: 768px) {
+        .manager-dashboard-tab-card {
+          padding: 25px;
+        }
+      }
+   `}</style>
  {/* Title Bar */}
 <div style={{
  display: 'flex',
@@ -329,10 +345,10 @@ const ManagerDashboard = () =>{
 <div>
  {/* TAB 1: ALL ORDERS */}
  {activeTab === 'orders' &&
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
+<div className="manager-dashboard-tab-card">
 <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1.2rem' }}>Live Order Records</h3>
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-orders" style={{ display: 'none', overflowX: 'auto' }}>
+<div className="desktop-tablet-manager-orders" style={{ display: 'none', overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
 <thead>
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
@@ -388,10 +404,10 @@ const ManagerDashboard = () =>{
 </div>
 
  {/* Mobile Card View */}
-<div className="mobile-only-manager-orders" style={{ display: 'none' }}>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+<div className="mobile-only-manager-orders" style={{ display: 'none', width: '100%', minWidth: 0 }}>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', minWidth: 0 }}>
  {orders.map((order) =>
-<div key={order._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: order.paymentMethod === 'Counter' ? '2px solid #e67e22' : '1px solid var(--color-border)', padding: '14px', borderRadius: '10px' }}>
+<div key={order._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: order.paymentMethod === 'Counter' ? '2px solid #e67e22' : '1px solid var(--color-border)', padding: '14px', borderRadius: '10px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
 <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>#{order._id.substring(order._id.length - 8).toUpperCase()}</span>
 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -436,14 +452,14 @@ const ManagerDashboard = () =>{
 
  {/* TAB 2: STAFF ATTENDANCE */}
  {activeTab === 'attendance' &&
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
+<div className="manager-dashboard-tab-card">
 <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1.2rem' }}>Employee Attendance Register</h3>
  {staffList.length === 0 ?
 <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>No staff members registered.</p>:
 
 <>
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-attendance" style={{ display: 'none', overflowX: 'auto' }}>
+<div className="desktop-tablet-manager-attendance" style={{ display: 'none', overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
 <thead>
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)' }}>
@@ -484,11 +500,11 @@ const ManagerDashboard = () =>{
 </div>
 
  {/* Mobile Card View */}
-<div className="mobile-only-manager-attendance" style={{ display: 'none' }}>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+<div className="mobile-only-manager-attendance" style={{ display: 'none', width: '100%', minWidth: 0 }}>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', minWidth: 0 }}>
  {staffList.map((member) =>
-<div key={member._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '14px', borderRadius: '10px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+<div key={member._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '14px', borderRadius: '10px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
 <div>
 <div style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', fontSize: '15px' }}>{member.name}</div>
 <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'capitalize' }}>{member.staffRole}</span>
@@ -526,7 +542,7 @@ const ManagerDashboard = () =>{
 
  {/* TAB 3: INVENTORY AUTOMATION */}
  {activeTab === 'inventory' &&
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
+<div className="manager-dashboard-tab-card">
 <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1.2rem', fontWeight: 800 }}>Smart Ingredient Stockroom</h3>
 <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '20px' }}>
  Operational inventory management panel. View stock levels, record restock/purchases, and track wastage logs. Cost and Selling prices are read-only.
@@ -552,7 +568,7 @@ const ManagerDashboard = () =>{
 </div>
 
  {/* Desktop Table View */}
-<div className="desktop-tablet-manager-inventory" style={{ display: 'none', overflowX: 'auto' }}>
+<div className="desktop-tablet-manager-inventory" style={{ display: 'none', overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
 <thead>
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
@@ -655,8 +671,8 @@ const ManagerDashboard = () =>{
 </div>
 
  {/* Mobile Card View */}
-<div className="mobile-only-manager-inventory" style={{ display: 'none' }}>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+<div className="mobile-only-manager-inventory" style={{ display: 'none', width: '100%', minWidth: 0 }}>
+<div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', minWidth: 0 }}>
  {filteredInventory.map((item) =>{
  const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
  const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
@@ -668,7 +684,7 @@ const ManagerDashboard = () =>{
  if (isLow) statusColor = '#F39C12';
 
  return (
-<div key={item._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '14px', borderRadius: '10px' }}>
+<div key={item._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '14px', borderRadius: '10px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
 <div>
 <div style={{ color: 'var(--color-text-primary)', fontWeight: 'bold', fontSize: '15px' }}>{item.name}</div>
@@ -742,7 +758,7 @@ const ManagerDashboard = () =>{
 
  {/* TAB 4: DAILY REPORTS */}
  {activeTab === 'reports' &&
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
+<div className="manager-dashboard-tab-card">
 <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 20px 0', fontSize: '1.2rem' }}>End-of-Day Daily Statement</h3>
 <div className="form-row" style={{ gap: '30px' }}>
 <div style={{ borderRight: '1px solid #5C4331', paddingRight: '30px' }}>
@@ -788,7 +804,7 @@ const ManagerDashboard = () =>{
 
  {/* TAB 5: CAFE MENU (MANAGER VIEW) */}
  {activeTab === 'menu' &&
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '12px' }}>
+<div className="manager-dashboard-tab-card">
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
 <div>
 <h3 style={{ fontSize: '1.2rem', color: 'var(--color-text-primary)', margin: 0, fontWeight: 800 }}>Cafe Dishes & Availability</h3>
@@ -823,7 +839,7 @@ const ManagerDashboard = () =>{
  filteredMenuItems.length === 0 ?
 <p style={{ color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>No menu items found.</p>:
 
-<div className="menu-grid-admin" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+<div className="menu-grid-admin" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', width: '100%', minWidth: 0 }}>
  {filteredMenuItems.map((item) =>
 <div key={item._id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`} style={{
  background: '#1F140E',
@@ -831,7 +847,9 @@ const ManagerDashboard = () =>{
  borderRadius: '10px',
  overflow: 'hidden',
  display: 'flex',
- flexDirection: 'column'
+ flexDirection: 'column',
+ width: '100%',
+ minWidth: 0
  }}>
 <div className="admin-menu-info" style={{ padding: '15px', display: 'flex', flexDirection: 'column', height: '100%' }}>
 <div style={{ flexGrow: 1 }}>

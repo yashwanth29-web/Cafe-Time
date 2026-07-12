@@ -34,7 +34,7 @@ const EmployeePayrollPage = () => {
 
   return (
     <div style={{ padding: '20px', maxWidth: '1000px', margin: '0 auto', fontFamily: "'Outfit', sans-serif" }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '16px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ margin: 0, color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '1.8rem' }}>My Salary Station</h2>
           <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>View your attendance shift logs, calculated daily rates, and total weekly earnings.</p>
@@ -60,13 +60,13 @@ const EmployeePayrollPage = () => {
           Retrieving your weekly salary metrics...
         </div>
       ) : salaryData ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', width: '100%', minWidth: 0 }}>
           
           {/* Section 1: Dashboard Earnings Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', width: '100%', minWidth: 0 }}>
             
             {/* Net Earnings Summary */}
-            <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0 }}>
               <div>
                 <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 800, borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '8px' }}>
                   Current Week Earnings
@@ -87,7 +87,7 @@ const EmployeePayrollPage = () => {
             </div>
 
             {/* Attendance & Shift Hours Card */}
-            <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
+            <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', minWidth: 0 }}>
               <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 800, borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '8px' }}>
                 Weekly Breakdown Summary
               </h3>
@@ -126,15 +126,15 @@ const EmployeePayrollPage = () => {
           </div>
 
           {/* Section 2: Detailed Logs Table */}
-          <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)' }}>
+          <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)', minWidth: 0 }}>
             <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)', fontSize: '1.25rem', fontWeight: 800 }}>Attendance Shift Logs & Daily Calculated Salary</h3>
             {(!salaryData.attendances || salaryData.attendances.length === 0) ? (
               <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)', background: 'rgba(0,0,0,0.02)', borderRadius: '12px' }}>
                 No completed attendance records found for this week.
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
                       <th style={{ padding: '12px 10px' }}>Date</th>

@@ -452,7 +452,7 @@ const StaffOrderWorkspace = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', width: '100%' }}>
         
         {/* Navigation Tabs */}
-        <div className="scrollable-tabs-container" style={{ background: 'var(--bg-secondary)', padding: '4px', borderRadius: '12px', width: '100%', maxWidth: 'max-content' }}>
+        <div className="scrollable-tabs-container" style={{ background: 'var(--bg-secondary)', padding: '4px', borderRadius: '12px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
           <button
             onClick={() => setSearchParams({ tab: 'orders', sub: subTabParam })}
             style={{
@@ -524,7 +524,7 @@ const StaffOrderWorkspace = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           {/* Sub Tab Queue Filter Indicators */}
-          <div className="scrollable-tabs-container" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '10px' }}>
+          <div className="scrollable-tabs-container" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '10px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
             {[
               { id: 'all', label: 'All Orders', count: stats.all, color: 'var(--color-text-primary)' },
               { id: 'placed', label: 'Placed / New', count: stats.placed, color: '#3498db' },
@@ -558,7 +558,7 @@ const StaffOrderWorkspace = () => {
               🎉 No orders found in this category. Queue is empty!
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
               {filteredOrders.map((order) => {
                 const isUnpaid = order.status === 'Delivered' && order.paymentStatus === 'Pending';
                 const ageMinutes = Math.round((Date.now() - new Date(order.createdAt).getTime()) / 60000);
@@ -623,7 +623,7 @@ const StaffOrderWorkspace = () => {
                         <strong style={{ fontSize: '1.1rem', color: '#27AE60' }}>₹{order.totalAmount}</strong>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '6px' }}>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }}>
                         
                         {/* Print KOT helper */}
                         <button
