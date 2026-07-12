@@ -5,6 +5,13 @@ import { getInventory, getNotifications, markNotificationRead } from '../service
 import BranchSwitcher from './BranchSwitcher';
 import { useBranch } from '../context/BranchContext';
 
+// Simple global cache for layout notifications and low-stock alerts
+const layoutCache = {
+  notifications: [],
+  lowStockAlerts: [],
+  hasLoaded: false
+};
+
 const SaaSLayout = ({ children }) => {
   const { user, logout } = useAuth();
   const { activeBranchId } = useBranch();
@@ -15,10 +22,10 @@ const SaaSLayout = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     return window.innerWidth >= 768 && window.innerWidth < 1024;
   });
-  const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [lowStockAlerts, setLowStockAlerts] = useState(() => layoutCache.lowStockAlerts);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState(() => layoutCache.notifications);
   const [notificationsDisabled, setNotificationsDisabled] = useState(false);
 
   const fetchNotifications = async () => {
@@ -26,7 +33,10 @@ const SaaSLayout = ({ children }) => {
     try {
       const res = await getNotifications();
       if (res && res.success) {
-        setNotifications(res.data || []);
+        const notifs = res.data || [];
+        setNotifications(notifs);
+        layoutCache.notifications = notifs;
+        layoutCache.hasLoaded = true;
       }
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
@@ -126,6 +136,7 @@ const SaaSLayout = ({ children }) => {
               return qty <= reorder;
             });
             setLowStockAlerts(lowItems);
+            layoutCache.lowStockAlerts = lowItems;
           }
         } catch (err) {
           console.error('Failed to fetch alerts in layout:', err);

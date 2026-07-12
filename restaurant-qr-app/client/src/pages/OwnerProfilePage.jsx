@@ -3,8 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useBranch } from '../context/BranchContext';
-import OwnerLayout from '../components/OwnerLayout';
+import OwnerLayout, { invalidateOwnerLayoutCache } from '../components/OwnerLayout';
 import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff, getAssetUrl } from '../services/api';
+
+// Simple global cache for profile page data
+const profileCache = {
+  cafeData: null,
+  paymentConfig: null,
+  operationalConfig: null,
+  branches: [],
+  staffCount: 0,
+  hasLoaded: false
+};
 
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
@@ -12,12 +22,12 @@ const OwnerProfilePage = () => {
   const { activeBranchId } = useBranch();
   const navigate = useNavigate();
 
-  const [cafeData, setCafeData] = useState(null);
-  const [paymentConfig, setPaymentConfig] = useState(null);
-  const [operationalConfig, setOpsConfig] = useState(null);
-  const [branches, setBranches] = useState([]);
-  const [staffCount, setStaffCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [cafeData, setCafeData] = useState(() => profileCache.cafeData);
+  const [paymentConfig, setPaymentConfig] = useState(() => profileCache.paymentConfig);
+  const [operationalConfig, setOpsConfig] = useState(() => profileCache.operationalConfig);
+  const [branches, setBranches] = useState(() => profileCache.branches);
+  const [staffCount, setStaffCount] = useState(() => profileCache.staffCount);
+  const [loading, setLoading] = useState(() => !profileCache.hasLoaded);
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -58,6 +68,7 @@ const OwnerProfilePage = () => {
     try {
       await deleteBranch(id);
       showToast(`Branch "${name}" deleted.`);
+      invalidateOwnerLayoutCache();
       await load();
     } catch (err) {
       showToast(err?.response?.data?.message || 'Delete failed.', false);
@@ -67,13 +78,20 @@ const OwnerProfilePage = () => {
   };
 
   const load = async () => {
-    setLoading(true);
+    if (!profileCache.hasLoaded) {
+      setLoading(true);
+    }
     try {
       const [r, br, st] = await Promise.all([getSetupData(), getBranches(), getStaff()]);
       if (r.success) {
         setCafeData(r.cafe);
         setPaymentConfig(r.paymentConfig);
         setOpsConfig(r.operationalConfig);
+        
+        profileCache.cafeData = r.cafe;
+        profileCache.paymentConfig = r.paymentConfig;
+        profileCache.operationalConfig = r.operationalConfig;
+
         if (r.cafe.gstRate !== undefined) {
           setTaxRateState(r.cafe.gstRate);
           localStorage.setItem('owner_tax_rate', String(r.cafe.gstRate));
@@ -83,8 +101,17 @@ const OwnerProfilePage = () => {
           localStorage.setItem('owner_service_charge', String(r.cafe.serviceChargeRate));
         }
       }
-      if (br.success) setBranches(br.branches || []);
-      if (st.success) setStaffCount(st.staff?.length || 0);
+      if (br.success) {
+        const brList = br.branches || [];
+        setBranches(brList);
+        profileCache.branches = brList;
+      }
+      if (st.success) {
+        const count = st.staff?.length || 0;
+        setStaffCount(count);
+        profileCache.staffCount = count;
+      }
+      profileCache.hasLoaded = true;
     } catch {showToast('Failed to load.', false);} finally
     {setLoading(false);}
   };
@@ -136,6 +163,8 @@ const OwnerProfilePage = () => {
         await updatePrimaryColor(form.uiPrimaryColor);
       } else if (activeModal === 'branch') {await createBranch(form);} else
       if (activeModal === 'editBranch') {await updateBranch(editingBranchId, form);}
+      
+      invalidateOwnerLayoutCache();
       await load();showToast('Saved successfully!');closeModal();
     } catch (err) {showToast(err?.response?.data?.message || 'Save failed.', false);} finally
     {setSaving(false);}

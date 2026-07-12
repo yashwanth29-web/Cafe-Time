@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import {
  createBranch,
@@ -107,13 +107,47 @@ const AdminMenuImage = ({ item }) =>{
 
 };
 
+// Simple in-memory global cache for instant rendering
+const dashboardCache = {};
+
+const getBranchCache = (branchId) => {
+  const key = branchId || 'all';
+  if (!dashboardCache[key]) {
+    dashboardCache[key] = {
+      orders: [],
+      menuItems: [],
+      categories: [],
+      inventoryList: [],
+      inventoryCategories: [],
+      statsData: null,
+      staff: [],
+      attendanceRecords: [],
+      attendanceSummary: {
+        totalStaff: 0,
+        present: 0,
+        absent: 0,
+        late: 0,
+        checkedOut: 0,
+        currentlyWorking: 0
+      },
+      attendanceReports: null,
+      workReports: [],
+      setupConfig: null,
+      hasLoaded: {}
+    };
+  }
+  return dashboardCache[key];
+};
+
 const OwnerDashboard = () =>{
  const { user } = useAuth();
  const { branches, branchesLoading, activeBranchId, onBranchSwitch, loadBranches } = useBranch();
  const navigate = useNavigate();
  const location = useLocation();
- const [searchParams] = useSearchParams();
- const tabParam = searchParams.get('tab');
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
+  const activeBranchIdRef = useRef(activeBranchId);
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState(() => {
@@ -137,55 +171,41 @@ const OwnerDashboard = () =>{
     return 'roster';
   });
 
-  useEffect(() => {
-    if (tabParam) {
-      if (tabParam === 'reviews') {
-        setActiveTab('menu');
-        setMenuSubTab('reviews');
-      } else if (tabParam === 'reports' || tabParam === 'financial_reports') {
-        setActiveTab('reports');
-        if (tabParam === 'financial_reports') setReportType('financial_summary');
-      } else if (tabParam === 'attendance') {
-        setActiveTab('staff');
-        setStaffSubTab('attendance');
-      } else if (tabParam === 'settings' || tabParam === 'config') {
-        navigate('/owner/profile');
-      } else {
-        setActiveTab(tabParam);
-        if (tabParam === 'menu') {
-          setMenuSubTab('dishes');
-        }
-        if (tabParam === 'staff') {
-          const subParam = searchParams.get('sub');
-          if (subParam === 'salary') {
-            setStaffSubTab('salary');
-          } else if (subParam === 'reports') {
-            setStaffSubTab('reports');
-          } else {
-            setStaffSubTab('roster');
-          }
-        }
-      }
-    } else {
-      setActiveTab('analytics');
-    }
-  }, [tabParam, searchParams, navigate]);
-
- // Base Data States
- const [orders, setOrders] = useState([]);
- const [ordersLoading, setOrdersLoading] = useState(true);
- const [ordersError, setOrdersError] = useState('');
- const seenPaidOrderIdsRef = useRef(new Set());
- const [orderDateFilter, setOrderDateFilter] = useState(() => {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
- });
- const [orderSearchQuery, setOrderSearchQuery] = useState('');
- const [menuItems, setMenuItems] = useState([]);
- const [menuLoading, setMenuLoading] = useState(false);
- const [menuError, setMenuError] = useState('');
- const [staff, setStaff] = useState([]);
- const [staffLoading, setStaffLoading] = useState(false);
+  // Base Data States
+  const [orders, setOrders] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).orders;
+  });
+  const [ordersLoading, setOrdersLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.orders;
+  });
+  const [ordersError, setOrdersError] = useState('');
+  const seenPaidOrderIdsRef = useRef(new Set());
+  const [orderDateFilter, setOrderDateFilter] = useState(() => {
+   const today = new Date();
+   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+  const [orderSearchQuery, setOrderSearchQuery] = useState('');
+  
+  const [menuItems, setMenuItems] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).menuItems;
+  });
+  const [menuLoading, setMenuLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.menuItems;
+  });
+  const [menuError, setMenuError] = useState('');
+  
+  const [staff, setStaff] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).staff;
+  });
+  const [staffLoading, setStaffLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.staff;
+  });
   const [staffError, setStaffError] = useState('');
 
   // POS/ERP Reports States
@@ -205,8 +225,15 @@ const OwnerDashboard = () =>{
   const [reportData, setReportData] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState('');
-  const [statsData, setStatsData] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(false);
+  
+  const [statsData, setStatsData] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).statsData;
+  });
+  const [statsLoading, setStatsLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.statsData;
+  });
   const [statsError, setStatsError] = useState('');
 
   const loadReportData = async (isSilent = false) => {
@@ -276,13 +303,17 @@ const OwnerDashboard = () =>{
     }
   };
 
-  const fetchDashboardStats = async (isSilent = false) => {
-    if (!isSilent) setStatsLoading(true);
+  const fetchDashboardStats = async (isSilent = false, targetBranchId = activeBranchId) => {
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.statsData) setStatsLoading(true);
     setStatsError('');
     try {
-      const response = await getDashboardStats({ branchId: activeBranchId === 'all' ? null : activeBranchId });
+      const response = await getDashboardStats({ branchId: targetBranchId === 'all' ? null : targetBranchId });
+      if (targetBranchId !== activeBranchIdRef.current) return;
       if (response.success) {
         setStatsData(response.data);
+        cache.statsData = response.data;
+        cache.hasLoaded.statsData = true;
       } else {
         setStatsError(response.message || 'Failed to load dashboard metrics');
       }
@@ -290,15 +321,13 @@ const OwnerDashboard = () =>{
       console.error('Error fetching dashboard stats:', err);
       setStatsError(err.response?.data?.message || 'Error fetching dashboard metrics');
     } finally {
-      setStatsLoading(false);
+      if (targetBranchId === activeBranchIdRef.current) {
+        setStatsLoading(false);
+      }
     }
   };
 
-  useEffect(() => {
-    if (activeTab === 'reports') {
-      loadReportData();
-    }
-  }, [activeTab, reportType, reportBranchId, reportDateRange, reportStartDate, reportEndDate]);
+
 
   const handleDownloadExcel = () => {
     if (!reportData || reportData.length === 0) return;
@@ -363,24 +392,35 @@ const OwnerDashboard = () =>{
   });
   const [detectingLocation, setDetectingLocation] = useState(false);
 
- const [attendanceRecords, setAttendanceRecords] = useState([]);
- const [attendanceSummary, setAttendanceSummary] = useState({
- totalStaff: 0,
- present: 0,
- absent: 0,
- late: 0,
- checkedOut: 0,
- currentlyWorking: 0
- });
- const [attendanceLoading, setAttendanceLoading] = useState(false);
- const [reportRange, setReportRange] = useState('daily');
- const [reportBranch, setReportBranch] = useState('');
- const [attendanceReports, setAttendanceReports] = useState(null);
+  const [attendanceRecords, setAttendanceRecords] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).attendanceRecords;
+  });
+  const [attendanceSummary, setAttendanceSummary] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).attendanceSummary;
+  });
+  const [attendanceLoading, setAttendanceLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.attendanceRecords;
+  });
+  const [reportRange, setReportRange] = useState('daily');
+  const [reportBranch, setReportBranch] = useState('');
+  const [attendanceReports, setAttendanceReports] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).attendanceReports;
+  });
 
- // Work Report states
- const [workReports, setWorkReports] = useState([]);
- const [reportsLoading, setReportsLoading] = useState(false);
- const [reportsError, setReportsError] = useState('');
+  // Work Report states
+  const [workReports, setWorkReports] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).workReports;
+  });
+  const [reportsLoading, setReportsLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.workReports;
+  });
+  const [reportsError, setReportsError] = useState('');
  const [reportsFilterRange, setReportsFilterRange] = useState('today'); // 'today', 'this_week', 'all'
  const [reportsFilterStaff, setReportsFilterStaff] = useState('');
  const [reportsFilterBranch, setReportsFilterBranch] = useState('');
@@ -413,18 +453,30 @@ const OwnerDashboard = () =>{
 
  // New menu item input state
  // Dynamic Category States
- const [categories, setCategories] = useState([]);
- const [categoryLoading, setCategoryLoading] = useState(false);
- const [categoryError, setCategoryError] = useState('');
- const [showCategoryModal, setShowCategoryModal] = useState(false);
- const [newCategoryName, setNewCategoryName] = useState('');
- const [editingCategory, setEditingCategory] = useState(null);
- const [categoryNameInput, setCategoryNameInput] = useState('');
+  const [categories, setCategories] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).categories;
+  });
+  const [categoryLoading, setCategoryLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.categories;
+  });
+  const [categoryError, setCategoryError] = useState('');
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [categoryNameInput, setCategoryNameInput] = useState('');
 
- // Dynamic Inventory Category States
- const [inventoryCategories, setInventoryCategories] = useState([]);
- const [invCategoryLoading, setInvCategoryLoading] = useState(false);
- const [invCategoryError, setInvCategoryError] = useState('');
+  // Dynamic Inventory Category States
+  const [inventoryCategories, setInventoryCategories] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).inventoryCategories;
+  });
+  const [invCategoryLoading, setInvCategoryLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.inventoryCategories;
+  });
+  const [invCategoryError, setInvCategoryError] = useState('');
  const [newInvCategoryName, setNewInvCategoryName] = useState('');
 
  const [newItem, setNewItem] = useState({
@@ -499,10 +551,16 @@ const OwnerDashboard = () =>{
   const [ifscCode, setIfscCode] = useState('');
   const [paymentInstructions, setPaymentInstructions] = useState('');
 
- // Database Inventory State
- const [inventoryList, setInventoryList] = useState([]);
- const [inventoryLoading, setInventoryLoading] = useState(false);
- const [inventoryError, setInventoryError] = useState('');
+  // Database Inventory State
+  const [inventoryList, setInventoryList] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return getBranchCache(activeId).inventoryList;
+  });
+  const [inventoryLoading, setInventoryLoading] = useState(() => {
+    const activeId = localStorage.getItem('activeBranchId') || 'all';
+    return !getBranchCache(activeId).hasLoaded.inventoryList;
+  });
+  const [inventoryError, setInventoryError] = useState('');
  const [inventoryLogs, setInventoryLogs] = useState([]);
  const [wastageReport, setWastageReport] = useState({ totalCost: 0, count: 0, data: [] });
  const [consumptionReport, setConsumptionReport] = useState({ totalCost: 0, count: 0, data: [] });
@@ -559,15 +617,19 @@ const OwnerDashboard = () =>{
  const [menuSearch, setMenuSearch] = useState('');
  const [inventorySearch, setInventorySearch] = useState('');
 
- const filteredMenuItems = menuItems.filter((item) =>
- item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
- (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
-);
+  const filteredMenuItems = useMemo(() => {
+    return menuItems.filter((item) =>
+      item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+      (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
+    );
+  }, [menuItems, menuSearch]);
 
- const filteredInventoryList = inventoryList.filter((item) =>
- item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
- (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
-);
+  const filteredInventoryList = useMemo(() => {
+    return inventoryList.filter((item) =>
+      item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+      (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
+    );
+  }, [inventoryList, inventorySearch]);
 
  const [imageUploading, setImageUploading] = useState(false);
 
@@ -604,34 +666,43 @@ const OwnerDashboard = () =>{
  'Starters & Bites',
  'French Fries'];
 
+  const applySetupConfig = (res) => {
+    if (res.operationalConfig?.tables) {
+      const t = res.operationalConfig.tables.map((tbl) => tbl.id.replace('T', ''));
+      if (t.length > 0) setDynamicTables(t);
+    }
+    if (res.cafe) {
+      setTaxRate(res.cafe.gstRate !== undefined ? res.cafe.gstRate : 5);
+      setServiceCharge(res.cafe.serviceChargeRate !== undefined ? res.cafe.serviceChargeRate : 0);
+    }
+    if (res.paymentConfig) {
+      setAcceptCash(res.paymentConfig.acceptCash !== undefined ? res.paymentConfig.acceptCash : true);
+      setEnableUpi(res.paymentConfig.enableUpi !== undefined ? res.paymentConfig.enableUpi : true);
+      setUpiId(res.paymentConfig.upiId || '');
+      setBankHolderName(res.paymentConfig.bankHolderName || '');
+      setAccountNumber(res.paymentConfig.accountNumber || '');
+      setIfscCode(res.paymentConfig.ifscCode || '');
+      setPaymentInstructions(res.paymentConfig.paymentInstructions || '');
+      if (res.paymentConfig.taxRate !== undefined) {
+        setTaxRate(res.paymentConfig.taxRate);
+      }
+      if (res.paymentConfig.platformCharge !== undefined) {
+        setServiceCharge(res.paymentConfig.platformCharge);
+      }
+    }
+  };
+
   // Load Setup Config
-  const loadSetupConfig = async () =>{
+  const loadSetupConfig = async () => {
+    const cache = getBranchCache(activeBranchId);
+    if (cache.setupConfig) {
+      applySetupConfig(cache.setupConfig);
+    }
     try {
       const res = await getSetupData();
       if (res.success) {
-        if (res.operationalConfig?.tables) {
-          const t = res.operationalConfig.tables.map((tbl) =>tbl.id.replace('T', ''));
-          if (t.length >0) setDynamicTables(t);
-        }
-        if (res.cafe) {
-          setTaxRate(res.cafe.gstRate !== undefined ? res.cafe.gstRate : 5);
-          setServiceCharge(res.cafe.serviceChargeRate !== undefined ? res.cafe.serviceChargeRate : 0);
-        }
-        if (res.paymentConfig) {
-          setAcceptCash(res.paymentConfig.acceptCash !== undefined ? res.paymentConfig.acceptCash : true);
-          setEnableUpi(res.paymentConfig.enableUpi !== undefined ? res.paymentConfig.enableUpi : true);
-          setUpiId(res.paymentConfig.upiId || '');
-          setBankHolderName(res.paymentConfig.bankHolderName || '');
-          setAccountNumber(res.paymentConfig.accountNumber || '');
-          setIfscCode(res.paymentConfig.ifscCode || '');
-          setPaymentInstructions(res.paymentConfig.paymentInstructions || '');
-          if (res.paymentConfig.taxRate !== undefined) {
-            setTaxRate(res.paymentConfig.taxRate);
-          }
-          if (res.paymentConfig.platformCharge !== undefined) {
-            setServiceCharge(res.paymentConfig.platformCharge);
-          }
-        }
+        cache.setupConfig = res;
+        applySetupConfig(res);
       }
     } catch (err) {
       console.error('Error fetching tables/keys setup:', err);
@@ -681,81 +752,100 @@ const OwnerDashboard = () =>{
     }
   };
 
- // Fetch Orders (Monitoring)
- const fetchOrders = async () =>{
- try {
- const queryParams = { date: orderDateFilter, cafeId: user?.cafeId };
- if (activeBranchId && activeBranchId !== 'all') {
-   queryParams.branchId = activeBranchId;
- }
- const response = await getOrders(queryParams);
- if (response.success) {
- setOrders(response.data);
-  
-  // Track paid status transition
-  const paidOrders = response.data.filter((o) => o.paymentStatus === 'Paid');
-  if (seenPaidOrderIdsRef.current.size === 0) {
-    paidOrders.forEach((o) => seenPaidOrderIdsRef.current.add(o._id));
-  } else {
-    const newPaidOrders = paidOrders.filter((o) => !seenPaidOrderIdsRef.current.has(o._id));
-    if (newPaidOrders.length > 0) {
-      playNotificationSound();
-      newPaidOrders.forEach((order) => {
-        speakPaymentReceived(order);
-        seenPaidOrderIdsRef.current.add(order._id);
-      });
+  // Fetch Orders (Monitoring)
+  const fetchOrders = async (isSilent = false, targetBranchId = activeBranchId) =>{
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.orders) setOrdersLoading(true);
+    try {
+      const queryParams = { date: orderDateFilter, cafeId: user?.cafeId };
+      if (targetBranchId && targetBranchId !== 'all') {
+        queryParams.branchId = targetBranchId;
+      }
+      const response = await getOrders(queryParams);
+      if (targetBranchId !== activeBranchIdRef.current) return;
+      if (response.success) {
+        setOrders(response.data);
+        cache.orders = response.data;
+        cache.hasLoaded.orders = true;
+   
+        // Track paid status transition
+        const paidOrders = response.data.filter((o) => o.paymentStatus === 'Paid');
+        if (seenPaidOrderIdsRef.current.size === 0) {
+          paidOrders.forEach((o) => seenPaidOrderIdsRef.current.add(o._id));
+        } else {
+          const newPaidOrders = paidOrders.filter((o) => !seenPaidOrderIdsRef.current.has(o._id));
+          if (newPaidOrders.length > 0) {
+            playNotificationSound();
+            newPaidOrders.forEach((order) => {
+              speakPaymentReceived(order);
+              seenPaidOrderIdsRef.current.add(order._id);
+            });
+          }
+        }
+        setOrdersError('');
+      } else {
+        setOrdersError('Failed to refresh orders.');
+      }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      setOrdersError('Cannot connect to local server orders feed.');
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setOrdersLoading(false);
+      }
     }
-  }
- setOrdersError('');
- } else {
- setOrdersError('Failed to refresh orders.');
- }
- } catch (error) {
- console.error('Error fetching orders:', error);
- setOrdersError('Cannot connect to local server orders feed.');
- } finally {
- setOrdersLoading(false);
- }
- };
+  };
 
- // Fetch Menu
- const fetchMenu = async (isSilent = false) =>{
- if (!isSilent) setMenuLoading(true);
- try {
- const response = await getMenu();
- if (response.success) {
- const mappedData = response.data.map(item => ({ ...item, id: item._id || item.id }));
- setMenuItems(mappedData);
- setMenuError('');
- } else {
- setMenuError('Failed to load cafe menu.');
- }
- } catch (error) {
- console.error('Error fetching menu:', error);
- setMenuError('Cannot connect to local server menu database.');
- } finally {
- setMenuLoading(false);
- }
- };
+  // Fetch Menu
+  const fetchMenu = async (isSilent = false, targetBranchId = activeBranchId) =>{
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.menuItems) setMenuLoading(true);
+    try {
+      const response = await getMenu();
+      if (targetBranchId !== activeBranchIdRef.current) return;
+      if (response.success) {
+        const mappedData = response.data.map(item => ({ ...item, id: item._id || item.id }));
+        setMenuItems(mappedData);
+        cache.menuItems = mappedData;
+        cache.hasLoaded.menuItems = true;
+        setMenuError('');
+      } else {
+        setMenuError('Failed to load cafe menu.');
+      }
+    } catch (error) {
+      console.error('Error fetching menu:', error);
+      setMenuError('Cannot connect to local server menu database.');
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setMenuLoading(false);
+      }
+    }
+  };
 
- // Fetch Categories
- const fetchCategories = async (isSilent = false) =>{
- if (!isSilent) setCategoryLoading(true);
- try {
- const response = await getCategories();
- if (response && response.success) {
- setCategories(response.data);
- setCategoryError('');
- } else {
- setCategoryError('Failed to load categories.');
- }
- } catch (error) {
- console.error('Error fetching categories:', error);
- setCategoryError('Cannot connect to category database.');
- } finally {
- setCategoryLoading(false);
- }
- };
+  // Fetch Categories
+  const fetchCategories = async (isSilent = false, targetBranchId = activeBranchId) =>{
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.categories) setCategoryLoading(true);
+    try {
+      const response = await getCategories();
+      if (targetBranchId !== activeBranchIdRef.current) return;
+      if (response && response.success) {
+        setCategories(response.data);
+        cache.categories = response.data;
+        cache.hasLoaded.categories = true;
+        setCategoryError('');
+      } else {
+        setCategoryError('Failed to load categories.');
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      setCategoryError('Cannot connect to category database.');
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setCategoryLoading(false);
+      }
+    }
+  };
 
  const handleCreateCategory = async (e) =>{
  e.preventDefault();
@@ -873,24 +963,30 @@ const OwnerDashboard = () =>{
  }
  };
 
- // Fetch Inventory Categories
- const fetchInventoryCategories = async (isSilent = false) =>{
- if (!isSilent) setInvCategoryLoading(true);
- try {
- const response = await getInventoryCategories();
- if (response && response.success) {
- setInventoryCategories(response.data);
- setInvCategoryError('');
- } else {
- setInvCategoryError('Failed to load stock categories.');
- }
- } catch (error) {
- console.error('Error fetching inventory categories:', error);
- setInvCategoryError('Cannot connect to stock categories database.');
- } finally {
- setInvCategoryLoading(false);
- }
- };
+  // Fetch Inventory Categories
+  const fetchInventoryCategories = async (isSilent = false, targetBranchId = activeBranchId) =>{
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.inventoryCategories) setInvCategoryLoading(true);
+    try {
+      const response = await getInventoryCategories();
+      if (targetBranchId !== activeBranchIdRef.current) return;
+      if (response && response.success) {
+        setInventoryCategories(response.data);
+        cache.inventoryCategories = response.data;
+        cache.hasLoaded.inventoryCategories = true;
+        setInvCategoryError('');
+      } else {
+        setInvCategoryError('Failed to load stock categories.');
+      }
+    } catch (error) {
+      console.error('Error fetching inventory categories:', error);
+      setInvCategoryError('Cannot connect to stock categories database.');
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setInvCategoryLoading(false);
+      }
+    }
+  };
 
  const handleCreateInventoryCategory = async (e) =>{
  e.preventDefault();
@@ -930,78 +1026,103 @@ const OwnerDashboard = () =>{
  }
  };
 
- // Fetch Staff
- const fetchStaffList = async (isSilent = false) =>{
- if (!isSilent) setStaffLoading(true);
- try {
- const response = await getStaff();
- if (response.success) {
- setStaff(response.staff);
- setStaffError('');
- } else {
- setStaffError('Failed to load staff roster.');
- }
- } catch (error) {
- console.error('Error fetching staff:', error);
- setStaffError('Cannot connect to local server staff database.');
- } finally {
- setStaffLoading(false);
- }
- };
+  // Fetch Staff
+  const fetchStaffList = async (isSilent = false, targetBranchId = activeBranchId) =>{
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.staff) setStaffLoading(true);
+    try {
+      const response = await getStaff();
+      if (targetBranchId !== activeBranchIdRef.current) return;
+      if (response.success) {
+        setStaff(response.staff);
+        cache.staff = response.staff;
+        cache.hasLoaded.staff = true;
+        setStaffError('');
+      } else {
+        setStaffError('Failed to load staff roster.');
+      }
+    } catch (error) {
+      console.error('Error fetching staff:', error);
+      setStaffError('Cannot connect to local server staff database.');
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setStaffLoading(false);
+      }
+    }
+  };
 
- // Fetch Attendance Today Dashboard
- const fetchAttendanceToday = async (isSilent = false) =>{
- if (!isSilent) setAttendanceLoading(true);
- try {
- const res = await getOwnerTodayAttendance();
- if (res.success) {
- setAttendanceSummary(res.summary);
- setAttendanceRecords(res.records);
- }
- } catch (error) {
- console.error('Error fetching today attendance:', error);
- } finally {
- setAttendanceLoading(false);
- }
- };
+  // Fetch Attendance Today Dashboard
+  const fetchAttendanceToday = async (isSilent = false, targetBranchId = activeBranchId) =>{
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.attendanceRecords) setAttendanceLoading(true);
+    try {
+      const res = await getOwnerTodayAttendance();
+      if (targetBranchId !== activeBranchIdRef.current) return;
+      if (res.success) {
+        setAttendanceSummary(res.summary);
+        setAttendanceRecords(res.records);
+        cache.attendanceSummary = res.summary;
+        cache.attendanceRecords = res.records;
+        cache.hasLoaded.attendanceRecords = true;
+      }
+    } catch (error) {
+      console.error('Error fetching today attendance:', error);
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setAttendanceLoading(false);
+      }
+    }
+  };
 
- // Fetch Attendance Reports
- const fetchAttendanceReportsData = async (isSilent = false) =>{
- if (!isSilent) setAttendanceLoading(true);
- try {
- const res = await getOwnerAttendanceReports({ range: reportRange, branchId: reportBranch });
- if (res.success) {
- setAttendanceReports(res);
- }
- } catch (error) {
- console.error('Error fetching reports:', error);
- } finally {
- setAttendanceLoading(false);
- }
- };
+  // Fetch Attendance Reports
+  const fetchAttendanceReportsData = async (isSilent = false, targetBranchId = activeBranchId) =>{
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.attendanceReports) setAttendanceLoading(true);
+    try {
+      const res = await getOwnerAttendanceReports({ range: reportRange, branchId: reportBranch });
+      if (targetBranchId !== activeBranchIdRef.current) return;
+      if (res.success) {
+        setAttendanceReports(res);
+        cache.attendanceReports = res;
+        cache.hasLoaded.attendanceReports = true;
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setAttendanceLoading(false);
+      }
+    }
+  };
 
- const fetchWorkReports = async (isSilent = false) =>{
- if (!isSilent) setReportsLoading(true);
- setReportsError('');
- try {
- const params = {};
- if (reportsFilterRange) params.range = reportsFilterRange;
- if (reportsFilterStaff) params.staffId = reportsFilterStaff;
- if (reportsFilterBranch) params.branchId = reportsFilterBranch;
+  const fetchWorkReports = async (isSilent = false, targetBranchId = activeBranchId) =>{
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.workReports) setReportsLoading(true);
+    setReportsError('');
+    try {
+      const params = {};
+      if (reportsFilterRange) params.range = reportsFilterRange;
+      if (reportsFilterStaff) params.staffId = reportsFilterStaff;
+      if (reportsFilterBranch) params.branchId = reportsFilterBranch;
 
- const res = await getWorkReports(params);
- if (res.success) {
- setWorkReports(res.reports || []);
- } else {
- setReportsError(res.message || 'Failed to fetch work reports.');
- }
- } catch (err) {
- console.error('Error fetching work reports:', err);
- setReportsError('Server error fetching work reports.');
- } finally {
- setReportsLoading(false);
- }
- };
+      const res = await getWorkReports(params);
+      if (targetBranchId !== activeBranchIdRef.current) return;
+      if (res.success) {
+        setWorkReports(res.reports || []);
+        cache.workReports = res.reports || [];
+        cache.hasLoaded.workReports = true;
+      } else {
+        setReportsError(res.message || 'Failed to fetch work reports.');
+      }
+    } catch (err) {
+      console.error('Error fetching work reports:', err);
+      setReportsError('Server error fetching work reports.');
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setReportsLoading(false);
+      }
+    }
+  };
 
  const fetchReviewsData = async (isSilent = false) =>{
  if (!isSilent) setReviewsLoading(true);
@@ -1028,154 +1149,34 @@ const OwnerDashboard = () =>{
  }
  };
 
- useEffect(() =>{
- if (activeTab === 'menu' && menuSubTab === 'reviews') {
- fetchReviewsData();
- }
- }, [activeTab, menuSubTab, reviewsFilterRating]);
 
- useEffect(() =>{
- if (activeTab === 'staff' && staffSubTab === 'attendance') {
- fetchAttendanceReportsData();
- }
- }, [reportRange, reportBranch, activeTab, staffSubTab]);
 
- useEffect(() =>{
- if (activeTab === 'staff' && staffSubTab === 'reports') {
- fetchWorkReports();
- fetchStaffList();
- }
- }, [reportsFilterRange, reportsFilterStaff, reportsFilterBranch, activeTab, staffSubTab]);
-
-  useEffect(() =>{
-  fetchOrders();
-  fetchMenu();
-  loadSetupConfig();
-  fetchDashboardStats(true);
-
- if (activeTab === 'staff') {
- fetchStaffList();
- }
- if (activeTab === 'staff' && staffSubTab === 'attendance') {
- fetchAttendanceToday();
- }
- if (activeTab === 'inventory' || activeTab === 'analytics' || activeTab === 'menu') {
- fetchInventoryList();
- fetchCategories();
- fetchInventoryCategories();
- }
-
-  if (user && user.cafeId) {
-    connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);
-
-    const handleOrderCreated = (newOrder) => {
-      setOrders(prev => {
-        if (prev.some(o => o._id === newOrder._id)) return prev;
-        if (activeBranchId && activeBranchId !== 'all' && newOrder.branchId !== activeBranchId) {
-          return prev;
-        }
-        return [newOrder, ...prev];
-      });
-      fetchDashboardStats(true);
-    };
-
-    const handleOrderUpdated = (updatedOrder) => {
-      setOrders(prev => {
-        if (activeBranchId && activeBranchId !== 'all' && updatedOrder.branchId !== activeBranchId) {
-          return prev.filter(o => o._id !== updatedOrder._id);
-        }
-        return prev.map(o => o._id === updatedOrder._id ? updatedOrder : o);
-      });
-      fetchDashboardStats(true);
-    };
-
-    const handleMenuUpdated = () => {
-      fetchMenu(true);
-      fetchCategories(true);
-    };
-
-    socket.on('order_created', handleOrderCreated);
-    socket.on('order_updated', handleOrderUpdated);
-    socket.on('menu_updated', handleMenuUpdated);
-
-    return () => {
-      socket.off('order_created', handleOrderCreated);
-      socket.off('order_updated', handleOrderUpdated);
-      socket.off('menu_updated', handleMenuUpdated);
-    };
-  }
-
-  return undefined;
- }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating, orderDateFilter, user, activeBranchId]);
-
-  // ── Branch switch listener ──
-  // When the user picks a different branch via the BranchSwitcher, refresh all branch-specific data
-  useEffect(() => {
-    const unsubscribe = onBranchSwitch((newBranchId) => {
-      // Immediately reset all branch-specific states to prevent screen flash of previous branch data
-      setOrders([]);
-      setOrdersLoading(true);
-      setMenuItems([]);
-      setMenuLoading(true);
-      setInventoryList([]);
-      setInventoryLogs([]);
-      setInventoryLoading(true);
-      setCategories([]);
-      setCategoryLoading(true);
-      setInventoryCategories([]);
-      setInvCategoryLoading(true);
-      setStaff([]);
+  // Register new staff
+  const handleAddStaff = async (e) =>{
+    e.preventDefault();
+    if (!newStaff.name || !newStaff.phone || !newStaff.staffRole) {
+      alert('Name, Phone Number, and Role are required.');
+      return;
+    }
+    try {
       setStaffLoading(true);
-      setAttendanceRecords([]);
-      setAttendanceLoading(true);
-      setAttendanceReports(null);
-      setWorkReports([]);
-      setReportsLoading(true);
-
-      // Fetch data relevant to the currently active tab
-      fetchOrders();
-      fetchMenu();
-      fetchInventoryList();
-      fetchCategories();
-      fetchInventoryCategories();
-      loadSetupConfig();
-      fetchDashboardStats(true);
-      if (activeTab === 'staff') {
+      const response = await createStaff({
+        ...newStaff,
+        dailyRate: Number(newStaff.dailyRate || 0)
+      });
+      if (response.success) {
+        alert(response.message || `Staff member "${newStaff.name}" registered successfully.`);
+        setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });
+        setShowAddStaffModal(false);
         fetchStaffList();
-        if (staffSubTab === 'attendance') fetchAttendanceToday();
-        if (staffSubTab === 'reports') fetchWorkReports();
       }
-      if (activeTab === 'menu' && menuSubTab === 'reviews') fetchReviewsData();
-    });
-    return unsubscribe;
-  }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab]);
-
- // Register new staff
- const handleAddStaff = async (e) =>{
- e.preventDefault();
- if (!newStaff.name || !newStaff.phone || !newStaff.staffRole) {
- alert('Name, Phone Number, and Role are required.');
- return;
- }
- try {
- setStaffLoading(true);
- const response = await createStaff({
-   ...newStaff,
-   dailyRate: Number(newStaff.dailyRate || 0)
- });
- if (response.success) {
- alert(response.message || `Staff member "${newStaff.name}" registered successfully.`);
- setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });
- setShowAddStaffModal(false);
- fetchStaffList();
- }
- } catch (error) {
- console.error('Error creating staff:', error);
- alert(error.response?.data?.message || 'Failed to create staff member.');
- } finally {
- setStaffLoading(false);
- }
- };
+    } catch (error) {
+      console.error('Error creating staff:', error);
+      alert(error.response?.data?.message || 'Failed to create staff member.');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
 
  // Edit staff
  const handleEditStaff = async (e) =>{
@@ -1524,45 +1525,52 @@ const exportStaffToCSV = () => {
  setEditingItem(null);
  }
  } catch (error) {
- console.error('Error updating item:', error);
+   console.error('Error updating item:', error);
  }
  };
 
- // Fetch Inventory List
- async function fetchInventoryList(isSilent = false) {
- if (!isSilent) setInventoryLoading(true);
- try {
- const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
- getInventory(),
- getInventoryLogs(),
- getWastageReport(),
- getConsumptionReport()]
-);
+  // Fetch Inventory List
+  async function fetchInventoryList(isSilent = false, targetBranchId = activeBranchId) {
+    const cache = getBranchCache(targetBranchId);
+    if (!isSilent && !cache.hasLoaded.inventoryList) setInventoryLoading(true);
+    try {
+      const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
+        getInventory(),
+        getInventoryLogs(),
+        getWastageReport(),
+        getConsumptionReport()
+      ]);
 
- if (invRes.success) {
-  const mappedInv = invRes.data.map(item => ({ ...item, id: item._id || item.id }));
-  setInventoryList(mappedInv);
-  setInventoryError('');
- } else {
- setInventoryError('Failed to load inventory.');
- }
+      if (targetBranchId !== activeBranchIdRef.current) return;
 
- if (logsRes.success) {
- setInventoryLogs(logsRes.data);
- }
- if (wasteRes.success) {
- setWastageReport(wasteRes);
- }
- if (consRes.success) {
- setConsumptionReport(consRes);
- }
- } catch (error) {
- console.error('Error fetching inventory analytics:', error);
- setInventoryError('Cannot connect to inventory database.');
- } finally {
- setInventoryLoading(false);
- }
- };
+      if (invRes.success) {
+        const mappedInv = invRes.data.map(item => ({ ...item, id: item._id || item.id }));
+        setInventoryList(mappedInv);
+        cache.inventoryList = mappedInv;
+        cache.hasLoaded.inventoryList = true;
+        setInventoryError('');
+      } else {
+        setInventoryError('Failed to load inventory.');
+      }
+
+      if (logsRes.success) {
+        setInventoryLogs(logsRes.data);
+      }
+      if (wasteRes.success) {
+        setWastageReport(wasteRes);
+      }
+      if (consRes.success) {
+        setConsumptionReport(consRes);
+      }
+    } catch (error) {
+      console.error('Error fetching inventory analytics:', error);
+      setInventoryError('Cannot connect to inventory database.');
+    } finally {
+      if (targetBranchId === activeBranchIdRef.current) {
+        setInventoryLoading(false);
+      }
+    }
+  };
 
  // Restock inventory item
  const handleRestockItem = async (id, currentStock) =>{
@@ -1725,26 +1733,58 @@ const exportStaffToCSV = () => {
  };
 
   // Analytical Calculations
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const completedOrders = useMemo(() => {
+    return orders.filter((o) => o.paymentStatus === 'Paid' || o.status === 'Completed');
+  }, [orders]);
 
-  const completedOrders = orders.filter((o) => o.paymentStatus === 'Paid' || o.status === 'Completed');
+  const todayOrders = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return completedOrders.filter((o) => new Date(o.createdAt) >= startOfToday);
+  }, [completedOrders]);
 
-  const todayOrders = completedOrders.filter((o) => new Date(o.createdAt) >= startOfToday);
-  const todayRevenue = statsData && statsData.todayRevenue !== undefined ? statsData.todayRevenue : todayOrders.reduce((acc, o) => acc + o.totalAmount, 0);
-  const monthlyOrders = completedOrders.filter((o) => new Date(o.createdAt) >= startOfMonth);
-  const monthlyRevenue = statsData && statsData.monthlyRevenue !== undefined ? statsData.monthlyRevenue : monthlyOrders.reduce((acc, o) => acc + o.totalAmount, 0);
+  const todayRevenue = useMemo(() => {
+    return statsData && statsData.todayRevenue !== undefined 
+      ? statsData.todayRevenue 
+      : todayOrders.reduce((acc, o) => acc + o.totalAmount, 0);
+  }, [statsData, todayOrders]);
 
- const totalInventoryValue = inventoryList.reduce((acc, item) =>acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 0);
+  const monthlyOrders = useMemo(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return completedOrders.filter((o) => new Date(o.createdAt) >= startOfMonth);
+  }, [completedOrders]);
 
- const purchaseLogs = inventoryLogs.filter((log) =>log.type === 'Purchase' || log.type === 'Initial');
- const totalInventoryCost = purchaseLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
+  const monthlyRevenue = useMemo(() => {
+    return statsData && statsData.monthlyRevenue !== undefined 
+      ? statsData.monthlyRevenue 
+      : monthlyOrders.reduce((acc, o) => acc + o.totalAmount, 0);
+  }, [statsData, monthlyOrders]);
 
- const deductionLogs = inventoryLogs.filter((log) =>log.type === 'Deduction');
- const totalInventoryConsumption = deductionLogs.reduce((acc, log) =>acc + (log.cost || 0), 0);
+  const totalInventoryValue = useMemo(() => {
+    return inventoryList.reduce((acc, item) => 
+      acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 
+      0
+    );
+  }, [inventoryList]);
 
-  const getRankedItems = () => {
+  const purchaseLogs = useMemo(() => {
+    return inventoryLogs.filter((log) => log.type === 'Purchase' || log.type === 'Initial');
+  }, [inventoryLogs]);
+
+  const totalInventoryCost = useMemo(() => {
+    return purchaseLogs.reduce((acc, log) => acc + (log.cost || 0), 0);
+  }, [purchaseLogs]);
+
+  const deductionLogs = useMemo(() => {
+    return inventoryLogs.filter((log) => log.type === 'Deduction');
+  }, [inventoryLogs]);
+
+  const totalInventoryConsumption = useMemo(() => {
+    return deductionLogs.reduce((acc, log) => acc + (log.cost || 0), 0);
+  }, [deductionLogs]);
+
+  const rankedItems = useMemo(() => {
     const itemCounts = {};
     completedOrders.forEach(order => {
       if (order.items && order.items.length > 0) {
@@ -1766,8 +1806,9 @@ const exportStaffToCSV = () => {
       ? sorted.slice(sorted.length - 5).reverse()
       : sorted.slice(0).reverse();
     return { topSelling, slowSelling };
-  };
-  const { topSelling, slowSelling } = getRankedItems();
+  }, [completedOrders]);
+
+  const { topSelling, slowSelling } = rankedItems;
 
  const getTopConsumedIngredients = () =>{
  const consumptionMap = {};
@@ -1787,6 +1828,342 @@ const exportStaffToCSV = () => {
  sort((a, b) =>b.quantity - a.quantity).
  slice(0, 5);
  };
+
+  // ── All Component Side Effects (useEffect Hooks) ──
+  useEffect(() => {
+    activeBranchIdRef.current = activeBranchId;
+  }, [activeBranchId]);
+
+  useEffect(() => {
+    if (tabParam) {
+      if (tabParam === 'reviews') {
+        setActiveTab('menu');
+        setMenuSubTab('reviews');
+      } else if (tabParam === 'reports' || tabParam === 'financial_reports') {
+        setActiveTab('reports');
+        if (tabParam === 'financial_reports') setReportType('financial_summary');
+      } else if (tabParam === 'attendance') {
+        setActiveTab('staff');
+        setStaffSubTab('attendance');
+      } else if (tabParam === 'settings' || tabParam === 'config') {
+        navigate('/owner/profile');
+      } else {
+        setActiveTab(tabParam);
+        if (tabParam === 'menu') {
+          setMenuSubTab('dishes');
+        }
+        if (tabParam === 'staff') {
+          const subParam = searchParams.get('sub');
+          if (subParam === 'salary') {
+            setStaffSubTab('salary');
+          } else if (subParam === 'reports') {
+            setStaffSubTab('reports');
+          } else {
+            setStaffSubTab('roster');
+          }
+        }
+      }
+    } else {
+      setActiveTab('analytics');
+    }
+  }, [tabParam, searchParams, navigate]);
+
+  useEffect(() => {
+    if (activeTab === 'reports') {
+      loadReportData();
+    }
+  }, [activeTab, reportType, reportBranchId, reportDateRange, reportStartDate, reportEndDate]);
+
+  useEffect(() => {
+    if (activeTab === 'menu' && menuSubTab === 'reviews') {
+      fetchReviewsData();
+    }
+  }, [activeTab, menuSubTab, reviewsFilterRating]);
+
+  useEffect(() => {
+    if (activeTab === 'staff' && staffSubTab === 'attendance') {
+      fetchAttendanceReportsData();
+    }
+  }, [reportRange, reportBranch, activeTab, staffSubTab]);
+
+  useEffect(() => {
+    if (activeTab === 'staff' && staffSubTab === 'reports') {
+      fetchWorkReports();
+      fetchStaffList();
+    }
+  }, [reportsFilterRange, reportsFilterStaff, reportsFilterBranch, activeTab, staffSubTab]);
+
+  useEffect(() => {
+    if (!user || !user.cafeId) return;
+
+    loadSetupConfig();
+
+    const targetBranch = activeBranchId;
+    const cache = getBranchCache(targetBranch);
+
+    const refreshData = async () => {
+      if (activeTab === 'analytics') {
+        const silent = !!cache.hasLoaded.statsData;
+        await Promise.all([
+          fetchDashboardStats(silent, targetBranch),
+          fetchInventoryList(silent, targetBranch),
+          fetchCategories(silent, targetBranch),
+          fetchInventoryCategories(silent, targetBranch)
+        ]);
+      } else if (activeTab === 'orders') {
+        const silent = !!cache.hasLoaded.orders;
+        await fetchOrders(silent, targetBranch);
+      } else if (activeTab === 'menu') {
+        const silent = !!cache.hasLoaded.menuItems;
+        await Promise.all([
+          fetchMenu(silent, targetBranch),
+          fetchCategories(silent, targetBranch),
+          fetchInventoryList(silent, targetBranch)
+        ]);
+      } else if (activeTab === 'staff') {
+        const silent = !!cache.hasLoaded.staff;
+        await fetchStaffList(silent, targetBranch);
+        if (staffSubTab === 'attendance') {
+          await fetchAttendanceToday(silent, targetBranch);
+        } else if (staffSubTab === 'reports') {
+          await fetchWorkReports(silent, targetBranch);
+        }
+      } else if (activeTab === 'inventory') {
+        const silent = !!cache.hasLoaded.inventoryList;
+        await Promise.all([
+          fetchInventoryList(silent, targetBranch),
+          fetchInventoryCategories(silent, targetBranch)
+        ]);
+      } else if (activeTab === 'reports') {
+        loadReportData(true);
+      }
+    };
+
+    refreshData();
+
+    if (user && user.cafeId) {
+      connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);
+
+      const handleOrderCreated = (newOrder) => {
+        setOrders(prev => {
+          if (prev.some(o => o._id === newOrder._id)) return prev;
+          if (activeBranchId && activeBranchId !== 'all' && newOrder.branchId !== activeBranchId) {
+            return prev;
+          }
+          const updated = [newOrder, ...prev];
+          cache.orders = updated;
+          return updated;
+        });
+        fetchDashboardStats(true, activeBranchId);
+      };
+
+      const handleOrderUpdated = (updatedOrder) => {
+        setOrders(prev => {
+          let updated;
+          if (activeBranchId && activeBranchId !== 'all' && updatedOrder.branchId !== activeBranchId) {
+            updated = prev.filter(o => o._id !== updatedOrder._id);
+          } else {
+            updated = prev.map(o => o._id === updatedOrder._id ? updatedOrder : o);
+          }
+          cache.orders = updated;
+          return updated;
+        });
+        fetchDashboardStats(true, activeBranchId);
+      };
+
+      const handleMenuUpdated = () => {
+        fetchMenu(true, activeBranchId);
+        fetchCategories(true, activeBranchId);
+      };
+
+      const handleRealtimeSync = (payload) => {
+        if (payload.cafeId && payload.cafeId !== user.cafeId) return;
+
+        const branchKey = payload.branchId || 'all';
+        const targetCache = getBranchCache(branchKey);
+        
+        if (payload.model === 'Order') {
+          targetCache.hasLoaded.orders = false;
+          targetCache.hasLoaded.statsData = false;
+        } else if (payload.model === 'Inventory') {
+          targetCache.hasLoaded.inventoryList = false;
+          targetCache.hasLoaded.statsData = false;
+        } else if (payload.model === 'User') {
+          targetCache.hasLoaded.staff = false;
+        } else if (payload.model === 'Attendance') {
+          targetCache.hasLoaded.attendanceRecords = false;
+        } else if (payload.model === 'Payroll') {
+          targetCache.hasLoaded.workReports = false;
+        }
+
+        const isCurrentBranch = activeBranchId === branchKey || branchKey === 'all' || activeBranchId === 'all';
+        if (isCurrentBranch) {
+          if (payload.model === 'Order' || payload.model === 'Inventory') {
+            fetchDashboardStats(true, activeBranchId);
+          }
+          
+          if (activeTab === 'analytics') {
+            fetchDashboardStats(true, activeBranchId);
+            fetchInventoryList(true, activeBranchId);
+          } else if (activeTab === 'orders' && payload.model === 'Order') {
+            fetchOrders(true, activeBranchId);
+          } else if (activeTab === 'menu' && (payload.model === 'Category' || payload.model === 'MenuItem')) {
+            fetchMenu(true, activeBranchId);
+            fetchCategories(true, activeBranchId);
+          } else if (activeTab === 'staff') {
+            if (payload.model === 'User') fetchStaffList(true, activeBranchId);
+            if (payload.model === 'Attendance') fetchAttendanceToday(true, activeBranchId);
+          } else if (activeTab === 'inventory' && (payload.model === 'Inventory' || payload.model === 'InventoryLog')) {
+            fetchInventoryList(true, activeBranchId);
+          }
+        }
+      };
+
+      const handleInventoryUpdated = (payload) => {
+        const branchKey = payload.branchId || 'all';
+        const isCurrentBranch = activeBranchId === branchKey || branchKey === 'all' || activeBranchId === 'all';
+        if (isCurrentBranch) {
+          fetchInventoryList(true, activeBranchId);
+          fetchDashboardStats(true, activeBranchId);
+        }
+      };
+
+      const handleStaffUpdated = (payload) => {
+        const branchKey = payload.branchId || 'all';
+        const isCurrentBranch = activeBranchId === branchKey || branchKey === 'all' || activeBranchId === 'all';
+        if (isCurrentBranch) {
+          fetchStaffList(true, activeBranchId);
+        }
+      };
+
+      const handleAttendanceUpdated = (payload) => {
+        const branchKey = payload.branchId || 'all';
+        const isCurrentBranch = activeBranchId === branchKey || branchKey === 'all' || activeBranchId === 'all';
+        if (isCurrentBranch) {
+          fetchAttendanceToday(true, activeBranchId);
+        }
+      };
+
+      const handlePayrollUpdated = (payload) => {
+        const branchKey = payload.branchId || 'all';
+        const isCurrentBranch = activeBranchId === branchKey || branchKey === 'all' || activeBranchId === 'all';
+        if (isCurrentBranch && activeTab === 'reports') {
+          loadReportData(true);
+        }
+      };
+
+      const handleReviewsUpdated = (payload) => {
+        const branchKey = payload.branchId || 'all';
+        const isCurrentBranch = activeBranchId === branchKey || branchKey === 'all' || activeBranchId === 'all';
+        if (isCurrentBranch && activeTab === 'menu' && menuSubTab === 'reviews') {
+          fetchReviewsData(true);
+        }
+      };
+
+      socket.on('order_created', handleOrderCreated);
+      socket.on('order_updated', handleOrderUpdated);
+      socket.on('menu_updated', handleMenuUpdated);
+      socket.on('dashboard_realtime_sync', handleRealtimeSync);
+      socket.on('inventory_updated', handleInventoryUpdated);
+      socket.on('staff_updated', handleStaffUpdated);
+      socket.on('attendance_updated', handleAttendanceUpdated);
+      socket.on('payroll_updated', handlePayrollUpdated);
+      socket.on('reviews_updated', handleReviewsUpdated);
+
+      return () => {
+        socket.off('order_created', handleOrderCreated);
+        socket.off('order_updated', handleOrderUpdated);
+        socket.off('menu_updated', handleMenuUpdated);
+        socket.off('dashboard_realtime_sync', handleRealtimeSync);
+        socket.off('inventory_updated', handleInventoryUpdated);
+        socket.off('staff_updated', handleStaffUpdated);
+        socket.off('attendance_updated', handleAttendanceUpdated);
+        socket.off('payroll_updated', handlePayrollUpdated);
+        socket.off('reviews_updated', handleReviewsUpdated);
+      };
+    }
+  }, [activeTab, menuSubTab, staffSubTab, reviewsFilterRating, orderDateFilter, user, activeBranchId]);
+
+  useEffect(() => {
+    const unsubscribe = onBranchSwitch((newBranchId) => {
+      const cache = getBranchCache(newBranchId);
+      
+      if (cache.hasLoaded.orders) {
+        setOrders(cache.orders);
+        setOrdersLoading(false);
+      }
+      if (cache.hasLoaded.menuItems) {
+        setMenuItems(cache.menuItems);
+        setMenuLoading(false);
+      }
+      if (cache.hasLoaded.inventoryList) {
+        setInventoryList(cache.inventoryList);
+        setInventoryLoading(false);
+      }
+      if (cache.hasLoaded.categories) {
+        setCategories(cache.categories);
+        setCategoryLoading(false);
+      }
+      if (cache.hasLoaded.inventoryCategories) {
+        setInventoryCategories(cache.inventoryCategories);
+        setInvCategoryLoading(false);
+      }
+      if (cache.hasLoaded.staff) {
+        setStaff(cache.staff);
+        setStaffLoading(false);
+      }
+      if (cache.hasLoaded.attendanceRecords) {
+        setAttendanceRecords(cache.attendanceRecords);
+        setAttendanceSummary(cache.attendanceSummary);
+        setAttendanceLoading(false);
+      }
+      if (cache.hasLoaded.workReports) {
+        setAttendanceReports(cache.attendanceReports);
+        setWorkReports(cache.workReports);
+        setReportsLoading(false);
+      }
+      if (cache.hasLoaded.statsData) {
+        setStatsData(cache.statsData);
+        setStatsLoading(false);
+      }
+
+      const refreshBranchData = async () => {
+        loadSetupConfig();
+        if (activeTab === 'analytics') {
+          await Promise.all([
+            fetchDashboardStats(true, newBranchId),
+            fetchInventoryList(true, newBranchId),
+            fetchCategories(true, newBranchId),
+            fetchInventoryCategories(true, newBranchId)
+          ]);
+        } else if (activeTab === 'orders') {
+          await fetchOrders(true, newBranchId);
+        } else if (activeTab === 'menu') {
+          await Promise.all([
+            fetchMenu(true, newBranchId),
+            fetchCategories(true, newBranchId),
+            fetchInventoryList(true, newBranchId)
+          ]);
+        } else if (activeTab === 'staff') {
+          await fetchStaffList(true, newBranchId);
+          if (staffSubTab === 'attendance') {
+            await fetchAttendanceToday(true, newBranchId);
+          } else if (staffSubTab === 'reports') {
+            await fetchWorkReports(true, newBranchId);
+          }
+        } else if (activeTab === 'inventory') {
+          await Promise.all([
+            fetchInventoryList(true, newBranchId),
+            fetchInventoryCategories(true, newBranchId)
+          ]);
+        } else if (activeTab === 'reports') {
+          loadReportData(true);
+        }
+      };
+      refreshBranchData();
+    });
+    return unsubscribe;
+  }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab]);
 
   // Suppress unused variables warnings
   if (globalThis.__unused_vars_check__) {

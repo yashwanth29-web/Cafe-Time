@@ -3,31 +3,55 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSetupData, getBranches } from '../services/api';
 
+// Simple global cache for owner header details to prevent redundant page change fetches
+export const ownerLayoutCache = {
+  cafeName: 'My Cafe',
+  logoUrl: '',
+  currentBranchName: 'Main Branch',
+  hasLoaded: false
+};
+
+export const invalidateOwnerLayoutCache = () => {
+  ownerLayoutCache.hasLoaded = false;
+};
+
 const OwnerLayout = ({ children }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [cafeName, setCafeName] = useState('My Cafe');
-  const [logoUrl, setLogoUrl] = useState('');
-  const [currentBranchName, setCurrentBranchName] = useState('Main Branch');
+  const [cafeName, setCafeName] = useState(() => ownerLayoutCache.cafeName);
+  const [logoUrl, setLogoUrl] = useState(() => ownerLayoutCache.logoUrl);
+  const [currentBranchName, setCurrentBranchName] = useState(() => ownerLayoutCache.currentBranchName);
 
   // Load cafe header data on each page change
   useEffect(() => {
+    if (ownerLayoutCache.hasLoaded) return;
+    
     const fetchHeaderData = async () => {
       try {
         const res = await getSetupData();
         if (res.success && res.cafe) {
-          setCafeName(res.cafe.name || 'My Cafe');
-          setLogoUrl(res.cafe.logoUrl || '');
+          const name = res.cafe.name || 'My Cafe';
+          const logo = res.cafe.logoUrl || '';
+          let branchName = 'Main Branch';
           if (res.cafe.city) {
-            setCurrentBranchName(`${res.cafe.city} Branch`);
+            branchName = `${res.cafe.city} Branch`;
           }
+          setCafeName(name);
+          setLogoUrl(logo);
+          setCurrentBranchName(branchName);
+          
+          ownerLayoutCache.cafeName = name;
+          ownerLayoutCache.logoUrl = logo;
+          ownerLayoutCache.currentBranchName = branchName;
         }
         const branchRes = await getBranches();
         if (branchRes.success && branchRes.branches && branchRes.branches.length > 0) {
           const active = branchRes.branches.find(b => b.isActive) || branchRes.branches[0];
           setCurrentBranchName(active.branchName);
+          ownerLayoutCache.currentBranchName = active.branchName;
         }
+        ownerLayoutCache.hasLoaded = true;
       } catch (err) {
         // Silently fail — header still renders with defaults
       }

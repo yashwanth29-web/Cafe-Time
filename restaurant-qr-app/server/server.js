@@ -18,7 +18,9 @@ dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
 
 const mongoose = require('mongoose');
 const multiBranchPlugin = require('./utils/multiBranchPlugin');
+const realtimeSyncPlugin = require('./utils/realtimeSyncPlugin');
 mongoose.plugin(multiBranchPlugin);
+mongoose.plugin(realtimeSyncPlugin);
 
 const cors = require('cors');
 const cookieParser = require('cookie-parser');

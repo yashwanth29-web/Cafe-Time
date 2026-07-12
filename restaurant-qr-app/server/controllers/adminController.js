@@ -1333,36 +1333,143 @@ const getDashboardStats = async (req, res) => {
       ...orderMatchQuery,
       $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ]
     };
-
-    const revenueStats = await Order.aggregate([
-      { $match: revenueMatch },
-      { 
-        $group: {
-          _id: null,
-          totalRevenueAllTime: { $sum: '$totalAmount' },
-          todayRevenue: { 
-            $sum: { 
-              $cond: [ { $gte: ['$createdAt', startOfToday] }, '$totalAmount', 0 ] 
-            } 
-          },
-          weeklyRevenue: { 
-            $sum: { 
-              $cond: [ { $gte: ['$createdAt', startOfWeek] }, '$totalAmount', 0 ] 
-            } 
-          },
-          monthlyRevenue: { 
-            $sum: { 
-              $cond: [ { $gte: ['$createdAt', startOfMonth] }, '$totalAmount', 0 ] 
-            } 
-          },
-          yearlyRevenue: { 
-            $sum: { 
-              $cond: [ { $gte: ['$createdAt', startOfYear] }, '$totalAmount', 0 ] 
-            } 
-          },
-          completedOrdersCount: { $sum: 1 }
-        }
+    
+    const invMatchQuery = { cafeId };
+    if (branchId && branchId !== 'all') {
+      if (branchDoc) {
+        invMatchQuery.branchId = { $in: [branchDoc.branchId, String(branchDoc._id)] };
+      } else {
+        invMatchQuery.branchId = branchId;
       }
+    }
+    
+    const invLogMatch = { cafeId };
+    if (branchId && branchId !== 'all') {
+      if (branchDoc) {
+        invLogMatch.branchId = { $in: [branchDoc.branchId, String(branchDoc._id)] };
+      } else {
+        invLogMatch.branchId = branchId;
+      }
+    }
+
+    const sevenDaysAgo = new Date(startOfToday.getTime() - (6 * 24 * 60 * 60 * 1000));
+
+    // Execute all dashboard queries in parallel to drastically improve performance
+    const [
+      revenueStats,
+      sourceStats,
+      topSellingItems,
+      inventoryValueAgg,
+      inventoryLogStats,
+      ordersToday,
+      completedOrders,
+      pendingOrders,
+      paymentStats,
+      weeklySalesAgg,
+      recentOrders,
+      allBranches
+    ] = await Promise.all([
+      Order.aggregate([
+        { $match: revenueMatch },
+        { 
+          $group: {
+            _id: null,
+            totalRevenueAllTime: { $sum: '$totalAmount' },
+            todayRevenue: { 
+              $sum: { 
+                $cond: [ { $gte: ['$createdAt', startOfToday] }, '$totalAmount', 0 ] 
+              } 
+            },
+            weeklyRevenue: { 
+              $sum: { 
+                $cond: [ { $gte: ['$createdAt', startOfWeek] }, '$totalAmount', 0 ] 
+              } 
+            },
+            monthlyRevenue: { 
+              $sum: { 
+                $cond: [ { $gte: ['$createdAt', startOfMonth] }, '$totalAmount', 0 ] 
+              } 
+            },
+            yearlyRevenue: { 
+              $sum: { 
+                $cond: [ { $gte: ['$createdAt', startOfYear] }, '$totalAmount', 0 ] 
+              } 
+            },
+            completedOrdersCount: { $sum: 1 }
+          }
+        }
+      ]),
+      Order.aggregate([
+        { $match: revenueMatch },
+        { $group: { _id: '$orderSource', count: { $sum: 1 } } }
+      ]),
+      Order.aggregate([
+        { $match: { ...revenueMatch, createdAt: { $gte: startOfMonth } } },
+        { $unwind: '$items' },
+        { 
+          $group: {
+            _id: '$items.name',
+            quantity: { $sum: '$items.quantity' },
+            revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } }
+          }
+        },
+        { $sort: { quantity: -1 } },
+        { $limit: 5 }
+      ]),
+      Inventory.aggregate([
+        { $match: invMatchQuery },
+        { $group: { _id: null, totalValue: { $sum: { $multiply: ['$quantity', '$cost'] } } } }
+      ]),
+      InventoryLog.aggregate([
+        { $match: invLogMatch },
+        {
+          $group: {
+            _id: '$type',
+            totalCost: { $sum: '$cost' }
+          }
+        }
+      ]),
+      Order.countDocuments({
+        ...orderMatchQuery,
+        createdAt: { $gte: startOfToday }
+      }),
+      Order.countDocuments(revenueMatch),
+      Order.countDocuments({
+        ...orderMatchQuery,
+        status: { $ne: 'Completed' },
+        paymentStatus: { $ne: 'Paid' }
+      }),
+      Order.aggregate([
+        { $match: revenueMatch },
+        { $group: { _id: '$paymentMethod', amount: { $sum: '$totalAmount' }, count: { $sum: 1 } } }
+      ]),
+      Order.aggregate([
+        { 
+          $match: { 
+            ...revenueMatch, 
+            createdAt: { $gte: sevenDaysAgo } 
+          } 
+        },
+        {
+          $project: {
+            totalAmount: 1,
+            istDate: { $add: ['$createdAt', 5.5 * 60 * 60 * 1000] }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: '%Y-%m-%d', date: '$istDate' }
+            },
+            sales: { $sum: '$totalAmount' }
+          }
+        }
+      ]),
+      Order.find(orderMatchQuery)
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+      Branch.find().lean()
     ]);
     
     const revenueData = revenueStats.length > 0 ? revenueStats[0] : { 
@@ -1374,11 +1481,6 @@ const getDashboardStats = async (req, res) => {
       completedOrdersCount: 0 
     };
     
-    const sourceStats = await Order.aggregate([
-      { $match: revenueMatch },
-      { $group: { _id: '$orderSource', count: { $sum: 1 } } }
-    ]);
-    
     const orderSourceData = { QR: 0, POS: 0, Counter: 0 };
     sourceStats.forEach(stat => {
       if (stat._id === 'QR') orderSourceData.QR = stat.count;
@@ -1386,80 +1488,19 @@ const getDashboardStats = async (req, res) => {
       else orderSourceData.Counter += stat.count;
     });
     
-    const topSellingItems = await Order.aggregate([
-      { $match: { ...revenueMatch, createdAt: { $gte: startOfMonth } } },
-      { $unwind: '$items' },
-      { 
-        $group: {
-          _id: '$items.name',
-          quantity: { $sum: '$items.quantity' },
-          revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } }
-        }
-      },
-      { $sort: { quantity: -1 } },
-      { $limit: 5 }
-    ]);
-    
     const formattedTopSelling = topSellingItems.map(item => ({
       name: item._id,
       quantity: item.quantity,
       revenue: item.revenue
     }));
     
-    const invMatchQuery = { cafeId };
-    if (branchId && branchId !== 'all') {
-      if (branchDoc) {
-        invMatchQuery.branchId = { $in: [branchDoc.branchId, String(branchDoc._id)] };
-      } else {
-        invMatchQuery.branchId = branchId;
-      }
-    }
-    
-    const inventoryValueAgg = await Inventory.aggregate([
-      { $match: invMatchQuery },
-      { $group: { _id: null, totalValue: { $sum: { $multiply: ['$quantity', '$cost'] } } } }
-    ]);
     const inventoryValue = inventoryValueAgg.length > 0 ? inventoryValueAgg[0].totalValue : 0;
-    
-    const invLogMatch = { cafeId };
-    if (branchId && branchId !== 'all') {
-      if (branchDoc) {
-        invLogMatch.branchId = { $in: [branchDoc.branchId, String(branchDoc._id)] };
-      } else {
-        invLogMatch.branchId = branchId;
-      }
-    }
-    
-    const inventoryLogStats = await InventoryLog.aggregate([
-      { $match: invLogMatch },
-      {
-        $group: {
-          _id: '$type',
-          totalCost: { $sum: '$cost' }
-        }
-      }
-    ]);
     
     let totalInventoryCost = 0;
     let totalInventoryConsumption = 0;
-    
     inventoryLogStats.forEach(stat => {
       if (stat._id === 'Purchase') totalInventoryCost += stat.totalCost;
       else if (stat._id === 'Deduction' || stat._id === 'Wastage') totalInventoryConsumption += stat.totalCost;
-    });
-
-    // Orders Today, Completed Orders (overall), Pending Orders (overall)
-    const ordersToday = await Order.countDocuments({
-      ...orderMatchQuery,
-      createdAt: { $gte: startOfToday }
-    });
-
-    const completedOrders = await Order.countDocuments(revenueMatch);
-
-    const pendingOrders = await Order.countDocuments({
-      ...orderMatchQuery,
-      status: { $ne: 'Completed' },
-      paymentStatus: { $ne: 'Paid' }
     });
 
     const averageOrderValue = revenueData.completedOrdersCount > 0 
@@ -1467,48 +1508,37 @@ const getDashboardStats = async (req, res) => {
       : 0;
 
     // Payment Summary (Grouped by payment method)
-    const paymentStats = await Order.aggregate([
-      { $match: revenueMatch },
-      { $group: { _id: '$paymentMethod', amount: { $sum: '$totalAmount' }, count: { $sum: 1 } } }
-    ]);
-
     const paymentSummary = {};
     paymentStats.forEach(p => {
       const method = p._id || 'Pending';
       paymentSummary[method] = { amount: p.amount, count: p.count };
     });
 
-    // Weekly sales data (daily groupings for past 7 days)
+    // Populate weeklySalesData from aggregated weeklySalesMap
+    const weeklySalesMap = {};
+    weeklySalesAgg.forEach(item => {
+      weeklySalesMap[item._id] = item.sales;
+    });
+
     const weeklySalesData = [];
     const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     for (let i = 6; i >= 0; i--) {
       const dIST = new Date(startOfTodayIST.getTime() - (i * 24 * 60 * 60 * 1000));
-      const dayStartUTC = new Date(dIST.getTime() - (5.5 * 60 * 60 * 1000));
-      const dayEndUTC = new Date(dayStartUTC.getTime() + (24 * 60 * 60 * 1000));
-      
-      const dayOrders = await Order.find({
-        ...revenueMatch,
-        createdAt: { $gte: dayStartUTC, $lt: dayEndUTC }
-      }).select('totalAmount').lean();
-
-      const daySales = dayOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const dateStr = dIST.toISOString().split('T')[0];
+      const sales = weeklySalesMap[dateStr] || 0;
       weeklySalesData.push({
         day: i === 0 ? 'Today' : dayLabels[dIST.getUTCDay()],
-        sales: Math.round(daySales * 100) / 100
+        sales: Math.round(sales * 100) / 100
       });
     }
 
-    // Recent orders (Last 5 orders)
-    const recentOrders = await Order.find(orderMatchQuery)
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .lean();
-
     const branchMap = new Map();
-    const allBranches = await Branch.find().lean();
     allBranches.forEach(b => {
       branchMap.set(String(b._id), b);
       branchMap.set(String(b.branchId), b);
+      if (!branchMap.has(`cafe:${b.cafeId}`)) {
+        branchMap.set(`cafe:${b.cafeId}`, b);
+      }
     });
 
     const formattedRecentOrders = [];
