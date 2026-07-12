@@ -109,6 +109,33 @@ const SaaSLayout = ({ children }) => {
   const userRole = (user?.role || '').toLowerCase();
   const unreadCount = lowStockAlerts.length + notifications.filter(n => !n.isRead).length;
 
+  const handleLogoClick = (e) => {
+    if (e) e.preventDefault();
+    let dashboardPath = '/login';
+    switch (userRole) {
+      case 'super_admin':
+        dashboardPath = '/super-admin/dashboard';
+        break;
+      case 'admin':
+      case 'owner':
+        dashboardPath = '/owner/dashboard';
+        break;
+      case 'manager':
+        dashboardPath = '/manager/dashboard';
+        break;
+      case 'chef':
+      case 'waiter':
+      case 'staff':
+      case 'cashier':
+        dashboardPath = '/staff/workspace';
+        break;
+    }
+    if (location.pathname === dashboardPath) {
+      return;
+    }
+    navigate(dashboardPath);
+  };
+
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
@@ -494,7 +521,7 @@ const SaaSLayout = ({ children }) => {
       <aside className={`sidebar-drawer ${mobileDrawerOpen ? 'open' : ''}`}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid #2d2d2d' }}>
           <div 
-            onClick={() => { navigate('/'); setMobileDrawerOpen(false); }}
+            onClick={(e) => { handleLogoClick(e); setMobileDrawerOpen(false); }}
             style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
             title="Go to Home"
           >
@@ -578,7 +605,7 @@ const SaaSLayout = ({ children }) => {
             ☰
           </button>
           <div 
-            onClick={() => navigate('/')}
+            onClick={handleLogoClick}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
             title="Go to Home"
           >
@@ -714,7 +741,7 @@ const SaaSLayout = ({ children }) => {
           overflow: 'hidden'
         }}>
           <div 
-            onClick={() => navigate('/')}
+            onClick={handleLogoClick}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -782,18 +809,7 @@ const SaaSLayout = ({ children }) => {
           </button>
         </div>
 
-        {/* Branch Switcher in Sidebar (owner/admin only) */}
-        {['admin', 'owner'].includes(userRole) && (
-          <div style={{
-            padding: sidebarCollapsed ? '8px 6px' : '10px 12px',
-            borderBottom: '1px solid #2d2d2d',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: sidebarCollapsed ? 'center' : 'flex-start'
-          }}>
-            <BranchSwitcher collapsed={sidebarCollapsed} />
-          </div>
-        )}
+        {/* Branch Switcher removed from Sidebar to prevent duplicate rendering */}
 
         {/* Navigation Items (Scrollable) */}
         <nav style={{

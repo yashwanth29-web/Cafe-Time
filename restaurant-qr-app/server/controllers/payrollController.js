@@ -208,23 +208,28 @@ const getCurrentEmployeePayroll = async (req, res) => {
       // Calculate daily salary for this attendance
       let dailySalary = 0;
       const sType = user.salaryType || 'DAILY';
+      const baseDailyRate = user.dailyRate || 0;
+      const currentHourlyRate = Number((baseDailyRate / 8).toFixed(2));
+      const currentWeeklyRate = Number((baseDailyRate * 6).toFixed(2));
+      const currentMonthlyRate = Number((baseDailyRate * 26).toFixed(2));
+
       if (sType === 'DAILY') {
         if (att.status === 'Present' || att.status === 'Late') {
-          dailySalary = user.dailyRate || 0;
+          dailySalary = baseDailyRate;
         } else if (att.status === 'Half Day') {
-          dailySalary = (user.dailyRate || 0) * 0.5;
+          dailySalary = baseDailyRate * 0.5;
         }
-        const otRate = user.hourlyRate || ((user.dailyRate || 0) / 8);
+        const otRate = currentHourlyRate;
         dailySalary += otHours * otRate;
       } else if (sType === 'HOURLY') {
-        dailySalary = workingHours * (user.hourlyRate || 0);
+        dailySalary = workingHours * currentHourlyRate;
       } else if (sType === 'WEEKLY') {
-        dailySalary = (user.weeklyRate || 0) / 6;
-        const otRate = user.hourlyRate || ((user.weeklyRate || 0) / 40);
+        dailySalary = currentWeeklyRate / 6;
+        const otRate = currentHourlyRate;
         dailySalary += otHours * otRate;
       } else if (sType === 'MONTHLY') {
-        dailySalary = (user.monthlyRate || 0) / 26;
-        const otRate = user.hourlyRate || ((user.monthlyRate || 0) / 160);
+        dailySalary = currentMonthlyRate / 26;
+        const otRate = currentHourlyRate;
         dailySalary += otHours * otRate;
       }
       

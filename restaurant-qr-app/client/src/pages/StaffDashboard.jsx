@@ -372,28 +372,32 @@ const StaffDashboard = () => {
     
     const overtimeHours = att?.overtimeHours || 0;
     let earnings = 0;
+    const baseDailyRate = user.dailyRate || 0;
+    const currentHourlyRate = Number((baseDailyRate / 8).toFixed(2));
+    const currentWeeklyRate = Number((baseDailyRate * 6).toFixed(2));
+    const currentMonthlyRate = Number((baseDailyRate * 26).toFixed(2));
 
     if (sType === 'DAILY') {
       if (durationMin >= 480) { // Completed day
-        earnings = user.dailyRate || 0;
+        earnings = baseDailyRate;
       } else if (durationMin >= 240) { // Half day
-        earnings = (user.dailyRate || 0) * 0.5;
+        earnings = baseDailyRate * 0.5;
       } else {
         earnings = 0;
       }
-      const otRate = user.hourlyRate || ((user.dailyRate || 0) / 8);
+      const otRate = currentHourlyRate;
       earnings += overtimeHours * otRate;
     } else if (sType === 'HOURLY') {
       const activeHours = durationMin / 60;
-      earnings = activeHours * (user.hourlyRate || 0);
-      earnings += overtimeHours * (user.hourlyRate || 0);
+      earnings = activeHours * currentHourlyRate;
+      earnings += overtimeHours * currentHourlyRate;
     } else if (sType === 'WEEKLY') {
-      earnings = (user.weeklyRate || 0) / 6; // Pro-rated for 6 working days
-      const otRate = user.hourlyRate || ((user.weeklyRate || 0) / 40);
+      earnings = currentWeeklyRate / 6; // Pro-rated for 6 working days
+      const otRate = currentHourlyRate;
       earnings += overtimeHours * otRate;
     } else if (sType === 'MONTHLY') {
-      earnings = (user.monthlyRate || 0) / 26; // Pro-rated for 26 working days
-      const otRate = user.hourlyRate || ((user.monthlyRate || 0) / 160);
+      earnings = currentMonthlyRate / 26; // Pro-rated for 26 working days
+      const otRate = currentHourlyRate;
       earnings += overtimeHours * otRate;
     }
     

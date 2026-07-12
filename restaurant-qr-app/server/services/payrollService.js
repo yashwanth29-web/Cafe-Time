@@ -61,24 +61,29 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
     let overtimePay = 0;
 
     const sType = emp.salaryType || 'DAILY';
+    const baseDailyRate = emp.dailyRate || 0;
+    const currentHourlyRate = Number((baseDailyRate / 8).toFixed(2));
+    const currentWeeklyRate = Number((baseDailyRate * 6).toFixed(2));
+    const currentMonthlyRate = Number((baseDailyRate * 26).toFixed(2));
+
     if (sType === 'DAILY') {
-      basicSalary = presentDays * (emp.dailyRate || 0);
-      halfDaySalary = halfDays * (emp.dailyRate || 0) * 0.5;
-      const otRate = emp.hourlyRate || ((emp.dailyRate || 0) / 8);
+      basicSalary = presentDays * baseDailyRate;
+      halfDaySalary = halfDays * baseDailyRate * 0.5;
+      const otRate = currentHourlyRate;
       overtimePay = overtimeHours * otRate;
     } else if (sType === 'HOURLY') {
-      basicSalary = workingHours * (emp.hourlyRate || 0);
+      basicSalary = workingHours * currentHourlyRate;
       halfDaySalary = 0;
-      overtimePay = overtimeHours * (emp.hourlyRate || 0);
+      overtimePay = overtimeHours * currentHourlyRate;
     } else if (sType === 'WEEKLY') {
-      basicSalary = emp.weeklyRate || 0;
+      basicSalary = currentWeeklyRate;
       halfDaySalary = 0;
-      const otRate = emp.hourlyRate || ((emp.weeklyRate || 0) / 40);
+      const otRate = currentHourlyRate;
       overtimePay = overtimeHours * otRate;
     } else if (sType === 'MONTHLY') {
-      basicSalary = (emp.monthlyRate || 0) / 4; // weekly share
+      basicSalary = currentMonthlyRate / 4; // weekly share
       halfDaySalary = 0;
-      const otRate = emp.hourlyRate || ((emp.monthlyRate || 0) / 160);
+      const otRate = currentHourlyRate;
       overtimePay = overtimeHours * otRate;
     }
 
@@ -99,10 +104,10 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
       workingHours: Number(workingHours.toFixed(2)),
       overtimeHours: Number(overtimeHours.toFixed(2)),
       salaryType: sType,
-      dailyRate: emp.dailyRate || 0,
-      hourlyRate: emp.hourlyRate || 0,
-      weeklyRate: emp.weeklyRate || 0,
-      monthlyRate: emp.monthlyRate || 0,
+      dailyRate: baseDailyRate,
+      hourlyRate: currentHourlyRate,
+      weeklyRate: currentWeeklyRate,
+      monthlyRate: currentMonthlyRate,
       basicSalary: Number(basicSalary.toFixed(2)),
       halfDaySalary: Number(halfDaySalary.toFixed(2)),
       overtimePay: Number(overtimePay.toFixed(2)),

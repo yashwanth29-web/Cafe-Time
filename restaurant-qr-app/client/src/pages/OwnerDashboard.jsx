@@ -3835,24 +3835,7 @@ const exportStaffToCSV = () => {
                         <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole || member.role}</span>
                       </td>
                       <td style={{ padding: '12px 10px' }}>
-                        {editingWageId === member._id ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <input 
-                              type="number" 
-                              value={tempWage} 
-                              onChange={e => setTempWage(Number(e.target.value))} 
-                              style={{ width: '70px', padding: '6px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text-primary)', fontSize: '13px' }} 
-                              min={0}
-                            />
-                            <button onClick={() => handleSaveWage(member._id, tempWage)} style={{ background: 'var(--color-primary)', border: 'none', color: 'white', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Save</button>
-                            <button onClick={() => setEditingWageId(null)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Cancel</button>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}</span>
-                            <button onClick={() => { setEditingWageId(member._id); setTempWage(member.dailyRate || 0); }} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-primary)', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Edit</button>
-                          </div>
-                        )}
+                        <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}</span>
                       </td>
                       <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)' }}>{member.requiredHours || 8} hrs</td>
                       <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{member.actualHoursWorked || 0} hrs</td>
@@ -3889,26 +3872,7 @@ const exportStaffToCSV = () => {
                       <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole || member.role}</span>
                     </div>
                     <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
-                      <div>Daily Wage:
-                        {editingWageId === member._id ? (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
-                            <input 
-                              type="number" 
-                              value={tempWage} 
-                              onChange={e => setTempWage(Number(e.target.value))} 
-                              style={{ width: '60px', padding: '4px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '4px', color: 'var(--color-text-primary)' }} 
-                              min={0}
-                            />
-                            <button onClick={() => handleSaveWage(member._id, tempWage)} style={{ background: 'var(--color-primary)', border: 'none', color: 'white', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px' }}>Save</button>
-                            <button onClick={() => setEditingWageId(null)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px' }}>Cancel</button>
-                          </div>
-                        ) : (
-                          <span style={{ color: 'var(--color-text-primary)', fontWeight: 500, marginLeft: '4px' }}>
-                            ₹{member.dailyRate || 0}
-                            <button onClick={() => { setEditingWageId(member._id); setTempWage(member.dailyRate || 0); }} style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '11px', textDecoration: 'underline', marginLeft: '6px' }}>Edit</button>
-                          </span>
-                        )}
-                      </div>
+                      <div>Daily Wage:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500, marginLeft: '4px' }}>₹{member.dailyRate || 0}</span></div>
                       <div>Required Hours:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.requiredHours || 8} hrs</span></div>
                       <div>Worked This Week:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.actualHoursWorked || 0} hrs</span></div>
                       <div>Working Days:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.workingDays || 0} days</span></div>

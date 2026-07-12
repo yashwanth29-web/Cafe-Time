@@ -105,9 +105,9 @@ const createStaff = async (req, res) => {
       isActive: isActive !== undefined ? isActive : true,
       salaryType: salaryType || 'DAILY',
       dailyRate: dailyRate !== undefined ? Number(dailyRate) : 0,
-      hourlyRate: hourlyRate !== undefined ? Number(hourlyRate) : 0,
-      weeklyRate: weeklyRate !== undefined ? Number(weeklyRate) : 0,
-      monthlyRate: monthlyRate !== undefined ? Number(monthlyRate) : 0,
+      hourlyRate: dailyRate !== undefined ? Number((Number(dailyRate) / 8).toFixed(2)) : 0,
+      weeklyRate: dailyRate !== undefined ? Number((Number(dailyRate) * 6).toFixed(2)) : 0,
+      monthlyRate: dailyRate !== undefined ? Number((Number(dailyRate) * 26).toFixed(2)) : 0,
       weeklyOff: weeklyOff || 'Sunday',
       joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
       salaryStatus: salaryStatus || 'ACTIVE'
@@ -202,21 +202,25 @@ const getStaff = async (req, res) => {
         const overtimeHours = att.overtimeHours || 0;
         let earnings = 0;
         const sType = s.salaryType || 'DAILY';
+        const baseDailyRate = s.dailyRate || 0;
+        const currentHourlyRate = Number((baseDailyRate / 8).toFixed(2));
+        const currentWeeklyRate = Number((baseDailyRate * 6).toFixed(2));
+        const currentMonthlyRate = Number((baseDailyRate * 26).toFixed(2));
 
         if (sType === 'DAILY') {
-          if (durationMin >= 480) { earnings = s.dailyRate || 0; }
-          else if (durationMin >= 240) { earnings = (s.dailyRate || 0) * 0.5; }
-          const otRate = s.hourlyRate || ((s.dailyRate || 0) / 8);
+          if (durationMin >= 480) { earnings = baseDailyRate; }
+          else if (durationMin >= 240) { earnings = baseDailyRate * 0.5; }
+          const otRate = currentHourlyRate;
           earnings += overtimeHours * otRate;
         } else if (sType === 'HOURLY') {
-          earnings = (durationMin / 60) * (s.hourlyRate || 0) + (overtimeHours * (s.hourlyRate || 0));
+          earnings = (durationMin / 60) * currentHourlyRate + (overtimeHours * currentHourlyRate);
         } else if (sType === 'WEEKLY') {
-          earnings = (s.weeklyRate || 0) / 6;
-          const otRate = s.hourlyRate || ((s.weeklyRate || 0) / 40);
+          earnings = currentWeeklyRate / 6;
+          const otRate = currentHourlyRate;
           earnings += overtimeHours * otRate;
         } else if (sType === 'MONTHLY') {
-          earnings = (s.monthlyRate || 0) / 26;
-          const otRate = s.hourlyRate || ((s.monthlyRate || 0) / 160);
+          earnings = currentMonthlyRate / 26;
+          const otRate = currentHourlyRate;
           earnings += overtimeHours * otRate;
         }
 
@@ -302,10 +306,13 @@ const updateStaff = async (req, res) => {
       staffMember.isActive = isActive;
     }
     if (salaryType) staffMember.salaryType = salaryType;
-    if (dailyRate !== undefined) staffMember.dailyRate = Number(dailyRate);
-    if (hourlyRate !== undefined) staffMember.hourlyRate = Number(hourlyRate);
-    if (weeklyRate !== undefined) staffMember.weeklyRate = Number(weeklyRate);
-    if (monthlyRate !== undefined) staffMember.monthlyRate = Number(monthlyRate);
+    if (dailyRate !== undefined) {
+      const baseDailyRate = Number(dailyRate);
+      staffMember.dailyRate = baseDailyRate;
+      staffMember.hourlyRate = Number((baseDailyRate / 8).toFixed(2));
+      staffMember.weeklyRate = Number((baseDailyRate * 6).toFixed(2));
+      staffMember.monthlyRate = Number((baseDailyRate * 26).toFixed(2));
+    }
     if (weeklyOff) staffMember.weeklyOff = weeklyOff;
     if (joiningDate) staffMember.joiningDate = new Date(joiningDate);
     if (salaryStatus) staffMember.salaryStatus = salaryStatus;
