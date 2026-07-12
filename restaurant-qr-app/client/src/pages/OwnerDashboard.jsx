@@ -43,6 +43,7 @@ import {
 '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
+import socket, { connectSocket } from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
 import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3 } from 'lucide-react';
 import * as XLSX from 'xlsx';
