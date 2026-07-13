@@ -9,10 +9,10 @@ test.describe('Customer Menu and Ordering Flow', () => {
     await expect(page).toHaveTitle(/Dr. Chai Cafe/);
     
     // 3. Wait for network data to load (menu items)
-    await page.waitForSelector('.menu-card', { timeout: 15000 });
+    await page.waitForSelector('.compact-menu-card', { timeout: 15000 });
 
     // 4. Find the first 'Add' button and click it
-    const firstItem = page.locator('.menu-card').first();
+    const firstItem = page.locator('.compact-menu-card').first();
     const addButton = firstItem.getByRole('button', { name: /add/i });
     
     if (await addButton.isVisible()) {

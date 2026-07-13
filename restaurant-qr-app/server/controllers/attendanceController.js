@@ -444,7 +444,7 @@ const getOwnerTodayDashboard = async (req, res) => {
     const staffList = await User.find({
       cafeId,
       assignedBranch: activeBranch,
-      role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] },
+      role: { $nin: ['super_admin', 'admin', 'owner', 'SUPER_ADMIN', 'ADMIN', 'OWNER'] },
       isActive: true
     });
 
@@ -538,7 +538,7 @@ const getOwnerReports = async (req, res) => {
     const staffCount = await User.countDocuments({
       cafeId,
       assignedBranch: activeBranch,
-      role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier'] },
+      role: { $nin: ['super_admin', 'admin', 'owner', 'SUPER_ADMIN', 'ADMIN', 'OWNER'] },
       isActive: true
     });
 

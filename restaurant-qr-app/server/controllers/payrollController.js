@@ -167,7 +167,7 @@ const getCurrentEmployeePayroll = async (req, res) => {
     // 2. Fetch all attendance records for this employee within the current week range
     const Attendance = require('../models/Attendance');
     const attendanceRecords = await Attendance.find({
-      employeeId: userId,
+      staffId: userId,
       cafeId,
       branchId: activeBranch,
       date: { $gte: weekStartStr, $lte: weekEndStr }
@@ -206,45 +206,23 @@ const getCurrentEmployeePayroll = async (req, res) => {
       overtimeHours += otHours;
 
       // Calculate daily salary for this attendance
-      let dailySalary = 0;
-      const sType = user.salaryType || 'DAILY';
       const baseDailyRate = user.dailyRate || 0;
-      const currentHourlyRate = Number((baseDailyRate / 8).toFixed(2));
-      const currentWeeklyRate = Number((baseDailyRate * 6).toFixed(2));
-      const currentMonthlyRate = Number((baseDailyRate * 26).toFixed(2));
+      const requiredHours = user.requiredHours || 8;
 
-      if (sType === 'DAILY') {
-        if (att.status === 'Present' || att.status === 'Late') {
-          dailySalary = baseDailyRate;
-        } else if (att.status === 'Half Day') {
-          dailySalary = baseDailyRate * 0.5;
-        }
-        const otRate = currentHourlyRate;
-        dailySalary += otHours * otRate;
-      } else if (sType === 'HOURLY') {
-        dailySalary = workingHours * currentHourlyRate;
-      } else if (sType === 'WEEKLY') {
-        dailySalary = currentWeeklyRate / 6;
-        const otRate = currentHourlyRate;
-        dailySalary += otHours * otRate;
-      } else if (sType === 'MONTHLY') {
-        dailySalary = currentMonthlyRate / 26;
-        const otRate = currentHourlyRate;
-        dailySalary += otHours * otRate;
-      }
-      
+      let dailySalary = (baseDailyRate * (workingHours + otHours)) / requiredHours;
       dailySalary = Number(dailySalary.toFixed(2));
+      
       const attDate = new Date(att.date || att.createdAt);
       const dayName = dayNames[attDate.getDay()];
       if (weeklyBreakdown.hasOwnProperty(dayName)) {
-        weeklyBreakdown[dayName] = dailySalary;
+        weeklyBreakdown[dayName] = Number(((weeklyBreakdown[dayName] || 0) + dailySalary).toFixed(2));
       }
 
       return {
         date: att.date || new Date(att.createdAt).toISOString().split('T')[0],
         checkInTime: att.checkInTime,
         checkOutTime: att.checkOutTime,
-        workingHours,
+        workingHours: Number((workingHours + otHours).toFixed(2)),
         dailySalary
       };
     });
@@ -256,8 +234,8 @@ const getCurrentEmployeePayroll = async (req, res) => {
       weekStart: weekStartStr,
       weekEnd: weekEndStr,
       dailyRate: user.dailyRate || 0,
-      requiredHours: 8,
-      actualHoursWorked: Number(actualHoursWorked.toFixed(2)),
+      requiredHours: user.requiredHours || 8,
+      actualHoursWorked: Number((actualHoursWorked + overtimeHours).toFixed(2)),
       workingDays: presentDays + halfDays * 0.5,
       weeklyBreakdown,
       attendances: formattedAttendances
@@ -309,32 +287,25 @@ const updatePayroll = async (req, res) => {
 
     if (salaryType !== undefined) payroll.salaryType = salaryType;
     if (dailyRate !== undefined) payroll.dailyRate = Number(dailyRate);
+    if (req.body.requiredHours !== undefined) payroll.requiredHours = Number(req.body.requiredHours);
     if (hourlyRate !== undefined) payroll.hourlyRate = Number(hourlyRate);
     if (weeklyRate !== undefined) payroll.weeklyRate = Number(weeklyRate);
     if (monthlyRate !== undefined) payroll.monthlyRate = Number(monthlyRate);
 
-    // Recalculate basicSalary and overtimePay
-    const sType = payroll.salaryType || 'DAILY';
-    if (sType === 'DAILY') {
-      payroll.basicSalary = payroll.presentDays * (payroll.dailyRate || 0);
-      payroll.halfDaySalary = payroll.halfDays * (payroll.dailyRate || 0) * 0.5;
-      const otRate = payroll.hourlyRate || ((payroll.dailyRate || 0) / 8);
-      payroll.overtimePay = payroll.overtimeHours * otRate;
-    } else if (sType === 'HOURLY') {
-      payroll.basicSalary = payroll.workingHours * (payroll.hourlyRate || 0);
-      payroll.halfDaySalary = 0;
-      payroll.overtimePay = payroll.overtimeHours * (payroll.hourlyRate || 0);
-    } else if (sType === 'WEEKLY') {
-      payroll.basicSalary = payroll.weeklyRate || 0;
-      payroll.halfDaySalary = 0;
-      const otRate = payroll.hourlyRate || ((payroll.weeklyRate || 0) / 40);
-      payroll.overtimePay = payroll.overtimeHours * otRate;
-    } else if (sType === 'MONTHLY') {
-      payroll.basicSalary = (payroll.monthlyRate || 0) / 4;
-      payroll.halfDaySalary = 0;
-      const otRate = payroll.hourlyRate || ((payroll.monthlyRate || 0) / 160);
-      payroll.overtimePay = payroll.overtimeHours * otRate;
-    }
+    // Recalculate basicSalary, halfDaySalary, and overtimePay using attendance-based formula
+    const baseDailyRate = payroll.dailyRate || 0;
+    const requiredHours = payroll.requiredHours || 8;
+
+    payroll.hourlyRate = Number((baseDailyRate / requiredHours).toFixed(2));
+    payroll.weeklyRate = Number((baseDailyRate * 6).toFixed(2));
+    payroll.monthlyRate = Number((baseDailyRate * 26).toFixed(2));
+
+    const halfDayHours = (payroll.halfDays || 0) * requiredHours * 0.5;
+    const basicHours = Math.max(0, (payroll.workingHours || 0) - halfDayHours);
+
+    payroll.basicSalary = (basicHours * baseDailyRate) / requiredHours;
+    payroll.halfDaySalary = (halfDayHours * baseDailyRate) / requiredHours;
+    payroll.overtimePay = ((payroll.overtimeHours || 0) * baseDailyRate) / requiredHours;
 
     // Round values to 2 decimal places
     payroll.basicSalary = Number(payroll.basicSalary.toFixed(2));

@@ -360,7 +360,6 @@ const StaffDashboard = () => {
     if (!todayStatus?.checkedIn || !user) return 0;
     
     const att = todayStatus.attendance;
-    const sType = user.salaryType || 'DAILY';
     
     // Get total regular working duration so far
     let durationMin = att?.totalDuration || 0;
@@ -371,35 +370,12 @@ const StaffDashboard = () => {
     }
     
     const overtimeHours = att?.overtimeHours || 0;
-    let earnings = 0;
     const baseDailyRate = user.dailyRate || 0;
-    const currentHourlyRate = Number((baseDailyRate / 8).toFixed(2));
-    const currentWeeklyRate = Number((baseDailyRate * 6).toFixed(2));
-    const currentMonthlyRate = Number((baseDailyRate * 26).toFixed(2));
+    const requiredHours = user.requiredHours || 8;
+    const workingHours = durationMin / 60;
 
-    if (sType === 'DAILY') {
-      if (durationMin >= 480) { // Completed day
-        earnings = baseDailyRate;
-      } else if (durationMin >= 240) { // Half day
-        earnings = baseDailyRate * 0.5;
-      } else {
-        earnings = 0;
-      }
-      const otRate = currentHourlyRate;
-      earnings += overtimeHours * otRate;
-    } else if (sType === 'HOURLY') {
-      const activeHours = durationMin / 60;
-      earnings = activeHours * currentHourlyRate;
-      earnings += overtimeHours * currentHourlyRate;
-    } else if (sType === 'WEEKLY') {
-      earnings = currentWeeklyRate / 6; // Pro-rated for 6 working days
-      const otRate = currentHourlyRate;
-      earnings += overtimeHours * otRate;
-    } else if (sType === 'MONTHLY') {
-      earnings = currentMonthlyRate / 26; // Pro-rated for 26 working days
-      const otRate = currentHourlyRate;
-      earnings += overtimeHours * otRate;
-    }
+    // Salary = Daily Wage * Actual Hours Worked / Required Daily Hours
+    const earnings = (baseDailyRate * (workingHours + overtimeHours)) / requiredHours;
     
     return Number(earnings.toFixed(2));
   };

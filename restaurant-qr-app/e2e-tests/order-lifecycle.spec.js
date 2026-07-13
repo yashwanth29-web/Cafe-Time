@@ -19,10 +19,10 @@ test.describe('End-to-End Order Lifecycle', () => {
       await expect(customerPage).toHaveTitle(/Dr. Chai Cafe/);
       
       // Wait for menu to load
-      await customerPage.waitForSelector('.menu-card', { timeout: 15000 });
+      await customerPage.waitForSelector('.compact-menu-card', { timeout: 15000 });
       
       // Add first item to cart
-      const firstItem = customerPage.locator('.menu-card').first();
+      const firstItem = customerPage.locator('.compact-menu-card').first();
       const addButton = firstItem.getByRole('button', { name: /add/i });
       if (await addButton.isVisible()) {
         await addButton.click();

@@ -4,10 +4,10 @@ const Payroll = require('../models/Payroll');
 
 const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, generatedBy) => {
 
-  // 1. Fetch active employees belonging to this cafe AND this specific branch
+  // 1. Fetch active employees belonging to this cafe AND this specific branch (excluding admins/owners to support future roles)
   const employees = await User.find({
     cafeId,
-    role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier'] },
+    role: { $nin: ['super_admin', 'admin', 'owner', 'SUPER_ADMIN', 'ADMIN', 'OWNER'] },
     isActive: true,
     assignedBranch: branchId
   });
@@ -28,7 +28,7 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
 
     // 2. Fetch all attendance records for this employee within week range
     const attendanceRecords = await Attendance.find({
-      employeeId: emp._id,
+      staffId: emp._id,
       cafeId,
       branchId,
       date: { $gte: weekStart, $lte: weekEnd }
@@ -39,6 +39,13 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
     let halfDays = 0;
     let workingHours = 0;
     let overtimeHours = 0;
+
+    let basicSalary = 0;
+    let halfDaySalary = 0;
+    let overtimePay = 0;
+
+    const baseDailyRate = emp.dailyRate || 0;
+    const requiredHours = emp.requiredHours || 8;
 
     attendanceRecords.forEach(att => {
       if (att.status === 'Present') {
@@ -51,41 +58,23 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
         absentDays += 1;
       }
       
-      workingHours += (att.totalDuration || 0) / 60;
-      overtimeHours += att.overtimeHours || 0;
+      const attWorkingHours = (att.totalDuration || 0) / 60;
+      const attOvertimeHours = att.overtimeHours || 0;
+
+      workingHours += attWorkingHours;
+      overtimeHours += attOvertimeHours;
+
+      // Salary = Daily Wage * Actual Hours Worked / Required Daily Hours
+      const daySalary = (baseDailyRate * attWorkingHours) / requiredHours;
+      const dayOvertimePay = (baseDailyRate * attOvertimeHours) / requiredHours;
+
+      if (att.status === 'Half Day') {
+        halfDaySalary += daySalary;
+      } else {
+        basicSalary += daySalary;
+      }
+      overtimePay += dayOvertimePay;
     });
-
-    // 3. Basic salary calculations based on employee's salary type and rates
-    let basicSalary = 0;
-    let halfDaySalary = 0;
-    let overtimePay = 0;
-
-    const sType = emp.salaryType || 'DAILY';
-    const baseDailyRate = emp.dailyRate || 0;
-    const currentHourlyRate = Number((baseDailyRate / 8).toFixed(2));
-    const currentWeeklyRate = Number((baseDailyRate * 6).toFixed(2));
-    const currentMonthlyRate = Number((baseDailyRate * 26).toFixed(2));
-
-    if (sType === 'DAILY') {
-      basicSalary = presentDays * baseDailyRate;
-      halfDaySalary = halfDays * baseDailyRate * 0.5;
-      const otRate = currentHourlyRate;
-      overtimePay = overtimeHours * otRate;
-    } else if (sType === 'HOURLY') {
-      basicSalary = workingHours * currentHourlyRate;
-      halfDaySalary = 0;
-      overtimePay = overtimeHours * currentHourlyRate;
-    } else if (sType === 'WEEKLY') {
-      basicSalary = currentWeeklyRate;
-      halfDaySalary = 0;
-      const otRate = currentHourlyRate;
-      overtimePay = overtimeHours * otRate;
-    } else if (sType === 'MONTHLY') {
-      basicSalary = currentMonthlyRate / 4; // weekly share
-      halfDaySalary = 0;
-      const otRate = currentHourlyRate;
-      overtimePay = overtimeHours * otRate;
-    }
 
     const netSalary = basicSalary + halfDaySalary + overtimePay;
 
@@ -103,11 +92,12 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
       halfDays,
       workingHours: Number(workingHours.toFixed(2)),
       overtimeHours: Number(overtimeHours.toFixed(2)),
-      salaryType: sType,
+      salaryType: emp.salaryType || 'DAILY',
       dailyRate: baseDailyRate,
-      hourlyRate: currentHourlyRate,
-      weeklyRate: currentWeeklyRate,
-      monthlyRate: currentMonthlyRate,
+      requiredHours: requiredHours,
+      hourlyRate: Number((baseDailyRate / requiredHours).toFixed(2)),
+      weeklyRate: Number((baseDailyRate * 6).toFixed(2)),
+      monthlyRate: Number((baseDailyRate * 26).toFixed(2)),
       basicSalary: Number(basicSalary.toFixed(2)),
       halfDaySalary: Number(halfDaySalary.toFixed(2)),
       overtimePay: Number(overtimePay.toFixed(2)),

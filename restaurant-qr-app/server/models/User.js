@@ -53,6 +53,10 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  requiredHours: {
+    type: Number,
+    default: 8
+  },
   hourlyRate: {
     type: Number,
     default: 0

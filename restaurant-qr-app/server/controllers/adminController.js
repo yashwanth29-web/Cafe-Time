@@ -39,7 +39,7 @@ const parseCoords = (locationStr) => {
 const createStaff = async (req, res) => {
   const { 
     name, email, phone, staffRole, assignedBranch, isActive,
-    salaryType, dailyRate, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
+    salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
   } = req.body;
   const cafeId = req.user.cafeId;
 
@@ -105,7 +105,8 @@ const createStaff = async (req, res) => {
       isActive: isActive !== undefined ? isActive : true,
       salaryType: salaryType || 'DAILY',
       dailyRate: dailyRate !== undefined ? Number(dailyRate) : 0,
-      hourlyRate: dailyRate !== undefined ? Number((Number(dailyRate) / 8).toFixed(2)) : 0,
+      requiredHours: requiredHours !== undefined ? Number(requiredHours) : 8,
+      hourlyRate: dailyRate !== undefined ? Number((Number(dailyRate) / (requiredHours !== undefined ? Number(requiredHours) : 8)).toFixed(2)) : 0,
       weeklyRate: dailyRate !== undefined ? Number((Number(dailyRate) * 6).toFixed(2)) : 0,
       monthlyRate: dailyRate !== undefined ? Number((Number(dailyRate) * 26).toFixed(2)) : 0,
       weeklyOff: weeklyOff || 'Sunday',
@@ -168,9 +169,11 @@ const getStaff = async (req, res) => {
     const monday = new Date(now.setDate(diff));
     monday.setHours(0, 0, 0, 0);
 
+    const activeBranch = query.assignedBranch;
     const Attendance = require('../models/Attendance');
     const attendancesThisWeek = await Attendance.find({
       cafeId,
+      branchId: activeBranch,
       createdAt: { $gte: monday }
     }).lean();
 
@@ -200,32 +203,15 @@ const getStaff = async (req, res) => {
         }
 
         const overtimeHours = att.overtimeHours || 0;
-        let earnings = 0;
-        const sType = s.salaryType || 'DAILY';
         const baseDailyRate = s.dailyRate || 0;
-        const currentHourlyRate = Number((baseDailyRate / 8).toFixed(2));
-        const currentWeeklyRate = Number((baseDailyRate * 6).toFixed(2));
-        const currentMonthlyRate = Number((baseDailyRate * 26).toFixed(2));
+        const requiredHours = s.requiredHours || 8;
+        const workingHours = durationMin / 60;
 
-        if (sType === 'DAILY') {
-          if (durationMin >= 480) { earnings = baseDailyRate; }
-          else if (durationMin >= 240) { earnings = baseDailyRate * 0.5; }
-          const otRate = currentHourlyRate;
-          earnings += overtimeHours * otRate;
-        } else if (sType === 'HOURLY') {
-          earnings = (durationMin / 60) * currentHourlyRate + (overtimeHours * currentHourlyRate);
-        } else if (sType === 'WEEKLY') {
-          earnings = currentWeeklyRate / 6;
-          const otRate = currentHourlyRate;
-          earnings += overtimeHours * otRate;
-        } else if (sType === 'MONTHLY') {
-          earnings = currentMonthlyRate / 26;
-          const otRate = currentHourlyRate;
-          earnings += overtimeHours * otRate;
-        }
+        // Salary = Daily Wage * Actual Hours Worked / Required Daily Hours
+        let earnings = (baseDailyRate * (workingHours + overtimeHours)) / requiredHours;
 
         earnings = Number(earnings.toFixed(2));
-        weeklyBreakdown[dayName] = earnings;
+        weeklyBreakdown[dayName] = Number(((weeklyBreakdown[dayName] || 0) + earnings).toFixed(2));
         currentWeekSalary += earnings;
       });
 
@@ -251,7 +237,7 @@ const updateStaff = async (req, res) => {
   const { id } = req.params;
   const { 
     name, email, phone, staffRole, assignedBranch, isActive,
-    salaryType, dailyRate, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
+    salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
   } = req.body;
   const cafeId = req.user.cafeId;
 
@@ -306,10 +292,14 @@ const updateStaff = async (req, res) => {
       staffMember.isActive = isActive;
     }
     if (salaryType) staffMember.salaryType = salaryType;
-    if (dailyRate !== undefined) {
-      const baseDailyRate = Number(dailyRate);
+    if (requiredHours !== undefined) {
+      staffMember.requiredHours = Number(requiredHours);
+    }
+    if (dailyRate !== undefined || requiredHours !== undefined) {
+      const baseDailyRate = dailyRate !== undefined ? Number(dailyRate) : staffMember.dailyRate;
+      const reqHours = staffMember.requiredHours || 8;
       staffMember.dailyRate = baseDailyRate;
-      staffMember.hourlyRate = Number((baseDailyRate / 8).toFixed(2));
+      staffMember.hourlyRate = Number((baseDailyRate / reqHours).toFixed(2));
       staffMember.weeklyRate = Number((baseDailyRate * 6).toFixed(2));
       staffMember.monthlyRate = Number((baseDailyRate * 26).toFixed(2));
     }
