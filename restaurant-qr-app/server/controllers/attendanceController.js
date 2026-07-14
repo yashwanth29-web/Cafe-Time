@@ -714,6 +714,74 @@ const stopExtraWork = async (req, res) => {
   }
 };
 
+/**
+ * Edit / Correct Attendance Log (Owner/Manager only)
+ * PUT /api/attendance/:id
+ */
+const editAttendance = async (req, res) => {
+  const { id } = req.params;
+  const { 
+    checkInTime, 
+    checkOutTime, 
+    status, 
+    workingHours, 
+    overtimeHours,
+    date
+  } = req.body;
+  const cafeId = req.user.cafeId;
+
+  try {
+    const attendance = await Attendance.findOne({ _id: id, cafeId });
+    if (!attendance) {
+      return res.status(404).json({ success: false, message: 'Attendance record not found in your cafe' });
+    }
+
+    if (req.user.role.toLowerCase() === 'manager' && req.user.assignedBranch && attendance.branchId !== req.user.assignedBranch) {
+      return res.status(403).json({ success: false, message: "Unauthorized access to this branch's attendance logs" });
+    }
+
+    if (checkInTime !== undefined) attendance.checkInTime = new Date(checkInTime);
+    if (checkOutTime !== undefined) {
+      if (checkOutTime === null) {
+        attendance.checkOutTime = undefined;
+        attendance.totalDuration = 0;
+        attendance.workingHours = 0;
+      } else {
+        attendance.checkOutTime = new Date(checkOutTime);
+      }
+    }
+    if (status !== undefined) attendance.status = status;
+    if (date !== undefined) attendance.date = date; // YYYY-MM-DD
+
+    if (workingHours !== undefined) {
+      attendance.workingHours = Number(workingHours);
+      attendance.totalDuration = Math.round(Number(workingHours) * 60);
+    } else if (attendance.checkInTime && attendance.checkOutTime) {
+      const checkIn = attendance.checkInTime;
+      const checkOut = attendance.checkOutTime;
+      const diffMs = checkOut.getTime() - checkIn.getTime();
+      const durationMin = Math.max(0, Math.round(diffMs / 60000));
+      attendance.totalDuration = durationMin;
+      attendance.workingHours = Number((durationMin / 60).toFixed(2));
+    }
+
+    if (overtimeHours !== undefined) {
+      attendance.overtimeHours = Number(overtimeHours);
+    }
+
+    await attendance.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Attendance record corrected successfully.',
+      attendance
+    });
+  } catch (error) {
+    console.error('editAttendance error:', error);
+    return res.status(500).json({ success: false, message: 'Server error correcting attendance record' });
+  }
+};
+
 module.exports = {
   checkIn,
   checkOut,
@@ -722,5 +790,6 @@ module.exports = {
   getOwnerTodayDashboard,
   getOwnerReports,
   startExtraWork,
-  stopExtraWork
+  stopExtraWork,
+  editAttendance
 };

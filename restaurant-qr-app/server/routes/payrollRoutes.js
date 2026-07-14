@@ -9,7 +9,9 @@ const {
   payPayroll,
   deletePayroll,
   getPayrollHistory,
-  getPayrollReport
+  getPayrollReport,
+  approvePayroll,
+  getSalaryHistory
 } = require('../controllers/payrollController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -20,9 +22,11 @@ router.post('/generate', restrictTo('admin', 'owner'), generatePayroll);
 router.get('/', restrictTo('admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier'), listPayroll);
 router.get('/current', restrictTo('admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier'), getCurrentEmployeePayroll);
 router.get('/history', restrictTo('admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier'), getPayrollHistory);
+router.get('/salary-history', restrictTo('admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier'), getSalaryHistory);
 router.get('/report', restrictTo('admin', 'owner'), getPayrollReport);
 router.get('/:id', restrictTo('admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier'), getPayrollDetails);
 router.patch('/:id', restrictTo('admin', 'owner'), updatePayroll);
+router.patch('/:id/approve', restrictTo('admin', 'owner'), approvePayroll);
 router.patch('/:id/pay', restrictTo('admin', 'owner'), payPayroll);
 router.delete('/:id', restrictTo('admin', 'owner'), deletePayroll);
 

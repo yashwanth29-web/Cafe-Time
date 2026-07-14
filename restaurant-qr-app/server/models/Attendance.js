@@ -114,4 +114,38 @@ AttendanceSchema.index({ cafeId: 1, branchId: 1, date: -1 });
 // Optimize queries bounded by branch
 AttendanceSchema.index({ cafeId: 1, branchId: 1 });
 
+// Post-save hook to automatically trigger recalculation
+AttendanceSchema.post('save', async function(doc) {
+  try {
+    const { recalculateStaffSalary } = require('../services/payrollService');
+    await recalculateStaffSalary(doc.staffId);
+  } catch (err) {
+    console.error('Error in post-save attendance hook:', err);
+  }
+});
+
+// Post-findOneAndUpdate hook
+AttendanceSchema.post('findOneAndUpdate', async function(doc) {
+  if (doc && doc.staffId) {
+    try {
+      const { recalculateStaffSalary } = require('../services/payrollService');
+      await recalculateStaffSalary(doc.staffId);
+    } catch (err) {
+      console.error('Error in post-findOneAndUpdate attendance hook:', err);
+    }
+  }
+});
+
+// Post-findOneAndDelete hook
+AttendanceSchema.post('findOneAndDelete', async function(doc) {
+  if (doc && doc.staffId) {
+    try {
+      const { recalculateStaffSalary } = require('../services/payrollService');
+      await recalculateStaffSalary(doc.staffId);
+    } catch (err) {
+      console.error('Error in post-findOneAndDelete attendance hook:', err);
+    }
+  }
+});
+
 module.exports = mongoose.model('Attendance', AttendanceSchema);

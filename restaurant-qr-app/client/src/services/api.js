@@ -478,6 +478,16 @@ export const getPayrollReport = async (params) => {
   return response.data;
 };
 
+export const approvePayroll = async (id) => {
+  const response = await API.patch(`/payroll/${id}/approve`);
+  return response.data;
+};
+
+export const getSalaryHistory = async (params) => {
+  const response = await API.get('/payroll/salary-history', { params });
+  return response.data;
+};
+
 // In-app Notifications APIs
 export const getNotifications = async () => {
   const response = await API.get('/notifications');

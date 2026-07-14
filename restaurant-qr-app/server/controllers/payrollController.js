@@ -364,6 +364,36 @@ const payPayroll = async (req, res) => {
 
     await payroll.save();
 
+    // Create permanent SalaryHistory record
+    try {
+      const SalaryHistory = require('../models/SalaryHistory');
+      const Branch = require('../models/Branch');
+      const branch = await Branch.findOne({ branchId: payroll.branchId, cafeId: payroll.cafeId });
+      const grossSalary = (payroll.basicSalary || 0) + (payroll.halfDaySalary || 0) + (payroll.overtimePay || 0) + (payroll.bonus || 0);
+
+      await SalaryHistory.create({
+        payrollId: payroll._id,
+        employeeId: payroll.employeeId,
+        employeeName: payroll.employeeName,
+        cafeId: payroll.cafeId,
+        branchId: payroll.branchId,
+        branchName: branch ? branch.branchName : 'Main',
+        payrollWeek: `${payroll.weekStart} to ${payroll.weekEnd}`,
+        weekStart: payroll.weekStart,
+        weekEnd: payroll.weekEnd,
+        workedDays: payroll.presentDays + (payroll.halfDays || 0) * 0.5,
+        workedHours: payroll.workingHours + (payroll.overtimeHours || 0),
+        grossSalary: Number(grossSalary.toFixed(2)),
+        deductions: payroll.deductions || 0,
+        finalSalary: payroll.netSalary || 0,
+        paymentStatus: 'Paid',
+        paymentDate: payroll.paymentDate,
+        paymentMethod: payroll.paymentMethod
+      });
+    } catch (historyErr) {
+      console.error('Error creating SalaryHistory record:', historyErr);
+    }
+
     // Create Notification for the Employee
     await Notification.create({
       userId: payroll.employeeId,
@@ -537,6 +567,119 @@ const getPayrollReport = async (req, res) => {
   }
 };
 
+/**
+ * Approve Payroll
+ * PATCH /api/payroll/:id/approve
+ */
+const approvePayroll = async (req, res) => {
+  const { id } = req.params;
+  const cafeId = req.user.cafeId;
+
+  try {
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+    const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
+    if (!payroll) {
+      return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
+    }
+
+    if (payroll.paymentStatus !== 'Pending') {
+      return res.status(400).json({ success: false, message: 'Only Pending payrolls can be approved.' });
+    }
+
+    payroll.paymentStatus = 'Approved';
+    await payroll.save();
+
+    // Create Notification for the Employee
+    await Notification.create({
+      userId: payroll.employeeId,
+      cafeId: payroll.cafeId || cafeId,
+      branchId: payroll.branchId || activeBranch,
+      title: 'Weekly Payroll Approved',
+      message: `Your payroll for the week ending on ${payroll.weekEnd} has been approved by the manager/owner.`
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Payroll approved successfully',
+      data: payroll
+    });
+  } catch (error) {
+    console.error('approvePayroll error:', error);
+    return res.status(500).json({ success: false, message: 'Server error approving payroll' });
+  }
+};
+
+/**
+ * Get permanent salary history
+ * GET /api/payroll/salary-history
+ */
+const getSalaryHistory = async (req, res) => {
+  const cafeId = req.user.cafeId;
+  const userRole = (req.user.role || '').toLowerCase();
+  const userId = req.user._id;
+  const { period } = req.query; // 'current_week', 'previous_week', 'previous_month', 'previous_year'
+
+  try {
+    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+    const query = { branchId: activeBranch };
+
+    // Enforce role authorization filters
+    if (userRole === 'admin' || userRole === 'owner' || userRole === 'manager') {
+      if (!cafeId) {
+        return res.status(400).json({ success: false, message: 'Your profile does not have a cafe assignment' });
+      }
+      query.cafeId = cafeId;
+    } else {
+      // Employee can only see their own salary history
+      query.employeeId = userId;
+    }
+
+    const getISTDate = (date = new Date()) => {
+      const tzOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = new Date(date.getTime() + tzOffset);
+      return istTime.toISOString().split('T')[0];
+    };
+
+    const todayStr = getISTDate();
+    const current = new Date(todayStr);
+
+    if (period === 'current_week') {
+      const day = current.getUTCDay();
+      const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(current.setUTCDate(diff));
+      const weekStartStr = monday.toISOString().split('T')[0];
+      query.weekStart = { $gte: weekStartStr };
+    } else if (period === 'previous_week') {
+      const day = current.getUTCDay();
+      const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(current.setUTCDate(diff));
+      // subtract 7 days for previous week's Monday
+      const prevMonday = new Date(monday.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const prevSunday = new Date(monday.getTime() - 1 * 24 * 60 * 60 * 1000);
+      
+      const prevMondayStr = prevMonday.toISOString().split('T')[0];
+      const prevSundayStr = prevSunday.toISOString().split('T')[0];
+      query.weekStart = { $gte: prevMondayStr, $lte: prevSundayStr };
+    } else if (period === 'previous_month') {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+      query.weekStart = { $gte: thirtyDaysAgoStr };
+    } else if (period === 'previous_year') {
+      const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+      const yearAgoStr = yearAgo.toISOString().split('T')[0];
+      query.weekStart = { $gte: yearAgoStr };
+    }
+
+    const SalaryHistory = require('../models/SalaryHistory');
+    const history = await SalaryHistory.find(query).sort({ weekStart: -1, createdAt: -1 });
+    
+    return res.status(200).json({ success: true, count: history.length, data: history });
+  } catch (error) {
+    console.error('getSalaryHistory error:', error);
+    return res.status(500).json({ success: false, message: 'Server error retrieving salary history' });
+  }
+};
+
 module.exports = {
   generatePayroll,
   listPayroll,
@@ -546,5 +689,7 @@ module.exports = {
   payPayroll,
   deletePayroll,
   getPayrollHistory,
-  getPayrollReport
+  getPayrollReport,
+  approvePayroll,
+  getSalaryHistory
 };

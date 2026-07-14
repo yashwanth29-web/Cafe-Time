@@ -39,7 +39,13 @@ import {
  getReviews,
  getAssetUrl,
  getReports,
- getDashboardStats } from
+ getDashboardStats,
+ generatePayroll,
+ getPayrollList,
+ updatePayroll,
+ payPayroll,
+ approvePayroll,
+ getSalaryHistory } from
 '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
@@ -329,6 +335,11 @@ const OwnerDashboard = () =>{
     if (subParam === 'salary') return 'salary';
     return 'roster';
   });
+
+  const [salaryHistoryList, setSalaryHistoryList] = useState([]);
+  const [salaryHistoryPeriod, setSalaryHistoryPeriod] = useState('current_week');
+  const [salaryHistoryLoading, setSalaryHistoryLoading] = useState(false);
+  const [salaryRunTab, setSalaryRunTab] = useState('run'); // 'run' or 'history'
 
   // Base Data States
   const [orders, setOrders] = useState(() => {
@@ -1209,6 +1220,121 @@ const OwnerDashboard = () =>{
       if (targetBranchId === activeBranchIdRef.current) {
         setStaffLoading(false);
       }
+    }
+  };
+
+  const fetchSalaryHistory = async (targetBranchId = activeBranchId) => {
+    setSalaryHistoryLoading(true);
+    try {
+      const res = await getSalaryHistory({ period: salaryHistoryPeriod, branchId: targetBranchId });
+      if (res.success) {
+        setSalaryHistoryList(res.data);
+      }
+    } catch (err) {
+      console.error('Error fetching salary history:', err);
+    } finally {
+      setSalaryHistoryLoading(false);
+    }
+  };
+
+  const handleGeneratePayroll = async () => {
+    const getISTDate = (date = new Date()) => {
+      const tzOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = new Date(date.getTime() + tzOffset);
+      return istTime.toISOString().split('T')[0];
+    };
+    const todayStr = getISTDate();
+    const current = new Date(todayStr);
+    const day = current.getUTCDay();
+    const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(current.setUTCDate(diff));
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    const weekStart = monday.toISOString().split('T')[0];
+    const weekEnd = sunday.toISOString().split('T')[0];
+
+    try {
+      const res = await generatePayroll(weekStart, weekEnd);
+      if (res.success) {
+        alert(`Weekly payroll run generated successfully for week ${weekStart} to ${weekEnd}.`);
+        fetchStaffList();
+      }
+    } catch (err) {
+      console.error('Error generating payroll:', err);
+      alert(err.response?.data?.message || 'Error generating weekly payroll. Check if already generated.');
+    }
+  };
+
+  const handleApprovePayroll = async (staffId) => {
+    try {
+      const getISTDate = (date = new Date()) => {
+        const tzOffset = 5.5 * 60 * 60 * 1000;
+        const istTime = new Date(date.getTime() + tzOffset);
+        return istTime.toISOString().split('T')[0];
+      };
+      const todayStr = getISTDate();
+      const current = new Date(todayStr);
+      const day = current.getUTCDay();
+      const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(current.setUTCDate(diff));
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+      const weekStart = monday.toISOString().split('T')[0];
+      const weekEnd = sunday.toISOString().split('T')[0];
+
+      const prRes = await getPayrollList({ employeeId: staffId, weekStart, weekEnd });
+      if (prRes.success && prRes.data && prRes.data.length > 0) {
+        const payrollId = prRes.data[0]._id;
+        const approveRes = await approvePayroll(payrollId);
+        if (approveRes.success) {
+          alert('Payroll approved successfully.');
+          fetchStaffList();
+        }
+      } else {
+        alert('Weekly payroll has not been generated for this staff member yet. Please click "Generate Payroll" first.');
+      }
+    } catch (err) {
+      console.error('Error approving payroll:', err);
+      alert('Error approving payroll: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handlePayPayroll = async (staffId) => {
+    const method = prompt('Enter payment method (e.g. Cash, Bank Transfer, UPI):', 'UPI');
+    if (!method) return;
+    const remarks = prompt('Enter payment remarks (optional):', 'Paid');
+
+    try {
+      const getISTDate = (date = new Date()) => {
+        const tzOffset = 5.5 * 60 * 60 * 1000;
+        const istTime = new Date(date.getTime() + tzOffset);
+        return istTime.toISOString().split('T')[0];
+      };
+      const todayStr = getISTDate();
+      const current = new Date(todayStr);
+      const day = current.getUTCDay();
+      const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(current.setUTCDate(diff));
+      const sunday = new Date(monday);
+      sunday.setUTCDate(monday.getUTCDate() + 6);
+      const weekStart = monday.toISOString().split('T')[0];
+      const weekEnd = sunday.toISOString().split('T')[0];
+
+      const prRes = await getPayrollList({ employeeId: staffId, weekStart, weekEnd });
+      if (prRes.success && prRes.data && prRes.data.length > 0) {
+        const payrollId = prRes.data[0]._id;
+        const payRes = await payPayroll(payrollId, { paymentMethod: method, remarks });
+        if (payRes.success) {
+          alert('Payroll marked as Paid successfully.');
+          fetchStaffList();
+          fetchSalaryHistory();
+        }
+      } else {
+        alert('Weekly payroll has not been generated for this staff member yet.');
+      }
+    } catch (err) {
+      console.error('Error paying payroll:', err);
+      alert('Error paying payroll: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -2384,6 +2510,8 @@ const exportStaffToCSV = () => {
             await fetchAttendanceToday(true, newBranchId);
           } else if (staffSubTab === 'reports') {
             await fetchWorkReports(true, newBranchId);
+          } else if (staffSubTab === 'salary') {
+            await fetchSalaryHistory(newBranchId);
           }
         } else if (activeTab === 'inventory') {
           await Promise.all([
@@ -2397,7 +2525,13 @@ const exportStaffToCSV = () => {
       refreshBranchData();
     });
     return unsubscribe;
-  }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab]);
+  }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab, salaryRunTab]);
+
+  useEffect(() => {
+    if (activeTab === 'staff' && staffSubTab === 'salary' && salaryRunTab === 'history') {
+      fetchSalaryHistory();
+    }
+  }, [salaryHistoryPeriod, salaryRunTab, activeTab, staffSubTab, activeBranchId]);
 
   // Suppress unused variables warnings
   if (globalThis.__unused_vars_check__) {
@@ -3980,218 +4114,309 @@ const exportStaffToCSV = () => {
  {/* Footer time */}
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '0.75rem', color: 'var(--color-text-secondary)', borderTop: '1px solid rgba(0, 0, 0,0.04)', paddingTop: '8px' }}>
 <span>{new Date(report.createdAt).toLocaleDateString([], { day: '2-digit', month: 'short' })}</span>
-<span> {new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
-</div>
-</div>
-)}
-</div>
- }
-</div>
-</div>
- }
-
  {staffSubTab === 'salary' && (
-  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
-    {/* Salary Dashboard Header / Filter bar */}
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-        <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff Salary Calculator</h4>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <input 
-            type="text" 
-            placeholder="Search Employee..." 
-            value={salarySearchQuery} 
-            onChange={e => setSalarySearchQuery(e.target.value)} 
-            className="form-input" 
-            style={{ width: '200px', height: '40px', padding: '0 12px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
-          />
-          <select 
-            value={salaryRoleFilter} 
-            onChange={e => setSalaryRoleFilter(e.target.value)} 
-            className="form-input" 
-            style={{ width: '150px', height: '40px', padding: '0 10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
-          >
-            <option value="">All Roles</option>
-            <option value="chef">Chef</option>
-            <option value="waiter">Waiter</option>
-            <option value="barista">Barista</option>
-            <option value="cashier">Cashier</option>
-            <option value="manager">Manager</option>
-            <option value="staff">Staff</option>
-          </select>
-          <button 
-            onClick={() => { fetchStaffList(); alert('Salaries refreshed successfully.'); }} 
-            className="btn btn-primary" 
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px', height: '40px', width: 'auto' }}
-          >
-            Refresh Salary
-          </button>
-        </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+      {/* Tab Switcher for Weekly Run vs Salary History */}
+      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+        <button 
+          onClick={() => setSalaryRunTab('run')} 
+          style={{ 
+            background: salaryRunTab === 'run' ? 'var(--color-primary)' : 'transparent', 
+            color: salaryRunTab === 'run' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', 
+            border: 'none', 
+            padding: '8px 16px', 
+            borderRadius: '8px', 
+            cursor: 'pointer', 
+            fontWeight: 'bold', 
+            fontSize: '13px' 
+          }}
+        >
+          Weekly Run
+        </button>
+        <button 
+          onClick={() => { setSalaryRunTab('history'); fetchSalaryHistory(); }} 
+          style={{ 
+            background: salaryRunTab === 'history' ? 'var(--color-primary)' : 'transparent', 
+            color: salaryRunTab === 'history' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', 
+            border: 'none', 
+            padding: '8px 16px', 
+            borderRadius: '8px', 
+            cursor: 'pointer', 
+            fontWeight: 'bold', 
+            fontSize: '13px' 
+          }}
+        >
+          Salary History Ledger
+        </button>
       </div>
 
-      {staffLoading && staff.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 0' }}>
-          <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading salary calculations...</p>
+      {salaryRunTab === 'run' ? (
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+            <div>
+              <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Weekly Run Calculator</h4>
+              <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>Calculate and disburse salaries based on attendance.</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input 
+                type="text" 
+                placeholder="Search Employee..." 
+                value={salarySearchQuery} 
+                onChange={e => setSalarySearchQuery(e.target.value)} 
+                className="form-input" 
+                style={{ width: '160px', height: '40px', padding: '0 12px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+              />
+              <button 
+                onClick={handleGeneratePayroll}
+                className="btn btn-secondary"
+                style={{ height: '40px', padding: '0 16px', fontSize: '13px', width: 'auto', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+              >
+                Generate Run
+              </button>
+              <button 
+                onClick={() => { fetchStaffList(); alert('Salaries refreshed successfully.'); }} 
+                className="btn btn-primary" 
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px', height: '40px', width: 'auto' }}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {staffLoading && staff.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading salary calculations...</p>
+            </div>
+          ) : (
+            <div style={{ width: '100%', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                    <th style={{ padding: '12px 10px' }}>Staff Name</th>
+                    <th style={{ padding: '12px 10px' }}>Employee ID</th>
+                    <th style={{ padding: '12px 10px' }}>Cafe</th>
+                    <th style={{ padding: '12px 10px' }}>Branch</th>
+                    <th style={{ padding: '12px 10px' }}>Daily Wage</th>
+                    <th style={{ padding: '12px 10px' }}>Req. Hours</th>
+                    <th style={{ padding: '12px 10px' }}>Worked This Week</th>
+                    <th style={{ padding: '12px 10px' }}>Present Days</th>
+                    <th style={{ padding: '12px 10px' }}>Absent Days</th>
+                    <th style={{ padding: '12px 10px' }}>Current Week Salary</th>
+                    <th style={{ padding: '12px 10px' }}>Payroll Status</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staff
+                    .filter(s => {
+                      const matchesSearch = s.name.toLowerCase().includes(salarySearchQuery.toLowerCase());
+                      const matchesRole = !salaryRoleFilter || (s.staffRole || s.role || '').toLowerCase() === salaryRoleFilter.toLowerCase();
+                      return matchesSearch && matchesRole;
+                    })
+                    .map(member => {
+                      let statusBg = 'rgba(230,126,34,0.15)';
+                      let statusColor = '#e67e22';
+                      if (member.payrollStatus === 'Approved') {
+                        statusBg = 'rgba(52,152,219,0.15)';
+                        statusColor = '#3498db';
+                      } else if (member.payrollStatus === 'Paid') {
+                        statusBg = 'rgba(46,204,113,0.15)';
+                        statusColor = '#2ecc71';
+                      }
+
+                      return (
+                        <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
+                          <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>{member.employeeId || '—'}</td>
+                          <td style={{ padding: '12px 10px' }}>{member.cafeName || '—'}</td>
+                          <td style={{ padding: '12px 10px' }}>{member.branchName || '—'}</td>
+                          <td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}</td>
+                          <td style={{ padding: '12px 10px' }}>{member.requiredHours || 8} hrs</td>
+                          <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{member.actualHoursWorked || 0} hrs</td>
+                          <td style={{ padding: '12px 10px', color: '#2ecc71', fontWeight: 'bold' }}>{member.workingDays || 0} days</td>
+                          <td style={{ padding: '12px 10px', color: '#e74c3c', fontWeight: 'bold' }}>{member.absentDays || 0} days</td>
+                          <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{member.currentWeekSalary || 0}</td>
+                          <td style={{ padding: '12px 10px' }}>
+                            <span style={{ backgroundColor: statusBg, color: statusColor, padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', border: `1px solid ${statusColor}` }}>
+                              {member.payrollStatus || 'Pending'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 10px', display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                            <button 
+                              onClick={() => { setSelectedSalaryStaff(member); setShowSalaryDetailModal(true); }} 
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 8px', fontSize: '11px', width: 'auto', minHeight: 'auto' }}
+                            >
+                              Shift Logs
+                            </button>
+                            {member.payrollStatus === 'Pending' && (
+                              <button 
+                                onClick={() => handleApprovePayroll(member._id)} 
+                                className="btn btn-secondary" 
+                                style={{ padding: '4px 8px', fontSize: '11px', width: 'auto', minHeight: 'auto', backgroundColor: '#3498db', color: '#fff', border: 'none' }}
+                              >
+                                Approve
+                              </button>
+                            )}
+                            {member.payrollStatus === 'Approved' && (
+                              <button 
+                                onClick={() => handlePayPayroll(member._id)} 
+                                className="btn btn-primary" 
+                                style={{ padding: '4px 8px', fontSize: '11px', width: 'auto', minHeight: 'auto' }}
+                              >
+                                Disburse
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       ) : (
-        <>
-          {/* Desktop Table View */}
-          <div className="desktop-tablet-staff" style={{ display: 'none', width: '100%', overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
-                  <th style={{ padding: '12px 10px' }}>Name</th>
-                  <th style={{ padding: '12px 10px' }}>Role</th>
-                  <th style={{ padding: '12px 10px' }}>Daily Wage</th>
-                  <th style={{ padding: '12px 10px' }}>Required Hours</th>
-                  <th style={{ padding: '12px 10px' }}>Worked This Week</th>
-                  <th style={{ padding: '12px 10px' }}>Working Days</th>
-                  <th style={{ padding: '12px 10px' }}>Weekly Salary</th>
-                  <th style={{ padding: '12px 10px', textAlign: 'center' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {staff
-                  .filter(s => {
-                    const matchesSearch = s.name.toLowerCase().includes(salarySearchQuery.toLowerCase());
-                    const matchesRole = !salaryRoleFilter || (s.staffRole || s.role || '').toLowerCase() === salaryRoleFilter.toLowerCase();
-                    return matchesSearch && matchesRole;
-                  })
-                  .map(member => (
-                    <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+            <div>
+              <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Permanent Salary History Ledger</h4>
+              <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>Auditable permanent records of disbursed payroll cycles.</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <select 
+                value={salaryHistoryPeriod} 
+                onChange={e => { setSalaryHistoryPeriod(e.target.value); }} 
+                className="form-input" 
+                style={{ width: '180px', height: '40px', padding: '0 10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+              >
+                <option value="current_week">Current Week</option>
+                <option value="previous_week">Previous Week</option>
+                <option value="previous_month">Previous Month</option>
+                <option value="previous_year">Previous Year</option>
+              </select>
+              <button 
+                onClick={() => fetchSalaryHistory()} 
+                className="btn btn-primary" 
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px', height: '40px', width: 'auto' }}
+              >
+                Sync Ledger
+              </button>
+            </div>
+          </div>
+
+          {salaryHistoryLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Retrieving ledger records...</p>
+            </div>
+          ) : salaryHistoryList.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}>
+              No disbursed salary records found for this period.
+            </div>
+          ) : (
+            <div style={{ width: '100%', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                    <th style={{ padding: '12px 10px' }}>Payroll Week</th>
+                    <th style={{ padding: '12px 10px' }}>Staff Name</th>
+                    <th style={{ padding: '12px 10px' }}>Cafe</th>
+                    <th style={{ padding: '12px 10px' }}>Branch</th>
+                    <th style={{ padding: '12px 10px' }}>Worked Days</th>
+                    <th style={{ padding: '12px 10px' }}>Worked Hours</th>
+                    <th style={{ padding: '12px 10px' }}>Gross Salary</th>
+                    <th style={{ padding: '12px 10px' }}>Deductions</th>
+                    <th style={{ padding: '12px 10px' }}>Final Salary</th>
+                    <th style={{ padding: '12px 10px' }}>Status</th>
+                    <th style={{ padding: '12px 10px' }}>Disbursement Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salaryHistoryList.map(record => (
+                    <tr key={record._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{record.payrollWeek}</td>
+                      <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{record.employeeName}</td>
+                      <td style={{ padding: '12px 10px' }}>{record.cafeId}</td>
+                      <td style={{ padding: '12px 10px' }}>{record.branchName || record.branchId}</td>
+                      <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{record.workedDays} days</td>
+                      <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{record.workedHours} hrs</td>
+                      <td style={{ padding: '12px 10px', fontWeight: 600 }}>₹{record.grossSalary}</td>
+                      <td style={{ padding: '12px 10px', color: '#e74c3c' }}>₹{record.deductions}</td>
+                      <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{record.finalSalary}</td>
                       <td style={{ padding: '12px 10px' }}>
-                        <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole || member.role}</span>
+                        <span style={{ backgroundColor: 'rgba(46,204,113,0.15)', color: '#2ecc71', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', border: '1px solid #2ecc71' }}>
+                          {record.paymentStatus}
+                        </span>
                       </td>
                       <td style={{ padding: '12px 10px' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}</span>
-                      </td>
-                      <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)' }}>{member.requiredHours || 8} hrs</td>
-                      <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{member.actualHoursWorked || 0} hrs</td>
-                      <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)' }}>{member.workingDays || 0} days</td>
-                      <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{member.currentWeekSalary || 0}</td>
-                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                        <button 
-                          onClick={() => { setSelectedSalaryStaff(member); setShowSalaryDetailModal(true); }} 
-                          className="btn btn-secondary" 
-                          style={{ padding: '5px 10px', fontSize: '12px', width: 'auto' }}
-                        >
-                          View Details
-                        </button>
+                        {record.paymentDate ? new Date(record.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                       </td>
                     </tr>
                   ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile View */}
-          <div className="mobile-only-staff" style={{ display: 'none' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              {staff
-                .filter(s => {
-                  const matchesSearch = s.name.toLowerCase().includes(salarySearchQuery.toLowerCase());
-                  const matchesRole = !salaryRoleFilter || (s.staffRole || s.role || '').toLowerCase() === salaryRoleFilter.toLowerCase();
-                  return matchesSearch && matchesRole;
-                })
-                .map(member => (
-                  <div key={member._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <span style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</span>
-                      <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole || member.role}</span>
-                    </div>
-                    <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
-                      <div>Daily Wage:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500, marginLeft: '4px' }}>₹{member.dailyRate || 0}</span></div>
-                      <div>Required Hours:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.requiredHours || 8} hrs</span></div>
-                      <div>Worked This Week:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.actualHoursWorked || 0} hrs</span></div>
-                      <div>Working Days:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.workingDays || 0} days</span></div>
-                      <div>Weekly Salary:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}> ₹{member.currentWeekSalary || 0}</span></div>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
-                      <button 
-                        onClick={() => { setSelectedSalaryStaff(member); setShowSalaryDetailModal(true); }} 
-                        className="btn btn-secondary touch-btn" 
-                        style={{ padding: '6px 12px', fontSize: '12px', minHeight: '36px' }}
-                      >
-                        View Details
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </>
+          )}
+        </div>
       )}
     </div>
+  )}
 
-    {/* Employee Detail View Modal */}
-    {showSalaryDetailModal && selectedSalaryStaff && (
-      <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-        <div className="modal-container" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '20px', padding: '28px 24px', width: '100%', maxWidth: '600px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
-          <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <div>
-              <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Employee Salary Details</h3>
-              <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.85rem' }}>{selectedSalaryStaff.name} ({selectedSalaryStaff.staffRole || selectedSalaryStaff.role})</p>
-            </div>
-            <button onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }} className="modal-close" style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
+  {/* Employee Detail View Modal */}
+  {showSalaryDetailModal && selectedSalaryStaff && (
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div className="modal-container" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '20px', padding: '28px 24px', width: '100%', maxWidth: '600px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+        <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Employee Salary Details</h3>
+            <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.85rem' }}>{selectedSalaryStaff.name} ({selectedSalaryStaff.staffRole || selectedSalaryStaff.role})</p>
           </div>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,0.1)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
-              <div>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Daily Wage:</span>
-                <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>₹{selectedSalaryStaff.dailyRate || 0}</div>
-              </div>
-              <div>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Required Hours:</span>
-                <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{selectedSalaryStaff.requiredHours || 8} hrs</div>
-              </div>
-              <div>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Weekly Total:</span>
-                <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>₹{selectedSalaryStaff.currentWeekSalary || 0}</div>
-              </div>
-            </div>
-            <div>
-              <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attendance Log & Daily Salary</h4>
-              {(!selectedSalaryStaff.attendances || selectedSalaryStaff.attendances.length === 0) ? (
-                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', background: 'rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-                  No attendance logs found for this week.
-                </div>
-              ) : (
-                <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
-                        <th style={{ padding: '10px' }}>Date</th>
-                        <th style={{ padding: '10px' }}>Check In</th>
-                        <th style={{ padding: '10px' }}>Check Out</th>
-                        <th style={{ padding: '10px' }}>Worked</th>
-                        <th style={{ padding: '10px' }}>Salary</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedSalaryStaff.attendances.map((att, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                          <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{att.date}</td>
-                          <td style={{ padding: '10px', color: 'var(--color-text-secondary)' }}>{new Date(att.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                          <td style={{ padding: '10px', color: 'var(--color-text-secondary)' }}>{att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                          <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{att.workingHours || 0} hrs</td>
-                          <td style={{ padding: '10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>₹{att.dailySalary || 0}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="modal-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }} className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }}>Close</button>
-          </div>
+          <button onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }} className="modal-close" style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
         </div>
-      </div>
-    )}
-  </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,0.1)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Daily Wage:</span>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>₹{selectedSalaryStaff.dailyRate || 0}</div>
+            </div>
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Required Hours:</span>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{selectedSalaryStaff.requiredHours || 8} hrs</div>
+            </div>
+            <div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Weekly Total:</span>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>₹{selectedSalaryStaff.currentWeekSalary || 0}</div>
+            </div>
+          </div>
+          <div>
+            <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attendance Log & Daily Salary</h4>
+            {(!selectedSalaryStaff.attendances || selectedSalaryStaff.attendances.length === 0) ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', background: 'rgba(0,0,0,0.05)', borderRadius: '8px' }}>
+                No attendance logs found for this week.
+              </div>
+            ) : (
+              <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                      <th style={{ padding: '10px' }}>Date</th>
+                      <th style={{ padding: '10px' }}>Check In</th>
+                      <th style={{ padding: '10px' }}>Check Out</th>
+                      <th style={{ padding: '10px' }}>Worked</th>
+                      <th style={{ padding: '10px' }}>Salary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedSalaryStaff.attendances.map((att, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{att.date}</td>
+                        <td style={{ padding: '10px', color: 'var(--color-text-secondary)' }}>{new Date(att.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                        <td style={{ padding: '10px', color: 'var(--color-text-secondary)' }}>{att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                        <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{att.workingHours || 0} hrs</td>
+                        <td style={{ padding: '10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>₹{att.dailySalary || 0}</td>
+                      </tr>
  )}
 </div>
  }

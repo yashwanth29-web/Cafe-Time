@@ -163,19 +163,31 @@ const getStaff = async (req, res) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const monday = new Date(now.setDate(diff));
-    monday.setHours(0, 0, 0, 0);
+    const getISTDateStr = (date = new Date()) => {
+      const tzOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = new Date(date.getTime() + tzOffset);
+      return istTime.toISOString().split('T')[0];
+    };
+
+    const todayStr = getISTDateStr();
+    const current = new Date(todayStr);
+    const day = current.getUTCDay();
+    const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(current.setUTCDate(diff));
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+
+    const weekStart = monday.toISOString().split('T')[0];
+    const weekEnd = sunday.toISOString().split('T')[0];
 
     const activeBranch = query.assignedBranch;
     const Attendance = require('../models/Attendance');
-    const attendancesThisWeek = await Attendance.find({
-      cafeId,
-      branchId: activeBranch,
-      createdAt: { $gte: monday }
-    }).lean();
+    const Payroll = require('../models/Payroll');
+
+    const cafe = await Cafe.findOne({ cafeId });
+    const branchDoc = await Branch.findOne({ branchId: activeBranch, cafeId });
+    const cafeName = cafe ? cafe.name : cafeId;
+    const branchName = branchDoc ? branchDoc.branchName : activeBranch;
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -186,40 +198,120 @@ const getStaff = async (req, res) => {
         source: 'STAFF',
         createdAt: { $gte: todayStart }
       });
+
+      const pr = await Payroll.findOne({ employeeId: s._id, weekStart, weekEnd });
       
-      const sAttendances = attendancesThisWeek.filter(a => a.staffId && a.staffId.toString() === s._id.toString());
+      let workingDays = 0;
+      let absentDays = 0;
+      let actualHoursWorked = 0;
+      let currentWeekSalary = 0;
+      let payrollStatus = 'Pending';
+
+      if (pr) {
+        workingDays = pr.presentDays + (pr.halfDays || 0) * 0.5;
+        absentDays = pr.absentDays || 0;
+        actualHoursWorked = pr.workingHours + (pr.overtimeHours || 0);
+        currentWeekSalary = pr.netSalary || 0;
+        payrollStatus = pr.paymentStatus || 'Pending';
+      } else {
+        const weeklyAttendances = await Attendance.find({
+          staffId: s._id,
+          cafeId,
+          branchId: activeBranch,
+          date: { $gte: weekStart, $lte: weekEnd },
+          checkOutTime: { $exists: true, $ne: null }
+        });
+
+        let presentCount = 0;
+        let halfCount = 0;
+        let absentCount = 0;
+        let workHrs = 0;
+        let otHrs = 0;
+        let earned = 0;
+
+        const baseDailyRate = s.dailyRate || 0;
+        const reqHours = s.requiredHours || 8;
+
+        weeklyAttendances.forEach(att => {
+          if (att.status === 'Present' || att.status === 'Late') {
+            presentCount += 1;
+          } else if (att.status === 'Half Day') {
+            halfCount += 1;
+          } else if (att.status === 'Absent') {
+            absentCount += 1;
+          }
+
+          const recWorkHours = att.workingHours || 0;
+          const recOtHours = att.overtimeHours || 0;
+
+          workHrs += recWorkHours;
+          otHrs += recOtHours;
+
+          const regularSalary = recWorkHours >= reqHours 
+            ? baseDailyRate 
+            : (baseDailyRate * recWorkHours) / reqHours;
+          const overtimeSalary = (baseDailyRate * recOtHours) / reqHours;
+
+          earned += regularSalary + overtimeSalary;
+        });
+
+        workingDays = presentCount + halfCount * 0.5;
+        absentDays = absentCount;
+        actualHoursWorked = Number((workHrs + otHrs).toFixed(2));
+        currentWeekSalary = Number(earned.toFixed(2));
+        payrollStatus = 'Pending';
+      }
+
+      // Compute weekly breakdown for display
       const weeklyBreakdown = {
         'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0, 'Friday': 0, 'Saturday': 0, 'Sunday': 0
       };
-      let currentWeekSalary = 0;
-
-      sAttendances.forEach(att => {
+      const rawAttendances = await Attendance.find({
+        staffId: s._id,
+        cafeId,
+        branchId: activeBranch,
+        date: { $gte: weekStart, $lte: weekEnd }
+      });
+      rawAttendances.forEach(att => {
         const attDate = new Date(att.date || att.createdAt);
         const dayName = dayNames[attDate.getDay()];
-        
-        let durationMin = att.totalDuration || 0;
-        if (!att.checkOutTime && att.checkInTime) {
-          durationMin = Math.max(0, Math.floor((Date.now() - new Date(att.checkInTime).getTime()) / 60000));
-        }
-
-        const overtimeHours = att.overtimeHours || 0;
+        const wh = att.workingHours || 0;
+        const oh = att.overtimeHours || 0;
         const baseDailyRate = s.dailyRate || 0;
-        const requiredHours = s.requiredHours || 8;
-        const workingHours = durationMin / 60;
+        const reqHours = s.requiredHours || 8;
+        const regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+        const overtimeSalary = (baseDailyRate * oh) / reqHours;
+        weeklyBreakdown[dayName] = Number((regularSalary + overtimeSalary).toFixed(2));
+      });
 
-        // Salary = Daily Wage * Actual Hours Worked / Required Daily Hours
-        let earnings = (baseDailyRate * (workingHours + overtimeHours)) / requiredHours;
-
-        earnings = Number(earnings.toFixed(2));
-        weeklyBreakdown[dayName] = Number(((weeklyBreakdown[dayName] || 0) + earnings).toFixed(2));
-        currentWeekSalary += earnings;
+      const formattedAttendances = rawAttendances.map(att => {
+        const wh = att.workingHours || 0;
+        const oh = att.overtimeHours || 0;
+        const baseDailyRate = s.dailyRate || 0;
+        const reqHours = s.requiredHours || 8;
+        const regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+        const overtimeSalary = (baseDailyRate * oh) / reqHours;
+        return {
+          date: att.date || new Date(att.createdAt).toISOString().split('T')[0],
+          checkInTime: att.checkInTime,
+          checkOutTime: att.checkOutTime,
+          workingHours: Number((wh + oh).toFixed(2)),
+          dailySalary: Number((regularSalary + overtimeSalary).toFixed(2))
+        };
       });
 
       return {
         ...s,
         ordersHandledToday: ordersCount,
         weeklyBreakdown,
-        currentWeekSalary: Number(currentWeekSalary.toFixed(2))
+        workingDays,
+        absentDays,
+        actualHoursWorked,
+        currentWeekSalary,
+        payrollStatus,
+        cafeName,
+        branchName,
+        attendances: formattedAttendances
       };
     }));
     

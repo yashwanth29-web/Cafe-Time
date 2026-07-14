@@ -117,6 +117,114 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
   };
 };
 
+const recalculateStaffSalary = async (staffId) => {
+  const User = require('../models/User');
+  const Attendance = require('../models/Attendance');
+
+  try {
+    const user = await User.findById(staffId);
+    if (!user) return;
+
+    const getISTDate = (date = new Date()) => {
+      const tzOffset = 5.5 * 60 * 60 * 1000;
+      const istTime = new Date(date.getTime() + tzOffset);
+      return istTime.toISOString().split('T')[0];
+    };
+
+    const todayStr = getISTDate();
+
+    // Calculate current week's start (Monday) and end (Sunday) dates
+    const current = new Date(todayStr);
+    const day = current.getUTCDay();
+    const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(current.setUTCDate(diff));
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+
+    const weekStart = monday.toISOString().split('T')[0];
+    const weekEnd = sunday.toISOString().split('T')[0];
+
+    const cafeId = user.cafeId || '';
+    const branchId = user.assignedBranch || 'default';
+
+    // 1. Fetch completed attendance records for today (only if checkOutTime exists)
+    const todayRecord = await Attendance.findOne({
+      staffId: user._id,
+      cafeId,
+      branchId,
+      date: todayStr,
+      checkOutTime: { $exists: true, $ne: null }
+    });
+
+    // 2. Fetch completed attendance records for this week
+    const weeklyRecords = await Attendance.find({
+      staffId: user._id,
+      cafeId,
+      branchId,
+      date: { $gte: weekStart, $lte: weekEnd },
+      checkOutTime: { $exists: true, $ne: null }
+    });
+
+    const dailyRate = user.dailyRate || 0;
+    const requiredHours = user.requiredHours || 8;
+
+    // Calculate today's metrics
+    let actualWorkedHoursToday = 0;
+    let overtimeHoursToday = 0;
+    let salaryEarnedToday = 0;
+
+    if (todayRecord) {
+      actualWorkedHoursToday = todayRecord.workingHours || 0;
+      overtimeHoursToday = todayRecord.overtimeHours || 0;
+
+      const regularSalary = actualWorkedHoursToday >= requiredHours 
+        ? dailyRate 
+        : (dailyRate * actualWorkedHoursToday) / requiredHours;
+      const overtimeSalary = (dailyRate * overtimeHoursToday) / requiredHours;
+
+      salaryEarnedToday = Number((regularSalary + overtimeSalary).toFixed(2));
+    }
+
+    // Calculate week's metrics
+    let actualWorkedHoursThisWeek = 0;
+    let overtimeHoursThisWeek = 0;
+    let salaryEarnedThisWeek = 0;
+
+    for (const record of weeklyRecords) {
+      const recWorkHours = record.workingHours || 0;
+      const recOtHours = record.overtimeHours || 0;
+
+      actualWorkedHoursThisWeek += recWorkHours;
+      overtimeHoursThisWeek += recOtHours;
+
+      const regularSalary = recWorkHours >= requiredHours 
+        ? dailyRate 
+        : (dailyRate * recWorkHours) / requiredHours;
+      const overtimeSalary = (dailyRate * recOtHours) / requiredHours;
+
+      salaryEarnedThisWeek += regularSalary + overtimeSalary;
+    }
+
+    // Update staff member fields in the database
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          actualWorkedHoursToday: Number(actualWorkedHoursToday.toFixed(2)),
+          overtimeHoursToday: Number(overtimeHoursToday.toFixed(2)),
+          salaryEarnedToday: Number(salaryEarnedToday.toFixed(2)),
+          actualWorkedHoursThisWeek: Number(actualWorkedHoursThisWeek.toFixed(2)),
+          overtimeHoursThisWeek: Number(overtimeHoursThisWeek.toFixed(2)),
+          salaryEarnedThisWeek: Number(salaryEarnedThisWeek.toFixed(2))
+        }
+      }
+    );
+  } catch (error) {
+    console.error(`recalculateStaffSalary error for staff ${staffId}:`, error);
+  }
+};
+
 module.exports = {
-  generateWeeklyPayroll
+  generateWeeklyPayroll,
+  recalculateStaffSalary
 };

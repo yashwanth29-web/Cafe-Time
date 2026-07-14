@@ -8,7 +8,8 @@ const {
   getOwnerTodayDashboard,
   getOwnerReports,
   startExtraWork,
-  stopExtraWork
+  stopExtraWork,
+  editAttendance
 } = require('../controllers/attendanceController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -62,5 +63,6 @@ router.post('/extra-work/stop', stopExtraWork);
 // Owner/Manager Attendance Endpoints
 router.get('/owner/today', restrictTo('admin', 'owner', 'manager'), getOwnerTodayDashboard);
 router.get('/owner/reports', restrictTo('admin', 'owner', 'manager'), getOwnerReports);
+router.put('/:id', restrictTo('admin', 'owner', 'manager'), editAttendance);
 
 module.exports = router;

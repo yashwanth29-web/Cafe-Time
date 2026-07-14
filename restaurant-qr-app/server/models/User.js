@@ -69,6 +69,30 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  actualWorkedHoursToday: {
+    type: Number,
+    default: 0
+  },
+  overtimeHoursToday: {
+    type: Number,
+    default: 0
+  },
+  salaryEarnedToday: {
+    type: Number,
+    default: 0
+  },
+  actualWorkedHoursThisWeek: {
+    type: Number,
+    default: 0
+  },
+  overtimeHoursThisWeek: {
+    type: Number,
+    default: 0
+  },
+  salaryEarnedThisWeek: {
+    type: Number,
+    default: 0
+  },
   weeklyOff: {
     type: String,
     default: 'Sunday'
