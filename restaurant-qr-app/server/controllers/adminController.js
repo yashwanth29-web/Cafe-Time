@@ -693,16 +693,26 @@ const updateOwnerProfile = async (req, res) => {
  * Retrieve branch list for current cafe
  */
 const getBranches = async (req, res) => {
-  const cafeId = req.user.cafeId;
-  if (!cafeId) {
-    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
-  }
   try {
     const role = (req.user.role || '').toLowerCase();
-    const query = { cafeId };
-    if (['manager', 'chef', 'waiter', 'cashier', 'staff'].includes(role)) {
-      query.branchId = req.user.assignedBranch || 'default';
+    let query = {};
+
+    if (role === 'super_admin') {
+      if (req.query.cafeId) {
+        query.cafeId = req.query.cafeId;
+      }
+    } else {
+      const cafeId = req.user.cafeId;
+      if (!cafeId) {
+        return res.status(200).json({ success: true, branches: [] });
+      }
+      query.cafeId = cafeId;
+
+      if (['manager', 'chef', 'waiter', 'cashier', 'staff'].includes(role)) {
+        query.branchId = req.user.assignedBranch || 'default';
+      }
     }
+
     const branches = await Branch.find(query).sort({ createdAt: -1 });
     return res.status(200).json({ success: true, branches });
   } catch (error) {
