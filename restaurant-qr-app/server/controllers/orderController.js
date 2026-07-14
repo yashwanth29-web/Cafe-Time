@@ -273,8 +273,8 @@ const getOrders = async (req, res) => {
         const year = parseInt(parts[0], 10);
         const month = parseInt(parts[1], 10) - 1;
         const day = parseInt(parts[2], 10);
-        const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
-        const endOfDay = new Date(year, month, day + 1, 0, 0, 0, 0);
+        const startOfDay = new Date(Date.UTC(year, month, day) - (5.5 * 60 * 60 * 1000));
+        const endOfDay = new Date(Date.UTC(year, month, day + 1) - (5.5 * 60 * 60 * 1000));
         filterQuery.createdAt = { $gte: startOfDay, $lt: endOfDay };
       }
     }
