@@ -560,16 +560,35 @@ const RECIPES = {
 const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, branchId = 'default') => {
   try {
     const MenuItem = require('../models/MenuItem');
-    const allInventory = await Inventory.find({ cafeId }).lean();
+    const query = itemId ? { _id: itemId, cafeId } : { cafeId, branchId };
+    const menuItems = await MenuItem.find(query);
+    if (menuItems.length === 0) return;
+
+    const ingredientNamesSet = new Set();
+    for (const item of menuItems) {
+      if (item.recipe && item.recipe.length > 0) {
+        for (const ing of item.recipe) {
+          if (ing.name) {
+            ingredientNamesSet.add(ing.name);
+          }
+        }
+      }
+    }
+
+    if (ingredientNamesSet.size === 0) return;
+
+    const relevantInventory = await Inventory.find({
+      cafeId,
+      branchId,
+      name: { $in: Array.from(ingredientNamesSet) }
+    }).lean();
+
     const invMap = {};
-    for (const inv of allInventory) {
+    for (const inv of relevantInventory) {
       const key = `${inv.branchId || inv.branch || 'default'}_${inv.name.toLowerCase()}`;
       invMap[key] = inv.quantity !== undefined ? inv.quantity : inv.stock;
     }
 
-    const query = itemId ? { _id: itemId, cafeId } : { cafeId };
-    const menuItems = await MenuItem.find(query);
-    
     const updatePromises = [];
     for (const item of menuItems) {
       const activeBId = item.branchId || branchId || 'default';
@@ -586,24 +605,23 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, br
         
         if (item.available !== shouldBeAvailable) {
           item.available = shouldBeAvailable;
-          const savePromise = item.save().then(() => {
+          const savePromise = MenuItem.updateOne(
+            { _id: item._id },
+            { $set: { available: shouldBeAvailable } }
+          ).then(() => {
             console.log(`Auto-updated menu item "${item.name}" availability to ${shouldBeAvailable} based on inventory levels.`);
             try {
               const { getIO } = require('../config/socket');
               const io = getIO();
               if (io) {
-                io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
+                const payload = {
                   _id: String(item._id),
                   name: item.name,
                   available: shouldBeAvailable,
-                  updatedAt: item.updatedAt || new Date().toISOString()
-                });
-                io.to(`cafe_${cafeId}`).emit('menuAvailabilityUpdated', {
-                  _id: String(item._id),
-                  name: item.name,
-                  available: shouldBeAvailable,
-                  updatedAt: item.updatedAt || new Date().toISOString()
-                });
+                  updatedAt: new Date().toISOString()
+                };
+                io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', payload);
+                io.to(`cafe_${cafeId}`).emit('menuAvailabilityUpdated', payload);
               }
             } catch (socketErr) {
               console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', socketErr.message);
@@ -618,7 +636,6 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, br
       await Promise.all(updatePromises);
     }
     
-    // Clear menu cache since availability status might have changed
     menuCache.clearMenu();
   } catch (err) {
     console.error('Error auto-updating menu item availability:', err);
