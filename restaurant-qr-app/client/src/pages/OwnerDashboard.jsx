@@ -1619,7 +1619,7 @@ const exportStaffToCSV = () => {
  branch: 'Main',
  category: 'Ingredients'
  });
- fetchInventoryList(); // reload all stats & logs as well
+ fetchInventoryList(true); // reload all stats & logs as well silently
  }
  } catch (error) {
  console.error('Error adding inventory item:', error);
