@@ -114,11 +114,17 @@ const createMenuItem = async (req, res) => {
     // Fetch latest status
     const latestItem = await MenuItem.findOne({ _id: savedItem._id, cafeId, branchId });
     menuCache.clearMenu();
-    const io = socket.getIO();
-    if (io) {
-      io.to(`branch:${branchId}`).emit('menu_updated', latestItem || savedItem);
-      io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || savedItem);
+    try {
+      const io = socket.getIO();
+      if (io) {
+        io.to(`branch:${branchId}`).emit('menu_updated', latestItem || savedItem);
+        io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || savedItem);
+      }
+    } catch (err) {
+      console.warn('[SOCKET] Could not broadcast menu_updated: Socket.IO not initialized');
     }
+
+    const finalItem = latestItem || savedItem;
 
     // Emit socket update
     try {
@@ -224,11 +230,17 @@ const updateMenuItem = async (req, res) => {
     // Fetch the updated item again to return the latest availability status
     const latestItem = await MenuItem.findOne({ _id: updatedItem._id, cafeId, branchId }, null, { bypassBranchFilter: true });
     menuCache.clearMenu();
-    const io = socket.getIO();
-    if (io) {
-      io.to(`branch:${branchId}`).emit('menu_updated', latestItem || updatedItem);
-      io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || updatedItem);
+    try {
+      const io = socket.getIO();
+      if (io) {
+        io.to(`branch:${branchId}`).emit('menu_updated', latestItem || updatedItem);
+        io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || updatedItem);
+      }
+    } catch (err) {
+      console.warn('[SOCKET] Could not broadcast menu_updated: Socket.IO not initialized');
     }
+
+    const finalItem = latestItem || updatedItem;
 
     // Emit socket update
     try {
