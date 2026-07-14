@@ -125,13 +125,19 @@ const getCafes = async (req, res) => {
           frontendErrors: health.frontendErrors,
           backendErrors: health.backendErrors,
           paymentFailures: health.paymentFailures,
-          printerFailures: health.printerFailures
+          printerFailures: health.printerFailures,
+          connectedUsers: health.connectedUsers || 0,
+          activeOrders: health.activeOrders || 0,
+          kitchenStatus: health.kitchenStatus || 'Online'
         } : {
           lastHeartbeat: null,
           frontendErrors: 0,
           backendErrors: 0,
           paymentFailures: 0,
-          printerFailures: 0
+          printerFailures: 0,
+          connectedUsers: 0,
+          activeOrders: 0,
+          kitchenStatus: 'Online'
         }
       };
     }));

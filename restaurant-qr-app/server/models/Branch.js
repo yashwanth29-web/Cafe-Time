@@ -69,6 +69,27 @@ const BranchSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  lastHeartbeat: {
+    type: Date,
+    default: null
+  },
+  activeStaff: {
+    type: Number,
+    default: 0
+  },
+  activeOrders: {
+    type: Number,
+    default: 0
+  },
+  inventorySyncStatus: {
+    type: String,
+    default: 'Synced'
+  },
+  services: {
+    type: Map,
+    of: String,
+    default: {}
+  },
   createdAt: {
     type: Date,
     default: Date.now

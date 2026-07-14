@@ -27,6 +27,18 @@ const SystemHealthSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  connectedUsers: {
+    type: Number,
+    default: 0
+  },
+  activeOrders: {
+    type: Number,
+    default: 0
+  },
+  kitchenStatus: {
+    type: String,
+    default: 'Online'
+  },
   createdAt: {
     type: Date,
     default: Date.now

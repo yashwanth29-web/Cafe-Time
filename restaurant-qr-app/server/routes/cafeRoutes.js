@@ -74,4 +74,56 @@ router.get('/payment-info/config', async (req, res) => {
   }
 });
 
+// POST /api/cafe/heartbeat
+router.post('/heartbeat', async (req, res) => {
+  const { cafeId, branchId, connectedUsers, activeStaff, activeOrders, kitchenStatus, inventorySyncStatus, services } = req.body;
+
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Missing cafeId' });
+  }
+
+  try {
+    const SystemHealth = require('../models/SystemHealth');
+    const Branch = require('../models/Branch');
+
+    // 1. Update Cafe System Health
+    let health = await SystemHealth.findOne({ cafeId });
+    if (!health) {
+      health = new SystemHealth({ cafeId });
+    }
+    health.lastHeartbeat = new Date();
+    if (typeof connectedUsers !== 'undefined') health.connectedUsers = Number(connectedUsers);
+    if (typeof activeOrders !== 'undefined') health.activeOrders = Number(activeOrders);
+    if (kitchenStatus) health.kitchenStatus = kitchenStatus;
+    
+    // Increment or track failure counts if provided in services
+    if (services) {
+      if (services.api === 'disconnected') health.backendErrors += 1;
+      if (services.paymentGateway === 'disconnected') health.paymentFailures += 1;
+      if (services.printer === 'disconnected') health.printerFailures += 1;
+    }
+    await health.save();
+
+    // 2. Update Branch Health
+    if (branchId) {
+      const branch = await Branch.findOne({ branchId, cafeId });
+      if (branch) {
+        branch.lastHeartbeat = new Date();
+        if (typeof activeStaff !== 'undefined') branch.activeStaff = Number(activeStaff);
+        if (typeof activeOrders !== 'undefined') branch.activeOrders = Number(activeOrders);
+        if (inventorySyncStatus) branch.inventorySyncStatus = inventorySyncStatus;
+        if (services) {
+          branch.services = services;
+        }
+        await branch.save();
+      }
+    }
+
+    return res.status(200).json({ success: true, message: 'Heartbeat recorded successfully' });
+  } catch (error) {
+    console.error('Heartbeat logging error:', error);
+    return res.status(500).json({ success: false, message: 'Server error recording heartbeat', error: error.message });
+  }
+});
+
 module.exports = router;

@@ -5,6 +5,22 @@ import { useAuth } from '../context/AuthContext';
 import { createOwner, getCafes, updateCafe, deleteCafe, getTickets, updateTicketStatus } from '../services/api';
 import { Building, Activity, ShieldCheck, HeartPulse, CreditCard, Ticket, Plus, X, Server, Search, TerminalSquare, RefreshCw, Edit, Trash2, Banknote, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
 
+const getStatusBadge = (lastHeartbeat, services = {}) => {
+  if (!lastHeartbeat) return { text: 'Offline', color: '#E74C3C', dot: '🔴' };
+  const diff = Date.now() - new Date(lastHeartbeat).getTime();
+  
+  if (diff > 60000) {
+    return { text: 'Offline', color: '#E74C3C', dot: '🔴' };
+  }
+  
+  // Safe extraction of API state
+  const apiState = services && typeof services.get === 'function' ? services.get('api') : services?.api;
+  if (apiState === 'slow' || diff > 30000) {
+    return { text: 'Slow Response', color: '#F39C12', dot: 'orange' }; // using basic colors for Lucide safety or simple dots
+  }
+  return { text: 'Online', color: '#2ECC71', dot: '🟢' };
+};
+
 const SuperAdminDashboard = () => {
   const navigate = useNavigate();
   const defaultRenewalDate = React.useMemo(() => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), []);
@@ -1088,69 +1104,190 @@ const SuperAdminDashboard = () => {
       }
 
       {/* TAB 6: Branch Monitoring */}
-      {activeTab === 'branches' &&
-      <div className="fade-in" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
-          <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: 800 }}><div style={{display: 'flex', alignItems: 'center', gap: '8px'}}><Building size={20} /> Multi-Branch Monitor</div></h3>
-          <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', opacity: 0.7, marginBottom: '20px' }}>
-            Global directory of all active physical cafe branches, managers, and operational configuration status.
-          </p>
+      {activeTab === 'branches' && (
+        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+              <div>
+                <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Building size={20} /> Live System Monitor & Heartbeat Dashboard
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>
+                  Centralized monitoring dashboard scaling to hundreds of registered cafes and thousands of active branches.
+                </p>
+              </div>
+              <button 
+                onClick={loadCafes} 
+                className="btn btn-primary" 
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', width: 'auto', padding: '8px 16px' }}
+              >
+                <RefreshCw size={15} /> Sync Heartbeats
+              </button>
+            </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {cafes.map((cafe) => {
-            const activeBranches = (cafe.branchesList || []).filter((b) => b.isActive).length;
-            return (
-              <div key={cafe._id} style={{ background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '12px' }}>
-                    <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontWeight: 850 }}>
-                      {cafe.name} ({cafe.cafeId})
-                    </h4>
-                    <span style={{ fontSize: '0.75rem', background: '#6F4E37', color: 'var(--color-text-primary)', padding: '3px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
-                      {activeBranches} / {(cafe.branchesList || []).length} Branches Active
-                    </span>
-                  </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {cafes.map((cafe) => {
+                const totalBranches = (cafe.branchesList || []).length;
+                const activeBranches = (cafe.branchesList || []).filter(b => b.isActive).length;
+                
+                // Determine Cafe status from health lastHeartbeat
+                const cafeHealth = cafe.health || {};
+                const cafeStatus = getStatusBadge(cafeHealth.lastHeartbeat);
 
-                  {cafe.branchesList && cafe.branchesList.length > 0 ?
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-                      {cafe.branchesList.map((br) =>
-                  <div key={br._id} style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', justifycontent: 'space-between' }}>
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <strong style={{ color: 'var(--color-text-primary)', fontSize: '0.9rem' }}>{br.branchName}</strong>
-                              <span style={{
-                          backgroundColor: br.isActive ? '#2ECC7122' : '#E74C3C22',
-                          color: br.isActive ? '#2ECC71' : '#E74C3C',
-                          fontSize: '0.65rem',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontWeight: 'bold'
-                        }}>
-                                {br.isActive ? 'Active' : 'Inactive'}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-                              ID: {br.branchId}
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '6px' }}>
-                              <Building size={12} style={{ marginRight: '4px', display: 'inline' }} /> {br.address}
-                            </div>
-                          </div>
-                          <div style={{ borderTop: '1px dashed #432E22', marginTop: '8px', paddingTop: '6px', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                            Manager: <strong style={{ color: 'var(--color-text-primary)' }}>{br.manager || 'Not Assigned'}</strong>
-                          </div>
+                return (
+                  <div key={cafe._id} style={{ background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' }}>
+                    
+                    {/* Cafe Summary Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '15px', borderBottom: '1px solid var(--color-border)', paddingBottom: '16px', marginBottom: '16px' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 850 }}>{cafe.name}</h4>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>({cafe.cafeId})</span>
                         </div>
-                  )}
-                    </div> :
+                        <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                          Owner: <strong style={{ color: 'var(--color-text-primary)' }}>{cafe.ownerName || 'Unknown'}</strong> ({cafe.ownerEmail})
+                        </p>
+                      </div>
 
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
-                      No branches registered for this cafe.
-                    </p>
-                }
-                </div>);
+                      {/* Cafe Health Metrics Badges */}
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', background: 'rgba(111,78,55,0.15)', color: '#6F4E37', border: '1px solid #6F4E37', padding: '3px 8px', borderRadius: '6px', fontWeight: 'bold' }}>
+                          Sub: {cafe.subscriptionStatus || 'Active'}
+                        </span>
+                        <span style={{ fontSize: '0.75rem', background: 'var(--bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', padding: '3px 8px', borderRadius: '6px', fontWeight: 'bold' }}>
+                          Branches: {activeBranches} / {totalBranches} Active
+                        </span>
+                        <span style={{ 
+                          fontSize: '0.75rem', 
+                          background: `${cafeStatus.color}15`, 
+                          color: cafeStatus.color, 
+                          border: `1px solid ${cafeStatus.color}`, 
+                          padding: '3px 8px', 
+                          borderRadius: '6px', 
+                          fontWeight: 'bold',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          {cafeStatus.dot} {cafeStatus.text}
+                        </span>
+                      </div>
+                    </div>
 
-          })}
+                    {/* Cafe Live Status Attributes */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px', background: 'var(--bg-card)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Last Seen:</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+                          {cafeHealth.lastHeartbeat ? new Date(cafeHealth.lastHeartbeat).toLocaleTimeString() : 'Never'}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Connected Users:</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+                          {cafeHealth.connectedUsers || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Active Orders:</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+                          {cafeHealth.activeOrders || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Kitchen Status:</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: cafeHealth.kitchenStatus === 'Online' ? '#2ECC71' : '#E74C3C' }}>
+                          {cafeHealth.kitchenStatus || 'Online'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Cafe Branches Live Details */}
+                    {cafe.branchesList && cafe.branchesList.length > 0 ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                        {cafe.branchesList.map((br) => {
+                          const brStatus = getStatusBadge(br.lastHeartbeat, br.services);
+                          const services = br.services || {};
+
+                          return (
+                            <div key={br._id} style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                              
+                              <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <strong style={{ color: 'var(--color-text-primary)', fontSize: '0.95rem' }}>{br.branchName}</strong>
+                                  <span style={{ 
+                                    fontSize: '0.7rem', 
+                                    backgroundColor: `${brStatus.color}15`, 
+                                    color: brStatus.color, 
+                                    border: `1px solid ${brStatus.color}`, 
+                                    padding: '2px 6px', 
+                                    borderRadius: '4px', 
+                                    fontWeight: 'bold' 
+                                  }}>
+                                    {brStatus.dot} {brStatus.text}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                                  Branch ID: {br.branchId}
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', margin: '12px 0', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                                  <div>Staff Active: <strong style={{ color: 'var(--color-text-primary)' }}>{br.activeStaff || 0}</strong></div>
+                                  <div>Orders Active: <strong style={{ color: 'var(--color-text-primary)' }}>{br.activeOrders || 0}</strong></div>
+                                  <div>Inventory Sync: <strong style={{ color: br.inventorySyncStatus === 'Synced' ? '#2ECC71' : '#E74C3C' }}>{br.inventorySyncStatus || 'Synced'}</strong></div>
+                                  <div>Heartbeat: <strong style={{ color: 'var(--color-text-primary)' }}>{br.lastHeartbeat ? new Date(br.lastHeartbeat).toLocaleTimeString() : 'Never'}</strong></div>
+                                </div>
+
+                                {/* Connected Services Audit */}
+                                <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '10px', marginTop: '10px' }}>
+                                  <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px' }}>Connected Services:</div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                    {Object.entries({
+                                      db: 'Database',
+                                      api: 'API Gateway',
+                                      paymentGateway: 'Payments',
+                                      kitchenDashboard: 'Kitchen',
+                                      qrOrdering: 'QR Menu',
+                                      inventorySync: 'Inventory',
+                                      printer: 'Printers'
+                                    }).map(([key, label]) => {
+                                      const state = services[key] || 'disconnected';
+                                      const isConn = state === 'connected';
+                                      const isSlow = state === 'slow';
+                                      const bg = isConn ? 'rgba(46,204,113,0.1)' : isSlow ? 'rgba(243,156,18,0.1)' : 'rgba(231,76,60,0.1)';
+                                      const fg = isConn ? '#2ECC71' : isSlow ? '#F39C12' : '#E74C3C';
+                                      
+                                      return (
+                                        <span key={key} style={{ fontSize: '9px', background: bg, color: fg, border: `1px solid ${fg}`, padding: '2px 5px', borderRadius: '3px', fontWeight: 'bold' }}>
+                                          {label}: {isConn ? 'Connected' : isSlow ? 'Slow' : 'Disconnected'}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ borderTop: '1px dashed var(--color-border)', marginTop: '12px', paddingTop: '8px', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                                Manager: <strong style={{ color: 'var(--color-text-primary)' }}>{br.manager || 'Not Assigned'}</strong>
+                              </div>
+
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+                        No branches registered for this cafe.
+                      </p>
+                    )}
+
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
-      }
+      )}
 
       {/* TAB 7: Support Tickets */}
       {activeTab === 'tickets' &&
