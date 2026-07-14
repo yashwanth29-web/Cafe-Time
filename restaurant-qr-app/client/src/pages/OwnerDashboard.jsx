@@ -4114,6 +4114,16 @@ const exportStaffToCSV = () => {
  {/* Footer time */}
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '0.75rem', color: 'var(--color-text-secondary)', borderTop: '1px solid rgba(0, 0, 0,0.04)', paddingTop: '8px' }}>
 <span>{new Date(report.createdAt).toLocaleDateString([], { day: '2-digit', month: 'short' })}</span>
+<span> {new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+</div>
+</div>
+)}
+</div>
+ }
+</div>
+</div>
+ }
+
  {staffSubTab === 'salary' && (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
       {/* Tab Switcher for Weekly Run vs Salary History */}
@@ -4417,8 +4427,20 @@ const exportStaffToCSV = () => {
                         <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{att.workingHours || 0} hrs</td>
                         <td style={{ padding: '10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>₹{att.dailySalary || 0}</td>
                       </tr>
- )}
-</div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="modal-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }} className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }}>Close</button>
+        </div>
+      </div>
+    </div>
+  )}
+  </div>
  }
 
  {activeTab === 'inventory' &&
