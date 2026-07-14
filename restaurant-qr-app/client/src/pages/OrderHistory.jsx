@@ -789,6 +789,7 @@ const OrderHistory = ({ cafeId }) => {
                       <button
                         disabled={submittingReview[order._id] || !reviewRatings[order._id]}
                         onClick={async () => {
+                          if (submittingReview[order._id]) return;
                           setSubmittingReview((prev) => ({ ...prev, [order._id]: true }));
                           try {
                             const res = await submitReview({

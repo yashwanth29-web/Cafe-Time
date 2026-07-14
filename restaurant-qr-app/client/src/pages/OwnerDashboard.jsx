@@ -611,7 +611,9 @@ const OwnerDashboard = () =>{
  averageRating: 0,
  distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
  });
- const [reviewsFilterRating, setReviewsFilterRating] = useState('');
+  const [reviewsFilterRating, setReviewsFilterRating] = useState('');
+  const [isMenuSubmitting, setIsMenuSubmitting] = useState(false);
+  const [isInventorySubmitting, setIsInventorySubmitting] = useState(false);
 
  // Search states
  const [menuSearch, setMenuSearch] = useState('');
@@ -1480,54 +1482,64 @@ const exportStaffToCSV = () => {
  }
  };
 
- // Add menu item
- const handleAddMenuItem = async (e) =>{
- e.preventDefault();
- if (!newItem.name || !newItem.price || !newItem.category || !newItem.description) {
- alert('Please fill out all required fields.');
- return;
- }
- try {
- const response = await createMenuItem(newItem);
- if (response.success) {
- setMenuItems((prevItems) =>[...prevItems, response.data]);
- setShowAddModal(false);
- setNewItem({
- name: '',
- price: '',
- category: 'Signature Chai',
- description: '',
- available: true,
- image: '',
- recipe: [],
- preparationTime: 10
- });
- }
- } catch (error) {
- console.error('Error creating item:', error);
- }
- };
+  // Add menu item
+  const handleAddMenuItem = async (e) =>{
+    e.preventDefault();
+    if (isMenuSubmitting) return;
+    if (!newItem.name || !newItem.price || !newItem.category || !newItem.description) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    setIsMenuSubmitting(true);
+    try {
+      const response = await createMenuItem(newItem);
+      if (response.success) {
+        setMenuItems((prevItems) => [...prevItems, response.data]);
+        setShowAddModal(false);
+        setNewItem({
+          name: '',
+          price: '',
+          category: 'Signature Chai',
+          description: '',
+          available: true,
+          image: '',
+          recipe: [],
+          preparationTime: 10
+        });
+      }
+    } catch (error) {
+      console.error('Error creating item:', error);
+      alert(error.response?.data?.message || 'Error creating menu item');
+    } finally {
+      setIsMenuSubmitting(false);
+    }
+  };
 
- // Edit menu item
- const handleEditMenuItem = async (e) =>{
- e.preventDefault();
- if (!editingItem.name || !editingItem.price || !editingItem.category || !editingItem.description) {
- alert('Please fill out all required fields.');
- return;
- }
- try {
- const response = await updateMenuItem(editingItem._id, editingItem);
- if (response.success) {
- setMenuItems((prevItems) =>
- prevItems.map((m) =>m._id === editingItem._id ? response.data : m)
-);
- setShowEditModal(false);
- setEditingItem(null);
- }
- } catch (error) {
-   console.error('Error updating item:', error);
- }
- };
+  // Edit menu item
+  const handleEditMenuItem = async (e) =>{
+    e.preventDefault();
+    if (isMenuSubmitting) return;
+    if (!editingItem.name || !editingItem.price || !editingItem.category || !editingItem.description) {
+      alert('Please fill out all required fields.');
+      return;
+    }
+    setIsMenuSubmitting(true);
+    try {
+      const response = await updateMenuItem(editingItem._id, editingItem);
+      if (response.success) {
+        setMenuItems((prevItems) =>
+          prevItems.map((m) => m._id === editingItem._id ? response.data : m)
+        );
+        setShowEditModal(false);
+        setEditingItem(null);
+      }
+    } catch (error) {
+      console.error('Error updating item:', error);
+      alert(error.response?.data?.message || 'Error updating menu item');
+    } finally {
+      setIsMenuSubmitting(false);
+    }
+  };
 
   // Fetch Inventory List
   async function fetchInventoryList(isSilent = false, targetBranchId = activeBranchId) {
@@ -1586,7 +1598,9 @@ const exportStaffToCSV = () => {
 
  const handleAddInventoryItem = async (e) =>{
  e.preventDefault();
+ if (isInventorySubmitting) return;
  try {
+ setIsInventorySubmitting(true);
  const response = await createInventoryItem(newInventoryItem);
  if (response.success) {
  setInventoryList((prev) =>[...prev, response.data]);
@@ -1609,14 +1623,18 @@ const exportStaffToCSV = () => {
  }
  } catch (error) {
  console.error('Error adding inventory item:', error);
- alert('Error creating inventory item');
+ alert(error.response?.data?.message || 'Error creating inventory item');
+ } finally {
+ setIsInventorySubmitting(false);
  }
  };
 
  // Edit Inventory Item
  const handleEditInventoryItem = async (e) =>{
  e.preventDefault();
+ if (isInventorySubmitting) return;
  try {
+ setIsInventorySubmitting(true);
  const response = await updateInventoryItem(editingInventoryItem._id, editingInventoryItem);
  if (response.success) {
  setInventoryList((prev) =>prev.map((item) =>item._id === editingInventoryItem._id ? response.data : item));
@@ -1625,7 +1643,9 @@ const exportStaffToCSV = () => {
  }
  } catch (error) {
  console.error('Error updating inventory item:', error);
- alert('Error updating inventory item');
+ alert(error.response?.data?.message || 'Error updating inventory item');
+ } finally {
+ setIsInventorySubmitting(false);
  }
  };
 
@@ -5034,7 +5054,7 @@ const exportStaffToCSV = () => {
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowAddModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Add Item</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={isMenuSubmitting}>{isMenuSubmitting ? 'Adding...' : 'Add Item'}</button>
 </div>
 </form>
 </div>
@@ -5178,7 +5198,7 @@ const exportStaffToCSV = () => {
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>{setShowEditModal(false);setEditingItem(null);}} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Update & Save</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={isMenuSubmitting}>{isMenuSubmitting ? 'Saving...' : 'Update & Save'}</button>
 </div>
 </form>
 </div>
@@ -5403,7 +5423,7 @@ const exportStaffToCSV = () => {
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowAddInventoryModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Add Ingredient</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={isInventorySubmitting}>{isInventorySubmitting ? 'Adding...' : 'Add Ingredient'}</button>
 </div>
 </form>
 </div>
@@ -5467,7 +5487,7 @@ const exportStaffToCSV = () => {
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>{setShowEditInventoryModal(false);setEditingInventoryItem(null);}} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Changes</button>
+<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }} disabled={isInventorySubmitting}>{isInventorySubmitting ? 'Saving...' : 'Save Changes'}</button>
 </div>
 </form>
 </div>
