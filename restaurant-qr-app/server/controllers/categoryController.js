@@ -33,13 +33,40 @@ const getCategories = async (req, res) => {
       return res.status(200).json({ success: true, count: cached.length, data: cached });
     }
     
-    let categories = await Category.find({ cafeId, branchId }).sort({ displayOrder: 1, name: 1 });
-
-    if (categories.length === 0) {
-      categories = await seedDefaultCategories(cafeId, branchId);
+    let categories;
+    if (branchId === 'all') {
+      // Find unique category documents by name for the entire cafe
+      categories = await Category.aggregate([
+        { $match: { cafeId } },
+        { $group: {
+            _id: '$name',
+            doc: { $first: '$$ROOT' }
+        }},
+        { $replaceRoot: { newRoot: '$doc' } },
+        { $sort: { displayOrder: 1, name: 1 } }
+      ]);
+    } else {
+      categories = await Category.find({ cafeId, branchId }).sort({ displayOrder: 1, name: 1 });
     }
 
-    menuCache.setCategories(categories);
+    if (categories.length === 0) {
+      try {
+        const seedBranchId = branchId === 'all' ? 'default' : branchId;
+        const existingInSeedBranch = await Category.find({ cafeId, branchId: seedBranchId });
+        if (existingInSeedBranch.length === 0) {
+          categories = await seedDefaultCategories(cafeId, seedBranchId);
+        } else {
+          categories = existingInSeedBranch;
+        }
+      } catch (seedError) {
+        console.warn('[SEED WARNING] Failed to seed default categories:', seedError.message);
+        categories = await Category.find({ cafeId, branchId }).sort({ displayOrder: 1, name: 1 });
+      }
+    }
+
+    if (categories && Array.isArray(categories)) {
+      menuCache.setCategories(categories);
+    }
 
     return res.status(200).json({ success: true, count: categories.length, data: categories });
   } catch (error) {
@@ -61,8 +88,15 @@ const createCategory = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide a category name' });
     }
 
+    let finalBranchId = branchId;
+    if (branchId === 'all') {
+      const Branch = require('../models/Branch');
+      const defaultBranch = await Branch.findOne({ cafeId }).lean();
+      finalBranchId = defaultBranch ? defaultBranch.branchId : 'default';
+    }
+
     // Check if category already exists in this branch
-    const exists = await Category.findOne({ name: name.trim(), cafeId, branchId });
+    const exists = await Category.findOne({ name: name.trim(), cafeId, branchId: finalBranchId });
     if (exists) {
       return res.status(400).json({ success: false, message: 'Category already exists in this branch' });
     }
@@ -70,7 +104,7 @@ const createCategory = async (req, res) => {
     const newCategory = new Category({
       name: name.trim(),
       cafeId,
-      branchId
+      branchId: finalBranchId
     });
 
     const savedCategory = await newCategory.save();
@@ -99,7 +133,13 @@ const updateCategory = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide a category name' });
     }
 
-    const category = await Category.findOne({ _id: id, cafeId, branchId });
+    let finalBranchId = branchId;
+    if (branchId === 'all') {
+      const categoryDoc = await Category.findById(id);
+      if (categoryDoc) finalBranchId = categoryDoc.branchId;
+    }
+
+    const category = await Category.findOne({ _id: id, cafeId, branchId: finalBranchId });
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
@@ -108,7 +148,7 @@ const updateCategory = async (req, res) => {
     const newName = name.trim();
 
     // Check if another category with the new name exists in this branch
-    const duplicate = await Category.findOne({ name: newName, cafeId, branchId, _id: { $ne: id } });
+    const duplicate = await Category.findOne({ name: newName, cafeId, branchId: finalBranchId, _id: { $ne: id } });
     if (duplicate) {
       return res.status(400).json({ success: false, message: 'Another category with this name already exists in this branch' });
     }
@@ -118,7 +158,7 @@ const updateCategory = async (req, res) => {
 
     // Cascade update to all menu items in this category FOR THIS BRANCH ONLY
     await MenuItem.updateMany(
-      { category: oldName, cafeId, branchId },
+      { category: oldName, cafeId, branchId: finalBranchId },
       { category: newName }
     );
 
@@ -142,18 +182,24 @@ const deleteCategory = async (req, res) => {
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
 
-    const category = await Category.findOne({ _id: id, cafeId, branchId });
+    let finalBranchId = branchId;
+    if (branchId === 'all') {
+      const categoryDoc = await Category.findById(id);
+      if (categoryDoc) finalBranchId = categoryDoc.branchId;
+    }
+
+    const category = await Category.findOne({ _id: id, cafeId, branchId: finalBranchId });
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
     const categoryName = category.name;
 
-    await Category.deleteOne({ _id: id, cafeId, branchId });
+    await Category.deleteOne({ _id: id, cafeId, branchId: finalBranchId });
 
     // Update menu items in this category FOR THIS BRANCH ONLY to 'Uncategorized'
     await MenuItem.updateMany(
-      { category: categoryName, cafeId, branchId },
+      { category: categoryName, cafeId, branchId: finalBranchId },
       { category: 'Uncategorized' }
     );
     // Invalidate caches

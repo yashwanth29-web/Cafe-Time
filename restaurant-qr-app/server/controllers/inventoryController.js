@@ -483,7 +483,7 @@ const getWastageReport = async (req, res) => {
     const query = { cafeId, type: { $in: ['Wastage', 'Damaged'] } };
     if (isStaff && req.user?.assignedBranch) {
       query.branchId = req.user.assignedBranch;
-    } else if (queryBranch) {
+    } else if (queryBranch && queryBranch !== 'all') {
       query.branchId = queryBranch;
     }
 
@@ -510,7 +510,7 @@ const getConsumptionReport = async (req, res) => {
     const query = { cafeId, type: 'Deduction' };
     if (isStaff && req.user?.assignedBranch) {
       query.branchId = req.user.assignedBranch;
-    } else if (queryBranch) {
+    } else if (queryBranch && queryBranch !== 'all') {
       query.branchId = queryBranch;
     }
 

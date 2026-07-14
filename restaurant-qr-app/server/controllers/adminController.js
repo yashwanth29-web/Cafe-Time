@@ -890,8 +890,10 @@ const getReports = async (req, res) => {
   try {
     let dateFilter = {};
     if (startDate && endDate) {
-      const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-      const end = new Date(endDate); end.setHours(23, 59, 59, 999);
+      const [sYear, sMonth, sDate] = startDate.split('-').map(Number);
+      const start = new Date(Date.UTC(sYear, sMonth - 1, sDate) - (5.5 * 60 * 60 * 1000));
+      const [eYear, eMonth, eDate] = endDate.split('-').map(Number);
+      const end = new Date(Date.UTC(eYear, eMonth - 1, eDate + 1) - (5.5 * 60 * 60 * 1000) - 1);
       dateFilter = { $gte: start, $lte: end };
     }
 
@@ -899,20 +901,40 @@ const getReports = async (req, res) => {
     const finalBranchId = isStaff ? req.user.assignedBranch : (branchId === 'all' ? null : branchId);
 
     const matchQuery = { cafeId };
-    if (finalBranchId) matchQuery.branchId = finalBranchId;
+    if (finalBranchId) {
+      const branchDoc = await getCachedBranch(`mode:${finalBranchId}:${cafeId}`, () => Branch.findOne({
+        $or: [
+          { branchId: finalBranchId },
+          { _id: mongoose.isValidObjectId(finalBranchId) ? finalBranchId : undefined }
+        ],
+        cafeId
+      }).lean());
+
+      if (branchDoc) {
+        matchQuery.branchId = {
+          $in: [
+            branchDoc.branchId,
+            String(branchDoc._id),
+            branchDoc._id
+          ]
+        };
+      } else {
+        matchQuery.branchId = finalBranchId;
+      }
+    }
     
     const dateMatchQuery = { ...matchQuery };
     if (startDate && endDate) dateMatchQuery.createdAt = dateFilter;
     
     const attendanceMatch = { ...matchQuery };
-    if (startDate && endDate) attendanceMatch.date = dateFilter;
+    if (startDate && endDate) attendanceMatch.date = { $gte: startDate, $lte: endDate };
 
     let reportData = [];
 
     switch (type) {
       case 'revenue': {
         const pipeline = [
-          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
+          { $match: { ...dateMatchQuery, status: 'Completed', paymentStatus: 'Paid' } },
           { $project: {
             invoiceNumber: { $cond: [{ $ifNull: ['$invoiceNumber', false] }, '$invoiceNumber', { $substr: [{ $toString: '$_id' }, 18, 6] }] },
             createdAt: 1, branchId: 1, paymentMethod: 1, paymentStatus: 1, totalAmount: 1, gstAmount: 1, discount: 1, serviceCharge: 1
@@ -1041,7 +1063,7 @@ const getReports = async (req, res) => {
       }
       case 'top_selling': {
         const pipeline = [
-          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
+          { $match: { ...dateMatchQuery, status: 'Completed', paymentStatus: 'Paid' } },
           { $unwind: '$items' },
           { $group: {
             _id: '$items.name',
@@ -1060,14 +1082,26 @@ const getReports = async (req, res) => {
         }));
         break;
       }
-            case 'low_stock': {
+      case 'low_stock': {
         const Inventory = require('../models/Inventory');
         const reqBranchId = req.query.branchId || 'all';
         const pipeline = [
           { $match: { cafeId: req.user.cafeId } }
         ];
         if (reqBranchId && reqBranchId !== 'all') {
-          pipeline[0].$match.$or = [{ branch: reqBranchId }, { branchId: reqBranchId }];
+          const branchDoc = await getCachedBranch(`mode:${reqBranchId}:${req.user.cafeId}`, () => Branch.findOne({
+            $or: [
+              { branchId: reqBranchId },
+              { _id: mongoose.isValidObjectId(reqBranchId) ? reqBranchId : undefined }
+            ],
+            cafeId: req.user.cafeId
+          }).lean());
+
+          const branchIds = branchDoc ? [branchDoc.branchId, String(branchDoc._id), branchDoc._id] : [reqBranchId];
+          pipeline[0].$match.$or = [
+            { branch: { $in: branchIds } },
+            { branchId: { $in: branchIds } }
+          ];
         }
         
         const items = await Inventory.aggregate(pipeline);
@@ -1083,7 +1117,7 @@ const getReports = async (req, res) => {
       }
       case 'payment': {
         const pipeline = [
-          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
+          { $match: { ...dateMatchQuery, status: 'Completed', paymentStatus: 'Paid' } },
           { $group: {
             _id: { $ifNull: ['$paymentMethod', 'UPI'] },
             orderCount: { $sum: 1 },
@@ -1105,7 +1139,7 @@ const getReports = async (req, res) => {
       }
       case 'profit_summary': {
         const revenueAgg = await Order.aggregate([
-          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
+          { $match: { ...dateMatchQuery, status: 'Completed', paymentStatus: 'Paid' } },
           { $group: { _id: null, totalRevenue: { $sum: '$totalAmount' } } }
         ]);
         const totalRevenue = revenueAgg.length > 0 ? revenueAgg[0].totalRevenue : 0;
@@ -1145,7 +1179,7 @@ const getReports = async (req, res) => {
       }
       case 'financial_summary': {
         const orderAgg = Order.aggregate([
-          { $match: { ...dateMatchQuery, $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ] } },
+          { $match: { ...dateMatchQuery, status: 'Completed', paymentStatus: 'Paid' } },
           { $group: {
             _id: null,
             grossRevenue: { $sum: '$totalAmount' },
@@ -1308,33 +1342,32 @@ const getDashboardStats = async (req, res) => {
 
     // Timezone-aware date calculations for Indian Standard Time (IST, UTC+5:30)
     const now = new Date();
-    const istMillis = now.getTime() + (5.5 * 60 * 60 * 1000);
-    const istDate = new Date(istMillis);
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const year = istTime.getUTCFullYear();
+    const month = istTime.getUTCMonth();
+    const date = istTime.getUTCDate();
+
+    const startOfToday = new Date(Date.UTC(year, month, date) - (5.5 * 60 * 60 * 1000));
     
-    const startOfTodayIST = new Date(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate());
-    const startOfToday = new Date(startOfTodayIST.getTime() - (5.5 * 60 * 60 * 1000));
-    
-    const day = istDate.getUTCDay();
+    const day = istTime.getUTCDay();
     const diffToMonday = day === 0 ? 6 : day - 1;
-    const startOfWeekIST = new Date(startOfTodayIST.getTime() - (diffToMonday * 24 * 60 * 60 * 1000));
-    const startOfWeek = new Date(startOfWeekIST.getTime() - (5.5 * 60 * 60 * 1000));
+    const startOfWeek = new Date(Date.UTC(year, month, date) - (diffToMonday * 24 * 60 * 60 * 1000) - (5.5 * 60 * 60 * 1000));
     
-    const startOfMonthIST = new Date(istDate.getUTCFullYear(), istDate.getUTCMonth(), 1);
-    const startOfMonth = new Date(startOfMonthIST.getTime() - (5.5 * 60 * 60 * 1000));
+    const startOfMonth = new Date(Date.UTC(year, month, 1) - (5.5 * 60 * 60 * 1000));
     
-    const startOfYearIST = new Date(istDate.getUTCFullYear(), 0, 1);
-    const startOfYear = new Date(startOfYearIST.getTime() - (5.5 * 60 * 60 * 1000));
+    const startOfYear = new Date(Date.UTC(year, 0, 1) - (5.5 * 60 * 60 * 1000));
 
     // Completed & Paid orders for revenue calculations
     const revenueMatch = {
       ...orderMatchQuery,
-      $or: [ { paymentStatus: 'Paid' }, { status: 'Completed' } ]
+      status: 'Completed',
+      paymentStatus: 'Paid'
     };
     
     const invMatchQuery = { cafeId };
     if (branchId && branchId !== 'all') {
       if (branchDoc) {
-        invMatchQuery.branchId = { $in: [branchDoc.branchId, String(branchDoc._id)] };
+        invMatchQuery.branchId = { $in: [branchDoc.branchId, String(branchDoc._id), branchDoc._id] };
       } else {
         invMatchQuery.branchId = branchId;
       }
@@ -1343,7 +1376,7 @@ const getDashboardStats = async (req, res) => {
     const invLogMatch = { cafeId };
     if (branchId && branchId !== 'all') {
       if (branchDoc) {
-        invLogMatch.branchId = { $in: [branchDoc.branchId, String(branchDoc._id)] };
+        invLogMatch.branchId = { $in: [branchDoc.branchId, String(branchDoc._id), branchDoc._id] };
       } else {
         invLogMatch.branchId = branchId;
       }
@@ -1355,7 +1388,7 @@ const getDashboardStats = async (req, res) => {
     const [
       revenueStats,
       sourceStats,
-      topSellingItems,
+      allSalesItems,
       inventoryValueAgg,
       inventoryLogStats,
       ordersToday,
@@ -1410,8 +1443,7 @@ const getDashboardStats = async (req, res) => {
             revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } }
           }
         },
-        { $sort: { quantity: -1 } },
-        { $limit: 5 }
+        { $sort: { quantity: -1 } }
       ]),
       Inventory.aggregate([
         { $match: invMatchQuery },
@@ -1433,8 +1465,11 @@ const getDashboardStats = async (req, res) => {
       Order.countDocuments(revenueMatch),
       Order.countDocuments({
         ...orderMatchQuery,
-        status: { $ne: 'Completed' },
-        paymentStatus: { $ne: 'Paid' }
+        paymentStatus: { $ne: 'Failed' },
+        $or: [
+          { status: { $ne: 'Completed' } },
+          { paymentStatus: { $ne: 'Paid' } }
+        ]
       }),
       Order.aggregate([
         { $match: revenueMatch },
@@ -1448,15 +1483,9 @@ const getDashboardStats = async (req, res) => {
           } 
         },
         {
-          $project: {
-            totalAmount: 1,
-            istDate: { $add: ['$createdAt', 5.5 * 60 * 60 * 1000] }
-          }
-        },
-        {
           $group: {
             _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$istDate' }
+              $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+05:30' }
             },
             sales: { $sum: '$totalAmount' }
           }
@@ -1469,6 +1498,22 @@ const getDashboardStats = async (req, res) => {
       Branch.find().lean()
     ]);
     
+    let salesItems = allSalesItems;
+    if (salesItems.length === 0) {
+      salesItems = await Order.aggregate([
+        { $match: revenueMatch },
+        { $unwind: '$items' },
+        { 
+          $group: {
+            _id: '$items.name',
+            quantity: { $sum: '$items.quantity' },
+            revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } }
+          }
+        },
+        { $sort: { quantity: -1 } }
+      ]);
+    }
+
     const revenueData = revenueStats.length > 0 ? revenueStats[0] : { 
       totalRevenueAllTime: 0, 
       todayRevenue: 0, 
@@ -1481,15 +1526,19 @@ const getDashboardStats = async (req, res) => {
     const orderSourceData = { QR: 0, POS: 0, Counter: 0 };
     sourceStats.forEach(stat => {
       if (stat._id === 'QR') orderSourceData.QR = stat.count;
-      else if (stat._id === 'Staff POS' || stat._id === 'Waiter' || stat._id === 'POS') orderSourceData.POS += stat.count;
+      else if (stat._id === 'Staff POS' || stat._id === 'Waiter' || stat._id === 'POS' || stat._id === 'MANUAL') orderSourceData.POS += stat.count;
       else orderSourceData.Counter += stat.count;
     });
     
-    const formattedTopSelling = topSellingItems.map(item => ({
+    const formattedSalesItems = salesItems.map(item => ({
       name: item._id,
       quantity: item.quantity,
       revenue: item.revenue
     }));
+    const formattedTopSelling = formattedSalesItems.slice(0, 5);
+    const formattedSlowSelling = formattedSalesItems.length > 5
+      ? formattedSalesItems.slice(-5).reverse()
+      : formattedSalesItems.slice().reverse();
     
     const inventoryValue = inventoryValueAgg.length > 0 ? inventoryValueAgg[0].totalValue : 0;
     
@@ -1520,11 +1569,12 @@ const getDashboardStats = async (req, res) => {
     const weeklySalesData = [];
     const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     for (let i = 6; i >= 0; i--) {
-      const dIST = new Date(startOfTodayIST.getTime() - (i * 24 * 60 * 60 * 1000));
-      const dateStr = dIST.toISOString().split('T')[0];
+      const dIST = new Date(startOfToday.getTime() - (i * 24 * 60 * 60 * 1000));
+      const targetTime = new Date(dIST.getTime() + (5.5 * 60 * 60 * 1000));
+      const dateStr = targetTime.toISOString().split('T')[0];
       const sales = weeklySalesMap[dateStr] || 0;
       weeklySalesData.push({
-        day: i === 0 ? 'Today' : dayLabels[dIST.getUTCDay()],
+        day: i === 0 ? 'Today' : dayLabels[targetTime.getUTCDay()],
         sales: Math.round(sales * 100) / 100
       });
     }
@@ -1557,6 +1607,7 @@ const getDashboardStats = async (req, res) => {
         paymentSummary,
         orderSourceData,
         topSellingItems: formattedTopSelling,
+        slowSellingItems: formattedSlowSelling,
         weeklySalesData,
         recentOrders: formattedRecentOrders,
         inventory: {

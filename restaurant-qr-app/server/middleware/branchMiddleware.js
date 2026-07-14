@@ -143,18 +143,23 @@ const attachCafeAndBranch = async (req, res, next) => {
 
     // Unless exempt, verify that the branch exists and is active under cafeId
     if (!isExempt) {
-      const branchStatus = await verifyBranchActive(cafeId, branchId);
-      if (!branchStatus.exists) {
-        return res.status(403).json({
-          success: false,
-          message: `Unauthorized access. Branch ID: ${branchId} does not exist.`
-        });
-      }
-      if (!branchStatus.isActive) {
-        return res.status(403).json({
-          success: false,
-          message: `Access denied. Branch ID: ${branchId} is inactive.`
-        });
+      const isOwnerOrAdmin = user && ['owner', 'admin'].includes((user.role || '').toLowerCase());
+      if (branchId === 'all' && isOwnerOrAdmin) {
+        // Owners/admins bypass branch existence/active check for 'all' branch selection
+      } else {
+        const branchStatus = await verifyBranchActive(cafeId, branchId);
+        if (!branchStatus.exists) {
+          return res.status(403).json({
+            success: false,
+            message: `Unauthorized access. Branch ID: ${branchId} does not exist.`
+          });
+        }
+        if (!branchStatus.isActive) {
+          return res.status(403).json({
+            success: false,
+            message: `Access denied. Branch ID: ${branchId} is inactive.`
+          });
+        }
       }
     }
 

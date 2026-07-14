@@ -44,7 +44,7 @@ module.exports = function multiBranchPlugin(schema) {
       if (!query.cafeId) {
         this.where({ cafeId: context.cafeId });
       }
-      if (!query.branchId) {
+      if (!query.branchId && context.branchId !== 'all') {
         this.where({ branchId: context.branchId });
       }
     }
@@ -67,7 +67,9 @@ module.exports = function multiBranchPlugin(schema) {
     const context = getContext();
     if (context && context.cafeId && context.branchId) {
       this.cafeId = context.cafeId;
-      this.branchId = context.branchId;
+      if (context.branchId !== 'all') {
+        this.branchId = context.branchId;
+      }
     }
     if (typeof next === 'function') {
       next();
@@ -78,7 +80,9 @@ module.exports = function multiBranchPlugin(schema) {
     const context = getContext();
     if (context && context.cafeId && context.branchId) {
       this.cafeId = context.cafeId;
-      this.branchId = context.branchId;
+      if (context.branchId !== 'all') {
+        this.branchId = context.branchId;
+      }
     }
     if (typeof next === 'function') {
       next();
@@ -98,12 +102,13 @@ module.exports = function multiBranchPlugin(schema) {
     const context = getContext();
     if (context && context.cafeId && context.branchId) {
       const pipeline = this.pipeline();
+      const matchStage = { cafeId: context.cafeId };
+      if (context.branchId !== 'all') {
+        matchStage.branchId = context.branchId;
+      }
       // Inject $match at the very beginning of the pipeline
       pipeline.unshift({
-        $match: {
-          cafeId: context.cafeId,
-          branchId: context.branchId
-        }
+        $match: matchStage
       });
     }
     if (typeof next === 'function') {

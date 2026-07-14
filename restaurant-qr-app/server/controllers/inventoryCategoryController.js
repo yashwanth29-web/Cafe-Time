@@ -28,16 +28,50 @@ const getInventoryCategories = async (req, res) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
     const branchId = req.branchId || req.query.branchId || 'default';
-    let categories = await InventoryCategory.find({ cafeId, branchId }).sort({ name: 1 });
+    
+    let categories;
+    if (branchId === 'all') {
+      // Find unique category documents by name for the entire cafe
+      categories = await InventoryCategory.aggregate([
+        { $match: { cafeId } },
+        { $group: {
+            _id: '$name',
+            doc: { $first: '$$ROOT' }
+        }},
+        { $replaceRoot: { newRoot: '$doc' } },
+        { $sort: { name: 1 } }
+      ]);
+    } else {
+      categories = await InventoryCategory.find({ cafeId, branchId }).sort({ name: 1 });
+    }
 
     if (categories.length === 0) {
-      categories = await seedDefaultInventoryCategories(cafeId, branchId);
+      try {
+        const seedBranchId = branchId === 'all' ? 'default' : branchId;
+        // Verify default categories do not already exist under seedBranchId
+        const existingInSeedBranch = await InventoryCategory.find({ cafeId, branchId: seedBranchId });
+        if (existingInSeedBranch.length === 0) {
+          categories = await seedDefaultInventoryCategories(cafeId, seedBranchId);
+        } else {
+          // If they already exist in the seed branch, copy them to categories return list
+          categories = existingInSeedBranch;
+        }
+      } catch (seedError) {
+        console.warn('[SEED WARNING] Failed to seed default inventory categories:', seedError.message);
+        // Fallback: Query again or just return empty list to prevent crash
+        categories = await InventoryCategory.find({ cafeId, branchId }).sort({ name: 1 });
+      }
+    }
+
+    // Ensure categories is always an array
+    if (!categories || !Array.isArray(categories)) {
+      categories = [];
     }
 
     return res.status(200).json({ success: true, count: categories.length, data: categories });
   } catch (error) {
     console.error('Error fetching inventory categories:', error);
-    return res.status(500).json({ success: false, message: 'Server error while fetching inventory categories', error: error.message });
+    return res.status(500).json({ success: false, message: 'Server error while fetching inventory categories', data: [], error: error.message });
   }
 };
 
@@ -54,7 +88,13 @@ const createInventoryCategory = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide a category name' });
     }
 
-    const exists = await InventoryCategory.findOne({ name: name.trim(), cafeId, branchId });
+    let finalBranchId = branchId;
+    if (branchId === 'all') {
+      const defaultBranch = await Branch.findOne({ cafeId }).lean();
+      finalBranchId = defaultBranch ? defaultBranch.branchId : 'default';
+    }
+
+    const exists = await InventoryCategory.findOne({ name: name.trim(), cafeId, branchId: finalBranchId });
     if (exists) {
       return res.status(400).json({ success: false, message: 'Category already exists in this branch' });
     }
@@ -62,7 +102,7 @@ const createInventoryCategory = async (req, res) => {
     const newCategory = new InventoryCategory({
       name: name.trim(),
       cafeId,
-      branchId
+      branchId: finalBranchId
     });
 
     const savedCategory = await newCategory.save();
@@ -82,18 +122,24 @@ const deleteInventoryCategory = async (req, res) => {
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
 
-    const category = await InventoryCategory.findOne({ _id: id, cafeId, branchId });
+    let finalBranchId = branchId;
+    if (branchId === 'all') {
+      const categoryDoc = await InventoryCategory.findById(id);
+      if (categoryDoc) finalBranchId = categoryDoc.branchId;
+    }
+
+    const category = await InventoryCategory.findOne({ _id: id, cafeId, branchId: finalBranchId });
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
 
     const categoryName = category.name;
 
-    await InventoryCategory.deleteOne({ _id: id, cafeId, branchId });
+    await InventoryCategory.deleteOne({ _id: id, cafeId, branchId: finalBranchId });
 
     // Update items under this category FOR THIS BRANCH ONLY to 'Uncategorized'
     await Inventory.updateMany(
-      { category: categoryName, cafeId, branchId },
+      { category: categoryName, cafeId, branchId: finalBranchId },
       { category: 'Uncategorized' }
     );
 

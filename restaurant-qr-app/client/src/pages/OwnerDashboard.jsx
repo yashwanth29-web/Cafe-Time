@@ -1734,7 +1734,7 @@ const exportStaffToCSV = () => {
 
   // Analytical Calculations
   const completedOrders = useMemo(() => {
-    return orders.filter((o) => o.paymentStatus === 'Paid' || o.status === 'Completed');
+    return orders.filter((o) => o.paymentStatus === 'Paid' && o.status === 'Completed');
   }, [orders]);
 
   const todayOrders = useMemo(() => {
@@ -1785,6 +1785,12 @@ const exportStaffToCSV = () => {
   }, [deductionLogs]);
 
   const rankedItems = useMemo(() => {
+    if (statsData) {
+      return {
+        topSelling: statsData.topSellingItems || [],
+        slowSelling: statsData.slowSellingItems || []
+      };
+    }
     const itemCounts = {};
     completedOrders.forEach(order => {
       if (order.items && order.items.length > 0) {
@@ -1806,7 +1812,7 @@ const exportStaffToCSV = () => {
       ? sorted.slice(sorted.length - 5).reverse()
       : sorted.slice(0).reverse();
     return { topSelling, slowSelling };
-  }, [completedOrders]);
+  }, [completedOrders, statsData]);
 
   const { topSelling, slowSelling } = rankedItems;
 
@@ -2091,40 +2097,69 @@ const exportStaffToCSV = () => {
       if (cache.hasLoaded.orders) {
         setOrders(cache.orders);
         setOrdersLoading(false);
+      } else {
+        setOrders([]);
+        setOrdersLoading(true);
       }
       if (cache.hasLoaded.menuItems) {
         setMenuItems(cache.menuItems);
         setMenuLoading(false);
+      } else {
+        setMenuItems([]);
+        setMenuLoading(true);
       }
       if (cache.hasLoaded.inventoryList) {
         setInventoryList(cache.inventoryList);
         setInventoryLoading(false);
+      } else {
+        setInventoryList([]);
+        setInventoryLoading(true);
       }
       if (cache.hasLoaded.categories) {
         setCategories(cache.categories);
         setCategoryLoading(false);
+      } else {
+        setCategories([]);
+        setCategoryLoading(true);
       }
       if (cache.hasLoaded.inventoryCategories) {
         setInventoryCategories(cache.inventoryCategories);
         setInvCategoryLoading(false);
+      } else {
+        setInventoryCategories([]);
+        setInvCategoryLoading(true);
       }
       if (cache.hasLoaded.staff) {
         setStaff(cache.staff);
         setStaffLoading(false);
+      } else {
+        setStaff([]);
+        setStaffLoading(true);
       }
       if (cache.hasLoaded.attendanceRecords) {
         setAttendanceRecords(cache.attendanceRecords);
         setAttendanceSummary(cache.attendanceSummary);
         setAttendanceLoading(false);
+      } else {
+        setAttendanceRecords([]);
+        setAttendanceSummary({ total: 0, present: 0, absent: 0, late: 0, presentPct: 0 });
+        setAttendanceLoading(true);
       }
       if (cache.hasLoaded.workReports) {
         setAttendanceReports(cache.attendanceReports);
         setWorkReports(cache.workReports);
         setReportsLoading(false);
+      } else {
+        setAttendanceReports([]);
+        setWorkReports([]);
+        setReportsLoading(true);
       }
       if (cache.hasLoaded.statsData) {
         setStatsData(cache.statsData);
         setStatsLoading(false);
+      } else {
+        setStatsData(null);
+        setStatsLoading(true);
       }
 
       const refreshBranchData = async () => {
@@ -2493,12 +2528,16 @@ const exportStaffToCSV = () => {
   </div>
   <div style={{ display: 'flex', gap: '20px', marginTop: '4px' }}>
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <span className="modern-metric-value" style={{ fontSize: '1.4rem' }}>{orders.filter(o => o.source !== 'STAFF').length}</span>
+      <span className="modern-metric-value" style={{ fontSize: '1.4rem' }}>
+        {statsData?.orderSourceData ? statsData.orderSourceData.QR : orders.filter(o => o.source !== 'STAFF').length}
+      </span>
       <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>QR Orders</span>
     </div>
     <div style={{ width: '1px', background: 'var(--color-border)' }}></div>
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <span className="modern-metric-value" style={{ fontSize: '1.4rem', color: '#3498db' }}>{orders.filter(o => o.source === 'STAFF').length}</span>
+      <span className="modern-metric-value" style={{ fontSize: '1.4rem', color: '#3498db' }}>
+        {statsData?.orderSourceData ? (statsData.orderSourceData.POS + statsData.orderSourceData.Counter) : orders.filter(o => o.source === 'STAFF').length}
+      </span>
       <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Staff POS</span>
     </div>
   </div>
