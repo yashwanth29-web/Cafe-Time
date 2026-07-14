@@ -1628,18 +1628,22 @@ const exportStaffToCSV = () => {
  };
 
  // Delete menu item
- const handleDeleteMenuItem = async (id) =>{
+  const handleDeleteMenuItem = async (id) =>{
+    if (isMenuSubmitting) return;
     if (window.confirm('Are you sure you want to remove this menu item?')) {
- try {
- const response = await deleteMenuItem(id);
- if (response.success) {
- setMenuItems((prevItems) =>prevItems.filter((item) =>item._id !== id));
- }
- } catch (error) {
- console.error('Error deleting item:', error);
- }
- }
- };
+      setIsMenuSubmitting(true);
+      try {
+        const response = await deleteMenuItem(id);
+        if (response.success) {
+          setMenuItems((prevItems) =>prevItems.filter((item) =>item._id !== id));
+        }
+      } catch (error) {
+        console.error('Error deleting item:', error);
+      } finally {
+        setIsMenuSubmitting(false);
+      }
+    }
+  };
 
   // Add menu item
   const handleAddMenuItem = async (e) =>{
@@ -1808,19 +1812,23 @@ const exportStaffToCSV = () => {
  }
  };
 
- // Delete Inventory Item
- const handleDeleteInventoryItem = async (id) =>{
- if (!window.confirm('Are you sure you want to delete this ingredient?')) return;
- try {
- const response = await deleteInventoryItem(id);
- if (response.success) {
- setInventoryList((prev) =>prev.filter((item) =>item._id !== id));
- }
- } catch (error) {
- console.error('Error deleting inventory item:', error);
- alert('Error deleting inventory item');
- }
- };
+  // Delete Inventory Item
+  const handleDeleteInventoryItem = async (id) =>{
+    if (isInventorySubmitting) return;
+    if (!window.confirm('Are you sure you want to delete this ingredient?')) return;
+    setIsInventorySubmitting(true);
+    try {
+      const response = await deleteInventoryItem(id);
+      if (response.success) {
+        setInventoryList((prev) =>prev.filter((item) =>item._id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting inventory item:', error);
+      alert('Error deleting inventory item');
+    } finally {
+      setIsInventorySubmitting(false);
+    }
+  };
 
  const handleRecordPurchase = async (e) =>{
  e.preventDefault();
