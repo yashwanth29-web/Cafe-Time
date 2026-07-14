@@ -48,7 +48,7 @@ import OwnerLayout from '../components/OwnerLayout';
 import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const AdminMenuImage = ({ item }) =>{
+const AdminMenuImage = React.memo(({ item }) =>{
  const isValidUrl = (url) =>{
  if (!url || typeof url !== 'string' || url.trim() === '') return false;
  return url.startsWith('/') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/');
@@ -56,17 +56,17 @@ const AdminMenuImage = ({ item }) =>{
 
  const getCategoryIcon = (categoryName) =>{
  const cat = (categoryName || '').toLowerCase();
- if (cat.includes('chai') || cat.includes('tea')) return '';
- if (cat.includes('coffee')) return '';
- if (cat.includes('juice') || cat.includes('cooler') || cat.includes('drink') || cat.includes('beverage')) return '';
- if (cat.includes('milkshake') || cat.includes('shake')) return '';
- if (cat.includes('starter') || cat.includes('bite') || cat.includes('snack')) return '';
- if (cat.includes('fry') || cat.includes('fries') || cat.includes('potato')) return '';
- if (cat.includes('burger')) return '';
- if (cat.includes('sandwich')) return '';
- if (cat.includes('pizza')) return '';
- if (cat.includes('dessert') || cat.includes('sweet') || cat.includes('cake')) return '';
- return '';
+ if (cat.includes('chai') || cat.includes('tea')) return '☕';
+ if (cat.includes('coffee')) return '☕';
+ if (cat.includes('juice') || cat.includes('cooler') || cat.includes('drink') || cat.includes('beverage')) return '🥤';
+ if (cat.includes('milkshake') || cat.includes('shake')) return '🥤';
+ if (cat.includes('starter') || cat.includes('bite') || cat.includes('snack')) return '🍿';
+ if (cat.includes('fry') || cat.includes('fries') || cat.includes('potato')) return '🍟';
+ if (cat.includes('burger')) return '🍔';
+ if (cat.includes('sandwich')) return '🥪';
+ if (cat.includes('pizza')) return '🍕';
+ if (cat.includes('dessert') || cat.includes('sweet') || cat.includes('cake')) return '🍰';
+ return '🍽️';
  };
 
  const [imgFailed, setImgFailed] = useState(!isValidUrl(item.image));
@@ -79,33 +79,150 @@ const AdminMenuImage = ({ item }) =>{
 
  if (imgFailed) {
  return (
-<div
- className="admin-menu-img"
- style={{
- display: 'flex',
- alignItems: 'center',
- justifyContent: 'center',
- background: 'linear-gradient(135deg, #1C2B24 0%, #121815 100%)',
- color: 'var(--color-primary)',
- fontSize: '36px',
- userSelect: 'none',
- flexDirection: 'column',
- gap: '4px'
- }}>
- 
- {getCategoryIcon(item.category)}
-</div>);
-
+ <div
+  className="admin-menu-img"
+  style={{
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'linear-gradient(135deg, #1C2B24 0%, #121815 100%)',
+  color: 'var(--color-primary)',
+  fontSize: '36px',
+  userSelect: 'none',
+  flexDirection: 'column',
+  gap: '4px'
+  }}>
+  {getCategoryIcon(item.category)}
+ </div>);
  }
 
  return (
-<img
- src={getAssetUrl(item.image)}
- alt={item.name}
- className="admin-menu-img"
- onError={() =>setImgFailed(true)} />);
+ <img
+  src={getAssetUrl(item.image)}
+  alt={item.name}
+  className="admin-menu-img"
+  onError={() =>setImgFailed(true)} />);
+});
 
-};
+const AdminMenuCard = React.memo(({ item, onEdit, onDelete }) => {
+  return (
+    <div className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
+      <AdminMenuImage item={item} />
+      <div className="admin-menu-info">
+        <div className="admin-menu-title">{item.name}</div>
+        <div className="admin-menu-desc">{item.description}</div>
+        <div className="admin-menu-meta">
+          <span className="admin-menu-price">₹{parseFloat(item.price).toFixed(2)}</span>
+          <div className="menu-card-actions">
+            <button onClick={() => onEdit(item)} className="btn btn-secondary menu-card-btn">✏️<span className="btn-text"> Edit</span></button>
+            <button onClick={() => onDelete(item._id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const InvMobileCard = React.memo(({ item, onPurchase, onWastage, onEdit, onDelete }) => {
+  const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
+  const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
+  const isLow = qtyVal <= reorderVal;
+  const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
+  let statusColor = '#2ECC71';
+  let statusLabel = 'IN STOCK';
+  if (qtyVal <= 0) {
+    statusColor = '#E74C3C';
+    statusLabel = 'OUT';
+  } else if (isLow) {
+    statusColor = '#F39C12';
+    statusLabel = 'LOW';
+  }
+  return (
+    <div style={{
+      background: 'rgba(0, 0, 0,0.02)', border: `1px solid ${isLow || qtyVal <= 0 ? statusColor + '44' : 'var(--color-border)'}`,
+      borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: 'var(--color-text-primary)', fontWeight: 700, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: '11px', marginTop: '2px' }}>{item.category || 'Ingredients'}</div>
+        </div>
+        <span style={{
+          background: `${statusColor}18`, border: `1px solid ${statusColor}`,
+          color: statusColor, padding: '2px 8px', borderRadius: '6px',
+          fontSize: '10px', fontWeight: 700, flexShrink: 0
+        }}>{statusLabel}</span>
+      </div>
+      <div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ color: isLow ? statusColor : 'var(--color-text-primary)', fontWeight: 800, fontSize: '18px', lineHeight: 1 }}>{qtyVal}</div>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginTop: '2px' }}>{item.unit} · Stock</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ color: 'var(--color-text-primary)', fontWeight: 700, fontSize: '15px', lineHeight: 1 }}>₹{(costPriceVal || 0).toFixed(2)}</div>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginTop: '2px' }}>Cost/unit</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: '13px', lineHeight: 1 }}>{reorderVal} {item.unit}</div>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginTop: '2px' }}>Reorder at</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid rgba(0, 0, 0,0.06)', paddingTop: '10px' }}>
+        <button
+          onClick={() => onPurchase(item)}
+          style={{ flex: 1, background: 'rgba(46,204,113,0.1)', color: '#2ECC71', border: '1px solid #2ECC71', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
+          Purchase</button>
+        <button
+          onClick={() => onWastage(item)}
+          style={{ flex: 1, background: 'rgba(231,76,60,0.1)', color: '#E74C3C', border: '1px solid #E74C3C', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
+          Wastage</button>
+        <button
+          onClick={() => onEdit(item)}
+          style={{ flex: 1, background: 'rgba(0, 0, 0,0.06)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
+          ✏️ Edit</button>
+        <button
+          onClick={() => onDelete(item._id)}
+          style={{ flex: 1, background: 'rgba(231,76,60,0.06)', color: '#E74C3C', border: '1px solid #E74C3C', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
+          🗑️ Delete</button>
+      </div>
+    </div>
+  );
+});
+
+const InvTableRow = React.memo(({ item, onPurchase, onWastage, onEdit, onDelete }) => {
+  const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
+  const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
+  const isLow = qtyVal <= reorderVal;
+  const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
+  let statusColor = '#2ECC71';
+  if (qtyVal <= 0) statusColor = '#E74C3C';
+  else if (isLow) statusColor = '#F39C12';
+  return (
+    <tr style={{ borderBottom: '1px solid #432E22' }}>
+      <td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{item.name}</td>
+      <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{item.category || 'Ingredients'}</td>
+      <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: isLow ? '#E74C3C' : 'var(--color-text-primary)' }}>{qtyVal} {item.unit}</td>
+      <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+        <span style={{ backgroundColor: `${statusColor}1A`, border: `1px solid ${statusColor}`, color: statusColor, padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
+          {qtyVal <= 0 ? 'OUT_OF_STOCK' : isLow ? 'LOW_STOCK' : 'IN_STOCK'}
+        </span>
+      </td>
+      <td style={{ padding: '10px 8px', textAlign: 'right' }}>₹{costPriceVal?.toFixed(2)}</td>
+      <td style={{ padding: '10px 8px', textAlign: 'right' }}>₹{(item.sellingPrice || 0).toFixed(2)}</td>
+      <td style={{ padding: '10px 8px' }}>{item.supplier || 'N/A'}</td>
+      <td style={{ padding: '10px 8px' }}>{item.branch || 'Main'}</td>
+      <td style={{ padding: '10px 8px', textAlign: 'center' }}>{reorderVal} {item.unit}</td>
+      <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+          <button onClick={() => onPurchase(item)} style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Purchase</button>
+          <button onClick={() => onWastage(item)} style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Wastage</button>
+          <button onClick={() => onEdit(item)} style={{ background: 'transparent', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>✏️ Edit</button>
+          <button onClick={() => onDelete(item._id)} style={{ background: 'transparent', color: '#E74C3C', border: '1px solid #E74C3C', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>🗑️</button>
+        </div>
+      </td>
+    </tr>
+  );
+});
 
 // Simple in-memory global cache for instant rendering
 const dashboardCache = {};
@@ -162,6 +279,48 @@ const OwnerDashboard = () =>{
   const [menuSubTab, setMenuSubTab] = useState(() => {
     return tabParam === 'reviews' ? 'reviews' : 'dishes';
   });
+
+  const handleEditMenuCallback = useCallback((item) => {
+    setEditingItem({ ...item });
+    setShowEditModal(true);
+  }, []);
+
+  const handleDeleteMenuCallback = useCallback((id) => {
+    handleDeleteMenuItem(id);
+  }, []);
+
+  const handlePurchaseInventoryCallback = useCallback((item) => {
+    const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
+    setPurchaseForm({
+      itemId: item._id,
+      itemName: item.name,
+      quantityAdded: 0,
+      costPrice: costPriceVal,
+      supplier: item.supplier || '',
+      notes: ''
+    });
+    setShowPurchaseModal(true);
+  }, []);
+
+  const handleWastageInventoryCallback = useCallback((item) => {
+    setWastageForm({
+      itemId: item._id,
+      itemName: item.name,
+      quantityWasted: 0,
+      type: 'Wastage',
+      reason: ''
+    });
+    setShowWastageModal(true);
+  }, []);
+
+  const handleEditInventoryCallback = useCallback((item) => {
+    setEditingInventoryItem({ ...item });
+    setShowEditInventoryModal(true);
+  }, []);
+
+  const handleDeleteInventoryCallback = useCallback((id) => {
+    handleDeleteInventoryItem(id);
+  }, []);
 
   const [staffSubTab, setStaffSubTab] = useState(() => {
     const subParam = searchParams.get('sub');
@@ -2743,22 +2902,14 @@ const exportStaffToCSV = () => {
 </div>:
 
 <div className="menu-grid-admin">
- {filteredMenuItems.map((item) =>
-<div key={item._id} className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
-<AdminMenuImage item={item} />
-<div className="admin-menu-info">
-<div className="admin-menu-title">{item.name}</div>
-<div className="admin-menu-desc">{item.description}</div>
-<div className="admin-menu-meta">
-<span className="admin-menu-price">₹{parseFloat(item.price).toFixed(2)}</span>
-<div className="menu-card-actions">
-  <button onClick={() =>{setEditingItem({ ...item });setShowEditModal(true);}} className="btn btn-secondary menu-card-btn">✏️<span className="btn-text"> Edit</span></button>
-  <button onClick={() =>handleDeleteMenuItem(item._id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
-</div>
-</div>
-</div>
-</div>
-)}
+  {filteredMenuItems.map((item) => (
+    <AdminMenuCard
+      key={item._id}
+      item={item}
+      onEdit={handleEditMenuCallback}
+      onDelete={handleDeleteMenuCallback}
+    />
+  ))}
 </div>
  }
 </>:
@@ -4091,77 +4242,22 @@ const exportStaffToCSV = () => {
  
 </div>
 
- {/* Mobile/Tablet: Card grid */}
 <div className="inv-mobile-cards">
- {filteredInventoryList.map((item) =>{
- const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
- const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
- const isLow = qtyVal<= reorderVal;
- const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
- let statusColor = '#2ECC71';let statusLabel = 'IN STOCK';
- if (qtyVal<= 0) {statusColor = '#E74C3C';statusLabel = 'OUT';} else
- if (isLow) {statusColor = '#F39C12';statusLabel = 'LOW';}
- return (
-<div key={item._id} style={{
- background: 'rgba(0, 0, 0,0.02)', border: `1px solid ${isLow || qtyVal<= 0 ? statusColor + '44' : 'var(--color-border)'}`,
- borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px'
- }}>
- {/* Top row: name + status badge */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-<div style={{ minWidth: 0 }}>
-<div style={{ color: 'var(--color-text-primary)', fontWeight: 700, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
-<div style={{ color: 'var(--color-text-secondary)', fontSize: '11px', marginTop: '2px' }}>{item.category || 'Ingredients'}</div>
-</div>
-<span style={{
- background: `${statusColor}18`, border: `1px solid ${statusColor}`,
- color: statusColor, padding: '2px 8px', borderRadius: '6px',
- fontSize: '10px', fontWeight: 700, flexShrink: 0
- }}>{statusLabel}</span>
-</div>
-
- {/* Mid row: stock + cost */}
-<div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
-<div style={{ textAlign: 'center' }}>
-<div style={{ color: isLow ? statusColor : 'var(--color-text-primary)', fontWeight: 800, fontSize: '18px', lineHeight: 1 }}>{qtyVal}</div>
-<div style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginTop: '2px' }}>{item.unit} · Stock</div>
-</div>
-<div style={{ textAlign: 'center' }}>
-<div style={{ color: 'var(--color-text-primary)', fontWeight: 700, fontSize: '15px', lineHeight: 1 }}>₹{(costPriceVal || 0).toFixed(2)}</div>
-<div style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginTop: '2px' }}>Cost/unit</div>
-</div>
-<div style={{ textAlign: 'center' }}>
-<div style={{ color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: '13px', lineHeight: 1 }}>{reorderVal} {item.unit}</div>
-<div style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginTop: '2px' }}>Reorder at</div>
-</div>
-</div>
-
- {/* Actions */}
-<div style={{ display: 'flex', gap: '6px', borderTop: '1px solid rgba(0, 0, 0,0.06)', paddingTop: '10px' }}>
-<button
- onClick={() =>{setPurchaseForm({ itemId: item._id, itemName: item.name, quantityAdded: 0, costPrice: costPriceVal, supplier: item.supplier || '', notes: '' });setShowPurchaseModal(true);}}
- style={{ flex: 1, background: 'rgba(46,204,113,0.1)', color: '#2ECC71', border: '1px solid #2ECC71', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
- Purchase</button>
-<button
- onClick={() =>{setWastageForm({ itemId: item._id, itemName: item.name, quantityWasted: 0, type: 'Wastage', reason: '' });setShowWastageModal(true);}}
- style={{ flex: 1, background: 'rgba(231,76,60,0.1)', color: '#E74C3C', border: '1px solid #E74C3C', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
- Wastage</button>
-<button
- onClick={() =>{setEditingInventoryItem({ ...item });setShowEditInventoryModal(true);}}
- style={{ flex: 1, background: 'rgba(0, 0, 0,0.06)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
- ✏️ Edit</button>
-<button
- onClick={() =>handleDeleteInventoryItem(item._id)}
- style={{ flex: 1, background: 'rgba(231,76,60,0.06)', color: '#E74C3C', border: '1px solid #E74C3C', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
- 🗑️ Delete</button>
-</div>
-</div>);
-
- })}
- {filteredInventoryList.length === 0 &&
-<div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px' }}>
- No ingredients found.
-</div>
- }
+  {filteredInventoryList.map((item) => (
+    <InvMobileCard
+      key={item._id}
+      item={item}
+      onPurchase={handlePurchaseInventoryCallback}
+      onWastage={handleWastageInventoryCallback}
+      onEdit={handleEditInventoryCallback}
+      onDelete={handleDeleteInventoryCallback}
+    />
+  ))}
+  {filteredInventoryList.length === 0 &&
+  <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px' }}>
+   No ingredients found.
+  </div>
+  }
 </div>
 
  {/* Desktop: scrollable table */}
@@ -4182,40 +4278,16 @@ const exportStaffToCSV = () => {
 </tr>
 </thead>
 <tbody>
- {filteredInventoryList.map((item) =>{
- const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
- const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
- const isLow = qtyVal<= reorderVal;
- const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
- let statusColor = '#2ECC71';
- if (qtyVal<= 0) statusColor = '#E74C3C';else
- if (isLow) statusColor = '#F39C12';
- return (
-<tr key={item._id} style={{ borderBottom: '1px solid #432E22' }}>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{item.name}</td>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{item.category || 'Ingredients'}</td>
-<td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: isLow ? '#E74C3C' : 'var(--color-text-primary)' }}>{qtyVal} {item.unit}</td>
-<td style={{ padding: '10px 8px', textAlign: 'center' }}>
-<span style={{ backgroundColor: `${statusColor}1A`, border: `1px solid ${statusColor}`, color: statusColor, padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
- {qtyVal<= 0 ? 'OUT_OF_STOCK' : isLow ? 'LOW_STOCK' : 'IN_STOCK'}
-</span>
-</td>
-<td style={{ padding: '10px 8px', textAlign: 'right' }}>₹{costPriceVal?.toFixed(2)}</td>
-<td style={{ padding: '10px 8px', textAlign: 'right' }}>₹{(item.sellingPrice || 0).toFixed(2)}</td>
-<td style={{ padding: '10px 8px' }}>{item.supplier || 'N/A'}</td>
-<td style={{ padding: '10px 8px' }}>{item.branch || 'Main'}</td>
-<td style={{ padding: '10px 8px', textAlign: 'center' }}>{reorderVal} {item.unit}</td>
-<td style={{ padding: '10px 8px', textAlign: 'center' }}>
-<div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-<button onClick={() =>{setPurchaseForm({ itemId: item._id, itemName: item.name, quantityAdded: 0, costPrice: costPriceVal, supplier: item.supplier || '', notes: '' });setShowPurchaseModal(true);}} style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Purchase</button>
-<button onClick={() =>{setWastageForm({ itemId: item._id, itemName: item.name, quantityWasted: 0, type: 'Wastage', reason: '' });setShowWastageModal(true);}} style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Wastage</button>
-<button onClick={() =>{setEditingInventoryItem({ ...item });setShowEditInventoryModal(true);}} style={{ background: 'transparent', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>✏️ Edit</button>
-<button onClick={() =>handleDeleteInventoryItem(item._id)} style={{ background: 'transparent', color: '#E74C3C', border: '1px solid #E74C3C', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>🗑️</button>
-</div>
-</td>
-</tr>);
-
- })}
+  {filteredInventoryList.map((item) => (
+    <InvTableRow
+      key={item._id}
+      item={item}
+      onPurchase={handlePurchaseInventoryCallback}
+      onWastage={handleWastageInventoryCallback}
+      onEdit={handleEditInventoryCallback}
+      onDelete={handleDeleteInventoryCallback}
+    />
+  ))}
 </tbody>
 </table>
 </div>
