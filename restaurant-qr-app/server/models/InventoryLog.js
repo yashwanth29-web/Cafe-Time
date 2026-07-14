@@ -21,6 +21,11 @@ const InventoryLogSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  orderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Order',
+    default: null
+  },
   type: {
     type: String,
     enum: ['Purchase', 'Wastage', 'Damaged', 'Shortage', 'Deduction', 'Adjustment', 'Initial'],

@@ -997,7 +997,24 @@ const getReports = async (req, res) => {
       }
       case 'inventory_consumption': {
         const pipeline = [
-          { $match: { ...dateMatchQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } } },
+          { $match: { ...dateMatchQuery, type: 'Deduction' } },
+          {
+            $lookup: {
+              from: 'orders',
+              localField: 'orderId',
+              foreignField: '_id',
+              as: 'order'
+            }
+          },
+          {
+            $match: {
+              $or: [
+                { orderId: { $exists: false } },
+                { orderId: null },
+                { 'order.status': 'Completed', 'order.paymentStatus': 'Paid' }
+              ]
+            }
+          },
           { $group: {
             _id: '$itemName',
             consumedQuantity: { $sum: { $abs: '$quantityChanged' } },
@@ -1151,7 +1168,24 @@ const getReports = async (req, res) => {
         const inventoryValue = inventoryAgg.length > 0 ? inventoryAgg[0].inventoryValue : 0;
 
         const consumptionAgg = await InventoryLog.aggregate([
-          { $match: { ...dateMatchQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } } },
+          { $match: { ...dateMatchQuery, type: 'Deduction' } },
+          {
+            $lookup: {
+              from: 'orders',
+              localField: 'orderId',
+              foreignField: '_id',
+              as: 'order'
+            }
+          },
+          {
+            $match: {
+              $or: [
+                { orderId: { $exists: false } },
+                { orderId: null },
+                { 'order.status': 'Completed', 'order.paymentStatus': 'Paid' }
+              ]
+            }
+          },
           { $group: { _id: null, totalConsumption: { $sum: '$cost' } } }
         ]);
         const inventoryConsumption = consumptionAgg.length > 0 ? consumptionAgg[0].totalConsumption : 0;
@@ -1194,7 +1228,7 @@ const getReports = async (req, res) => {
         ]);
 
         const inventoryWastageAgg = InventoryLog.aggregate([
-          { $match: { ...dateMatchQuery, type: { $in: ['Wastage', 'Damaged', 'Shortage', 'Deduction'] } } },
+          { $match: { ...dateMatchQuery, type: { $in: ['Wastage', 'Damaged', 'Shortage'] } } },
           { $group: { _id: null, totalWastageCost: { $sum: '$cost' } } }
         ]);
 
@@ -1452,6 +1486,24 @@ const getDashboardStats = async (req, res) => {
       InventoryLog.aggregate([
         { $match: invLogMatch },
         {
+          $lookup: {
+            from: 'orders',
+            localField: 'orderId',
+            foreignField: '_id',
+            as: 'order'
+          }
+        },
+        {
+          $match: {
+            $or: [
+              { type: { $ne: 'Deduction' } },
+              { orderId: { $exists: false } },
+              { orderId: null },
+              { 'order.status': 'Completed', 'order.paymentStatus': 'Paid' }
+            ]
+          }
+        },
+        {
           $group: {
             _id: '$type',
             totalCost: { $sum: '$cost' }
@@ -1546,7 +1598,7 @@ const getDashboardStats = async (req, res) => {
     let totalInventoryConsumption = 0;
     inventoryLogStats.forEach(stat => {
       if (stat._id === 'Purchase') totalInventoryCost += stat.totalCost;
-      else if (stat._id === 'Deduction' || stat._id === 'Wastage') totalInventoryConsumption += stat.totalCost;
+      else if (stat._id === 'Deduction') totalInventoryConsumption += stat.totalCost;
     });
 
     const averageOrderValue = revenueData.completedOrdersCount > 0 

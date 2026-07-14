@@ -751,6 +751,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
           branchId,
           itemId: invItem._id,
           itemName: invItem.name,
+          orderId: order._id,
           type: 'Deduction',
           quantityChanged: -deductionQty,
           cost: (invItem.costPrice || invItem.cost || 0) * deductionQty,
