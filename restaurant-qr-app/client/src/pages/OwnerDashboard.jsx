@@ -1773,16 +1773,28 @@ const exportStaffToCSV = () => {
   }, [inventoryLogs]);
 
   const totalInventoryCost = useMemo(() => {
-    return purchaseLogs.reduce((acc, log) => acc + (log.cost || 0), 0);
-  }, [purchaseLogs]);
+    if (statsData && statsData.totalInventoryCost !== undefined) {
+      return statsData.totalInventoryCost;
+    }
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonthPurchases = purchaseLogs.filter((log) => new Date(log.createdAt) >= startOfMonth);
+    return thisMonthPurchases.reduce((acc, log) => acc + (log.cost || 0), 0);
+  }, [purchaseLogs, statsData]);
 
   const deductionLogs = useMemo(() => {
     return inventoryLogs.filter((log) => log.type === 'Deduction');
   }, [inventoryLogs]);
 
   const totalInventoryConsumption = useMemo(() => {
-    return deductionLogs.reduce((acc, log) => acc + (log.cost || 0), 0);
-  }, [deductionLogs]);
+    if (statsData && statsData.totalInventoryConsumption !== undefined) {
+      return statsData.totalInventoryConsumption;
+    }
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonthDeductions = deductionLogs.filter((log) => new Date(log.createdAt) >= startOfMonth);
+    return thisMonthDeductions.reduce((acc, log) => acc + (log.cost || 0), 0);
+  }, [deductionLogs, statsData]);
 
   const rankedItems = useMemo(() => {
     if (statsData) {
@@ -2517,11 +2529,11 @@ const exportStaffToCSV = () => {
     </div>
   </div>
   <p className="modern-metric-value" style={{ color: '#e67e22' }}>₹{totalInventoryValue.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-warning">All stock valued</span>
+  <span className="modern-metric-pill modern-pill-warning">Current Real-Time Value</span>
 </div>
 <div className="modern-metric-card">
   <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Order Source</h4>
+    <h4 className="modern-metric-title">Order Source (This Month)</h4>
     <div className="modern-metric-icon-wrapper">
       <BarChart3 size={18} color="#3498db" />
     </div>
@@ -2548,23 +2560,23 @@ const exportStaffToCSV = () => {
 <div className="analytics-grid" style={{ marginTop: '16px' }}>
 <div className="modern-metric-card">
   <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Total Inventory Cost</h4>
+    <h4 className="modern-metric-title">Total Inventory Cost (This Month)</h4>
     <div className="modern-metric-icon-wrapper">
       <IndianRupee size={18} color="#9b59b6" />
     </div>
   </div>
   <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-neutral">Initial stock + Purchases</span>
+  <span className="modern-metric-pill modern-pill-neutral">Purchases this month</span>
 </div>
 <div className="modern-metric-card">
   <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Inventory Consumption</h4>
+    <h4 className="modern-metric-title">Inventory Consumption (This Month)</h4>
     <div className="modern-metric-icon-wrapper">
       <IndianRupee size={18} color="#16a085" />
     </div>
   </div>
   <p className="modern-metric-value" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-neutral">Cost of sold ingredients</span>
+  <span className="modern-metric-pill modern-pill-neutral">Consumed this month</span>
 </div>
 </div>
 

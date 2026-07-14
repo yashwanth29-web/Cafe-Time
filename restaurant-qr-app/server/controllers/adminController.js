@@ -1407,7 +1407,7 @@ const getDashboardStats = async (req, res) => {
       }
     }
     
-    const invLogMatch = { cafeId };
+    const invLogMatch = { cafeId, createdAt: { $gte: startOfMonth } };
     if (branchId && branchId !== 'all') {
       if (branchDoc) {
         invLogMatch.branchId = { $in: [branchDoc.branchId, String(branchDoc._id), branchDoc._id] };
@@ -1464,7 +1464,7 @@ const getDashboardStats = async (req, res) => {
         }
       ]),
       Order.aggregate([
-        { $match: revenueMatch },
+        { $match: { ...revenueMatch, createdAt: { $gte: startOfMonth } } },
         { $group: { _id: '$orderSource', count: { $sum: 1 } } }
       ]),
       Order.aggregate([
