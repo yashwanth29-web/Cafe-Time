@@ -17,7 +17,13 @@ const OwnerSetup = () => {
   const navigate = useNavigate();
 
   // Wizard active step (1 to 5)
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => {
+    return Number(localStorage.getItem('owner_setup_step') || '1');
+  });
+
+  useEffect(() => {
+    localStorage.setItem('owner_setup_step', String(step));
+  }, [step]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -282,6 +288,7 @@ const OwnerSetup = () => {
 
       const res = await saveSetupData(setupPayload);
       if (res.success) {
+        localStorage.removeItem('owner_setup_step');
         // Reload user session details so setupCompleted turns true
         await checkSession();
         navigate('/admin');
