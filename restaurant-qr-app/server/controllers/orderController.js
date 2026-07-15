@@ -241,23 +241,23 @@ const createOrder = async (req, res, next) => {
     // 4. Table Validation
     const activeTableNumber = String(tableNumber).trim();
     if (activeTableNumber !== 'Takeaway' && activeTableNumber !== 'Walk-in') {
-      const opConfig = await OperationalConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean();
-      if (!opConfig) {
-        return res.status(400).json({ success: false, message: 'Operational configuration not found for this branch' });
-      }
+      // Validate table by performing a query including cafeId, branchId, and tableNumber
+      const opConfig = await OperationalConfig.findOne({
+        cafeId: activeCafeId,
+        branchId: resolvedBranch.branchId,
+        tables: {
+          $elemMatch: {
+            $or: [
+              { id: { $regex: new RegExp('^' + activeTableNumber + '$', 'i') } },
+              { label: { $regex: new RegExp('^' + activeTableNumber + '$', 'i') } },
+              { id: { $regex: new RegExp('^t' + activeTableNumber + '$', 'i') } },
+              { label: { $regex: new RegExp('^table[- ]?' + activeTableNumber + '$', 'i') } }
+            ]
+          }
+        }
+      }).lean();
 
-      const tableExists = opConfig.tables.some(t => {
-        const labelClean = String(t.label).replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
-        const idClean = String(t.id).replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
-        const targetClean = String(activeTableNumber).replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
-        return labelClean === targetClean || 
-               idClean === targetClean || 
-               labelClean === 'table' + targetClean || 
-               idClean === 't' + targetClean ||
-               targetClean === 'table' + labelClean ||
-               targetClean === 't' + idClean;
-      });
-      if (!tableExists) {
+      if (!opConfig) {
         return res.status(400).json({ success: false, message: `Table ${activeTableNumber} does not exist in this branch` });
       }
     }
