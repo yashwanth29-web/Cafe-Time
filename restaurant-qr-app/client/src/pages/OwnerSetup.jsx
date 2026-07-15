@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -24,6 +24,7 @@ const OwnerSetup = () => {
   useEffect(() => {
     localStorage.setItem('owner_setup_step', String(step));
   }, [step]);
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -113,14 +114,7 @@ const OwnerSetup = () => {
     fetchExistingData();
   }, []);
 
-  // Fetch branches when entering Step 2
-  useEffect(() => {
-    if (step === 2) {
-      fetchBranches();
-    }
-  }, [step]);
-
-  const fetchBranches = async () => {
+  const fetchBranches = useCallback(async () => {
     try {
       const res = await getBranches();
       if (res.success) {
@@ -129,9 +123,16 @@ const OwnerSetup = () => {
     } catch (err) {
       console.error('Failed to load branches:', err);
     }
-  };
+  }, []);
 
-  const handleAddBranch = async () => {
+  // Fetch branches when entering Step 2
+  useEffect(() => {
+    if (step === 2) {
+      fetchBranches();
+    }
+  }, [step, fetchBranches]);
+
+  const handleAddBranch = useCallback(async () => {
     if (!newBranchName || !newBranchAddress) {
       setErrorMsg('Branch Name and Address are required.');
       return;
@@ -158,9 +159,9 @@ const OwnerSetup = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [newBranchName, newBranchAddress, newBranchManager, fetchBranches]);
 
-  const handleDeleteBranch = async (id) => {
+  const handleDeleteBranch = useCallback(async (id) => {
     if (window.confirm('Are you sure you want to delete this branch?')) {
       try {
         const res = await deleteBranch(id);
@@ -173,10 +174,10 @@ const OwnerSetup = () => {
         setErrorMsg('Failed to delete branch.');
       }
     }
-  };
+  }, [fetchBranches]);
 
   // Upload Logo handler
-  const handleLogoUpload = async (e) => {
+  const handleLogoUpload = useCallback(async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -201,10 +202,10 @@ const OwnerSetup = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Generate Menu & Inventory (Step 3)
-  const handleGenerateAssets = async () => {
+  const handleGenerateAssets = useCallback(async () => {
     setErrorMsg('');
     setLoading(true);
     try {
@@ -219,10 +220,10 @@ const OwnerSetup = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Initialize Launch Portal (Step 5)
-  const handleStartLaunchInitialization = async () => {
+  const handleStartLaunchInitialization = useCallback(async () => {
     setLoading(true);
     setLaunchReady(false);
     setErrorMsg('');
@@ -239,16 +240,16 @@ const OwnerSetup = () => {
     
     setLoading(false);
     setLaunchReady(true);
-  };
+  }, []);
 
   useEffect(() => {
     if (step === 5) {
       handleStartLaunchInitialization();
     }
-  }, [step]);
+  }, [step, handleStartLaunchInitialization]);
 
   // Final Setup Save
-  const handleFinalizeSetup = async () => {
+  const handleFinalizeSetup = useCallback(async () => {
     setErrorMsg('');
     setLoading(true);
     try {
@@ -298,10 +299,31 @@ const OwnerSetup = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    cafeName,
+    logoUrl,
+    address,
+    mapsLocation,
+    openingTime,
+    closingTime,
+    gstNumber,
+    supportNumber,
+    gstRate,
+    serviceChargeRate,
+    upiId,
+    bankHolderName,
+    accountNumber,
+    ifscCode,
+    printerEnabled,
+    kitchenDisplayEnabled,
+    inventoryEnabled,
+    user,
+    checkSession,
+    navigate
+  ]);
 
   // Wizard navigation validations
-  const validateAndNext = () => {
+  const validateAndNext = useCallback(() => {
     setErrorMsg('');
     if (step === 1) {
       if (!cafeName.trim()) {
@@ -336,7 +358,7 @@ const OwnerSetup = () => {
       }
     }
     setStep((prev) => prev + 1);
-  };
+  }, [step, cafeName, address, supportNumber, branches, assetsGenerated, upiId]);
 
   const stepTitles = [
     'Cafe Profile',
@@ -347,27 +369,41 @@ const OwnerSetup = () => {
   ];
 
   return (
-    <div style={{
-      maxWidth: '850px',
-      margin: '40px auto',
-      padding: '0 20px',
-      fontFamily: "'Outfit', sans-serif"
-    }}>
+    <div className="outer-wizard-wrapper">
       {/* CSS Styles injection for interactive UI */}
       <style>{`
+        .outer-wizard-wrapper,
+        .outer-wizard-wrapper *,
+        .outer-wizard-wrapper *::before,
+        .outer-wizard-wrapper *::after {
+          box-sizing: border-box;
+        }
+        .outer-wizard-wrapper {
+          max-width: 850px;
+          margin: 40px auto;
+          padding: 0 20px;
+          padding-left: calc(20px + env(safe-area-inset-left));
+          padding-right: calc(20px + env(safe-area-inset-right));
+          padding-top: env(safe-area-inset-top);
+          padding-bottom: env(safe-area-inset-bottom);
+          font-family: 'Outfit', sans-serif;
+          width: 100%;
+        }
         .wizard-container {
           background: rgba(43, 30, 24, 0.95);
           border: 1px solid #6F4E37;
           border-radius: 20px;
-          padding: 35px;
+          padding: clamp(15px, 4vw, 35px);
           box-shadow: 0 10px 30px rgba(0,0,0,0.5);
           color: var(--color-text-primary);
+          width: 100%;
         }
         .progress-bar-container {
           display: flex;
           justify-content: space-between;
           position: relative;
-          margin-bottom: 40px;
+          margin-bottom: clamp(35px, 6vw, 55px);
+          width: 100%;
         }
         .progress-bar-line {
           position: absolute;
@@ -417,11 +453,15 @@ const OwnerSetup = () => {
         .step-label {
           position: absolute;
           top: 40px;
-          transform: translateX(-35%);
+          left: 50%;
+          transform: translateX(-50%);
           font-size: 0.75rem;
           font-weight: 600;
           color: #A0826C;
-          white-space: nowrap;
+          text-align: center;
+          width: 120px;
+          white-space: normal;
+          line-height: 1.2;
         }
         .step-label.active {
           color: var(--color-text-secondary);
@@ -439,11 +479,17 @@ const OwnerSetup = () => {
           grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
           gap: 20px;
           margin-bottom: 25px;
+          width: 100%;
+        }
+        .col-span-2 {
+          grid-column: span 2;
         }
         .form-group {
           display: flex;
           flex-direction: column;
           gap: 6px;
+          width: 100%;
+          min-width: 0;
         }
         .form-group label {
           font-size: 0.8rem;
@@ -460,9 +506,16 @@ const OwnerSetup = () => {
           border-radius: 8px;
           outline: none;
           transition: border 0.2s;
+          width: 100%;
         }
         .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
           border-color: var(--color-text-secondary);
+        }
+        .form-group input[type="file"] {
+          padding: 8px;
+          background: rgba(0, 0, 0, 0.1);
+          border: 1px dashed #5C4331;
+          cursor: pointer;
         }
         .wizard-button {
           padding: 12px 28px;
@@ -497,6 +550,13 @@ const OwnerSetup = () => {
         .btn-success:hover {
           background: #2ECC71;
         }
+        .logo-upload-container {
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          margin-bottom: 25px;
+          width: 100%;
+        }
         .logo-preview-box {
           width: 90px;
           height: 90px;
@@ -507,11 +567,39 @@ const OwnerSetup = () => {
           justify-content: center;
           background: rgba(0,0,0,0.3);
           overflow: hidden;
+          flex-shrink: 0;
         }
         .logo-preview-box img {
           width: 100%;
           height: 100%;
           object-fit: cover;
+        }
+        .gps-input-container {
+          display: flex;
+          gap: 10px;
+          width: 100%;
+        }
+        .map-preview-container {
+          height: 100px;
+          background: #1F2937;
+          border: 1px solid #4B5563;
+          border-radius: 8px;
+          margin-top: 10px;
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 10px;
+          width: 100%;
+        }
+        .setup-card {
+          background: rgba(0,0,0,0.1);
+          padding: 20px;
+          border-radius: 12px;
+          border: 1px solid #5C4331;
+          margin-bottom: 25px;
+          width: 100%;
         }
         .branch-item {
           background: rgba(255,255,255,0.02);
@@ -522,6 +610,22 @@ const OwnerSetup = () => {
           justify-content: space-between;
           align-items: center;
           margin-bottom: 10px;
+          gap: 15px;
+          width: 100%;
+        }
+        .branch-info {
+          min-width: 0;
+          flex: 1;
+          word-break: break-word;
+        }
+        .generator-card {
+          background: rgba(0,0,0,0.15);
+          border: 1px dashed #6F4E37;
+          border-radius: 12px;
+          padding: 30px;
+          text-align: center;
+          margin-bottom: 25px;
+          width: 100%;
         }
         .init-row {
           display: flex;
@@ -532,6 +636,24 @@ const OwnerSetup = () => {
           border: 1px solid #3E2723;
           border-radius: 8px;
           margin-bottom: 8px;
+          gap: 12px;
+          width: 100%;
+        }
+        .init-row span:first-child {
+          text-align: left;
+          word-break: break-word;
+          min-width: 0;
+          flex: 1;
+        }
+        .init-row span:last-child, .init-row .spinner {
+          flex-shrink: 0;
+        }
+        .wizard-controls {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 15px;
+          width: 100%;
         }
         .spinner {
           border: 2px solid #5C4331;
@@ -540,6 +662,12 @@ const OwnerSetup = () => {
           width: 18px;
           height: 18px;
           animation: spin 0.8s linear infinite;
+        }
+        .wizard-title {
+          font-size: clamp(1.8rem, 5vw, 2.5rem);
+        }
+        .wizard-subtitle {
+          font-size: clamp(0.9rem, 2.5vw, 1.1rem);
         }
         @keyframes spin {
           0% { transform: rotate(0deg); }
@@ -553,15 +681,64 @@ const OwnerSetup = () => {
           .progress-bar-container { display: none; }
           .mobile-step-indicator { display: block; }
           .form-grid { grid-template-columns: 1fr; }
+          .col-span-2 { grid-column: span 1; }
+        }
+        @media (max-width: 600px) {
+          .outer-wizard-wrapper {
+            margin: 15px auto !important;
+            padding: 0 10px !important;
+          }
+          .wizard-container {
+            padding: 20px 15px;
+            border-radius: 12px;
+          }
+          .logo-upload-container {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 15px;
+          }
+          .logo-upload-container .form-group {
+            width: 100%;
+          }
+          .setup-card {
+            padding: 15px;
+          }
+          .generator-card {
+            padding: 20px 15px;
+          }
+        }
+        @media (max-width: 500px) {
+          .gps-input-container {
+            flex-direction: column;
+          }
+          .gps-input-container button {
+            width: 100%;
+          }
+        }
+        @media (max-width: 480px) {
+          .wizard-controls {
+            flex-direction: column-reverse;
+            align-items: stretch;
+          }
+          .wizard-controls button {
+            width: 100%;
+          }
+          .wizard-controls div {
+            display: none;
+          }
+          .setup-card button {
+            width: 100%;
+          }
         }
       `}</style>
 
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-        <h1 style={{ color: '#5C4331', margin: 0, fontSize: '2.5rem', fontWeight: 800 }}>
+      <div className="wizard-header" style={{ textAlign: 'center', marginBottom: '30px' }}>
+        <h1 className="wizard-title" style={{ color: '#5C4331', margin: 0, fontWeight: 800 }}>
           Welcome to {cafeName || 'Our Cafe'}
         </h1>
-        <p style={{ color: '#A0826C', marginTop: '5px', fontSize: '1.1rem', fontWeight: 500 }}>
+        <p className="wizard-subtitle" style={{ color: '#A0826C', marginTop: '5px', fontWeight: 500 }}>
           Complete the 5-step operational wizard to launch your portal dashboard
         </p>
       </div>
@@ -630,7 +807,7 @@ const OwnerSetup = () => {
               Step 1: Setup Cafe Profile
             </h2>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
+            <div className="logo-upload-container">
               <div className="logo-preview-box">
                 <img src={getAssetUrl(logoPreview)} alt="Logo Preview" />
               </div>
@@ -649,7 +826,7 @@ const OwnerSetup = () => {
             </div>
 
             <div className="form-grid">
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <div className="form-group col-span-2">
                 <label htmlFor="registered-cafe-name">Cafe Name</label>
                 <input
                   type="text"
@@ -662,7 +839,7 @@ const OwnerSetup = () => {
                 />
               </div>
 
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <div className="form-group col-span-2">
                 <label htmlFor="cafe-address">Street Address</label>
                 <textarea
                   rows={2}
@@ -726,9 +903,9 @@ const OwnerSetup = () => {
               </div>
 
               {/* GPS coordinates detection */}
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+              <div className="form-group col-span-2">
                 <label htmlFor="maps-location">Google Maps Coordinates</label>
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div className="gps-input-container">
                   <input
                     type="text"
                     id="maps-location"
@@ -737,7 +914,7 @@ const OwnerSetup = () => {
                     onChange={(e) => setMapsLocation(e.target.value)}
                     placeholder="Latitude, Longitude"
                     disabled={loading}
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, minWidth: 0 }}
                   />
                   <button
                     type="button"
@@ -766,22 +943,11 @@ const OwnerSetup = () => {
                   </button>
                 </div>
                 {/* Simulated map widget */}
-                <div style={{
-                  height: '100px',
-                  background: '#1F2937',
-                  border: '1px solid #4B5563',
-                  borderRadius: '8px',
-                  marginTop: '10px',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
+                <div className="map-preview-container">
+                  <div className="map-preview-label" style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', zIndex: 3 }}>
                     Map Preview
                   </div>
-                  <div style={{ color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: '0.85rem' }}>
+                  <div className="map-coordinates-text" style={{ color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: '0.85rem', wordBreak: 'break-all', textAlign: 'center', padding: '0 5px', zIndex: 3 }}>
                     📍 Coordinates: {mapsLocation}
                   </div>
                   <div style={{
@@ -791,7 +957,8 @@ const OwnerSetup = () => {
                     background: 'rgba(111, 78, 55, 0.2)',
                     border: '2px solid #6F4E37',
                     position: 'absolute',
-                    animation: 'ping 2s infinite'
+                    animation: 'ping 2s infinite',
+                    zIndex: 1
                   }} />
                 </div>
               </div>
@@ -809,31 +976,34 @@ const OwnerSetup = () => {
               Setup and manage branches belonging only to your cafe. Branch sharing is not permitted.
             </p>
 
-            <div style={{ background: 'rgba(0,0,0,0.1)', padding: '20px', borderRadius: '12px', border: '1px solid #5C4331', marginBottom: '25px' }}>
+            <div className="setup-card">
               <h4 style={{ margin: '0 0 15px 0', color: 'var(--color-text-secondary)' }}>Add New Branch</h4>
               <div className="form-grid" style={{ marginBottom: '15px' }}>
                 <div className="form-group">
-                  <label>Branch Name</label>
+                  <label htmlFor="new-branch-name">Branch Name</label>
                   <input
                     type="text"
+                    id="new-branch-name"
                     value={newBranchName}
                     onChange={(e) => setNewBranchName(e.target.value)}
                     placeholder="Vijayawada Main"
                   />
                 </div>
                 <div className="form-group">
-                  <label>Manager Name</label>
+                  <label htmlFor="new-branch-manager">Manager Name</label>
                   <input
                     type="text"
+                    id="new-branch-manager"
                     value={newBranchManager}
                     onChange={(e) => setNewBranchManager(e.target.value)}
                     placeholder="Siva Prasad"
                   />
                 </div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                  <label>Branch Street Address</label>
+                <div className="form-group col-span-2">
+                  <label htmlFor="new-branch-address">Branch Street Address</label>
                   <input
                     type="text"
+                    id="new-branch-address"
                     value={newBranchAddress}
                     onChange={(e) => setNewBranchAddress(e.target.value)}
                     placeholder="Benz Circle, Vijayawada"
@@ -857,7 +1027,7 @@ const OwnerSetup = () => {
               <div>
                 {branches.map((b) => (
                   <div className="branch-item" key={b._id}>
-                    <div>
+                    <div className="branch-info">
                       <strong style={{ color: 'var(--color-text-secondary)' }}>{b.branchName}</strong>
                       <span style={{ fontSize: '0.8rem', color: '#A0826C', marginLeft: '10px' }}>({b.branchId})</span>
                       <div style={{ fontSize: '0.8rem', color: '#D4C3B3', marginTop: '4px' }}>
@@ -867,7 +1037,7 @@ const OwnerSetup = () => {
                     <button
                       type="button"
                       onClick={() => handleDeleteBranch(b._id)}
-                      style={{ background: 'transparent', border: 'none', color: '#E74C3C', cursor: 'pointer', fontWeight: 'bold' }}
+                      style={{ background: 'transparent', border: 'none', color: '#E74C3C', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0, padding: '5px' }}
                     >
                       ✕
                     </button>
@@ -888,14 +1058,7 @@ const OwnerSetup = () => {
               Generate independent menu items, recipes, ingredients, and inventory levels strictly for this cafe. No existing cafe data will be shared.
             </p>
 
-            <div style={{
-              background: 'rgba(0,0,0,0.15)',
-              border: '1px dashed #6F4E37',
-              borderRadius: '12px',
-              padding: '30px',
-              textAlign: 'center',
-              marginBottom: '25px'
-            }}>
+            <div className="generator-card">
               {!assetsGenerated ? (
                 <div>
                   <div style={{ fontSize: '2.5rem', marginBottom: '15px' }}>🍽️</div>
@@ -908,7 +1071,7 @@ const OwnerSetup = () => {
                     onClick={handleGenerateAssets}
                     disabled={loading}
                     className="wizard-button btn-primary"
-                    style={{ minWidth: '220px' }}
+                    style={{ minWidth: '220px', maxWidth: '100%' }}
                   >
                     {loading ? 'Generating Assets...' : 'Generate Menu & Inventory'}
                   </button>
@@ -952,10 +1115,11 @@ const OwnerSetup = () => {
 
             <h4 style={{ color: 'var(--color-text-secondary)', margin: '20px 0 12px 0' }}>Payment Configuration (UPI Details)</h4>
             <div className="form-grid" style={{ marginBottom: '25px' }}>
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label>UPI ID *</label>
+              <div className="form-group col-span-2">
+                <label htmlFor="upi-id">UPI ID *</label>
                 <input
                   type="text"
+                  id="upi-id"
                   value={upiId}
                   onChange={(e) => setUpiId(e.target.value)}
                   placeholder="payee@upi"
@@ -963,9 +1127,10 @@ const OwnerSetup = () => {
                 />
               </div>
               <div className="form-group">
-                <label>Account Holder Name</label>
+                <label htmlFor="bank-holder-name">Account Holder Name</label>
                 <input
                   type="text"
+                  id="bank-holder-name"
                   value={bankHolderName}
                   onChange={(e) => setBankHolderName(e.target.value)}
                   placeholder="Sai Tea Point Pvt Ltd"
@@ -973,19 +1138,21 @@ const OwnerSetup = () => {
                 />
               </div>
               <div className="form-group">
-                <label>Bank Account Number</label>
+                <label htmlFor="account-number">Bank Account Number</label>
                 <input
                   type="text"
+                  id="account-number"
                   value={accountNumber}
                   onChange={(e) => setAccountNumber(e.target.value)}
                   placeholder="918822334455"
                   disabled={loading}
                 />
               </div>
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label>IFSC Code</label>
+              <div className="form-group col-span-2">
+                <label htmlFor="ifsc-code">IFSC Code</label>
                 <input
                   type="text"
+                  id="ifsc-code"
                   value={ifscCode}
                   onChange={(e) => setIfscCode(e.target.value)}
                   placeholder="SBIN0001234"
@@ -997,35 +1164,39 @@ const OwnerSetup = () => {
             <h4 style={{ color: 'var(--color-text-secondary)', margin: '20px 0 12px 0' }}>Taxes & Settings</h4>
             <div className="form-grid">
               <div className="form-group">
-                <label>GST Rate (%)</label>
+                <label htmlFor="gst-rate">GST Rate (%)</label>
                 <input
                   type="number"
+                  id="gst-rate"
                   value={gstRate}
                   onChange={(e) => setGstRate(Number(e.target.value))}
                   disabled={loading}
                 />
               </div>
               <div className="form-group">
-                <label>Service Charge (%)</label>
+                <label htmlFor="service-charge-rate">Service Charge (%)</label>
                 <input
                   type="number"
+                  id="service-charge-rate"
                   value={serviceChargeRate}
                   onChange={(e) => setServiceChargeRate(Number(e.target.value))}
                   disabled={loading}
                 />
               </div>
               <div className="form-group">
-                <label>Required Shift Hours (Attendance)</label>
+                <label htmlFor="required-daily-hours">Required Shift Hours (Attendance)</label>
                 <input
                   type="number"
+                  id="required-daily-hours"
                   value={requiredDailyHours}
                   onChange={(e) => setRequiredDailyHours(Number(e.target.value))}
                   disabled={loading}
                 />
               </div>
               <div className="form-group">
-                <label>Salary Payment Frequency</label>
+                <label htmlFor="salary-type">Salary Payment Frequency</label>
                 <select
+                  id="salary-type"
                   value={salaryType}
                   onChange={(e) => setSalaryType(e.target.value)}
                   disabled={loading}
@@ -1099,7 +1270,7 @@ const OwnerSetup = () => {
                   onClick={handleFinalizeSetup}
                   disabled={loading}
                   className="wizard-button btn-success"
-                  style={{ minWidth: '250px', fontSize: '1.1rem', padding: '15px' }}
+                  style={{ minWidth: '250px', maxWidth: '100%', fontSize: '1.1rem', padding: '15px' }}
                 >
                   {loading ? 'Launching Portal...' : 'Launch Operations Portal'}
                 </button>
@@ -1109,7 +1280,7 @@ const OwnerSetup = () => {
         )}
 
         {/* Wizard Controls */}
-        <div style={{
+        <div className="wizard-controls" style={{
           display: 'flex',
           justifyContent: 'space-between',
           marginTop: '35px',
