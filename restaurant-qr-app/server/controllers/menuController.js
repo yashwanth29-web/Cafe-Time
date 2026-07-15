@@ -20,53 +20,63 @@ const getMenuItems = async (req, res) => {
 
     let finalMenuItems = [];
 
-    // The Global Master Menu is stored under cafeId: 'CD001', branchId: 'default'
-    if (cafeId === 'CD001' && branchId === 'default') {
-      finalMenuItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).select('-__v -createdAt -updatedAt').sort({ category: 1, name: 1 }).lean();
-      console.log(`[DEBUG getMenuItems] CD001/default Master Items fetched: ${finalMenuItems.length}`);
+    if (cafeId === 'CD001') {
+      if (branchId === 'default') {
+        finalMenuItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).select('-__v -createdAt -updatedAt').sort({ category: 1, name: 1 }).lean();
+        console.log(`[DEBUG getMenuItems] CD001/default Master Items fetched: ${finalMenuItems.length}`);
+      } else {
+        // 1. Fetch Global Master Items
+        const masterItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).select('-__v -createdAt -updatedAt').lean();
+        console.log(`[DEBUG getMenuItems] Non-CD001 branch - Master Items fetched: ${masterItems.length}`);
+        
+        // 2. Fetch Local Items for this specific cafe and branch
+        const localItems = await MenuItem.find({ cafeId, branchId }).select('-__v -createdAt -updatedAt').lean();
+        console.log(`[DEBUG getMenuItems] Non-CD001 branch - Local Items fetched: ${localItems.length}`);
+        
+        // 3. Map Local Items by masterItemId for O(1) lookup
+        const localOverridesMap = {};
+        const customLocalItems = [];
+        
+        localItems.forEach(localItem => {
+          if (localItem.masterItemId) {
+            localOverridesMap[localItem.masterItemId.toString()] = localItem;
+          } else {
+            customLocalItems.push(localItem);
+          }
+        });
+        
+        // 4. Merge master and local overrides
+        const mergedMasterItems = masterItems.map(master => {
+          const override = localOverridesMap[master._id.toString()];
+          if (override) {
+            return override.isHidden ? null : override;
+          }
+          // Force the master item to pretend to belong to this cafe/branch in the response
+          // so the frontend doesn't get confused
+          return { ...master, cafeId, branchId };
+        }).filter(item => item !== null);
+        
+        console.log(`[DEBUG getMenuItems] Non-CD001 branch - Merged Master Items: ${mergedMasterItems.length}`);
+        
+        // 5. Combine and sort
+        finalMenuItems = [...mergedMasterItems, ...customLocalItems];
+      }
     } else {
-      // 1. Fetch Global Master Items
-      const masterItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).select('-__v -createdAt -updatedAt').lean();
-      console.log(`[DEBUG getMenuItems] Non-CD001 branch - Master Items fetched: ${masterItems.length}`);
-      
-      // 2. Fetch Local Items for this specific cafe and branch
-      const localItems = await MenuItem.find({ cafeId, branchId }).select('-__v -createdAt -updatedAt').lean();
-      console.log(`[DEBUG getMenuItems] Non-CD001 branch - Local Items fetched: ${localItems.length}`);
-      
-      // 3. Map Local Items by masterItemId for O(1) lookup
-      const localOverridesMap = {};
-      const customLocalItems = [];
-      
-      localItems.forEach(localItem => {
-        if (localItem.masterItemId) {
-          localOverridesMap[localItem.masterItemId.toString()] = localItem;
-        } else {
-          customLocalItems.push(localItem);
-        }
-      });
-      
-      // 4. Merge master and local overrides
-      const mergedMasterItems = masterItems.map(master => {
-        const override = localOverridesMap[master._id.toString()];
-        if (override) {
-          return override.isHidden ? null : override;
-        }
-        // Force the master item to pretend to belong to this cafe/branch in the response
-        // so the frontend doesn't get confused
-        return { ...master, cafeId, branchId };
-      }).filter(item => item !== null);
-      
-      console.log(`[DEBUG getMenuItems] Non-CD001 branch - Merged Master Items: ${mergedMasterItems.length}`);
-      
-      // 5. Combine and sort
-      finalMenuItems = [...mergedMasterItems, ...customLocalItems];
-      finalMenuItems.sort((a, b) => {
-        if (a.category === b.category) {
-          return a.name.localeCompare(b.name);
-        }
-        return a.category.localeCompare(b.category);
-      });
+      // Completely independent tenant
+      const query = { cafeId };
+      if (branchId !== 'all') {
+        query.branchId = branchId;
+      }
+      finalMenuItems = await MenuItem.find(query).select('-__v -createdAt -updatedAt').lean();
+      console.log(`[DEBUG getMenuItems] Independent tenant ${cafeId} - Local Items fetched: ${finalMenuItems.length}`);
     }
+
+    finalMenuItems.sort((a, b) => {
+      if (a.category === b.category) {
+        return a.name.localeCompare(b.name);
+      }
+      return a.category.localeCompare(b.category);
+    });
 
     console.log(`[DEBUG getMenuItems] Final returned items: ${finalMenuItems.length}`);
     menuCache.setMenu(finalMenuItems);

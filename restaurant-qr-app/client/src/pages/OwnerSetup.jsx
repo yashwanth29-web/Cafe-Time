@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getSetupData, saveSetupData, uploadLogo, getAssetUrl } from '../services/api';
+import { 
+  getSetupData, 
+  saveSetupData, 
+  uploadLogo, 
+  getAssetUrl, 
+  getBranches, 
+  createBranch, 
+  deleteBranch, 
+  seedTenantAssets 
+} from '../services/api';
 
 const OwnerSetup = () => {
   const { user, checkSession } = useAuth();
@@ -19,39 +28,47 @@ const OwnerSetup = () => {
   const [logoPreview, setLogoPreview] = useState('/logo.png');
   const [logoUrl, setLogoUrl] = useState('');
   const [address, setAddress] = useState('');
-  const [mapsLocation, setMapsLocation] = useState('40.7128,-74.0060'); // Default GPS coordinates
+  const [mapsLocation, setMapsLocation] = useState('16.5062,80.6480'); // Default coordinates
   const [openingTime, setOpeningTime] = useState('08:00');
   const [closingTime, setClosingTime] = useState('22:00');
   const [gstNumber, setGstNumber] = useState('');
   const [supportNumber, setSupportNumber] = useState('');
 
-  // Step 2: Payment Setup States
+  // Step 2: Branch Setup States
+  const [branches, setBranches] = useState([]);
+  const [newBranchName, setNewBranchName] = useState('');
+  const [newBranchAddress, setNewBranchAddress] = useState('');
+  const [newBranchManager, setNewBranchManager] = useState('');
+
+  // Step 3: Menu & Inventory States
+  const [assetsGenerated, setAssetsGenerated] = useState(false);
+
+  // Step 4: Business Configuration States
+  const [requiredDailyHours, setRequiredDailyHours] = useState(8);
+  const [gstRate, setGstRate] = useState(5);
+  const [serviceChargeRate, setServiceChargeRate] = useState(0);
+  const [salaryType, setSalaryType] = useState('DAILY');
   const [upiId, setUpiId] = useState('');
   const [bankHolderName, setBankHolderName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [ifscCode, setIfscCode] = useState('');
-
-  // Step 3: Operational Setup States
-  const [tableCount, setTableCount] = useState(5);
-  const [tablesList, setTablesList] = useState([
-  { id: 'T1', label: 'Table-1' },
-  { id: 'T2', label: 'Table-2' },
-  { id: 'T3', label: 'Table-3' },
-  { id: 'T4', label: 'Table-4' },
-  { id: 'T5', label: 'Table-5' }]
-  );
   const [printerEnabled, setPrinterEnabled] = useState(false);
   const [kitchenDisplayEnabled, setKitchenDisplayEnabled] = useState(true);
-  const [inventoryEnabled, setInventoryEnabled] = useState(false);
+  const [inventoryEnabled, setInventoryEnabled] = useState(true);
 
-  // Step 4: Staff Setup States
-  const [staffName, setStaffName] = useState('');
-  const [staffEmail, setStaffEmail] = useState('');
-  const [staffPhone, setStaffPhone] = useState('');
-  const [staffRole, setStaffRole] = useState('chef'); // chef, manager, staff
-  const [tempStaffList, setTempStaffList] = useState([]);
+  // Step 5: Launch Portal States
+  const [initStages, setInitStages] = useState({
+    dashboard: 'pending', // pending, loading, success
+    analytics: 'pending',
+    reports: 'pending',
+    heartbeat: 'pending',
+    notifications: 'pending',
+    qrOrdering: 'pending',
+    featureFlags: 'pending'
+  });
+  const [launchReady, setLaunchReady] = useState(false);
 
-  // Fetch current details on load (in case some default values exist or they are reloading)
+  // Fetch current details on load
   useEffect(() => {
     const fetchExistingData = async () => {
       try {
@@ -63,11 +80,13 @@ const OwnerSetup = () => {
             setAddress(cafe.address || '');
             setLogoUrl(cafe.logoUrl || '');
             if (cafe.logoUrl) setLogoPreview(cafe.logoUrl);
-            setMapsLocation(cafe.mapsLocation || '40.7128,-74.0060');
+            setMapsLocation(cafe.mapsLocation || '16.5062,80.6480');
             setOpeningTime(cafe.openingTime || '08:00');
             setClosingTime(cafe.closingTime || '22:00');
             setGstNumber(cafe.gstNumber || '');
             setSupportNumber(cafe.supportNumber || '');
+            setGstRate(cafe.gstRate !== undefined ? cafe.gstRate : 5);
+            setServiceChargeRate(cafe.serviceChargeRate !== undefined ? cafe.serviceChargeRate : 0);
           }
           if (paymentConfig) {
             setUpiId(paymentConfig.upiId || '');
@@ -79,10 +98,6 @@ const OwnerSetup = () => {
             setPrinterEnabled(operationalConfig.printerEnabled || false);
             setKitchenDisplayEnabled(operationalConfig.kitchenDisplayEnabled || false);
             setInventoryEnabled(operationalConfig.inventoryEnabled || false);
-            if (operationalConfig.tables && operationalConfig.tables.length > 0) {
-              setTablesList(operationalConfig.tables);
-              setTableCount(operationalConfig.tables.length);
-            }
           }
         }
       } catch (err) {
@@ -92,30 +107,66 @@ const OwnerSetup = () => {
     fetchExistingData();
   }, []);
 
-  // Sync table generation when count changes
-  const handleTableCountChange = (count) => {
-    const newCount = Math.max(1, Math.min(50, Number(count)));
-    setTableCount(newCount);
+  // Fetch branches when entering Step 2
+  useEffect(() => {
+    if (step === 2) {
+      fetchBranches();
+    }
+  }, [step]);
 
-    setTablesList((prev) => {
-      const list = [...prev];
-      if (list.length < newCount) {
-        for (let i = list.length; i < newCount; i++) {
-          list.push({ id: `T${i + 1}`, label: `Table-${i + 1}` });
-        }
-      } else if (list.length > newCount) {
-        list.splice(newCount);
+  const fetchBranches = async () => {
+    try {
+      const res = await getBranches();
+      if (res.success) {
+        setBranches(res.branches || []);
       }
-      return list;
-    });
+    } catch (err) {
+      console.error('Failed to load branches:', err);
+    }
   };
 
-  const handleTableLabelChange = (index, value) => {
-    setTablesList((prev) => {
-      const list = [...prev];
-      list[index].label = value;
-      return list;
-    });
+  const handleAddBranch = async () => {
+    if (!newBranchName || !newBranchAddress) {
+      setErrorMsg('Branch Name and Address are required.');
+      return;
+    }
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const res = await createBranch({
+        branchName: newBranchName,
+        address: newBranchAddress,
+        manager: newBranchManager,
+        isActive: true
+      });
+      if (res.success) {
+        setSuccessMsg('Branch added successfully!');
+        setNewBranchName('');
+        setNewBranchAddress('');
+        setNewBranchManager('');
+        await fetchBranches();
+        setTimeout(() => setSuccessMsg(''), 2500);
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to create branch.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteBranch = async (id) => {
+    if (window.confirm('Are you sure you want to delete this branch?')) {
+      try {
+        const res = await deleteBranch(id);
+        if (res.success) {
+          setSuccessMsg('Branch deleted.');
+          await fetchBranches();
+          setTimeout(() => setSuccessMsg(''), 2000);
+        }
+      } catch (err) {
+        setErrorMsg('Failed to delete branch.');
+      }
+    }
   };
 
   // Upload Logo handler
@@ -124,7 +175,6 @@ const OwnerSetup = () => {
     if (!file) return;
 
     setLogoFile(file);
-    // Visual reader preview
     const reader = new FileReader();
     reader.onload = (event) => {
       setLogoPreview(event.target.result);
@@ -147,40 +197,49 @@ const OwnerSetup = () => {
     }
   };
 
-  // Add staff locally to register during setup finalize
-  const addStaffToRoster = () => {
-    if (!staffName || !staffEmail || !staffPhone) {
-      setErrorMsg('Please complete all staff details before adding.');
-      return;
+  // Generate Menu & Inventory (Step 3)
+  const handleGenerateAssets = async () => {
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      const res = await seedTenantAssets();
+      if (res.success) {
+        setAssetsGenerated(true);
+        setSuccessMsg('Menu, recipes, inventory, and ingredients generated successfully!');
+        setTimeout(() => setSuccessMsg(''), 3000);
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to generate menu assets.');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  // Initialize Launch Portal (Step 5)
+  const handleStartLaunchInitialization = async () => {
+    setLoading(true);
+    setLaunchReady(false);
     setErrorMsg('');
 
-    // Check duplicate email in current temp list
-    if (tempStaffList.find((s) => s.email.toLowerCase() === staffEmail.toLowerCase())) {
-      setErrorMsg('Staff member with this email is already added.');
-      return;
+    const stages = ['dashboard', 'analytics', 'reports', 'heartbeat', 'notifications', 'qrOrdering', 'featureFlags'];
+    
+    for (let i = 0; i < stages.length; i++) {
+      const stage = stages[i];
+      setInitStages(prev => ({ ...prev, [stage]: 'loading' }));
+      // Simulate real-time initialization steps with micro-delays
+      await new Promise(resolve => setTimeout(resolve, 400));
+      setInitStages(prev => ({ ...prev, [stage]: 'success' }));
     }
-
-    setTempStaffList((prev) => [
-    ...prev,
-    {
-      name: staffName,
-      email: staffEmail,
-      phone: staffPhone,
-      staffRole: staffRole,
-      role: ['chef', 'manager'].includes(staffRole) ? staffRole : 'staff'
-    }]
-    );
-
-    // Reset inputs
-    setStaffName('');
-    setStaffEmail('');
-    setStaffPhone('');
+    
+    setLoading(false);
+    setLaunchReady(true);
   };
 
-  const removeStaffFromRoster = (index) => {
-    setTempStaffList((prev) => prev.filter((_, i) => i !== index));
-  };
+  useEffect(() => {
+    if (step === 5) {
+      handleStartLaunchInitialization();
+    }
+  }, [step]);
 
   // Final Setup Save
   const handleFinalizeSetup = async () => {
@@ -188,13 +247,16 @@ const OwnerSetup = () => {
     setLoading(true);
     try {
       const setupPayload = {
+        name: cafeName,
         logoUrl,
         address,
         mapsLocation,
         openingTime,
         closingTime,
         gstNumber,
-        supportNumber: supportNumber || user.phone,
+        supportNumber: supportNumber || user?.phone || '',
+        gstRate,
+        serviceChargeRate,
         paymentConfig: {
           acceptCash: true,
           enableUpi: true,
@@ -205,17 +267,22 @@ const OwnerSetup = () => {
           isVerified: true
         },
         operationalConfig: {
-          tables: tablesList,
+          tables: [
+            { id: 'T1', label: 'Table-1' },
+            { id: 'T2', label: 'Table-2' },
+            { id: 'T3', label: 'Table-3' },
+            { id: 'T4', label: 'Table-4' },
+            { id: 'T5', label: 'Table-5' }
+          ],
           printerEnabled,
           kitchenDisplayEnabled,
           inventoryEnabled
-        },
-        staffList: tempStaffList
+        }
       };
 
       const res = await saveSetupData(setupPayload);
       if (res.success) {
-        // Reload user session details so `setupCompleted` turns true
+        // Reload user session details so setupCompleted turns true
         await checkSession();
         navigate('/admin');
       }
@@ -230,12 +297,32 @@ const OwnerSetup = () => {
   const validateAndNext = () => {
     setErrorMsg('');
     if (step === 1) {
-      if (!address) {
-        setErrorMsg('Cafe address is required.');
+      if (!cafeName.trim()) {
+        setErrorMsg('Cafe name is required.');
+        return;
+      }
+      if (!address.trim()) {
+        setErrorMsg('Street address is required.');
+        return;
+      }
+      if (!supportNumber.trim()) {
+        setErrorMsg('Contact number is required.');
         return;
       }
     }
     if (step === 2) {
+      if (branches.length === 0) {
+        setErrorMsg('Please setup at least one branch for this cafe.');
+        return;
+      }
+    }
+    if (step === 3) {
+      if (!assetsGenerated) {
+        setErrorMsg('Please click the button to generate your menu and inventory before proceeding.');
+        return;
+      }
+    }
+    if (step === 4) {
       if (!upiId) {
         setErrorMsg('UPI ID is required to accept online payments.');
         return;
@@ -245,12 +332,12 @@ const OwnerSetup = () => {
   };
 
   const stepTitles = [
-  'Cafe Profile',
-  'Payment Setup',
-  'Operational Setup',
-  'Staff Roster',
-  'Complete Onboarding'];
-
+    'Cafe Profile',
+    'Branch Setup',
+    'Menu & Inventory',
+    'Business Configuration',
+    'Launch Portal'
+  ];
 
   return (
     <div style={{
@@ -419,142 +506,64 @@ const OwnerSetup = () => {
           height: 100%;
           object-fit: cover;
         }
-        .table-card {
+        .branch-item {
           background: rgba(255,255,255,0.02);
-          border: 1px solid #5C4331;
-          border-radius: 8px;
-          padding: 12px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .table-card input {
-          background: transparent;
-          border: none;
-          border-bottom: 1px solid #5C4331;
-          color: var(--color-text-primary);
-          width: 100%;
-          outline: none;
-          font-size: 0.9rem;
-          padding: 4px;
-        }
-        .table-card input:focus {
-          border-color: var(--color-text-secondary);
-        }
-        .toggle-card {
-          background: rgba(255, 255, 255, 0.02);
           border: 1px solid #5C4331;
           border-radius: 8px;
           padding: 15px;
           display: flex;
           justify-content: space-between;
           align-items: center;
+          margin-bottom: 10px;
         }
-        @media (max-width: 600px) {
-          .wizard-container {
-            padding: 20px 15px;
-            border-radius: 12px;
-          }
-          .progress-bar-container {
-            margin-bottom: 25px;
-          }
-          .step-label {
-            display: none;
-          }
-          .step-node {
-            width: 28px;
-            height: 28px;
-            font-size: 0.8rem;
-          }
-          .mobile-step-indicator {
-            display: block;
-          }
-          .form-grid {
-            grid-template-columns: 1fr !important;
-            gap: 15px;
-          }
-          .form-group {
-            grid-column: span 1 !important;
-          }
-          .form-group input, .form-group textarea, .form-group select {
-            padding: 10px;
-          }
-          .wizard-button {
-            padding: 10px 20px;
-          }
-          .mobile-full-width {
-            flex-direction: column;
-            align-items: stretch !important;
-            gap: 12px !important;
-          }
-          .mobile-full-width button {
-            width: 100%;
-          }
-          .mobile-logo-box {
-            flex-direction: column;
-            align-items: center !important;
-            text-align: center;
-            gap: 15px !important;
-          }
-          .mobile-logo-box .form-group {
-            width: 100%;
-          }
+        .init-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 12px;
+          background: rgba(0,0,0,0.15);
+          border: 1px solid #3E2723;
+          border-radius: 8px;
+          margin-bottom: 8px;
+        }
+        .spinner {
+          border: 2px solid #5C4331;
+          border-top: 2px solid var(--color-text-secondary);
+          border-radius: 50%;
+          width: 18px;
+          height: 18px;
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes ping {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+        @media (max-width: 768px) {
+          .progress-bar-container { display: none; }
+          .mobile-step-indicator { display: block; }
+          .form-grid { grid-template-columns: 1fr; }
         }
       `}</style>
-
-      {/* ── Exit / Continue Later button ── */}
-      <div style={{ position: 'relative' }}>
-        <button
-          onClick={() => navigate('/owner/profile')}
-          title="Exit setup — continue later"
-          style={{
-            position: 'fixed',
-            top: '18px',
-            right: '20px',
-            zIndex: 999,
-            width: '38px',
-            height: '38px',
-            borderRadius: '50%',
-            background: 'rgba(92, 67, 49, 0.85)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(230, 213, 195, 0.25)',
-            color: 'var(--color-text-primary)',
-            fontSize: '1rem',
-            fontWeight: 800,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
-            transition: 'background 0.2s, transform 0.2s',
-            lineHeight: 1
-          }}
-          onMouseOver={(e) => {e.currentTarget.style.background = 'rgba(140, 90, 60, 0.95)';e.currentTarget.style.transform = 'scale(1.08)';}}
-          onMouseOut={(e) => {e.currentTarget.style.background = 'rgba(92, 67, 49, 0.85)';e.currentTarget.style.transform = 'scale(1)';}}>
-          
-          ✕
-        </button>
-      </div>
 
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: '30px' }}>
         <h1 style={{ color: '#5C4331', margin: 0, fontSize: '2.5rem', fontWeight: 800 }}>
-          Welcome to Dr. Chai Cafe
+          Welcome to {cafeName || 'Our Cafe'}
         </h1>
         <p style={{ color: '#A0826C', marginTop: '5px', fontSize: '1.1rem', fontWeight: 500 }}>
           Complete the 5-step operational wizard to launch your portal dashboard
         </p>
-        <p style={{ color: '#A0826C', marginTop: '6px', fontSize: '0.82rem', opacity: 0.75 }}>
-          ✕ to exit and continue later from your profile page
-        </p>
       </div>
-
 
       <div className="wizard-container">
         {/* Progress Tracker */}
         <div className="progress-bar-container">
           <div className="progress-bar-line" />
-          <div className="progress-bar-fill" style={{ width: `${(step - 1) * 22.5}%` }} />
+          <div className="progress-bar-fill" style={{ width: `${(step - 1) * 25}%` }} />
           
           {stepTitles.map((title, index) => {
             const stepNum = index + 1;
@@ -569,8 +578,8 @@ const OwnerSetup = () => {
                 <div className={`step-label ${isActive ? 'active' : ''}`}>
                   {title}
                 </div>
-              </div>);
-
+              </div>
+            );
           })}
         </div>
 
@@ -580,622 +589,553 @@ const OwnerSetup = () => {
         </div>
 
         {/* Form Messages */}
-        {errorMsg &&
-        <div style={{
-          background: '#FDF2F2',
-          borderLeft: '4px solid #EC5B5B',
-          color: '#D83A3A',
-          padding: '14px',
-          borderRadius: '6px',
-          marginBottom: '25px',
-          fontWeight: 500
-        }}>
+        {errorMsg && (
+          <div style={{
+            background: '#FDF2F2',
+            borderLeft: '4px solid #EC5B5B',
+            color: '#D83A3A',
+            padding: '14px',
+            borderRadius: '6px',
+            marginBottom: '25px',
+            fontWeight: 500
+          }}>
             ⚠️ {errorMsg}
           </div>
-        }
-        {successMsg &&
-        <div style={{
-          background: '#F2FDF5',
-          borderLeft: '4px solid #2ECC71',
-          color: '#27AE60',
-          padding: '14px',
-          borderRadius: '6px',
-          marginBottom: '25px',
-          fontWeight: 500
-        }}>
+        )}
+        {successMsg && (
+          <div style={{
+            background: '#F2FDF5',
+            borderLeft: '4px solid #2ECC71',
+            color: '#27AE60',
+            padding: '14px',
+            borderRadius: '6px',
+            marginBottom: '25px',
+            fontWeight: 500
+          }}>
             ✓ {successMsg}
           </div>
-        }
+        )}
 
         {/* STEP 1: Cafe Profile */}
-        {step === 1 &&
-        <div className="fade-in">
+        {step === 1 && (
+          <div className="fade-in">
             <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
               Step 1: Setup Cafe Profile
             </h2>
             
-            <div className="mobile-logo-box" style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '25px' }}>
               <div className="logo-preview-box">
                 <img src={getAssetUrl(logoPreview)} alt="Logo Preview" />
               </div>
               <div className="form-group" style={{ flex: 1 }}>
                 <label htmlFor="cafe-logo">Upload Cafe Logo</label>
                 <input
-                type="file"
-                id="cafe-logo"
-                name="cafe-logo"
-                accept="image/*"
-                onChange={handleLogoUpload}
-                disabled={loading} />
-              
+                  type="file"
+                  id="cafe-logo"
+                  name="cafe-logo"
+                  accept="image/*"
+                  onChange={handleLogoUpload}
+                  disabled={loading}
+                />
                 <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Recommended: Square format image, Max 2MB.</span>
               </div>
             </div>
 
             <div className="form-grid">
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label htmlFor="registered-cafe-name">Cafe Name (Registered)</label>
+                <label htmlFor="registered-cafe-name">Cafe Name</label>
                 <input
-                type="text"
-                id="registered-cafe-name"
-                name="registered-cafe-name"
-                value={cafeName}
-                disabled
-                style={{ background: 'rgba(0, 0, 0,0.05)', color: '#A0826C' }} />
-              
+                  type="text"
+                  id="registered-cafe-name"
+                  name="registered-cafe-name"
+                  value={cafeName}
+                  onChange={(e) => setCafeName(e.target.value)}
+                  placeholder="Sai Tea Point"
+                  disabled={loading}
+                />
               </div>
 
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label htmlFor="cafe-address">Cafe Street Address</label>
+                <label htmlFor="cafe-address">Street Address</label>
                 <textarea
-                rows={2}
-                id="cafe-address"
-                name="cafe-address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="123 Main St, Near Central Square..."
-                disabled={loading} />
-              
+                  rows={2}
+                  id="cafe-address"
+                  name="cafe-address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Main Road, Near Metro Station, Hyderabad"
+                  disabled={loading}
+                />
               </div>
 
               <div className="form-group">
                 <label htmlFor="opening-time">Opening Time</label>
                 <input
-                type="time"
-                id="opening-time"
-                name="opening-time"
-                value={openingTime}
-                onChange={(e) => setOpeningTime(e.target.value)}
-                disabled={loading} />
-              
+                  type="time"
+                  id="opening-time"
+                  name="opening-time"
+                  value={openingTime}
+                  onChange={(e) => setOpeningTime(e.target.value)}
+                  disabled={loading}
+                />
               </div>
 
               <div className="form-group">
                 <label htmlFor="closing-time">Closing Time</label>
                 <input
-                type="time"
-                id="closing-time"
-                name="closing-time"
-                value={closingTime}
-                onChange={(e) => setClosingTime(e.target.value)}
-                disabled={loading} />
-              
+                  type="time"
+                  id="closing-time"
+                  name="closing-time"
+                  value={closingTime}
+                  onChange={(e) => setClosingTime(e.target.value)}
+                  disabled={loading}
+                />
               </div>
 
               <div className="form-group">
-                <label htmlFor="support-number">Support Contact Number</label>
+                <label htmlFor="support-number">Contact Number</label>
                 <input
-                type="text"
-                id="support-number"
-                name="support-number"
-                value={supportNumber}
-                onChange={(e) => setSupportNumber(e.target.value)}
-                placeholder="+91 9999988888"
-                disabled={loading} />
-              
+                  type="text"
+                  id="support-number"
+                  name="support-number"
+                  value={supportNumber}
+                  onChange={(e) => setSupportNumber(e.target.value)}
+                  placeholder="+91 9876543210"
+                  disabled={loading}
+                />
               </div>
 
               <div className="form-group">
-                <label htmlFor="gst-number">GST Registration Number (Optional)</label>
+                <label htmlFor="gst-number">GST Number</label>
                 <input
-                type="text"
-                id="gst-number"
-                name="gst-number"
-                value={gstNumber}
-                onChange={(e) => setGstNumber(e.target.value)}
-                placeholder="22AAAAA0000A1Z5"
-                disabled={loading} />
-              
+                  type="text"
+                  id="gst-number"
+                  name="gst-number"
+                  value={gstNumber}
+                  onChange={(e) => setGstNumber(e.target.value)}
+                  placeholder="36AAAAA1111A1Z1"
+                  disabled={loading}
+                />
               </div>
 
-              {/* Simulated Google Maps Location Picker */}
+              {/* GPS coordinates detection */}
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label htmlFor="maps-location">Google Maps Location Coordinates</label>
+                <label htmlFor="maps-location">Google Maps Coordinates</label>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <input
-                  type="text"
-                  id="maps-location"
-                  name="maps-location"
-                  value={mapsLocation}
-                  onChange={(e) => setMapsLocation(e.target.value)}
-                  placeholder="Latitude, Longitude"
-                  disabled={loading}
-                  style={{ flex: 1 }} />
-                
+                    type="text"
+                    id="maps-location"
+                    name="maps-location"
+                    value={mapsLocation}
+                    onChange={(e) => setMapsLocation(e.target.value)}
+                    placeholder="Latitude, Longitude"
+                    disabled={loading}
+                    style={{ flex: 1 }}
+                  />
                   <button
-                  type="button"
-                  className="wizard-button btn-secondary"
-                  onClick={() => {
-                    if (navigator.geolocation) {
-                      navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                          const { latitude, longitude } = position.coords;
-                          setMapsLocation(`${latitude.toFixed(6)},${longitude.toFixed(6)}`);
-                          setSuccessMsg('Coordinates detected from GPS device!');
-                          setTimeout(() => setSuccessMsg(''), 2000);
-                        },
-                        (error) => {
-                          console.warn("Geolocation failed, using fallback simulation:", error);
-                          // Fallback simulation
-                          const randLat = (16.5062 + (Math.random() - 0.5) * 0.01).toFixed(6);
-                          const randLng = (80.6480 + (Math.random() - 0.5) * 0.01).toFixed(6);
-                          setMapsLocation(`${randLat},${randLng}`);
-                          setSuccessMsg('Coordinates simulated (GPS denied/failed)!');
-                          setTimeout(() => setSuccessMsg(''), 2000);
-                        },
-                        { enableHighAccuracy: true, timeout: 5000 }
-                      );
-                    } else {
-                      // Fallback simulation
-                      const randLat = (16.5062 + (Math.random() - 0.5) * 0.01).toFixed(6);
-                      const randLng = (80.6480 + (Math.random() - 0.5) * 0.01).toFixed(6);
-                      setMapsLocation(`${randLat},${randLng}`);
-                      setSuccessMsg('Coordinates simulated!');
-                      setTimeout(() => setSuccessMsg(''), 2000);
-                    }
-                  }}>
-                  
+                    type="button"
+                    className="wizard-button btn-secondary"
+                    onClick={() => {
+                      if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                          (position) => {
+                            const { latitude, longitude } = position.coords;
+                            setMapsLocation(`${latitude.toFixed(6)},${longitude.toFixed(6)}`);
+                            setSuccessMsg('GPS Coordinates detected!');
+                            setTimeout(() => setSuccessMsg(''), 2000);
+                          },
+                          () => {
+                            const randLat = (16.5062 + (Math.random() - 0.5) * 0.01).toFixed(6);
+                            const randLng = (80.6480 + (Math.random() - 0.5) * 0.01).toFixed(6);
+                            setMapsLocation(`${randLat},${randLng}`);
+                            setSuccessMsg('Coordinates simulated (GPS denied/failed)!');
+                            setTimeout(() => setSuccessMsg(''), 2000);
+                          }
+                        );
+                      }
+                    }}
+                  >
                     📍 Detect GPS
                   </button>
                 </div>
-                {/* Micro simulated map widget */}
+                {/* Simulated map widget */}
                 <div style={{
-                height: '100px',
-                background: '#1F2937',
-                border: '1px solid #4B5563',
-                borderRadius: '8px',
-                marginTop: '10px',
-                position: 'relative',
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
+                  height: '100px',
+                  background: '#1F2937',
+                  border: '1px solid #4B5563',
+                  borderRadius: '8px',
+                  marginTop: '10px',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
                   <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem' }}>
-                    Map Preview Mode
+                    Map Preview
                   </div>
                   <div style={{ color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: '0.85rem' }}>
-                    📍 Coordinates set to: {mapsLocation}
+                    📍 Coordinates: {mapsLocation}
                   </div>
                   <div style={{
-                  width: '30px',
-                  height: '30px',
-                  borderRadius: '50%',
-                  background: 'rgba(111, 78, 55, 0.2)',
-                  border: '2px solid #6F4E37',
-                  position: 'absolute',
-                  animation: 'ping 2s infinite'
-                }} />
-                  <style>{`
-                    @keyframes ping {
-                      0% { transform: scale(1); opacity: 1; }
-                      100% { transform: scale(2.2); opacity: 0; }
-                    }
-                  `}</style>
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '50%',
+                    background: 'rgba(111, 78, 55, 0.2)',
+                    border: '2px solid #6F4E37',
+                    position: 'absolute',
+                    animation: 'ping 2s infinite'
+                  }} />
                 </div>
               </div>
             </div>
           </div>
-        }
+        )}
 
-        {/* STEP 2: Payment Setup */}
-        {step === 2 &&
-        <div className="fade-in">
+        {/* STEP 2: Branch Setup */}
+        {step === 2 && (
+          <div className="fade-in">
             <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
-              Step 2: Payment Setup (UPI Details)
-            </h2>
-            <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '20px', lineHeight: '1.5' }}>
-              Customers pay directly into your business bank account via UPI. Fill out your details below to accept payments.
-            </p>
-
-            <div className="form-grid">
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label htmlFor="upi-id">UPI ID *</label>
-                <input
-                type="text"
-                id="upi-id"
-                name="upi-id"
-                value={upiId}
-                onChange={(e) => setUpiId(e.target.value)}
-                placeholder="owner@okaxis"
-                disabled={loading}
-                required />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="bank-holder-name">Bank Account Holder Name</label>
-                <input
-                type="text"
-                id="bank-holder-name"
-                name="bank-holder-name"
-                value={bankHolderName}
-                onChange={(e) => setBankHolderName(e.target.value)}
-                placeholder="John Doe Enterprise"
-                disabled={loading} />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="bank-account-number">Bank Account Number</label>
-                <input
-                type="text"
-                id="bank-account-number"
-                name="bank-account-number"
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-                placeholder="1002998877665"
-                disabled={loading} />
-              </div>
-
-              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label htmlFor="ifsc-code">IFSC Code</label>
-                <input
-                type="text"
-                id="ifsc-code"
-                name="ifsc-code"
-                value={ifscCode}
-                onChange={(e) => setIfscCode(e.target.value)}
-                placeholder="HDFC0000123"
-                disabled={loading} />
-              </div>
-            </div>
-          </div>
-        }
-
-        {/* STEP 3: Operational Setup */}
-        {step === 3 &&
-        <div className="fade-in">
-            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
-              Step 3: Operational Configuration & Custom Tables
-            </h2>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '30px' }}>
-              <div className="form-group" style={{ maxWidth: '300px' }}>
-                <label htmlFor="total-dining-tables">Total Dining Tables</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button
-                  type="button"
-                  className="wizard-button btn-secondary"
-                  style={{ padding: '6px 15px' }}
-                  onClick={() => handleTableCountChange(tableCount - 1)}>
-                  
-                    -
-                  </button>
-                  <input
-                  type="number"
-                  id="total-dining-tables"
-                  name="total-dining-tables"
-                  value={tableCount}
-                  onChange={(e) => handleTableCountChange(e.target.value)}
-                  style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 'bold' }} />
-                
-                  <button
-                  type="button"
-                  className="wizard-button btn-secondary"
-                  style={{ padding: '6px 15px' }}
-                  onClick={() => handleTableCountChange(tableCount + 1)}>
-                  
-                    +
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <span id="custom-tables-heading" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#D4C3B3', textTransform: 'uppercase' }}>
-                  Custom Table QR Labels (Click labels to rename)
-                </span>
-                <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-                gap: '12px',
-                maxHeight: '180px',
-                overflowY: 'auto',
-                background: 'rgba(0,0,0,0.1)',
-                padding: '15px',
-                borderRadius: '10px',
-                border: '1px solid #5C4331'
-              }} aria-labelledby="custom-tables-heading">
-                  {tablesList.map((tbl, idx) =>
-                <div key={idx} className="table-card">
-                      <label htmlFor={`table-label-${idx}`} style={{ fontSize: '0.75rem', color: '#A0826C' }}>#{idx + 1}</label>
-                      <input
-                    type="text"
-                    id={`table-label-${idx}`}
-                    name={`table-label-${idx}`}
-                    value={tbl.label}
-                    onChange={(e) => handleTableLabelChange(idx, e.target.value)}
-                    placeholder={`Table-${idx + 1}`} />
-                  
-                    </div>
-                )}
-                </div>
-              </div>
-
-              <div className="form-grid" style={{ marginTop: '10px' }}>
-                <div className="toggle-card">
-                  <label htmlFor="kitchen-display-enabled" style={{ cursor: 'pointer', display: 'flex', flex: 1, flexDirection: 'column' }}>
-                    <strong style={{ display: 'block', fontSize: '0.9rem' }}>Kitchen Screen Console</strong>
-                    <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Staff order tracking board</span>
-                  </label>
-                  <input
-                  type="checkbox"
-                  id="kitchen-display-enabled"
-                  name="kitchen-display-enabled"
-                  checked={kitchenDisplayEnabled}
-                  onChange={(e) => setKitchenDisplayEnabled(e.target.checked)}
-                  style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
-                
-                </div>
-
-                <div className="toggle-card">
-                  <label htmlFor="printer-enabled" style={{ cursor: 'pointer', display: 'flex', flex: 1, flexDirection: 'column' }}>
-                    <strong style={{ display: 'block', fontSize: '0.9rem' }}>Thermal Printer Settings</strong>
-                    <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Auto-print receipt on order</span>
-                  </label>
-                  <input
-                  type="checkbox"
-                  id="printer-enabled"
-                  name="printer-enabled"
-                  checked={printerEnabled}
-                  onChange={(e) => setPrinterEnabled(e.target.checked)}
-                  style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
-                
-                </div>
-
-                <div className="toggle-card">
-                  <label htmlFor="inventory-enabled" style={{ cursor: 'pointer', display: 'flex', flex: 1, flexDirection: 'column' }}>
-                    <strong style={{ display: 'block', fontSize: '0.9rem' }}>Inventory Tracking</strong>
-                    <span style={{ fontSize: '0.75rem', color: '#A0826C' }}>Track ingredient consumption</span>
-                  </label>
-                  <input
-                  type="checkbox"
-                  id="inventory-enabled"
-                  name="inventory-enabled"
-                  checked={inventoryEnabled}
-                  onChange={(e) => setInventoryEnabled(e.target.checked)}
-                  style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
-                
-                </div>
-              </div>
-            </div>
-          </div>
-        }
-
-        {/* STEP 4: Staff Setup */}
-        {step === 4 &&
-        <div className="fade-in">
-            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
-              Step 4: Register Initial Staff Accounts
+              Step 2: Branch Setup
             </h2>
             <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '20px' }}>
-              Provision manager, chef, and server staff members. They will receive credentials to login directly.
+              Setup and manage branches belonging only to your cafe. Branch sharing is not permitted.
             </p>
 
-            <div style={{
-            background: 'rgba(0,0,0,0.1)',
-            padding: '20px',
-            borderRadius: '12px',
-            border: '1px solid #5C4331',
-            marginBottom: '25px'
-          }}>
-              <h4 style={{ margin: '0 0 15px 0', color: 'var(--color-text-secondary)' }}>Add Staff Member</h4>
+            <div style={{ background: 'rgba(0,0,0,0.1)', padding: '20px', borderRadius: '12px', border: '1px solid #5C4331', marginBottom: '25px' }}>
+              <h4 style={{ margin: '0 0 15px 0', color: 'var(--color-text-secondary)' }}>Add New Branch</h4>
               <div className="form-grid" style={{ marginBottom: '15px' }}>
                 <div className="form-group">
-                  <label htmlFor="staff-name">Staff Name</label>
+                  <label>Branch Name</label>
                   <input
-                  type="text"
-                  id="staff-name"
-                  name="staff-name"
-                  value={staffName}
-                  onChange={(e) => setStaffName(e.target.value)}
-                  placeholder="Chef Ram" />
-                
+                    type="text"
+                    value={newBranchName}
+                    onChange={(e) => setNewBranchName(e.target.value)}
+                    placeholder="Vijayawada Main"
+                  />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="staff-email">Email Address</label>
+                  <label>Manager Name</label>
                   <input
-                  type="email"
-                  id="staff-email"
-                  name="staff-email"
-                  value={staffEmail}
-                  onChange={(e) => setStaffEmail(e.target.value)}
-                  placeholder="ram@cafe.com" />
-                
+                    type="text"
+                    value={newBranchManager}
+                    onChange={(e) => setNewBranchManager(e.target.value)}
+                    placeholder="Siva Prasad"
+                  />
                 </div>
-                <div className="form-group">
-                  <label htmlFor="staff-phone">Phone Number</label>
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label>Branch Street Address</label>
                   <input
-                  type="text"
-                  id="staff-phone"
-                  name="staff-phone"
-                  value={staffPhone}
-                  onChange={(e) => setStaffPhone(e.target.value)}
-                  placeholder="+91 9090909090" />
-                
-                </div>
-                <div className="form-group">
-                  <label htmlFor="staff-role">Staff Role</label>
-                  <select
-                  id="staff-role"
-                  name="staff-role"
-                  value={staffRole}
-                  onChange={(e) => setStaffRole(e.target.value)}>
-                  
-                    <option value="chef">Chef (Kitchen Staff)</option>
-                    <option value="manager">Manager (Operations)</option>
-                    <option value="staff">Server (Table Staff)</option>
-                  </select>
+                    type="text"
+                    value={newBranchAddress}
+                    onChange={(e) => setNewBranchAddress(e.target.value)}
+                    placeholder="Benz Circle, Vijayawada"
+                  />
                 </div>
               </div>
               <button
-              type="button"
-              onClick={addStaffToRoster}
-              className="wizard-button btn-secondary">
-              
-                + Add Staff Member
+                type="button"
+                onClick={handleAddBranch}
+                disabled={loading}
+                className="wizard-button btn-secondary"
+              >
+                + Create Branch
               </button>
             </div>
 
-            {/* Local Staff Grid */}
-            <div style={{ overflowX: 'auto' }}>
-              <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-text-secondary)' }}>Staff Roster ({tempStaffList.length})</h4>
-              {tempStaffList.length === 0 ?
-            <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No staff members added to this setup session yet.</p> :
-
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #5C4331', color: '#D4C3B3', textAlign: 'left' }}>
-                      <th style={{ padding: '8px' }}>Name</th>
-                      <th style={{ padding: '8px' }}>Email</th>
-                      <th style={{ padding: '8px' }}>Phone</th>
-                      <th style={{ padding: '8px' }}>Role</th>
-                      <th style={{ padding: '8px', textAlign: 'center' }}>Remove</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tempStaffList.map((stf, index) =>
-                <tr key={index} style={{ borderBottom: '1px solid rgba(0, 0, 0,0.05)' }}>
-                        <td style={{ padding: '8px' }}>{stf.name}</td>
-                        <td style={{ padding: '8px' }}>{stf.email}</td>
-                        <td style={{ padding: '8px' }}>{stf.phone}</td>
-                        <td style={{ padding: '8px', textTransform: 'capitalize' }}>{stf.staffRole}</td>
-                        <td style={{ padding: '8px', textAlign: 'center' }}>
-                          <button
+            <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-text-secondary)' }}>Registered Branches ({branches.length})</h4>
+            {branches.length === 0 ? (
+              <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No branches setup yet.</p>
+            ) : (
+              <div>
+                {branches.map((b) => (
+                  <div className="branch-item" key={b._id}>
+                    <div>
+                      <strong style={{ color: 'var(--color-text-secondary)' }}>{b.branchName}</strong>
+                      <span style={{ fontSize: '0.8rem', color: '#A0826C', marginLeft: '10px' }}>({b.branchId})</span>
+                      <div style={{ fontSize: '0.8rem', color: '#D4C3B3', marginTop: '4px' }}>
+                        📍 {b.address} {b.manager && `| Manager: ${b.manager}`}
+                      </div>
+                    </div>
+                    <button
                       type="button"
-                      onClick={() => removeStaffFromRoster(index)}
-                      style={{ background: 'transparent', border: 'none', color: '#E74C3C', cursor: 'pointer', fontWeight: 'bold' }}>
-                      
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                )}
-                  </tbody>
-                </table>
-            }
-            </div>
+                      onClick={() => handleDeleteBranch(b._id)}
+                      style={{ background: 'transparent', border: 'none', color: '#E74C3C', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        }
+        )}
 
-        {/* STEP 5: Review & Complete */}
-        {step === 5 &&
-        <div className="fade-in" style={{ textAlign: 'center', padding: '20px 0' }}>
-            {/* Visual Animated Checkbox checkmark */}
-            <div style={{
-            width: '80px',
-            height: '80px',
-            borderRadius: '50%',
-            background: '#27AE60',
-            color: 'var(--color-text-primary)',
-            fontSize: '2.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 20px auto',
-            boxShadow: '0 0 15px rgba(39, 174, 96, 0.4)',
-            animation: 'bounceIn 0.8s ease'
-          }}>
-              ✓
-            </div>
-            <style>{`
-              @keyframes bounceIn {
-                0% { transform: scale(0.3); opacity: 0; }
-                50% { transform: scale(1.1); }
-                70% { transform: scale(0.9); }
-                100% { transform: scale(1); opacity: 1; }
-              }
-            `}</style>
-
-            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 10px 0' }}>All Steps Completed!</h2>
-            <p style={{ color: '#A0826C', maxWidth: '500px', margin: '0 auto 30px auto', lineHeight: '1.5' }}>
-              Your cafe configuration details, encrypted keys, and staff roles have been validated. Click below to launch your operations portal.
+        {/* STEP 3: Menu & Inventory */}
+        {step === 3 && (
+          <div className="fade-in">
+            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
+              Step 3: Menu & Inventory Initialization
+            </h2>
+            <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '25px', lineHeight: '1.5' }}>
+              Generate independent menu items, recipes, ingredients, and inventory levels strictly for this cafe. No existing cafe data will be shared.
             </p>
 
             <div style={{
-            background: 'rgba(0, 0, 0,0.02)',
-            border: '1px solid #5C4331',
-            borderRadius: '10px',
-            padding: '20px',
-            maxWidth: '500px',
-            margin: '0 auto 30px auto',
-            textAlign: 'left'
-          }}>
-              <h4 style={{ margin: '0 0 10px 0', borderBottom: '1px solid #5C4331', paddingBottom: '6px', color: 'var(--color-text-secondary)' }}>Configuration Summary</h4>
-              <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Dining Tables:</strong> {tablesList.length} Tables Registered</p>
-              <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Hardware Printing:</strong> {printerEnabled ? 'Enabled' : 'Disabled'}</p>
-              <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Kitchen Display:</strong> {kitchenDisplayEnabled ? 'Enabled' : 'Disabled'}</p>
-              <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>UPI ID:</strong> {upiId || 'Not Configured'}</p>
-              <p style={{ margin: '5px 0', fontSize: '0.85rem' }}><strong>Staff accounts:</strong> {tempStaffList.length} Users queued for registration</p>
+              background: 'rgba(0,0,0,0.15)',
+              border: '1px dashed #6F4E37',
+              borderRadius: '12px',
+              padding: '30px',
+              textAlign: 'center',
+              marginBottom: '25px'
+            }}>
+              {!assetsGenerated ? (
+                <div>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '15px' }}>🍽️</div>
+                  <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-text-secondary)' }}>Dynamic Menu & Asset Generator</h4>
+                  <p style={{ fontSize: '0.85rem', color: '#A0826C', maxWidth: '400px', margin: '0 auto 20px auto' }}>
+                    Click below to generate your cafe's isolated menu registry, recipe sheets, and raw ingredient list.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAssets}
+                    disabled={loading}
+                    className="wizard-button btn-primary"
+                    style={{ minWidth: '220px' }}
+                  >
+                    {loading ? 'Generating Assets...' : 'Generate Menu & Inventory'}
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    background: '#27AE60',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '2rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 15px auto',
+                    boxShadow: '0 0 10px rgba(39, 174, 96, 0.4)'
+                  }}>
+                    ✓
+                  </div>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#2ECC71' }}>Assets Generated Successfully!</h4>
+                  <p style={{ fontSize: '0.85rem', color: '#A0826C', maxWidth: '450px', margin: '0 auto' }}>
+                    Your cafe's independent menu selection, recipe sheets, ingredient stocks, and inventory logs have been created and isolated.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: Business Configuration */}
+        {step === 4 && (
+          <div className="fade-in">
+            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
+              Step 4: Business Configuration
+            </h2>
+            <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '20px' }}>
+              Configure your payment preferences, taxes, and initial parameters.
+            </p>
+
+            <h4 style={{ color: 'var(--color-text-secondary)', margin: '20px 0 12px 0' }}>Payment Configuration (UPI Details)</h4>
+            <div className="form-grid" style={{ marginBottom: '25px' }}>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label>UPI ID *</label>
+                <input
+                  type="text"
+                  value={upiId}
+                  onChange={(e) => setUpiId(e.target.value)}
+                  placeholder="payee@upi"
+                  disabled={loading}
+                />
+              </div>
+              <div className="form-group">
+                <label>Account Holder Name</label>
+                <input
+                  type="text"
+                  value={bankHolderName}
+                  onChange={(e) => setBankHolderName(e.target.value)}
+                  placeholder="Sai Tea Point Pvt Ltd"
+                  disabled={loading}
+                />
+              </div>
+              <div className="form-group">
+                <label>Bank Account Number</label>
+                <input
+                  type="text"
+                  value={accountNumber}
+                  onChange={(e) => setAccountNumber(e.target.value)}
+                  placeholder="918822334455"
+                  disabled={loading}
+                />
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label>IFSC Code</label>
+                <input
+                  type="text"
+                  value={ifscCode}
+                  onChange={(e) => setIfscCode(e.target.value)}
+                  placeholder="SBIN0001234"
+                  disabled={loading}
+                />
+              </div>
             </div>
 
-            <button
-            type="button"
-            onClick={handleFinalizeSetup}
-            disabled={loading}
-            className="wizard-button btn-success"
-            style={{ fontSize: '1.1rem', padding: '14px 45px' }}>
-            
-              {loading ? 'Saving configuration...' : 'Finalize & Launch Portal'}
-            </button>
+            <h4 style={{ color: 'var(--color-text-secondary)', margin: '20px 0 12px 0' }}>Taxes & Settings</h4>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>GST Rate (%)</label>
+                <input
+                  type="number"
+                  value={gstRate}
+                  onChange={(e) => setGstRate(Number(e.target.value))}
+                  disabled={loading}
+                />
+              </div>
+              <div className="form-group">
+                <label>Service Charge (%)</label>
+                <input
+                  type="number"
+                  value={serviceChargeRate}
+                  onChange={(e) => setServiceChargeRate(Number(e.target.value))}
+                  disabled={loading}
+                />
+              </div>
+              <div className="form-group">
+                <label>Required Shift Hours (Attendance)</label>
+                <input
+                  type="number"
+                  value={requiredDailyHours}
+                  onChange={(e) => setRequiredDailyHours(Number(e.target.value))}
+                  disabled={loading}
+                />
+              </div>
+              <div className="form-group">
+                <label>Salary Payment Frequency</label>
+                <select
+                  value={salaryType}
+                  onChange={(e) => setSalaryType(e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="DAILY">Daily Wages</option>
+                  <option value="HOURLY">Hourly Wages</option>
+                  <option value="WEEKLY">Weekly Wages</option>
+                  <option value="MONTHLY">Monthly Wages</option>
+                </select>
+              </div>
+            </div>
           </div>
-        }
+        )}
 
-        {/* Wizard Navigation Footer controls */}
+        {/* STEP 5: Launch Portal */}
+        {step === 5 && (
+          <div className="fade-in">
+            <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
+              Step 5: Launch Operations Portal
+            </h2>
+            <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '25px' }}>
+              Initialising modules, setting up live heartbeats, QR tables, and checking security feature flags.
+            </p>
+
+            <div style={{ marginBottom: '30px' }}>
+              <div className="init-row">
+                <span>Dashboard Widgets initialization</span>
+                {initStages.dashboard === 'loading' && <div className="spinner"></div>}
+                {initStages.dashboard === 'success' && <span style={{ color: '#2ECC71', fontWeight: 'bold' }}>✓ Success</span>}
+              </div>
+              <div className="init-row">
+                <span>Analytics Engine setup</span>
+                {initStages.analytics === 'loading' && <div className="spinner"></div>}
+                {initStages.analytics === 'success' && <span style={{ color: '#2ECC71', fontWeight: 'bold' }}>✓ Success</span>}
+              </div>
+              <div className="init-row">
+                <span>Operational Reports generation</span>
+                {initStages.reports === 'loading' && <div className="spinner"></div>}
+                {initStages.reports === 'success' && <span style={{ color: '#2ECC71', fontWeight: 'bold' }}>✓ Success</span>}
+              </div>
+              <div className="init-row">
+                <span>Live Heartbeat check</span>
+                {initStages.heartbeat === 'loading' && <div className="spinner"></div>}
+                {initStages.heartbeat === 'success' && <span style={{ color: '#2ECC71', fontWeight: 'bold' }}>✓ Success</span>}
+              </div>
+              <div className="init-row">
+                <span>Notification Socket Channels establishment</span>
+                {initStages.notifications === 'loading' && <div className="spinner"></div>}
+                {initStages.notifications === 'success' && <span style={{ color: '#2ECC71', fontWeight: 'bold' }}>✓ Success</span>}
+              </div>
+              <div className="init-row">
+                <span>QR Table routing verification</span>
+                {initStages.qrOrdering === 'loading' && <div className="spinner"></div>}
+                {initStages.qrOrdering === 'success' && <span style={{ color: '#2ECC71', fontWeight: 'bold' }}>✓ Success</span>}
+              </div>
+              <div className="init-row">
+                <span>Feature flags check</span>
+                {initStages.featureFlags === 'loading' && <div className="spinner"></div>}
+                {initStages.featureFlags === 'success' && <span style={{ color: '#2ECC71', fontWeight: 'bold' }}>✓ Success</span>}
+              </div>
+            </div>
+
+            {launchReady && (
+              <div style={{ textAlign: 'center', marginTop: '20px' }}>
+                <h4 style={{ color: '#2ECC71', marginBottom: '10px' }}>Initialization Complete!</h4>
+                <p style={{ color: '#A0826C', fontSize: '0.85rem', marginBottom: '25px' }}>
+                  All systems are green. Click launch below to open your Owner Dashboard.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleFinalizeSetup}
+                  disabled={loading}
+                  className="wizard-button btn-success"
+                  style={{ minWidth: '250px', fontSize: '1.1rem', padding: '15px' }}
+                >
+                  {loading ? 'Launching Portal...' : 'Launch Operations Portal'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Wizard Controls */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           marginTop: '35px',
           borderTop: '1px solid #5C4331',
-          paddingTop: '20px'
+          paddingTop: '25px'
         }}>
-          {step > 1 && step < 5 ?
-          <button
-            type="button"
-            onClick={() => setStep((prev) => prev - 1)}
-            className="wizard-button btn-secondary"
-            disabled={loading}>
-            
-              ← Previous Step
-            </button> :
+          {step > 1 && step < 5 ? (
+            <button
+              type="button"
+              className="wizard-button btn-secondary"
+              onClick={() => setStep((prev) => prev - 1)}
+              disabled={loading}
+            >
+              Back
+            </button>
+          ) : (
+            <div />
+          )}
 
-          <div />
-          }
-
-          {step < 5 ?
-          <button
-            type="button"
-            onClick={validateAndNext}
-            className="wizard-button btn-primary"
-            disabled={loading}>
-            
-              Next Step →
-            </button> :
-
-          <div />
-          }
+          {step < 5 && (
+            <button
+              type="button"
+              className="wizard-button btn-primary"
+              onClick={validateAndNext}
+              disabled={loading}
+            >
+              Continue
+            </button>
+          )}
         </div>
       </div>
-    </div>);
-
+    </div>
+  );
 };
 
 export default OwnerSetup;

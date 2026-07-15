@@ -281,7 +281,7 @@ const getOrders = async (req, res) => {
 
     const orders = await Order.find(filterQuery).sort({ createdAt: -1 }).limit(200).lean();
     const branchMap = new Map();
-    const allBranches = await Branch.find().lean();
+    const allBranches = await Branch.find({ cafeId }).lean();
     allBranches.forEach(b => {
       branchMap.set(String(b._id), b);
       branchMap.set(String(b.branchId), b);

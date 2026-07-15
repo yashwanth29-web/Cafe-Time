@@ -79,16 +79,22 @@ API.interceptors.request.use(
     const isCustomerView = window.location.pathname === '/' || window.location.pathname === '/history';
     
     let activeBranchId;
+    let activeCafeId;
     if (isCustomerView) {
-      // In customer view, strictly prefer the branchId from the URL (which App.jsx puts in sessionStorage)
+      // In customer view, strictly prefer the branchId and cafeId from the URL (which App.jsx puts in sessionStorage)
       activeBranchId = sessionStorage.getItem('branchId') || localStorage.getItem('activeBranchId');
+      activeCafeId = sessionStorage.getItem('cafeId') || localStorage.getItem('activeCafeId');
     } else {
-      // In owner/staff dashboards, prefer the active branch from localStorage
+      // In owner/staff dashboards, prefer the active branch and cafe from localStorage
       activeBranchId = localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId');
+      activeCafeId = localStorage.getItem('activeCafeId') || sessionStorage.getItem('cafeId');
     }
     
     if (activeBranchId) {
       config.headers['x-branch-id'] = activeBranchId;
+    }
+    if (activeCafeId) {
+      config.headers['x-cafe-id'] = activeCafeId;
     }
     return config;
   },
@@ -271,6 +277,11 @@ export const deleteStaff = async (id) => {
 
 export const getStaffSummary = async () => {
   const response = await API.get('/admin/staff-summary');
+  return response.data;
+};
+
+export const seedTenantAssets = async () => {
+  const response = await API.post('/admin/setup/seed-assets');
   return response.data;
 };
 

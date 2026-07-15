@@ -1649,7 +1649,7 @@ const getDashboardStats = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(5)
         .lean(),
-      Branch.find().lean()
+      Branch.find({ cafeId }).lean()
     ]);
     
     let salesItems = allSalesItems;
@@ -1779,6 +1779,109 @@ const getDashboardStats = async (req, res) => {
 };
 
 
+const initializeTenantAssets = async (req, res) => {
+  const cafeId = req.user.cafeId;
+  const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+  
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  }
+
+  try {
+    const Category = require('../models/Category');
+    const MenuItem = require('../models/MenuItem');
+    const InventoryCategory = require('../models/InventoryCategory');
+    const Inventory = require('../models/Inventory');
+
+    // 1. Seed Menu Categories
+    const existingCats = await Category.find({ cafeId });
+    if (existingCats.length === 0) {
+      const categoriesToSeed = [
+        { name: 'Signature Chai', cafeId, branchId: activeBranch },
+        { name: 'Coffee Selection', cafeId, branchId: activeBranch },
+        { name: 'Fresh Juices & Coolers', cafeId, branchId: activeBranch },
+        { name: 'Thick Milkshakes', cafeId, branchId: activeBranch },
+        { name: 'Starters & Bites', cafeId, branchId: activeBranch },
+        { name: 'French Fries', cafeId, branchId: activeBranch }
+      ];
+      await Category.insertMany(categoriesToSeed);
+    }
+
+    // 2. Seed Menu Items
+    const existingItems = await MenuItem.find({ cafeId });
+    if (existingItems.length === 0) {
+      const masterItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).lean();
+      let itemsToSeed = [];
+      if (masterItems.length > 0) {
+        itemsToSeed = masterItems.map(item => {
+          const { _id, ...rest } = item;
+          return {
+            ...rest,
+            cafeId,
+            branchId: activeBranch
+          };
+        });
+      } else {
+        itemsToSeed = [
+          {
+            name: 'Regular Tea',
+            image: '/images/default-food.png',
+            price: 20,
+            category: 'Signature Chai',
+            available: true,
+            description: 'Traditional regular chai brewed to perfection with fresh milk and tea leaves.',
+            preparationTime: 5,
+            recipe: [
+              { name: 'Tea Leaves', quantity: 10 },
+              { name: 'Milk', quantity: 100 },
+              { name: 'Sugar', quantity: 8 }
+            ],
+            cafeId,
+            branchId: activeBranch
+          }
+        ];
+      }
+      await MenuItem.insertMany(itemsToSeed);
+    }
+
+    // 3. Seed Inventory Categories
+    const existingInvCats = await InventoryCategory.find({ cafeId });
+    if (existingInvCats.length === 0) {
+      const invCategoriesToSeed = [
+        { name: 'Tea Ingredients', cafeId, branchId: activeBranch },
+        { name: 'Coffee Ingredients', cafeId, branchId: activeBranch },
+        { name: 'Juice Ingredients', cafeId, branchId: activeBranch },
+        { name: 'Milkshake Ingredients', cafeId, branchId: activeBranch },
+        { name: 'Bakery Items', cafeId, branchId: activeBranch },
+        { name: 'Snacks', cafeId, branchId: activeBranch },
+        { name: 'Packaging Materials', cafeId, branchId: activeBranch },
+        { name: 'Cleaning Supplies', cafeId, branchId: activeBranch }
+      ];
+      await InventoryCategory.insertMany(invCategoriesToSeed);
+    }
+
+    // 4. Seed Inventory Items (ingredients)
+    const existingInventory = await Inventory.find({ cafeId });
+    if (existingInventory.length === 0) {
+      const { seedDefaultInventory } = require('./inventoryController');
+      await seedDefaultInventory(cafeId, activeBranch);
+    }
+
+    const menuCache = require('../utils/menuCache');
+    menuCache.clearMenu();
+    menuCache.clearCategories();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Menu items, recipes, inventory, and ingredients generated successfully!'
+    });
+  } catch (error) {
+    console.error('initializeTenantAssets error:', error);
+    return res.status(500).json({ success: false, message: 'Server error generating assets' });
+  }
+};
+
+
 module.exports = {
   getDashboardStats,
   createStaff,
@@ -1797,5 +1900,6 @@ module.exports = {
   uploadLogo,
   getStorageHealth,
   updateCafeTheme,
-  getReports
+  getReports,
+  initializeTenantAssets
 };

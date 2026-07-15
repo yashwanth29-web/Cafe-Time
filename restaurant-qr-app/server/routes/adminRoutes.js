@@ -21,7 +21,8 @@ const {
   getStorageHealth,
   updateCafeTheme,
   getReports,
-  getDashboardStats
+  getDashboardStats,
+  initializeTenantAssets
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -80,6 +81,7 @@ router.put('/profile/owner', restrictTo('admin', 'owner'), updateOwnerProfile);
 // Onboarding Setup routes
 router.get('/setup', restrictTo('admin', 'owner'), getSetupData);
 router.post('/setup', restrictTo('admin', 'owner'), saveSetupData);
+router.post('/setup/seed-assets', restrictTo('admin', 'owner'), initializeTenantAssets);
 router.post('/upload-logo', restrictTo('admin', 'owner'), upload.single('logo'), uploadLogo);
 router.put('/theme', restrictTo('admin', 'owner'), updateCafeTheme);
 
