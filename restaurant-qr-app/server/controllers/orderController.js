@@ -263,6 +263,18 @@ const createOrder = async (req, res, next) => {
       }
     }
 
+    // Strict 10-digit numeric phone number validation
+    if (customerPhone) {
+      const cleanPhone = String(customerPhone).trim();
+      const phoneRegex = /^[0-9]{10}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        return res.status(422).json({
+          success: false,
+          message: 'Please enter a valid 10-digit mobile number.'
+        });
+      }
+    }
+
     // 6. Menu and Cart Item Validation
     let computedTotal = 0;
     const validatedItems = [];

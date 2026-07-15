@@ -277,11 +277,25 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   const gstAmount = subtotal * (gstRate / 100);
   const grandTotal = subtotal + gstAmount + platformCharge;
 
+  const isPhoneValid = (phone) => {
+    const trimmed = (phone || '').trim();
+    return /^[0-9]{10}$/.test(trimmed);
+  };
+
+  const handlePhoneChange = (e) => {
+    let val = e.target.value;
+    val = val.replace(/[^0-9]/g, '');
+    if (val.length > 10) {
+      val = val.slice(0, 10);
+    }
+    setCustomerPhone(val);
+  };
+
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
     
-    if (!isStaff && (!customerName || !customerPhone)) {
-      alert('Please fill out your name and contact number before placing your order.');
+    if (!isStaff && (!customerName || !customerPhone || !isPhoneValid(customerPhone))) {
+      alert('Please enter a valid 10-digit mobile number before placing your order.');
       return;
     }
 
@@ -456,19 +470,35 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                   name="tel"
                   autoComplete="tel"
                   type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   placeholder="Contact Mobile Number"
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={handlePhoneChange}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    let pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                    pastedText = pastedText.trim().replace(/[^0-9]/g, '');
+                    if (pastedText.length > 10) {
+                      pastedText = pastedText.slice(0, 10);
+                    }
+                    setCustomerPhone(pastedText);
+                  }}
                   style={{
                     width: '100%',
                     padding: '10px 12px',
                     borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
+                    border: customerPhone && !isPhoneValid(customerPhone) ? '1px solid #E74C3C' : '1px solid var(--color-border)',
                     background: 'rgba(0,0,0,0.15)',
                     color: 'var(--color-text-primary)',
                     outline: 'none',
                     fontSize: '13px'
                   }} />
+                  {customerPhone && !isPhoneValid(customerPhone) && (
+                    <span style={{ color: '#E74C3C', fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                      Please enter a valid 10-digit mobile number.
+                    </span>
+                  )}
                 </div>
 
                 <div>
@@ -530,8 +560,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             <div style={{ marginTop: '24px' }}>
               <button
               onClick={handlePlaceOrder}
-              className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone)) ? 'btn-disabled' : ''}`}
-              disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone))}
+              className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone || !isPhoneValid(customerPhone))) ? 'btn-disabled' : ''}`}
+              disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone || !isPhoneValid(customerPhone)))}
               style={{
                 width: '100%',
                 padding: '14px 20px',
@@ -541,7 +571,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 border: 'none',
                 background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
                 color: 'var(--color-text-primary)',
-                cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone)) ? 'not-allowed' : 'pointer'
+                cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone || !isPhoneValid(customerPhone))) ? 'not-allowed' : 'pointer'
               }}>
               
                 {loading ?
