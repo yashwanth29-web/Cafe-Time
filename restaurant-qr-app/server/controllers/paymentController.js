@@ -13,6 +13,9 @@ const mongoose = require('mongoose');
 const createOrder = async (req, res) => {
   try {
     const { cafeId, branchId, items, tableNumber, customerName, customerEmail, customerPhone, specialInstructions } = req.body;
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
 
     // Basic validation
     if (!items || items.length === 0) {
@@ -67,8 +70,8 @@ const createOrder = async (req, res) => {
     let platformCharge = 0;
     let upiId = '9346540919@ybl'; // Default fallback UPI ID
 
-    const config = await PaymentConfig.findOne({ cafeId: cafeId || 'CD001', branchId: activeBranchId });
-    const cafe = await Cafe.findOne({ cafeId: cafeId || 'CD001' });
+    const config = await PaymentConfig.findOne({ cafeId, branchId: activeBranchId });
+    const cafe = await Cafe.findOne({ cafeId });
 
     if (config) {
       gstRate = config.taxRate || 0;
@@ -86,7 +89,7 @@ const createOrder = async (req, res) => {
 
     // Create a new Order in DB with 'Pending' payment status
     const newOrder = new Order({
-      cafeId: cafeId || 'CD001',
+      cafeId: cafeId,
       branchId: activeBranchId,
       tableNumber: tableNumber || 'Takeaway',
       items: validatedItems,
@@ -163,7 +166,9 @@ const verifyPayment = async (req, res) => {
       orderId: razorpayOrderId || order.razorpayOrderId || `UPI-${order._id}`,
       appOrderId: updatedOrder._id,
       amount: updatedOrder.totalAmount,
-      status: 'success'
+      status: 'success',
+      cafeId: updatedOrder.cafeId,
+      branchId: updatedOrder.branchId || 'default'
     });
     await paymentRecord.save();
 

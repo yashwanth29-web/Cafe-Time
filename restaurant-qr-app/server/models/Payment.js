@@ -25,10 +25,20 @@ const PaymentSchema = new mongoose.Schema({
     required: true,
     default: 'success'
   },
+  cafeId: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  branchId: {
+    type: String,
+    required: true,
+    trim: true
+  },
   createdAt: {
     type: Date,
     default: Date.now
   }
-}, { bypassBranchFilter: true });
+});
 
 module.exports = mongoose.model('Payment', PaymentSchema);

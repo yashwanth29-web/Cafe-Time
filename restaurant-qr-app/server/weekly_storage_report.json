@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-07-09T16:05:24.573Z",
-  "totalGridFsFiles": 30,
-  "totalGridFsSizeMB": 1.278,
+  "timestamp": "2026-07-15T14:01:52.896Z",
+  "totalGridFsFiles": 34,
+  "totalGridFsSizeMB": 1.4,
   "orphanedFiles": [
     {
       "fileId": "6a335227d30565d9c9c73ea4",
@@ -176,9 +176,15 @@
       "filename": "report-1781776929555-210427017.png",
       "uploadDate": "2026-06-18T10:02:11.338Z",
       "length": 93536
+    },
+    {
+      "fileId": "6a57811185a520dd762bf6dc",
+      "filename": "CY_logo.jpg",
+      "uploadDate": "2026-07-15T12:46:10.064Z",
+      "length": 4423
     }
   ],
-  "reclaimableSpaceMB": 1.267,
+  "reclaimableSpaceMB": 1.272,
   "chunkIntegrity": {
     "totalOrphanedChunks": 0,
     "orphanedChunkFileIds": []

@@ -1,14 +1,15 @@
 // In-memory frontend cache synchronized with Socket.io
 
 const getFrontendPartitionKey = () => {
-  const isCustomerView = window.location.pathname === '/' || window.location.pathname === '/history';
+  const isCustomerView = window.location.pathname === '/' || window.location.pathname === '/history' || window.location.pathname === '/cart';
   let cafeId, branchId;
+  const searchParams = new URLSearchParams(window.location.search);
   if (isCustomerView) {
-    cafeId = sessionStorage.getItem('cafeId') || 'CD001';
-    branchId = sessionStorage.getItem('branchId') || 'default';
+    cafeId = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
+    branchId = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
   } else {
-    cafeId = localStorage.getItem('activeCafeId') || sessionStorage.getItem('cafeId') || 'CD001';
-    branchId = localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId') || 'default';
+    cafeId = localStorage.getItem('activeCafeId') || searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
+    branchId = localStorage.getItem('activeBranchId') || searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
   }
   return `${cafeId}_${branchId}`;
 };

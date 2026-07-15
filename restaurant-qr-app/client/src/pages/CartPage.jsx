@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CartItem from '../components/CartItem';
-import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview } from '../services/api';
+import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getPaymentInfo } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 import { useAuth } from '../context/AuthContext';
 import socket, { connectSocket } from '../socket';
@@ -22,6 +22,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   // Cafe Details State
   const [cafeInfo, setCafeInfo] = useState(null);
+  const [paymentConfig, setPaymentConfig] = useState(null);
 
   // Review states
   const [submittedReviews, setSubmittedReviews] = useState(() => {
@@ -51,7 +52,9 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   useEffect(() => {
     const fetchCafe = async () => {
       try {
-        const id = cafeId || sessionStorage.getItem('cafeId') || 'CD001';
+        const searchParams = new URLSearchParams(window.location.search);
+        const id = cafeId || searchParams.get('cafeId') || sessionStorage.getItem('cafeId');
+        if (!id) return;
         const res = await getCafeInfo(id);
         if (res.success) {
           setCafeInfo(res.data);
@@ -61,6 +64,21 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
       }
     };
     fetchCafe();
+  }, [cafeId]);
+
+  // Fetch branch-specific PaymentConfig details on mount / cafeId change
+  useEffect(() => {
+    const fetchPaymentConfig = async () => {
+      try {
+        const res = await getPaymentInfo();
+        if (res.success) {
+          setPaymentConfig(res.data);
+        }
+      } catch (e) {
+        console.error('Error fetching payment config:', e);
+      }
+    };
+    fetchPaymentConfig();
   }, [cafeId]);
 
   // Voiced/audio feedback state to prevent duplicates
@@ -272,8 +290,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   // Totals calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
-  const gstRate = cafeInfo?.gstRate || 0;
-  const platformCharge = cafeInfo?.serviceChargeRate || 0;
+  const gstRate = paymentConfig ? (paymentConfig.taxRate ?? 0) : (cafeInfo?.gstRate || 0);
+  const platformCharge = paymentConfig ? (paymentConfig.platformCharge ?? 0) : (cafeInfo?.serviceChargeRate || 0);
   const gstAmount = subtotal * (gstRate / 100);
   const grandTotal = subtotal + gstAmount + platformCharge;
 
@@ -319,7 +337,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         customerEmail: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
         customerPhone: customerPhone || (isStaff ? '0000000000' : ''),
         specialInstructions,
-        cafeId: user?.cafeId || cafeId || 'CD001',
+        cafeId: user?.cafeId || cafeId || sessionStorage.getItem('cafeId') || '',
         branchId: user?.assignedBranch || sessionStorage.getItem('branchId') || 'default',
         source: isStaff ? 'STAFF' : 'QR',
         staffId: isStaff && user ? user._id : undefined
@@ -342,7 +360,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
           activeIds.push(response.data._id);
           sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
           
-          const c = sessionStorage.getItem('cafeId') || 'CD001';
+          const c = sessionStorage.getItem('cafeId') || '';
           const b = sessionStorage.getItem('branchId') || 'default';
           const t = sessionStorage.getItem('tableNumber') || 'default';
           const activeKey = `activeOrderIds_${c}_${b}_${t}`;

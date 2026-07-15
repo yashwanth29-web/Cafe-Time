@@ -202,7 +202,9 @@ app.use('/uploads', express.static(uploadsDir));
 
 // Attach branch context globally for all /api endpoints
 const { attachCafeAndBranch } = require('./middleware/branchMiddleware');
+const { validateTenant } = require('./middleware/tenantValidationMiddleware');
 app.use('/api', attachCafeAndBranch);
+app.use('/api', validateTenant);
 
 // Mount Routes
 app.use('/api/orders', orderRoutes);

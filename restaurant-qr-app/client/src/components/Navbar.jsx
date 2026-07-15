@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getCafeInfo, getAssetUrl } from '../services/api';
 
-const Navbar = ({ tableNumber, cartItemCount }) => {
+const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
   const [cafeInfo, setCafeInfo] = useState(null);
 
   useEffect(() => {
     const fetchCafe = async () => {
       try {
-        const id = sessionStorage.getItem('cafeId') || 'CD001';
+        const id = cafeId || new URLSearchParams(window.location.search).get('cafeId') || sessionStorage.getItem('cafeId');
+        if (!id) return;
         const res = await getCafeInfo(id);
         if (res.success) {
           setCafeInfo(res.data);
@@ -18,7 +19,7 @@ const Navbar = ({ tableNumber, cartItemCount }) => {
       }
     };
     fetchCafe();
-  }, []);
+  }, [cafeId]);
 
   const logoSrc = cafeInfo?.logoUrl ? getAssetUrl(cafeInfo.logoUrl) : null;
 

@@ -49,7 +49,9 @@ const OrderHistory = ({ cafeId }) => {
   useEffect(() => {
     const fetchCafe = async () => {
       try {
-        const id = cafeId || sessionStorage.getItem('cafeId') || 'CD001';
+        const searchParams = new URLSearchParams(window.location.search);
+        const id = cafeId || searchParams.get('cafeId') || sessionStorage.getItem('cafeId');
+        if (!id) return;
         const res = await getCafeInfo(id);
         if (res.success) {
           setCafeInfo(res.data);
@@ -126,9 +128,10 @@ const OrderHistory = ({ cafeId }) => {
     const fetchActiveOrders = async () => {
       // Sync session with localStorage to restore tracking on tab reload/re-scan
       const syncSessionWithLocalStorage = () => {
-        const c = sessionStorage.getItem('cafeId') || 'CD001';
-        const b = sessionStorage.getItem('branchId') || 'default';
-        const t = sessionStorage.getItem('tableNumber') || 'default';
+        const searchParams = new URLSearchParams(window.location.search);
+        const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
+        const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
+        const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || 'default';
         const activeKey = `activeOrderIds_${c}_${b}_${t}`;
         const completedKey = `completedOrderIds_${c}_${b}_${t}`;
         
@@ -204,9 +207,10 @@ const OrderHistory = ({ cafeId }) => {
       sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
       sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
       
-      const c = sessionStorage.getItem('cafeId') || 'CD001';
-      const b = sessionStorage.getItem('branchId') || 'default';
-      const t = sessionStorage.getItem('tableNumber') || 'default';
+      const searchParams = new URLSearchParams(window.location.search);
+      const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
+      const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
+      const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || 'default';
       localStorage.setItem(`activeOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedIds));
       localStorage.setItem(`completedOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedCompIds));
 
@@ -225,9 +229,10 @@ const OrderHistory = ({ cafeId }) => {
 
   // Socket listener for real-time order status and payment updates
   useEffect(() => {
-    const c = sessionStorage.getItem('cafeId') || 'CD001';
-    const b = sessionStorage.getItem('branchId') || 'default';
-    const t = sessionStorage.getItem('tableNumber') || 'default';
+    const searchParams = new URLSearchParams(window.location.search);
+    const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
+    const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
+    const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || 'default';
     connectSocket(c, b);
 
     const handleOrderUpdated = (updatedOrder) => {
@@ -342,9 +347,10 @@ const OrderHistory = ({ cafeId }) => {
         sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
         sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
         
-        const c = sessionStorage.getItem('cafeId') || 'CD001';
-        const b = sessionStorage.getItem('branchId') || 'default';
-        const t = sessionStorage.getItem('tableNumber') || 'default';
+        const searchParams = new URLSearchParams(window.location.search);
+        const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
+        const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
+        const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || 'default';
         localStorage.setItem(`activeOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedIds));
         localStorage.setItem(`completedOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedCompIds));
 
@@ -674,10 +680,9 @@ const OrderHistory = ({ cafeId }) => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {completedOrders.map((order) => {
-              const itemsSubtotal = order.items.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
-              const gstRate = cafeInfo?.gstRate || 0;
-              const platformCharge = cafeInfo?.serviceChargeRate || 0;
-              const gstAmount = itemsSubtotal * (gstRate / 100);
+              const itemsSubtotal = order.subtotal || order.items.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
+              const finalTax = order.tax !== undefined ? order.tax : 0;
+              const finalPlatformCharge = order.totalAmount - itemsSubtotal - finalTax;
               const hasReviewed = submittedReviews.includes(order._id);
 
               return (
@@ -726,8 +731,8 @@ const OrderHistory = ({ cafeId }) => {
 
                     <div style={{ borderTop: '1px dashed #33271c', paddingTop: '8px', textAlign: 'right', fontSize: '11px' }}>
                       <div>Subtotal: ₹{itemsSubtotal.toFixed(2)}</div>
-                      {gstRate > 0 && <div>GST ({gstRate}%): ₹{gstAmount.toFixed(2)}</div>}
-                      {platformCharge > 0 && <div>Platform Charge: ₹{platformCharge.toFixed(2)}</div>}
+                      {finalTax > 0 && <div>GST: ₹{finalTax.toFixed(2)}</div>}
+                      {finalPlatformCharge > 0.01 && <div>Platform Charge: ₹{finalPlatformCharge.toFixed(2)}</div>}
                       <div style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '6px' }}>
                         GRAND TOTAL: ₹{order.totalAmount.toFixed(2)}
                       </div>

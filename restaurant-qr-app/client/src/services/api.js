@@ -88,12 +88,14 @@ API.interceptors.request.use(
     if (isCustomerView) {
       // In customer view, strictly prefer the branchId and cafeId from the QR URL
       // (which App.jsx stores in sessionStorage). Never use localStorage here.
-      activeBranchId = sessionStorage.getItem('branchId') || localStorage.getItem('activeBranchId');
-      activeCafeId = sessionStorage.getItem('cafeId') || localStorage.getItem('activeCafeId');
+      const searchParams = new URLSearchParams(window.location.search);
+      activeBranchId = searchParams.get('branchId') || sessionStorage.getItem('branchId') || localStorage.getItem('activeBranchId');
+      activeCafeId = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || localStorage.getItem('activeCafeId');
     } else {
       // In owner/staff dashboards, prefer the active branch and cafe from localStorage
-      activeBranchId = localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId');
-      activeCafeId = localStorage.getItem('activeCafeId') || sessionStorage.getItem('cafeId');
+      const searchParams = new URLSearchParams(window.location.search);
+      activeBranchId = localStorage.getItem('activeBranchId') || searchParams.get('branchId') || sessionStorage.getItem('branchId');
+      activeCafeId = localStorage.getItem('activeCafeId') || searchParams.get('cafeId') || sessionStorage.getItem('cafeId');
     }
     
     if (activeBranchId) {

@@ -17,9 +17,10 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
   useEffect(() => {
     // Sync session with localStorage to restore tracking on tab reload/re-scan
     const syncSessionWithLocalStorage = () => {
-      const c = sessionStorage.getItem('cafeId') || 'CD001';
-      const b = sessionStorage.getItem('branchId') || 'default';
-      const t = sessionStorage.getItem('tableNumber') || 'default';
+      const searchParams = new URLSearchParams(window.location.search);
+      const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
+      const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
+      const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || 'default';
       const activeKey = `activeOrderIds_${c}_${b}_${t}`;
       const completedKey = `completedOrderIds_${c}_${b}_${t}`;
       

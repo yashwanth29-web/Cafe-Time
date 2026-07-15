@@ -41,7 +41,8 @@ const SaaSLayout = ({ children }) => {
 
     const fetchCafe = async () => {
       try {
-        const id = user?.cafeId || sessionStorage.getItem('cafeId') || 'CD001';
+        const id = user?.cafeId || sessionStorage.getItem('cafeId');
+        if (!id) return;
         const res = await getCafeInfo(id);
         if (res.success) {
           setCafeInfo(res.data);

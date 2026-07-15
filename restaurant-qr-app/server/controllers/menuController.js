@@ -8,7 +8,10 @@ const socket = require('../socket');
 // @access  Public
 const getMenuItems = async (req, res, next) => {
   try {
-    const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
+    const cafeId = req.cafeId || req.query.cafeId || (req.user && req.user.cafeId);
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || req.query.branchId || 'default';
     console.log(`[DEBUG getMenuItems] Request for cafeId: ${cafeId}, branchId: ${branchId}`);
 
@@ -69,7 +72,7 @@ const getMenuItems = async (req, res, next) => {
       }
     } else {
       // Completely independent tenant
-      const query = { cafeId };
+      const query = { cafeId, isHidden: { $ne: true } };
       if (branchId !== 'all') {
         query.branchId = branchId;
       }
@@ -100,7 +103,10 @@ const getMenuItems = async (req, res, next) => {
 const createMenuItem = async (req, res, next) => {
   try {
     const { name, price, originalPrice, category, description, available, isCombo, image, recipe, preparationTime } = req.body;
-    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+    const cafeId = req.cafeId || (req.user && req.user.cafeId);
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || 'default';
 
     // Simple validation
@@ -174,7 +180,10 @@ const updateMenuItem = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
-    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+    const cafeId = req.cafeId || (req.user && req.user.cafeId);
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || 'default';
 
     // Strip immutable or restricted tenant fields to prevent Cast/MongoServerError on update
@@ -308,7 +317,10 @@ const updateMenuItem = async (req, res, next) => {
 const deleteMenuItem = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const cafeId = (req.user && req.user.cafeId) || 'CD001';
+    const cafeId = req.cafeId || (req.user && req.user.cafeId);
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || 'default';
 
     // Find regardless of cafeId/branchId to check if it's a global master item

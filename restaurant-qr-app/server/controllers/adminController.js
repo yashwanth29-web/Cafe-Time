@@ -1419,16 +1419,22 @@ const appendLegacyFallback = async (order, branchMap = null) => {
 
   if (!orderObj.branchId || !orderObj.branchName) {
     let defaultBranch;
-    const targetCafeId = orderObj.cafeId || 'CD001';
-    if (branchMap && branchMap.has(targetCafeId)) {
+    const targetCafeId = orderObj.cafeId;
+    if (branchMap && targetCafeId && branchMap.has(targetCafeId)) {
       defaultBranch = branchMap.get(targetCafeId);
-    } else {
+    } else if (targetCafeId) {
       defaultBranch = await getCachedBranch(`cafe:${targetCafeId}`, () => Branch.findOne({ cafeId: targetCafeId }).lean()) || {
         _id: null,
-        branchName: 'DR . Chai Cafe',
-        address: 'Comrade Puchalapalli Sundarayya Road, Yerrapalem'
+        branchName: 'Primary Location',
+        address: ''
       };
       if (branchMap) branchMap.set(targetCafeId, defaultBranch);
+    } else {
+      defaultBranch = {
+        _id: null,
+        branchName: 'Primary Location',
+        address: ''
+      };
     }
     orderObj.branchId = orderObj.branchId || defaultBranch.branchId || 'default';
     orderObj.branchName = orderObj.branchName || defaultBranch.branchName;

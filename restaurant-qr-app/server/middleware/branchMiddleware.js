@@ -63,23 +63,41 @@ const attachCafeAndBranch = async (req, res, next) => {
       path.startsWith('/auth') ||
       path.startsWith('/superadmin') ||
       path.startsWith('/health') ||
-      path.startsWith('/cafe') ||
       path.includes('/branches');
 
     // For public order creation (POST /orders from QR scans), the request body's
     // branchId is the authoritative source (set from the QR code parameters stored
-    // in sessionStorage). The x-branch-id header may come from stale localStorage
-    // if an owner previously used the same browser for their dashboard.
-    // We detect QR order requests by path + method, not by auth header, because
-    // the Axios interceptor always sends a token if one exists in localStorage.
+    // in sessionStorage).
     const isOrderCreation = req.method === 'POST' && (path === '/orders' || path === '/orders/');
     let cafeId = req.headers['x-cafe-id'] || req.query?.cafeId || req.body?.cafeId;
     let branchId;
     if (isOrderCreation && req.body?.branchId) {
-      // For order creation, body branchId takes priority (QR source of truth)
       branchId = req.body.branchId;
     } else {
-      branchId = req.headers['x-branch-id'] || req.query?.branchId || req.body?.branchId || 'default';
+      branchId = req.headers['x-branch-id'] || req.query?.branchId || req.body?.branchId;
+    }
+
+    // Try to extract cafeId from URL path parameter for Cafe details endpoint e.g., /api/cafe/CD002
+    if (!cafeId && path.startsWith('/cafe/')) {
+      const parts = path.split('/');
+      const potentialId = parts[2];
+      if (potentialId && potentialId !== 'payment-info' && potentialId !== 'heartbeat') {
+        cafeId = potentialId;
+      }
+    }
+
+    // Try to extract cafeId and branchId from order if order ID is in path
+    if (path.startsWith('/orders/')) {
+      const parts = path.split('/');
+      const orderId = parts[2];
+      if (orderId && mongoose.isValidObjectId(orderId)) {
+        const Order = require('../models/Order');
+        const orderDoc = await Order.findById(orderId).lean();
+        if (orderDoc) {
+          cafeId = cafeId || orderDoc.cafeId;
+          branchId = branchId || orderDoc.branchId;
+        }
+      }
     }
 
     // If req.user is already set by protect middleware, use it
@@ -102,34 +120,14 @@ const attachCafeAndBranch = async (req, res, next) => {
             req.user = user; // Set it so subsequent handlers have it
           }
         } catch (e) {
-          // Token verification failed or expired - ignore, user remains undefined
+          // Token verification failed or expired - ignore
         }
       }
-    }
-
-    if (isExempt) {
-      if (user) {
-        cafeId = cafeId || user.cafeId || 'CD001';
-        const role = (user.role || '').toLowerCase();
-        if (['manager', 'chef', 'waiter', 'cashier', 'staff'].includes(role)) {
-          branchId = branchId || user.assignedBranch || 'default';
-        }
-      } else {
-        cafeId = cafeId || 'CD001';
-        branchId = branchId || 'default';
-      }
-      runWithContext({ cafeId, branchId }, () => {
-        req.cafeId = cafeId;
-        req.branchId = branchId;
-        next();
-      });
-      return;
     }
 
     if (user) {
-      cafeId = user.cafeId || 'CD001';
+      cafeId = cafeId || user.cafeId;
       const role = (user.role || '').toLowerCase();
-      
       if (role === 'super_admin') {
         // Super admins bypass branch checks entirely
         runWithContext({ cafeId, branchId }, () => {
@@ -141,26 +139,34 @@ const attachCafeAndBranch = async (req, res, next) => {
       }
 
       if (['manager', 'chef', 'waiter', 'cashier', 'staff'].includes(role)) {
-        // Staff are strictly locked to their assigned branch - auto-coerce to prevent stale localStorage blocking
-        const assignedBranch = user.assignedBranch || 'default';
-        branchId = assignedBranch;
-      } else if (['owner', 'admin'].includes(role)) {
-        // Owners/admins must own the branch they are requesting
-        // Checked via DB/cache query below (making sure branch exists under user's cafeId)
+        branchId = user.assignedBranch || branchId;
       }
-    } else {
-      if (!cafeId) {
-        cafeId = 'CD001';
-      }
+    }
+
+    // Set branchId default to 'default' only if cafeId is set and branchId is not
+    if (cafeId && !branchId) {
+      branchId = 'default';
+    }
+
+    if (isExempt) {
+      runWithContext({ cafeId, branchId }, () => {
+        req.cafeId = cafeId;
+        req.branchId = branchId;
+        next();
+      });
+      return;
     }
 
     // Unless exempt, verify that the branch exists and is active under cafeId
     if (!isExempt) {
+      if (!cafeId) {
+        return res.status(400).json({ success: false, message: 'Missing cafeId context' });
+      }
       const isOwnerOrAdmin = user && ['owner', 'admin'].includes((user.role || '').toLowerCase());
       if (branchId === 'all' && isOwnerOrAdmin) {
         // Owners/admins bypass branch existence/active check for 'all' branch selection
       } else if (branchId === 'default') {
-        // Default fallback branch is always allowed to prevent blocking new tenants before setup
+        // Default fallback branch
       } else {
         const branchStatus = await verifyBranchActive(cafeId, branchId);
         if (!branchStatus.exists) {

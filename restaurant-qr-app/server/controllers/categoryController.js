@@ -26,7 +26,10 @@ const seedDefaultCategories = async (cafeId, branchId = 'default') => {
 // @access  Public
 const getCategories = async (req, res, next) => {
   try {
-    const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
+    const cafeId = req.cafeId || req.query.cafeId || (req.user && req.user.cafeId);
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || req.query.branchId || 'default';
     const cached = menuCache.getCategories(cafeId, branchId);
     if (cached) {
@@ -82,7 +85,10 @@ const getCategories = async (req, res, next) => {
 const createCategory = async (req, res, next) => {
   try {
     const { name } = req.body;
-    const cafeId = req.user.cafeId || 'CD001';
+    const cafeId = req.cafeId || req.user.cafeId;
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || 'default';
 
     if (!name) {
@@ -128,7 +134,10 @@ const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
-    const cafeId = req.user.cafeId || 'CD001';
+    const cafeId = req.cafeId || req.user.cafeId;
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || 'default';
 
     if (!name) {
@@ -183,7 +192,10 @@ const updateCategory = async (req, res, next) => {
 const deleteCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const cafeId = req.user.cafeId || 'CD001';
+    const cafeId = req.cafeId || req.user.cafeId;
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || 'default';
 
     let finalBranchId = branchId;
@@ -225,7 +237,10 @@ const deleteCategory = async (req, res, next) => {
 const reorderCategories = async (req, res, next) => {
   try {
     const { orderedIds } = req.body;
-    const cafeId = req.user.cafeId || 'CD001';
+    const cafeId = req.cafeId || req.user.cafeId;
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const branchId = req.branchId || 'default';
 
     if (!orderedIds || !Array.isArray(orderedIds)) {

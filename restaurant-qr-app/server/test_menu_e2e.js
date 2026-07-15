@@ -89,7 +89,7 @@ async function runTests() {
 
     console.log(`\n--- Testing ADD (Custom Local Item) ---`);
     const addRes = await axios.post(API_URL, 
-      { name: 'TEST_ITEM_123', price: 50.00, category: 'Test' }, 
+      { name: 'TEST_ITEM_123', price: 50.00, category: 'Test', description: 'Test item description' }, 
       reqConfig(TEST_CAFE, TEST_BRANCH)
     );
     console.log(`PASS: Add API called. Success: ${addRes.data.success}`);

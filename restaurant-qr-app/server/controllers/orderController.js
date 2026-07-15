@@ -50,7 +50,7 @@ const emitOrderUpdated = async (order, branchMap = null) => {
       }
     }
     const orderIdStr = String(order._id || '');
-    const cafeId = order.cafeId || 'CD001';
+    const cafeId = order.cafeId;
 
     // Broadcast standard events (camelCase) to standard room names (strictly isolated with cafeId)
     if (branchStr) {
@@ -114,7 +114,7 @@ const appendLegacyFallback = async (order, branchMap = null) => {
     // Legacy fallback
     // Find the default branch or first branch of the cafe
     let defaultBranch;
-    const targetCafeId = orderObj.cafeId || 'CD001';
+    const targetCafeId = orderObj.cafeId;
     if (branchMap && branchMap.has(targetCafeId)) {
       defaultBranch = branchMap.get(targetCafeId);
     } else {
@@ -131,7 +131,7 @@ const appendLegacyFallback = async (order, branchMap = null) => {
   }
 
   if (!orderObj.cafeName || !orderObj.cafeLogo || !orderObj.cafeGstNumber) {
-    const targetCafeId = orderObj.cafeId || 'CD001';
+    const targetCafeId = orderObj.cafeId;
     const defaultCafe = await getCachedBranch(`cafeInfo:${targetCafeId}`, () => Cafe.findOne({ cafeId: targetCafeId }).lean());
     if (defaultCafe) {
       orderObj.cafeName = orderObj.cafeName || defaultCafe.name || 'Our Cafe';
@@ -194,7 +194,10 @@ const createOrder = async (req, res, next) => {
       razorpayPaymentId
     } = req.body;
 
-    const targetCafeId = cafeId || 'CD001';
+    const targetCafeId = cafeId;
+    if (!targetCafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     const Cafe = require('../models/Cafe');
     const targetCafe = await Cafe.findOne({ cafeId: targetCafeId });
     if (targetCafe && targetCafe.isDeleted) {
@@ -215,7 +218,10 @@ const createOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Branch information missing' });
     }
 
-    const activeCafeId = cafeId || 'CD001';
+    const activeCafeId = cafeId;
+    if (!activeCafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
 
     // 2. Cafe Validation
     const resolvedCafe = await Cafe.findOne({ cafeId: activeCafeId }).lean();
@@ -307,9 +313,6 @@ const createOrder = async (req, res, next) => {
 
       // Find the menu item bypassing branch filter
       let dbItem = await MenuItem.findOne({ _id: itemId, cafeId: activeCafeId }, null, { bypassBranchFilter: true }).lean();
-      if (!dbItem) {
-        dbItem = await MenuItem.findOne({ _id: itemId, cafeId: 'CD001', branchId: 'default' }, null, { bypassBranchFilter: true }).lean();
-      }
 
       if (!dbItem) {
         return res.status(400).json({ success: false, message: `Menu item "${item.name || itemId}" not found` });
@@ -455,7 +458,10 @@ const createOrder = async (req, res, next) => {
 const getOrders = async (req, res, next) => {
   try {
     const filterQuery = {};
-    const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
+    const cafeId = req.cafeId || req.query.cafeId || (req.user && req.user.cafeId);
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     if (cafeId) filterQuery.cafeId = cafeId;
 
     const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
@@ -530,7 +536,10 @@ const getOrders = async (req, res, next) => {
 const getOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const cafeId = req.query.cafeId || req.cafeId || 'CD001';
+    const cafeId = req.cafeId || req.query.cafeId || (req.user && req.user.cafeId);
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
     
     let order = await Order.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true }).lean();
     if (!order) {
@@ -558,7 +567,10 @@ const updateOrderStatus = async (req, res, next) => {
     const isOwnerOrAdmin = ['owner', 'admin', 'super_admin'].includes(userRole);
 
     // Strict Branch/Cafe Isolation Query
-    const query = { _id: id, cafeId: req.cafeId || 'CD001' };
+    if (!req.cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId' });
+    }
+    const query = { _id: id, cafeId: req.cafeId };
     if (!isOwnerOrAdmin) {
       query.branchId = req.branchId || 'default';
     }
@@ -569,12 +581,12 @@ const updateOrderStatus = async (req, res, next) => {
     }
 
     const activeBranchId = order.branchId || req.branchId || 'default';
-    const branch = await getCachedBranch(`mode:${activeBranchId}:${req.cafeId || 'CD001'}`, () => Branch.findOne({ 
+    const branch = await getCachedBranch(`mode:${activeBranchId}:${req.cafeId}`, () => Branch.findOne({ 
       $or: [
         { branchId: activeBranchId },
         { _id: mongoose.isValidObjectId(activeBranchId) ? activeBranchId : undefined }
       ],
-      cafeId: req.cafeId || 'CD001'
+      cafeId: req.cafeId
     }).lean());
     
     const isUnified = branch ? !!branch.unifiedStaffMode : false;

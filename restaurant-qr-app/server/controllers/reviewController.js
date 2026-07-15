@@ -24,8 +24,8 @@ const createReview = async (req, res) => {
     }));
 
     const newReview = new Review({
-      cafeId: order.cafeId || 'CD001',
-      branchId: order.branchId || 'default',
+      cafeId: order.cafeId,
+      branchId: order.branchId,
       orderId,
       customerName: order.customerName || 'Anonymous',
       rating,

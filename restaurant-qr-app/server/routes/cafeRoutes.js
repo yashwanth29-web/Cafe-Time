@@ -3,6 +3,29 @@ const router = express.Router();
 const Cafe = require('../models/Cafe');
 const User = require('../models/User');
 
+// Get payment config (UPI details) for branch/cafe (Accessible to staff)
+router.get('/payment-info/config', async (req, res) => {
+  try {
+    const PaymentConfig = require('../models/PaymentConfig');
+    // Ensure we have cafeId and branchId from middleware
+    const cafeId = req.cafeId;
+    const branchId = req.branchId;
+
+    if (!cafeId || !branchId) {
+       return res.status(400).json({ success: false, message: 'Missing cafeId or branchId context' });
+    }
+
+    const config = await PaymentConfig.findOne({ cafeId, branchId });
+    if (!config) {
+      return res.status(200).json({ success: true, data: { enableUpi: false, upiId: '', taxRate: 0, platformCharge: 0 } });
+    }
+    
+    return res.status(200).json({ success: true, data: { enableUpi: config.enableUpi, upiId: config.upiId, taxRate: config.taxRate, platformCharge: config.platformCharge } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error fetching payment info', error: error.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const hasOwnerIdField = Cafe.schema.paths.ownerId !== undefined;
@@ -52,29 +75,6 @@ router.get('/:id', async (req, res) => {
     return res.status(200).json({ success: true, data: cafeData });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error fetching cafe details', error: error.message });
-  }
-});
-
-// Get payment config (UPI details) for branch/cafe (Accessible to staff)
-router.get('/payment-info/config', async (req, res) => {
-  try {
-    const PaymentConfig = require('../models/PaymentConfig');
-    // Ensure we have cafeId and branchId from middleware
-    const cafeId = req.cafeId;
-    const branchId = req.branchId;
-
-    if (!cafeId || !branchId) {
-       return res.status(400).json({ success: false, message: 'Missing cafeId or branchId context' });
-    }
-
-    const config = await PaymentConfig.findOne({ cafeId, branchId });
-    if (!config) {
-      return res.status(200).json({ success: true, data: { enableUpi: false, upiId: '' } });
-    }
-    
-    return res.status(200).json({ success: true, data: { enableUpi: config.enableUpi, upiId: config.upiId } });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'Server error fetching payment info', error: error.message });
   }
 });
 

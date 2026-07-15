@@ -38,17 +38,23 @@ function AppContent() {
 
   // Synchronously initialize table number state from query param or session storage
   const [tableNumber, setTableNumber] = useState(() => {
-    return tableParam || sessionStorage.getItem('tableNumber') || '';
+    const val = tableParam || sessionStorage.getItem('tableNumber') || '';
+    if (tableParam) sessionStorage.setItem('tableNumber', tableParam);
+    return val;
   });
 
   // Synchronously initialize cafe ID state from query param or session storage
   const [cafeId, setCafeId] = useState(() => {
-    return cafeIdParam || sessionStorage.getItem('cafeId') || '';
+    const val = cafeIdParam || sessionStorage.getItem('cafeId') || '';
+    if (cafeIdParam) sessionStorage.setItem('cafeId', cafeIdParam);
+    return val;
   });
 
   // Synchronously initialize branch ID state from query param or session storage
   const [branchId, setBranchId] = useState(() => {
-    return branchIdParam || sessionStorage.getItem('branchId') || '';
+    const val = branchIdParam || sessionStorage.getItem('branchId') || '';
+    if (branchIdParam) sessionStorage.setItem('branchId', branchIdParam);
+    return val;
   });
 
   // Save source param to session storage if present
@@ -154,7 +160,7 @@ function AppContent() {
   return (
     <div className={`app-container${isAdminOrAuthRoute ? ' admin-no-padding' : ''}`}>
       {!isAdminOrAuthRoute && (
-        <Navbar tableNumber={tableNumber} cartItemCount={totalItemCount} />
+        <Navbar tableNumber={tableNumber} cafeId={cafeId} cartItemCount={totalItemCount} />
       )}
       
       <main className={`main-content${isAdminOrAuthRoute ? ' admin-full-width' : ''}`}>
@@ -191,7 +197,7 @@ function AppContent() {
             } 
           />
 
-          <Route path="/history" element={<OrderHistory cafeId={cafeIdParam || 'CD001'} />} />
+          <Route path="/history" element={<OrderHistory cafeId={cafeId || sessionStorage.getItem('cafeId') || ''} />} />
 
           <Route path="/login" element={<Login />} />
 

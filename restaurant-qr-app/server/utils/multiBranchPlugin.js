@@ -11,8 +11,7 @@ module.exports = function multiBranchPlugin(schema) {
     schema.add({
       cafeId: {
         type: String,
-        required: true,
-        default: 'CD001'
+        required: true
       }
     });
   }
@@ -20,8 +19,7 @@ module.exports = function multiBranchPlugin(schema) {
     schema.add({
       branchId: {
         type: String,
-        required: true,
-        default: 'default'
+        required: true
       }
     });
   }
