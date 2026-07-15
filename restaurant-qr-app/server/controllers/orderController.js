@@ -143,6 +143,14 @@ const appendLegacyFallback = async (order, branchMap = null) => {
     }
   }
 
+  if (!orderObj.invoiceId || !orderObj.receiptId || !orderObj.kotId || !orderObj.potId) {
+    const hexId = String(orderObj._id).slice(-6).toUpperCase();
+    orderObj.invoiceId = orderObj.invoiceId || 'INV-' + hexId;
+    orderObj.receiptId = orderObj.receiptId || 'REC-' + hexId;
+    orderObj.kotId = orderObj.kotId || 'KOT-' + hexId;
+    orderObj.potId = orderObj.potId || 'POT-' + hexId;
+  }
+
   if (!orderObj.grandTotal) {
     orderObj.grandTotal = orderObj.totalAmount || 0;
     orderObj.subtotal = Number((orderObj.grandTotal / 1.05).toFixed(2));
@@ -215,6 +223,21 @@ const createOrder = async (req, res) => {
     const Cafe = require('../models/Cafe');
     const resolvedCafe = await Cafe.findOne({ cafeId: activeCafeId }).lean();
 
+    let resolvedOwnerId = null;
+    if (resolvedCafe) {
+      if (resolvedCafe.ownerId) {
+        resolvedOwnerId = resolvedCafe.ownerId;
+      } else if (resolvedCafe.ownerEmail) {
+        const User = require('../models/User');
+        const ownerUser = await User.findOne({ email: resolvedCafe.ownerEmail, role: { $in: ['admin', 'owner', 'ADMIN', 'OWNER'] } }).lean();
+        if (ownerUser) {
+          resolvedOwnerId = ownerUser._id;
+        }
+      }
+    }
+
+    const uniqueId = new mongoose.Types.ObjectId().toString().slice(-6).toUpperCase();
+
     // Build the order document
     const newOrder = new Order({
       cafeId: activeCafeId,
@@ -226,6 +249,13 @@ const createOrder = async (req, res) => {
       cafeLogo: resolvedCafe ? resolvedCafe.logoUrl : '',
       cafeGstNumber: resolvedCafe ? resolvedCafe.gstNumber : '',
       cafeSupportNumber: resolvedCafe ? resolvedCafe.supportNumber : '',
+      ownerId: resolvedOwnerId,
+      customerId: customerPhone || customerEmail || '',
+      invoiceId: 'INV-' + uniqueId,
+      receiptId: 'REC-' + uniqueId,
+      kotId: 'KOT-' + uniqueId,
+      potId: 'POT-' + uniqueId,
+      paymentId: razorpayPaymentId || '',
       tableNumber,
       items,
       totalAmount,

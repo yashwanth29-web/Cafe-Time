@@ -94,11 +94,11 @@ export const printPOSReceipt = (order, user = null, cafe = null, branch = null) 
           <table class="info-table">
             <tr>
               <td class="bold">Invoice No:</td>
-              <td>${order._id.toUpperCase()}</td>
+              <td>${(order.invoiceId || order._id).toUpperCase()}</td>
             </tr>
             <tr>
               <td class="bold">Order No:</td>
-              <td>#${order._id.slice(-6).toUpperCase()}</td>
+              <td>#${(order.receiptId || order._id.slice(-6)).toUpperCase()}</td>
             </tr>
             <tr>
               <td class="bold">Date/Time:</td>
@@ -267,7 +267,7 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
           <table class="meta-table">
             <tr>
               <td class="bold">KOT No:</td>
-              <td>#${order._id.slice(-6).toUpperCase()}</td>
+              <td>${(order.kotId || ('KOT-' + order._id.slice(-6))).toUpperCase()}</td>
             </tr>
             <tr>
               <td class="bold">Table No:</td>

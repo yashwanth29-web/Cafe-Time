@@ -99,6 +99,35 @@ const OrderSchema = new mongoose.Schema({
     ref: 'Branch',
     default: null
   },
+  ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  customerId: {
+    type: String,
+    default: ''
+  },
+  invoiceId: {
+    type: String,
+    default: ''
+  },
+  receiptId: {
+    type: String,
+    default: ''
+  },
+  kotId: {
+    type: String,
+    default: ''
+  },
+  potId: {
+    type: String,
+    default: ''
+  },
+  paymentId: {
+    type: String,
+    default: ''
+  },
   branchName: {
     type: String,
     default: ''
