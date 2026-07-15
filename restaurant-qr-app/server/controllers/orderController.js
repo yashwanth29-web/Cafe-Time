@@ -245,52 +245,113 @@ const createOrder = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'This branch is currently inactive' });
     }
 
-    // 4. Table Validation
+    // 4. Table Validation — 4-strategy progressive lookup for multi-branch resilience
     const activeTableNumber = String(tableNumber).trim();
     if (activeTableNumber !== 'Takeaway' && activeTableNumber !== 'Walk-in') {
-      // Use bypassBranchFilter to prevent the multiBranchPlugin from injecting
-      // the request context's branchId into this query. The context branchId comes
-      // from the x-branch-id header which may differ from the QR-encoded branchId
-      // when an owner tests QR codes from their own browser.
+
+      // Strategy 1: exact match — cafeId + QR-resolved branchId
       let opConfig = await OperationalConfig.findOne(
         { cafeId: activeCafeId, branchId: resolvedBranch.branchId },
         null,
         { bypassBranchFilter: true }
       ).lean();
 
-      // Fallback: if no branch-specific config exists, try the 'default' branch config.
-      // This handles cases where tables were configured before multi-branch was set up.
+      // Strategy 2: fallback to 'default' branch config
+      // Handles setups configured before multi-branch was enabled
       if (!opConfig && resolvedBranch.branchId !== 'default') {
         opConfig = await OperationalConfig.findOne(
           { cafeId: activeCafeId, branchId: 'default' },
           null,
           { bypassBranchFilter: true }
         ).lean();
+        if (opConfig) {
+          console.warn('[ORDER] Strategy 2: Using default-branch OperationalConfig', {
+            cafeId: activeCafeId, requestedBranch: resolvedBranch.branchId
+          });
+        }
       }
 
-      if (!opConfig) {
-        console.error('[ORDER] Table validation failed - no OperationalConfig found', {
-          cafeId: activeCafeId,
-          branchId: resolvedBranch.branchId,
-          tableNumber: activeTableNumber
-        });
-        return res.status(400).json({ success: false, message: 'Operational configuration not found for this branch' });
+      // Strategy 3: search ALL configs for this cafe — find any that contains this table.
+      // Handles data-migration cases: ObjectId-vs-string mismatch, legacy branchId, etc.
+      if (!opConfig || (opConfig.tables && opConfig.tables.length === 0)) {
+        const allCafeConfigs = await OperationalConfig.find(
+          { cafeId: activeCafeId },
+          null,
+          { bypassBranchFilter: true }
+        ).lean();
+
+        if (allCafeConfigs && allCafeConfigs.length > 0) {
+          // Find whichever branch config actually contains this table number
+          const matchingConfig = allCafeConfigs.find(cfg =>
+            cfg.tables && cfg.tables.some(t =>
+              String(t.label).trim() === activeTableNumber ||
+              String(t.id).trim() === activeTableNumber
+            )
+          );
+
+          if (matchingConfig) {
+            // Found the table in a different branchId's config — use it
+            opConfig = matchingConfig;
+            console.warn('[ORDER] Strategy 3: Table found in alternate branch config', {
+              cafeId: activeCafeId,
+              requestedBranch: resolvedBranch.branchId,
+              foundInBranch: matchingConfig.branchId,
+              table: activeTableNumber
+            });
+          } else {
+            // Configs exist but the table is genuinely absent from ALL of them
+            console.error('[ORDER] Table not found in any branch config for this cafe', {
+              requestedTable: activeTableNumber,
+              cafeId: activeCafeId,
+              bodyBranchId: branchId,
+              resolvedBranchId: resolvedBranch.branchId,
+              headerBranchId: req.headers['x-branch-id'],
+              contextBranchId: req.branchId,
+              configsFound: allCafeConfigs.map(c => ({
+                branchId: c.branchId,
+                tables: (c.tables || []).map(t => ({ id: t.id, label: t.label }))
+              }))
+            });
+            return res.status(404).json({
+              success: false,
+              message: `Table ${activeTableNumber} does not exist in this branch`
+            });
+          }
+        } else {
+          // Strategy 4: No OperationalConfig at all for this cafe.
+          // Tables haven't been configured yet — skip validation and allow the order.
+          // The QR code itself (with cafeId + branchId + tableNumber) is the source of truth.
+          console.warn('[ORDER] Strategy 4: No OperationalConfig for cafe — skipping table validation', {
+            cafeId: activeCafeId,
+            branchId: resolvedBranch.branchId,
+            tableNumber: activeTableNumber
+          });
+          opConfig = null;
+        }
       }
 
-      const tableExists = opConfig.tables.some(t => String(t.label).trim() === activeTableNumber || String(t.id).trim() === activeTableNumber);
-      if (!tableExists) {
-        // Diagnostic logging: this should never happen for valid QR orders
-        console.error('[ORDER] Table validation FAILED - table not found in opConfig', {
-          requestedTable: activeTableNumber,
-          cafeId: activeCafeId,
-          bodyBranchId: branchId,
-          resolvedBranchId: resolvedBranch.branchId,
-          opConfigBranchId: opConfig.branchId,
-          availableTables: opConfig.tables.map(t => ({ id: t.id, label: t.label })),
-          headerBranchId: req.headers['x-branch-id'],
-          contextBranchId: req.branchId
-        });
-        return res.status(404).json({ success: false, message: `Table ${activeTableNumber} does not exist in this branch` });
+      // Final check: if we found a config with tables, validate the table exists in it
+      if (opConfig && opConfig.tables && opConfig.tables.length > 0) {
+        const tableExists = opConfig.tables.some(t =>
+          String(t.label).trim() === activeTableNumber ||
+          String(t.id).trim() === activeTableNumber
+        );
+        if (!tableExists) {
+          console.error('[ORDER] Table not found in matched config', {
+            requestedTable: activeTableNumber,
+            cafeId: activeCafeId,
+            bodyBranchId: branchId,
+            resolvedBranchId: resolvedBranch.branchId,
+            opConfigBranchId: opConfig.branchId,
+            availableTables: (opConfig.tables || []).map(t => ({ id: t.id, label: t.label })),
+            headerBranchId: req.headers['x-branch-id'],
+            contextBranchId: req.branchId
+          });
+          return res.status(404).json({
+            success: false,
+            message: `Table ${activeTableNumber} does not exist in this branch`
+          });
+        }
       }
     }
 
