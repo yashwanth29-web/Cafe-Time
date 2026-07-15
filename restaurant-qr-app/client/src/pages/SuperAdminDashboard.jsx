@@ -322,13 +322,13 @@ const SuperAdminDashboard = () => {
           backdrop-filter: blur(4px);
         }
         .modal-card {
-          background: #FAF6F0;
-          border: 1px solid #E6D5C3;
+          background: var(--bg-card);
+          border: 1px solid var(--color-border);
           border-radius: 16px;
           width: 90%;
           max-width: 600px;
           padding: 25px;
-          color: #3E2723;
+          color: var(--color-text-primary);
           box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3), 0 10px 10px -5px rgba(0,0,0,0.1);
           max-height: 85vh;
           overflow-y: auto;
@@ -340,8 +340,8 @@ const SuperAdminDashboard = () => {
           margin-bottom: 24px;
         }
         .stat-card {
-          background: #FAF6F0;
-          border: 1px solid #E6D5C3;
+          background: var(--bg-card);
+          border: 1px solid var(--color-border);
           padding: 16px;
           border-radius: 12px;
           text-align: left;
@@ -349,7 +349,7 @@ const SuperAdminDashboard = () => {
         }
         .stat-card h3 {
           margin: 0;
-          color: #8B6E58;
+          color: var(--color-text-secondary);
           font-size: 0.75rem;
           font-weight: 700;
           text-transform: uppercase;
@@ -359,7 +359,7 @@ const SuperAdminDashboard = () => {
           margin: 8px 0 0 0;
           font-size: 1.75rem;
           font-weight: 800;
-          color: #3E2723;
+          color: var(--color-text-primary);
         }
         .form-grid-v2 {
           display: grid;
@@ -412,37 +412,37 @@ const SuperAdminDashboard = () => {
           gap: 16px;
         }
         .cafe-card {
-          background: #FAF6F0;
-          border: 1px solid #E6D5C3;
+          background: var(--bg-card);
+          border: 1px solid var(--color-border);
           border-radius: 16px;
           padding: 20px;
           cursor: pointer;
           transition: all 0.2s ease;
-          color: #3E2723;
+          color: var(--color-text-primary);
           text-align: left;
           box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         .cafe-card:hover {
           transform: translateY(-2px);
           box-shadow: 0 10px 15px rgba(0,0,0,0.2);
-          border-color: #8B6E58;
+          border-color: var(--color-primary);
         }
         .cafe-card-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 10px;
-          border-bottom: 1px solid #E6D5C3;
+          border-bottom: 1px solid var(--color-border);
           padding-bottom: 10px;
         }
         .cafe-card-title {
           font-size: 1.15rem;
           font-weight: 800;
-          color: #3E2723;
+          color: var(--color-text-primary);
           margin: 0;
         }
         .cafe-card-details-expanded {
-          border-top: 1px dashed #E6D5C3;
+          border-top: 1px dashed var(--color-border);
           padding-top: 12px;
           margin-top: 12px;
           animation: slideDown 0.2s ease-out;
@@ -452,10 +452,10 @@ const SuperAdminDashboard = () => {
           justify-content: space-between;
           margin-bottom: 8px;
           font-size: 0.85rem;
-          color: #6F4E37;
+          color: var(--color-text-secondary);
         }
         .details-row strong {
-          color: #3E2723;
+          color: var(--color-text-primary);
           font-weight: 600;
         }
         .cafe-card-actions {
@@ -464,7 +464,7 @@ const SuperAdminDashboard = () => {
           flex-wrap: wrap;
           margin-top: 15px;
           justify-content: flex-end;
-          border-top: 1px solid #E6D5C3;
+          border-top: 1px solid var(--color-border);
           padding-top: 12px;
         }
         @keyframes slideDown {
