@@ -24,7 +24,7 @@ const seedDefaultCategories = async (cafeId, branchId = 'default') => {
 // @desc    Get all categories
 // @route   GET /api/categories
 // @access  Public
-const getCategories = async (req, res) => {
+const getCategories = async (req, res, next) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
     const branchId = req.branchId || req.query.branchId || 'default';
@@ -70,15 +70,16 @@ const getCategories = async (req, res) => {
 
     return res.status(200).json({ success: true, count: categories.length, data: categories });
   } catch (error) {
-    console.error('Error fetching categories:', error);
-    return res.status(500).json({ success: false, message: 'Server error while fetching categories', error: error.message });
+    error.controllerName = 'categoryController';
+    error.serviceName = 'getCategories';
+    next(error);
   }
 };
 
 // @desc    Create a new category
 // @route   POST /api/categories
 // @access  Protected (Owner/Admin)
-const createCategory = async (req, res) => {
+const createCategory = async (req, res, next) => {
   try {
     const { name } = req.body;
     const cafeId = req.user.cafeId || 'CD001';
@@ -114,15 +115,16 @@ const createCategory = async (req, res) => {
 
     return res.status(201).json({ success: true, data: savedCategory });
   } catch (error) {
-    console.error('Error creating category:', error);
-    return res.status(500).json({ success: false, message: 'Server error while creating category', error: error.message });
+    error.controllerName = 'categoryController';
+    error.serviceName = 'createCategory';
+    next(error);
   }
 };
 
 // @desc    Update a category
 // @route   PATCH /api/categories/:id
 // @access  Protected (Owner/Admin)
-const updateCategory = async (req, res) => {
+const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
@@ -135,7 +137,7 @@ const updateCategory = async (req, res) => {
 
     let finalBranchId = branchId;
     if (branchId === 'all') {
-      const categoryDoc = await Category.findById(id);
+      const categoryDoc = await Category.findOne({ _id: id, cafeId });
       if (categoryDoc) finalBranchId = categoryDoc.branchId;
     }
 
@@ -159,7 +161,8 @@ const updateCategory = async (req, res) => {
     // Cascade update to all menu items in this category FOR THIS BRANCH ONLY
     await MenuItem.updateMany(
       { category: oldName, cafeId, branchId: finalBranchId },
-      { category: newName }
+      { category: newName },
+      { bypassBranchFilter: true }
     );
 
     // Invalidate caches
@@ -168,15 +171,16 @@ const updateCategory = async (req, res) => {
 
     return res.status(200).json({ success: true, data: updatedCategory });
   } catch (error) {
-    console.error('Error updating category:', error);
-    return res.status(500).json({ success: false, message: 'Server error while updating category', error: error.message });
+    error.controllerName = 'categoryController';
+    error.serviceName = 'updateCategory';
+    next(error);
   }
 };
 
 // @desc    Delete a category
 // @route   DELETE /api/categories/:id
 // @access  Protected (Owner/Admin)
-const deleteCategory = async (req, res) => {
+const deleteCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
     const cafeId = req.user.cafeId || 'CD001';
@@ -184,7 +188,7 @@ const deleteCategory = async (req, res) => {
 
     let finalBranchId = branchId;
     if (branchId === 'all') {
-      const categoryDoc = await Category.findById(id);
+      const categoryDoc = await Category.findOne({ _id: id, cafeId });
       if (categoryDoc) finalBranchId = categoryDoc.branchId;
     }
 
@@ -200,7 +204,8 @@ const deleteCategory = async (req, res) => {
     // Update menu items in this category FOR THIS BRANCH ONLY to 'Uncategorized'
     await MenuItem.updateMany(
       { category: categoryName, cafeId, branchId: finalBranchId },
-      { category: 'Uncategorized' }
+      { category: 'Uncategorized' },
+      { bypassBranchFilter: true }
     );
     // Invalidate caches
     menuCache.clearCategories(cafeId, finalBranchId);
@@ -208,15 +213,16 @@ const deleteCategory = async (req, res) => {
 
     return res.status(200).json({ success: true, message: 'Category deleted successfully, items moved to Uncategorized' });
   } catch (error) {
-    console.error('Error deleting category:', error);
-    return res.status(500).json({ success: false, message: 'Server error while deleting category', error: error.message });
+    error.controllerName = 'categoryController';
+    error.serviceName = 'deleteCategory';
+    next(error);
   }
 };
 
 // @desc    Reorder categories display order
 // @route   PUT /api/categories/reorder
 // @access  Protected (Owner/Admin)
-const reorderCategories = async (req, res) => {
+const reorderCategories = async (req, res, next) => {
   try {
     const { orderedIds } = req.body;
     const cafeId = req.user.cafeId || 'CD001';
@@ -240,8 +246,9 @@ const reorderCategories = async (req, res) => {
 
     return res.status(200).json({ success: true, message: 'Categories reordered successfully' });
   } catch (error) {
-    console.error('Error reordering categories:', error);
-    return res.status(500).json({ success: false, message: 'Server error while reordering categories', error: error.message });
+    error.controllerName = 'categoryController';
+    error.serviceName = 'reorderCategories';
+    next(error);
   }
 };
 

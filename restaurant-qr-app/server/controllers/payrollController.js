@@ -115,9 +115,9 @@ const getPayrollDetails = async (req, res) => {
 
   try {
     const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
-    const payroll = await Payroll.findOne({ _id: id, branchId: activeBranch });
+    const payroll = await Payroll.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true });
     if (!payroll) {
-      return res.status(404).json({ success: false, message: 'Payroll record not found in this branch' });
+      return res.status(404).json({ success: false, message: 'Payroll record not found' });
     }
 
     // Check ownership scope
@@ -262,7 +262,7 @@ const updatePayroll = async (req, res) => {
 
   try {
     const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
-    const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
+    const payroll = await Payroll.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true });
     if (!payroll) {
       return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
     }
@@ -347,7 +347,7 @@ const payPayroll = async (req, res) => {
 
   try {
     const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
-    const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
+    const payroll = await Payroll.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true });
     if (!payroll) {
       return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
     }
@@ -424,7 +424,7 @@ const deletePayroll = async (req, res) => {
 
   try {
     const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
-    const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
+    const payroll = await Payroll.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true });
     if (!payroll) {
       return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
     }
@@ -577,7 +577,7 @@ const approvePayroll = async (req, res) => {
 
   try {
     const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
-    const payroll = await Payroll.findOne({ _id: id, cafeId, branchId: activeBranch });
+    const payroll = await Payroll.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true });
     if (!payroll) {
       return res.status(404).json({ success: false, message: 'Payroll record not found or does not belong to this branch' });
     }

@@ -1,13 +1,16 @@
+const { logErrorDiagnostics } = require('../utils/errorDiagnostics');
+
 const errorHandler = (err, req, res, next) => {
   let error = { ...err };
   error.message = err.message;
+  error.statusCode = err.statusCode;
 
-  // Log to console for dev
-  console.error(err);
+  // Log detailed diagnostics to console
+  logErrorDiagnostics(err, req);
 
   // Mongoose bad ObjectId
   if (err.name === 'CastError') {
-    const message = `Resource not found`;
+    const message = 'Resource not found';
     error = new Error(message);
     error.statusCode = 404;
   }
@@ -28,6 +31,7 @@ const errorHandler = (err, req, res, next) => {
 
   res.status(error.statusCode || 500).json({
     success: false,
+    message: error.message || 'Server Error',
     error: error.message || 'Server Error'
   });
 };

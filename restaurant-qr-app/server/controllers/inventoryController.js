@@ -129,7 +129,7 @@ const seedDefaultInventory = async (cafeId, branchId = 'default') => {
   return await Inventory.insertMany(itemsToCreate);
 };
 
-const getInventory = async (req, res) => {
+const getInventory = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const reqBranchId = req.query.branchId || req.headers['x-branch-id'];
@@ -158,15 +158,16 @@ const getInventory = async (req, res) => {
 
     return res.status(200).json({ success: true, count: items.length, data: items });
   } catch (error) {
-    console.error('getInventory error:', error);
-    return res.status(500).json({ success: false, message: 'Server error retrieving inventory items', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'getInventory';
+    next(error);
   }
 };
 
 // @desc    Create inventory item
 // @route   POST /api/inventory
 // @access  Protected (Owner/Admin)
-const createInventoryItem = async (req, res) => {
+const createInventoryItem = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
@@ -215,21 +216,22 @@ const createInventoryItem = async (req, res) => {
     await updateMenuItemAvailabilityFromInventory(cafeId, null, savedItem.branchId || 'default');
     return res.status(201).json({ success: true, data: savedItem });
   } catch (error) {
-    console.error('createInventoryItem error:', error);
-    return res.status(500).json({ success: false, message: 'Server error creating inventory item', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'createInventoryItem';
+    next(error);
   }
 };
 
 // @desc    Update inventory item
 // @route   PATCH /api/inventory/:id
 // @access  Protected (Owner, Manager)
-const updateInventoryItem = async (req, res) => {
+const updateInventoryItem = async (req, res, next) => {
   try {
     const { id } = req.params;
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
     
-    const item = await Inventory.findOne({ _id: id, cafeId, branchId });
+    const item = await Inventory.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Inventory item not found or unauthorized' });
     }
@@ -281,36 +283,38 @@ const updateInventoryItem = async (req, res) => {
 
     return res.status(200).json({ success: true, data: savedItem });
   } catch (error) {
-    console.error('updateInventoryItem error:', error);
-    return res.status(500).json({ success: false, message: 'Server error updating inventory item', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'updateInventoryItem';
+    next(error);
   }
 };
 
 // @desc    Delete inventory item
 // @route   DELETE /api/inventory/:id
 // @access  Protected (Owner/Admin)
-const deleteInventoryItem = async (req, res) => {
+const deleteInventoryItem = async (req, res, next) => {
   try {
     const { id } = req.params;
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
 
-    const deletedItem = await Inventory.findOneAndDelete({ _id: id, cafeId, branchId });
+    const deletedItem = await Inventory.findOneAndDelete({ _id: id, cafeId }, { bypassBranchFilter: true });
     if (!deletedItem) {
       return res.status(404).json({ success: false, message: 'Inventory item not found or unauthorized' });
     }
 
     return res.status(200).json({ success: true, message: 'Inventory item deleted successfully' });
   } catch (error) {
-    console.error('deleteInventoryItem error:', error);
-    return res.status(500).json({ success: false, message: 'Server error deleting inventory item', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'deleteInventoryItem';
+    next(error);
   }
 };
 
 // @desc    Get all inventory movement logs
 // @route   GET /api/inventory/logs
 // @access  Protected (Owner, Manager)
-const getInventoryLogs = async (req, res) => {
+const getInventoryLogs = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
@@ -326,15 +330,16 @@ const getInventoryLogs = async (req, res) => {
     const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).limit(200).lean();
     return res.status(200).json({ success: true, count: logs.length, data: logs });
   } catch (error) {
-    console.error('getInventoryLogs error:', error);
-    return res.status(500).json({ success: false, message: 'Server error retrieving logs', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'getInventoryLogs';
+    next(error);
   }
 };
 
 // @desc    Add Purchase Entry (Increments stock & records log)
 // @route   POST /api/inventory/purchase
 // @access  Protected (Owner, Manager)
-const recordPurchase = async (req, res) => {
+const recordPurchase = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
@@ -344,7 +349,7 @@ const recordPurchase = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Item ID and valid Quantity Added are required' });
     }
 
-    const item = await Inventory.findOne({ _id: itemId, cafeId, branchId });
+    const item = await Inventory.findOne({ _id: itemId, cafeId }, null, { bypassBranchFilter: true });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
@@ -376,15 +381,16 @@ const recordPurchase = async (req, res) => {
 
     return res.status(200).json({ success: true, message: 'Purchase entry added successfully', data: item, log: newLog });
   } catch (error) {
-    console.error('recordPurchase error:', error);
-    return res.status(500).json({ success: false, message: 'Server error recording purchase', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'recordPurchase';
+    next(error);
   }
 };
 
 // @desc    Record Wastage / Damaged items (Decrements stock & records log)
 // @route   POST /api/inventory/wastage
 // @access  Protected (Owner, Manager)
-const recordWastage = async (req, res) => {
+const recordWastage = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
@@ -394,7 +400,7 @@ const recordWastage = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Item ID, valid Quantity Wasted, and Type (Wastage/Damaged) are required' });
     }
 
-    const item = await Inventory.findOne({ _id: itemId, cafeId, branchId });
+    const item = await Inventory.findOne({ _id: itemId, cafeId }, null, { bypassBranchFilter: true });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
@@ -424,15 +430,16 @@ const recordWastage = async (req, res) => {
 
     return res.status(200).json({ success: true, message: 'Wastage recorded successfully', data: item, log: newLog });
   } catch (error) {
-    console.error('recordWastage error:', error);
-    return res.status(500).json({ success: false, message: 'Server error recording wastage', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'recordWastage';
+    next(error);
   }
 };
 
 // @desc    Report Shortage (Chef flags stock issue)
 // @route   POST /api/inventory/shortage
 // @access  Protected (Owner, Manager, Chef)
-const reportShortage = async (req, res) => {
+const reportShortage = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
@@ -442,7 +449,7 @@ const reportShortage = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Item ID is required' });
     }
 
-    const item = await Inventory.findOne({ _id: itemId, cafeId, branchId });
+    const item = await Inventory.findOne({ _id: itemId, cafeId }, null, { bypassBranchFilter: true });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
@@ -466,15 +473,16 @@ const reportShortage = async (req, res) => {
 
     return res.status(200).json({ success: true, message: 'Shortage reported successfully', data: item, log: newLog });
   } catch (error) {
-    console.error('reportShortage error:', error);
-    return res.status(500).json({ success: false, message: 'Server error reporting shortage', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'reportShortage';
+    next(error);
   }
 };
 
 // @desc    Get Wastage reports
 // @route   GET /api/inventory/reports/wastage
 // @access  Protected (Owner Only)
-const getWastageReport = async (req, res) => {
+const getWastageReport = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
@@ -493,15 +501,16 @@ const getWastageReport = async (req, res) => {
 
     return res.status(200).json({ success: true, totalCost, count, data: logs });
   } catch (error) {
-    console.error('getWastageReport error:', error);
-    return res.status(500).json({ success: false, message: 'Server error generating wastage report', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'getWastageReport';
+    next(error);
   }
 };
 
 // @desc    Get Consumption reports
 // @route   GET /api/inventory/reports/consumption
 // @access  Protected (Owner Only)
-const getConsumptionReport = async (req, res) => {
+const getConsumptionReport = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
@@ -520,8 +529,9 @@ const getConsumptionReport = async (req, res) => {
 
     return res.status(200).json({ success: true, totalCost, count, data: logs });
   } catch (error) {
-    console.error('getConsumptionReport error:', error);
-    return res.status(500).json({ success: false, message: 'Server error generating consumption report', error: error.message });
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'getConsumptionReport';
+    next(error);
   }
 };
 

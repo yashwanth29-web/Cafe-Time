@@ -116,7 +116,9 @@ MenuItemSchema.pre('save', function(next) {
       }
     }
   }
-  next();
+  if (typeof next === 'function') {
+    next();
+  }
 });
 
 MenuItemSchema.pre('findOneAndUpdate', function(next) {
@@ -132,7 +134,9 @@ MenuItemSchema.pre('findOneAndUpdate', function(next) {
       }
     }
   }
-  next();
+  if (typeof next === 'function') {
+    next();
+  }
 });
 
 module.exports = mongoose.model('MenuItem', MenuItemSchema);

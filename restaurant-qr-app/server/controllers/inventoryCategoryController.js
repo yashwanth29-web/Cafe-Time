@@ -24,7 +24,7 @@ const seedDefaultInventoryCategories = async (cafeId, branchId = 'default') => {
 // @desc    Get all inventory categories
 // @route   GET /api/inventory/categories
 // @access  Protected
-const getInventoryCategories = async (req, res) => {
+const getInventoryCategories = async (req, res, next) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
     const branchId = req.branchId || req.query.branchId || 'default';
@@ -70,15 +70,16 @@ const getInventoryCategories = async (req, res) => {
 
     return res.status(200).json({ success: true, count: categories.length, data: categories });
   } catch (error) {
-    console.error('Error fetching inventory categories:', error);
-    return res.status(500).json({ success: false, message: 'Server error while fetching inventory categories', data: [], error: error.message });
+    error.controllerName = 'inventoryCategoryController';
+    error.serviceName = 'getInventoryCategories';
+    next(error);
   }
 };
 
 // @desc    Create a new inventory category
 // @route   POST /api/inventory/categories
 // @access  Protected (Owner/Admin)
-const createInventoryCategory = async (req, res) => {
+const createInventoryCategory = async (req, res, next) => {
   try {
     const { name } = req.body;
     const cafeId = req.user.cafeId || 'CD001';
@@ -90,6 +91,7 @@ const createInventoryCategory = async (req, res) => {
 
     let finalBranchId = branchId;
     if (branchId === 'all') {
+      const Branch = require('../models/Branch');
       const defaultBranch = await Branch.findOne({ cafeId }).lean();
       finalBranchId = defaultBranch ? defaultBranch.branchId : 'default';
     }
@@ -108,15 +110,16 @@ const createInventoryCategory = async (req, res) => {
     const savedCategory = await newCategory.save();
     return res.status(201).json({ success: true, data: savedCategory });
   } catch (error) {
-    console.error('Error creating inventory category:', error);
-    return res.status(500).json({ success: false, message: 'Server error while creating inventory category', error: error.message });
+    error.controllerName = 'inventoryCategoryController';
+    error.serviceName = 'createInventoryCategory';
+    next(error);
   }
 };
 
 // @desc    Delete an inventory category
 // @route   DELETE /api/inventory/categories/:id
 // @access  Protected (Owner/Admin)
-const deleteInventoryCategory = async (req, res) => {
+const deleteInventoryCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
     const cafeId = req.user.cafeId || 'CD001';
@@ -124,7 +127,7 @@ const deleteInventoryCategory = async (req, res) => {
 
     let finalBranchId = branchId;
     if (branchId === 'all') {
-      const categoryDoc = await InventoryCategory.findById(id);
+      const categoryDoc = await InventoryCategory.findOne({ _id: id, cafeId });
       if (categoryDoc) finalBranchId = categoryDoc.branchId;
     }
 
@@ -140,13 +143,15 @@ const deleteInventoryCategory = async (req, res) => {
     // Update items under this category FOR THIS BRANCH ONLY to 'Uncategorized'
     await Inventory.updateMany(
       { category: categoryName, cafeId, branchId: finalBranchId },
-      { category: 'Uncategorized' }
+      { category: 'Uncategorized' },
+      { bypassBranchFilter: true }
     );
 
     return res.status(200).json({ success: true, message: 'Inventory category deleted successfully, items moved to Uncategorized' });
   } catch (error) {
-    console.error('Error deleting inventory category:', error);
-    return res.status(500).json({ success: false, message: 'Server error while deleting inventory category', error: error.message });
+    error.controllerName = 'inventoryCategoryController';
+    error.serviceName = 'deleteInventoryCategory';
+    next(error);
   }
 };
 

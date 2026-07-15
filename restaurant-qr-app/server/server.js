@@ -110,6 +110,40 @@ app.use((req, res, next) => {
   });
 });
 
+// Centralized Failed Request Diagnostic Logging Middleware
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  
+  res.json = function(data) {
+    if (res.statusCode >= 400) {
+      const timestamp = new Date().toISOString();
+      const authenticatedUser = req.user ? {
+        _id: req.user._id,
+        email: req.user.email,
+        role: req.user.role
+      } : 'Anonymous';
+      const ownerId = req.user && (req.user.role === 'owner' || req.user.role === 'admin') ? req.user._id : (req.user ? req.user.cafeId : 'N/A');
+      const cafeId = req.cafeId || (req.user && req.user.cafeId) || 'N/A';
+      const branchId = req.branchId || 'N/A';
+
+      console.error(`\n=== FAILED REQUEST DIAGNOSTIC LOG ===`);
+      console.error(`Timestamp:          ${timestamp}`);
+      console.error(`HTTP Method:        ${req.method}`);
+      console.error(`Request Path:       ${req.originalUrl}`);
+      console.error(`Status Code:        ${res.statusCode}`);
+      console.error(`Authenticated User: ${JSON.stringify(authenticatedUser)}`);
+      console.error(`Owner ID:           ${ownerId}`);
+      console.error(`Cafe ID:            ${cafeId}`);
+      console.error(`Branch ID:          ${branchId}`);
+      console.error(`Payload:            ${JSON.stringify(req.body)}`);
+      console.error(`Response Data:      ${JSON.stringify(data)}`);
+      console.error(`======================================\n`);
+    }
+    return originalJson.call(this, data);
+  };
+  next();
+});
+
 
 // Middlewares
 app.use(cors({

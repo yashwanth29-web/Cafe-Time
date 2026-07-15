@@ -6,7 +6,7 @@ const socket = require('../socket');
 // @desc    Get all menu items
 // @route   GET /api/menu
 // @access  Public
-const getMenuItems = async (req, res) => {
+const getMenuItems = async (req, res, next) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
     const branchId = req.branchId || req.query.branchId || 'default';
@@ -82,15 +82,16 @@ const getMenuItems = async (req, res) => {
     menuCache.setMenu(cafeId, branchId, finalMenuItems);
     return res.status(200).json({ success: true, count: finalMenuItems.length, data: finalMenuItems });
   } catch (error) {
-    console.error('Error fetching menu items:', error);
-    return res.status(500).json({ success: false, message: 'Server error while fetching menu items', error: error.message });
+    error.controllerName = 'menuController';
+    error.serviceName = 'getMenuItems';
+    next(error);
   }
 };
 
 // @desc    Create a new menu item
 // @route   POST /api/menu
 // @access  Public (Owner Dashboard)
-const createMenuItem = async (req, res) => {
+const createMenuItem = async (req, res, next) => {
   try {
     const { name, price, originalPrice, category, description, available, isCombo, image, recipe, preparationTime } = req.body;
     const cafeId = (req.user && req.user.cafeId) || 'CD001';
@@ -154,15 +155,16 @@ const createMenuItem = async (req, res) => {
 
     return res.status(201).json({ success: true, data: finalItem });
   } catch (error) {
-    console.error('Error creating menu item:', error);
-    return res.status(500).json({ success: false, message: 'Server error while creating menu item', error: error.message });
+    error.controllerName = 'menuController';
+    error.serviceName = 'createMenuItem';
+    next(error);
   }
 };
 
 // @desc    Update a menu item
 // @route   PATCH /api/menu/:id
 // @access  Public (Owner Dashboard)
-const updateMenuItem = async (req, res) => {
+const updateMenuItem = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
@@ -190,6 +192,11 @@ const updateMenuItem = async (req, res) => {
       updateData.preparationTime = parseInt(updateData.preparationTime);
     }
 
+    // Never overwrite an existing image with null, undefined, or empty/default image in update
+    if (!updateData.image || updateData.image === '/images/default-food.png') {
+      delete updateData.image;
+    }
+
     // First find the item regardless of cafeId/branchId to see if it's a Global Master item
     const existingItem = await MenuItem.findOne({ _id: id }, null, { bypassBranchFilter: true });
     console.log(`[DEBUG updateMenuItem] Attempting to update item ID: ${id}`);
@@ -213,7 +220,7 @@ const updateMenuItem = async (req, res) => {
         updatedItem = await MenuItem.findOneAndUpdate(
           { _id: existingOverride._id, cafeId, branchId },
           updateData,
-          { returnDocument: 'after', runValidators: true }
+          { returnDocument: 'after', runValidators: true, bypassBranchFilter: true }
         );
       } else {
         // Create a new override for this cafe and branch
@@ -231,12 +238,12 @@ const updateMenuItem = async (req, res) => {
         const newLocalItem = new MenuItem(overrideData);
         updatedItem = await newLocalItem.save();
       }
-    } else if (existingItem.cafeId === cafeId && existingItem.branchId === branchId) {
-      // It's a local item or global master editing global master -> Update directly
+    } else if (existingItem.cafeId === cafeId) {
+      // It's a local item belonging to this cafe -> Update directly
       updatedItem = await MenuItem.findOneAndUpdate(
-        { _id: id, cafeId, branchId },
+        { _id: id, cafeId },
         updateData,
-        { returnDocument: 'after', runValidators: true }
+        { returnDocument: 'after', runValidators: true, bypassBranchFilter: true }
       );
     } else {
       // Unauthorized cross-cafe edit
@@ -283,15 +290,16 @@ const updateMenuItem = async (req, res) => {
 
     return res.status(200).json({ success: true, data: finalItem });
   } catch (error) {
-    console.error('Error updating menu item:', error);
-    return res.status(500).json({ success: false, message: 'Server error while updating menu item', error: error.message });
+    error.controllerName = 'menuController';
+    error.serviceName = 'updateMenuItem';
+    next(error);
   }
 };
 
 // @desc    Delete a menu item
 // @route   DELETE /api/menu/:id
 // @access  Public (Owner Dashboard)
-const deleteMenuItem = async (req, res) => {
+const deleteMenuItem = async (req, res, next) => {
   try {
     const { id } = req.params;
     const cafeId = (req.user && req.user.cafeId) || 'CD001';
@@ -308,7 +316,7 @@ const deleteMenuItem = async (req, res) => {
       // Local branch trying to delete a Global Master item -> Create a Local Override with isHidden: true
       const existingOverride = await MenuItem.findOne({ masterItemId: id, cafeId, branchId }, null, { bypassBranchFilter: true });
       if (existingOverride) {
-        await MenuItem.findByIdAndUpdate(existingOverride._id, { isHidden: true });
+        await MenuItem.findOneAndUpdate({ _id: existingOverride._id, cafeId, branchId }, { isHidden: true }, { bypassBranchFilter: true });
       } else {
         const overrideData = {
           ...existingItem.toObject(),
@@ -322,13 +330,13 @@ const deleteMenuItem = async (req, res) => {
         };
         await new MenuItem(overrideData).save();
       }
-    } else if (existingItem.cafeId === cafeId && existingItem.branchId === branchId) {
+    } else if (existingItem.cafeId === cafeId) {
       // If it's an override of a master item, we must just hide it so the master doesn't reappear
       if (existingItem.masterItemId) {
-        await MenuItem.findByIdAndUpdate(id, { isHidden: true });
+        await MenuItem.findOneAndUpdate({ _id: id, cafeId }, { isHidden: true }, { bypassBranchFilter: true });
       } else {
         // If it's a purely custom local item (or master deleting its own item), actually delete it
-        await MenuItem.findByIdAndDelete(id);
+        await MenuItem.findOneAndDelete({ _id: id, cafeId }, { bypassBranchFilter: true });
       }
     } else {
       return res.status(403).json({ success: false, message: 'Unauthorized to delete this item from this branch' });
@@ -339,8 +347,9 @@ const deleteMenuItem = async (req, res) => {
 
     return res.status(200).json({ success: true, message: 'Menu item deleted successfully' });
   } catch (error) {
-    console.error('Error deleting menu item:', error);
-    return res.status(500).json({ success: false, message: 'Server error while deleting menu item', error: error.message });
+    error.controllerName = 'menuController';
+    error.serviceName = 'deleteMenuItem';
+    next(error);
   }
 };
 

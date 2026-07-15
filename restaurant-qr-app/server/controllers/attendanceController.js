@@ -731,7 +731,7 @@ const editAttendance = async (req, res) => {
   const cafeId = req.user.cafeId;
 
   try {
-    const attendance = await Attendance.findOne({ _id: id, cafeId });
+    const attendance = await Attendance.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true });
     if (!attendance) {
       return res.status(404).json({ success: false, message: 'Attendance record not found in your cafe' });
     }
