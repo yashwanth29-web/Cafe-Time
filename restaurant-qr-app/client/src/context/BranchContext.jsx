@@ -35,14 +35,24 @@ export const BranchProvider = ({ children }) => {
         if (['super_admin', 'admin', 'owner'].includes(role)) {
           const stored = localStorage.getItem(STORAGE_KEY);
           const ids = res.branches.map(b => b.branchId);
+          let newActiveId = stored;
+          
           if (stored && (ids.includes(stored) || stored === 'all')) {
             setActiveBranchId(stored);
           } else if (res.branches.length > 0) {
             const firstId = res.branches[0].branchId;
             localStorage.setItem(STORAGE_KEY, firstId);
             setActiveBranchId(firstId);
+            newActiveId = firstId;
           } else {
             setActiveBranchId('default');
+            newActiveId = 'default';
+          }
+          
+          if (newActiveId !== stored) {
+            switchListeners.current.forEach(fn => {
+              try { fn(newActiveId); } catch (e) {}
+            });
           }
         } else {
           // Staff are strictly locked to their database assignment

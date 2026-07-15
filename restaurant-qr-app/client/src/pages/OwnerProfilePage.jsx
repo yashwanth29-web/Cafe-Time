@@ -19,7 +19,7 @@ const profileCache = {
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
   const { themeMode, setThemeMode, primaryColor, updatePrimaryColor } = useTheme();
-  const { activeBranchId } = useBranch();
+  const { activeBranchId, loadBranches } = useBranch();
   const navigate = useNavigate();
 
   const [cafeData, setCafeData] = useState(() => profileCache.cafeData);
@@ -69,6 +69,9 @@ const OwnerProfilePage = () => {
       await deleteBranch(id);
       showToast(`Branch "${name}" deleted.`);
       invalidateOwnerLayoutCache();
+      if (loadBranches) {
+        await loadBranches();
+      }
       await load();
     } catch (err) {
       showToast(err?.response?.data?.message || 'Delete failed.', false);
@@ -184,6 +187,9 @@ const OwnerProfilePage = () => {
       if (activeModal === 'editBranch') {await updateBranch(editingBranchId, form);}
       
       invalidateOwnerLayoutCache();
+      if (loadBranches) {
+        await loadBranches();
+      }
       await load();showToast('Saved successfully!');closeModal();
     } catch (err) {showToast(err?.response?.data?.message || 'Save failed.', false);} finally
     {setSaving(false);}

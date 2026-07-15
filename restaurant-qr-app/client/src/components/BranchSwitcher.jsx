@@ -194,7 +194,24 @@ const BranchSwitcher = ({ collapsed = false }) => {
         </div>
       );
     }
-    return null;
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '6px 14px',
+        borderRadius: '8px',
+        background: 'rgba(231, 76, 60, 0.1)',
+        border: '1px solid #e74c3c',
+        color: '#e74c3c',
+        fontSize: '13px',
+        fontWeight: 'bold',
+        cursor: 'not-allowed'
+      }}>
+        <span>⚠️</span>
+        {!collapsed && <span>No branches available</span>}
+      </div>
+    );
   }
 
   // Filter branches

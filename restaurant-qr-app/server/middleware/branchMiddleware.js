@@ -122,14 +122,8 @@ const attachCafeAndBranch = async (req, res, next) => {
       }
 
       if (['manager', 'chef', 'waiter', 'cashier', 'staff'].includes(role)) {
-        // Staff are strictly locked to their assigned branch
+        // Staff are strictly locked to their assigned branch - auto-coerce to prevent stale localStorage blocking
         const assignedBranch = user.assignedBranch || 'default';
-        if (branchId !== assignedBranch) {
-          return res.status(403).json({
-            success: false,
-            message: `Access denied. You are only permitted to access your assigned branch: ${assignedBranch}`
-          });
-        }
         branchId = assignedBranch;
       } else if (['owner', 'admin'].includes(role)) {
         // Owners/admins must own the branch they are requesting
@@ -146,6 +140,8 @@ const attachCafeAndBranch = async (req, res, next) => {
       const isOwnerOrAdmin = user && ['owner', 'admin'].includes((user.role || '').toLowerCase());
       if (branchId === 'all' && isOwnerOrAdmin) {
         // Owners/admins bypass branch existence/active check for 'all' branch selection
+      } else if (branchId === 'default') {
+        // Default fallback branch is always allowed to prevent blocking new tenants before setup
       } else {
         const branchStatus = await verifyBranchActive(cafeId, branchId);
         if (!branchStatus.exists) {
