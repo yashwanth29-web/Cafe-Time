@@ -36,8 +36,13 @@ const logErrorDiagnostics = (err, req, controllerName = 'UnknownController', ser
     };
   }
 
+  const requestId = req.requestId || 'N/A';
+  const orderId = req.body?.orderId || req.params?.orderId || (req.originalUrl && req.originalUrl.includes('/orders') && req.params?.id ? req.params.id : 'N/A');
+
   console.error(`\n=== BACKEND DIAGNOSTIC ERROR LOG ===`);
   console.error(`Timestamp:          ${timestamp}`);
+  console.error(`Request ID:         ${requestId}`);
+  console.error(`Order ID:           ${orderId}`);
   console.error(`Controller Name:    ${err.controllerName || controllerName}`);
   console.error(`Service Name:       ${err.serviceName || serviceName}`);
   console.error(`HTTP Method:        ${httpMethod}`);

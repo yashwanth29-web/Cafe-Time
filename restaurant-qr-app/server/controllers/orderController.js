@@ -52,10 +52,10 @@ const emitOrderUpdated = async (order, branchMap = null) => {
     const orderIdStr = String(order._id || '');
     const cafeId = order.cafeId || 'CD001';
 
-    // Broadcast standard events (camelCase) to standard room names
+    // Broadcast standard events (camelCase) to standard room names (strictly isolated with cafeId)
     if (branchStr) {
-      io.to(`branch:${branchStr}`).emit('orderCreated', order);
-      io.to(`branch:${branchStr}`).emit('orderUpdated', order);
+      io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('orderCreated', order);
+      io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('orderUpdated', order);
     }
     io.to(`cafe:${cafeId}:owner`).emit('orderCreated', order);
     io.to(`cafe:${cafeId}:owner`).emit('orderUpdated', order);
@@ -75,7 +75,7 @@ const emitOrderUpdated = async (order, branchMap = null) => {
     // If order payment is paid, broadcast payment events
     if (order.paymentStatus === 'Paid') {
       if (branchStr) {
-        io.to(`branch:${branchStr}`).emit('paymentCompleted', order);
+        io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('paymentCompleted', order);
         io.to(`branch_${cafeId}_${branchStr}`).emit('payment_completed', order);
       }
       io.to(`cafe:${cafeId}:owner`).emit('paymentCompleted', order);

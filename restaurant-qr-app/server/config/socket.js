@@ -112,7 +112,7 @@ const initializeSocket = (server) => {
         console.log(`[SOCKET] Socket ${socket.id} joined room cafe:${cafeId} | Cafe: ${cafeId}`);
       }
 
-      // Join Branch Room (standardized on Branch Code string, e.g. branch:BR002)
+      // Join Branch Room (strictly isolated with cafeId context)
       if (branchId) {
         try {
           const Branch = require('../models/Branch');
@@ -128,15 +128,17 @@ const initializeSocket = (server) => {
           }
           
           if (branchCode) {
-            socket.join(`branch:${branchCode}`);
+            socket.join(`cafe:${cafeId}:branch:${branchCode}`);
+            socket.join(`branch_${cafeId}_${branchCode}`);
             if (isDev) {
-              console.log(`[SOCKET] Socket ${socket.id} joined room branch:${branchCode} | Standardized Branch Code: ${branchCode}`);
+              console.log(`[SOCKET] Socket ${socket.id} joined rooms cafe:${cafeId}:branch:${branchCode} and branch_${cafeId}_${branchCode}`);
             }
           }
         } catch (branchErr) {
           console.error('[SOCKET] Error resolving branch room code:', branchErr.message);
-          // Fallback to raw string join
-          socket.join(`branch:${branchId}`);
+          // Fallback to isolated raw string join
+          socket.join(`cafe:${cafeId}:branch:${branchId}`);
+          socket.join(`branch_${cafeId}_${branchId}`);
         }
       }
 
@@ -169,12 +171,12 @@ const initializeSocket = (server) => {
         socket.join(`cafe:${targetCafe}`);
         socket.join(`cafe_${targetCafe}`);
 
-        // Join Branch Rooms
-        socket.join(`branch:${targetBranch}`);
+        // Join Branch Rooms (strictly isolated with cafeId)
+        socket.join(`cafe:${targetCafe}:branch:${targetBranch}`);
         socket.join(`branch_${targetCafe}_${targetBranch}`);
 
         if (isDev) {
-          console.log(`[SOCKET] Socket ${socket.id} joined rooms cafe:${targetCafe} and branch:${targetBranch}`);
+          console.log(`[SOCKET] Socket ${socket.id} joined rooms cafe:${targetCafe}:branch:${targetBranch} and branch_${targetCafe}_${targetBranch}`);
         }
       } catch (err) {
         console.error('[SOCKET] join_room error:', err.message);
@@ -186,10 +188,10 @@ const initializeSocket = (server) => {
       try {
         const targetCafe = cafeId || 'CD001';
         if (branchId) {
-          socket.leave(`branch:${branchId}`);
+          socket.leave(`cafe:${targetCafe}:branch:${branchId}`);
           socket.leave(`branch_${targetCafe}_${branchId}`);
           if (isDev) {
-            console.log(`[SOCKET] Socket ${socket.id} left rooms for branch:${branchId}`);
+            console.log(`[SOCKET] Socket ${socket.id} left rooms for branch:${targetCafe}:${branchId}`);
           }
         }
       } catch (err) {

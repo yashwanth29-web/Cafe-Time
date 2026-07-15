@@ -91,6 +91,13 @@ app.use(compression({
   }
 }));
 
+// Request ID Generator Middleware
+app.use((req, res, next) => {
+  const crypto = require('crypto');
+  req.requestId = crypto.randomUUID();
+  next();
+});
+
 // API Response Profiler Middleware
 app.use((req, res, next) => {
   const start = process.hrtime();
@@ -129,6 +136,7 @@ app.use((req, res, next) => {
 
       console.error(`\n=== FAILED REQUEST DIAGNOSTIC LOG ===`);
       console.error(`Timestamp:          ${timestamp}`);
+      console.error(`Request ID:         ${req.requestId || 'N/A'}`);
       console.error(`HTTP Method:        ${req.method}`);
       console.error(`Request Path:       ${req.originalUrl}`);
       console.error(`Status Code:        ${res.statusCode}`);
@@ -212,6 +220,11 @@ app.use('/api/payment', paymentRoutes);
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ success: true, message: 'Server is running perfectly' });
+});
+
+// Catch-all unmatched /api routes (Route Not Found)
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, message: 'Route Not Found' });
 });
 
 // Serve Static Assets in Production
