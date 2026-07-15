@@ -38,6 +38,7 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const cafeRoutes = require('./routes/cafeRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 // Create Express instance
 const app = express();
@@ -205,6 +206,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/cafe', cafeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/payment', paymentRoutes);
 
 
 // Health check endpoint

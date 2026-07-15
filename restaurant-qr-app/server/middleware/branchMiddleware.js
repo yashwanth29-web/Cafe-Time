@@ -35,7 +35,13 @@ const verifyBranchActive = async (cafeId, branchId) => {
     return cached;
   }
   
-  const branch = await Branch.findOne({ branchId, cafeId });
+  const branch = await Branch.findOne({
+    $or: [
+      { branchId: branchId },
+      { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
+    ],
+    cafeId
+  });
   const result = {
     exists: !!branch,
     isActive: !!(branch && branch.isActive),

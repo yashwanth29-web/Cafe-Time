@@ -8,5 +8,6 @@ router.get('/', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter
 router.get('/:id', getOrderById);
 router.patch('/:id/payment-method', updateOrderPaymentMethod);
 router.patch('/:id', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), updateOrderStatus);
+router.patch('/:id/status', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), updateOrderStatus);
 
 module.exports = router;

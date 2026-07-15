@@ -213,7 +213,7 @@ const createOrder = async (req, res, next) => {
     // 2. Cafe Validation
     const resolvedCafe = await Cafe.findOne({ cafeId: activeCafeId }).lean();
     if (!resolvedCafe) {
-      return res.status(404).json({ success: false, message: 'Cafe not found' });
+      return res.status(400).json({ success: false, message: 'Cafe not found' });
     }
     if (resolvedCafe.isActive === false) {
       return res.status(403).json({ success: false, message: 'This cafe is currently inactive' });
@@ -222,136 +222,43 @@ const createOrder = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'This cafe subscription is suspended or expired' });
     }
 
-    // 3. Branch Validation - resolve branch from QR-encoded branchId
-    const branchOrConditions = [{ branchId: branchId }];
-    if (mongoose.isValidObjectId(branchId)) {
-      branchOrConditions.push({ _id: branchId });
-    }
+    // 3. Branch Validation
     const resolvedBranch = await Branch.findOne({
-      $or: branchOrConditions,
+      $or: [
+        { branchId: branchId },
+        { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
+      ],
       cafeId: activeCafeId
     }).lean();
 
     if (!resolvedBranch) {
-      console.error('[ORDER] Branch resolution failed', {
-        requestedBranchId: branchId,
-        cafeId: activeCafeId,
-        headerBranchId: req.headers['x-branch-id'],
-        bodyBranchId: req.body?.branchId
-      });
-      return res.status(404).json({ success: false, message: 'Branch not found' });
+      return res.status(400).json({ success: false, message: 'Branch not found' });
     }
     if (resolvedBranch.isActive === false) {
       return res.status(403).json({ success: false, message: 'This branch is currently inactive' });
     }
 
-    // 4. Table Validation — 4-strategy progressive lookup for multi-branch resilience
+    // 4. Table Validation
     const activeTableNumber = String(tableNumber).trim();
     if (activeTableNumber !== 'Takeaway' && activeTableNumber !== 'Walk-in') {
-
-      // Strategy 1: exact match — cafeId + QR-resolved branchId
-      let opConfig = await OperationalConfig.findOne(
-        { cafeId: activeCafeId, branchId: resolvedBranch.branchId },
-        null,
-        { bypassBranchFilter: true }
-      ).lean();
-
-      // Strategy 2: fallback to 'default' branch config
-      // Handles setups configured before multi-branch was enabled
-      if (!opConfig && resolvedBranch.branchId !== 'default') {
-        opConfig = await OperationalConfig.findOne(
-          { cafeId: activeCafeId, branchId: 'default' },
-          null,
-          { bypassBranchFilter: true }
-        ).lean();
-        if (opConfig) {
-          console.warn('[ORDER] Strategy 2: Using default-branch OperationalConfig', {
-            cafeId: activeCafeId, requestedBranch: resolvedBranch.branchId
-          });
-        }
+      const opConfig = await OperationalConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean();
+      if (!opConfig) {
+        return res.status(400).json({ success: false, message: 'Operational configuration not found for this branch' });
       }
 
-      // Strategy 3: search ALL configs for this cafe — find any that contains this table.
-      // Handles data-migration cases: ObjectId-vs-string mismatch, legacy branchId, etc.
-      if (!opConfig || (opConfig.tables && opConfig.tables.length === 0)) {
-        const allCafeConfigs = await OperationalConfig.find(
-          { cafeId: activeCafeId },
-          null,
-          { bypassBranchFilter: true }
-        ).lean();
-
-        if (allCafeConfigs && allCafeConfigs.length > 0) {
-          // Find whichever branch config actually contains this table number
-          const matchingConfig = allCafeConfigs.find(cfg =>
-            cfg.tables && cfg.tables.some(t =>
-              String(t.label).trim() === activeTableNumber ||
-              String(t.id).trim() === activeTableNumber
-            )
-          );
-
-          if (matchingConfig) {
-            // Found the table in a different branchId's config — use it
-            opConfig = matchingConfig;
-            console.warn('[ORDER] Strategy 3: Table found in alternate branch config', {
-              cafeId: activeCafeId,
-              requestedBranch: resolvedBranch.branchId,
-              foundInBranch: matchingConfig.branchId,
-              table: activeTableNumber
-            });
-          } else {
-            // Configs exist but the table is genuinely absent from ALL of them
-            console.error('[ORDER] Table not found in any branch config for this cafe', {
-              requestedTable: activeTableNumber,
-              cafeId: activeCafeId,
-              bodyBranchId: branchId,
-              resolvedBranchId: resolvedBranch.branchId,
-              headerBranchId: req.headers['x-branch-id'],
-              contextBranchId: req.branchId,
-              configsFound: allCafeConfigs.map(c => ({
-                branchId: c.branchId,
-                tables: (c.tables || []).map(t => ({ id: t.id, label: t.label }))
-              }))
-            });
-            return res.status(404).json({
-              success: false,
-              message: `Table ${activeTableNumber} does not exist in this branch`
-            });
-          }
-        } else {
-          // Strategy 4: No OperationalConfig at all for this cafe.
-          // Tables haven't been configured yet — skip validation and allow the order.
-          // The QR code itself (with cafeId + branchId + tableNumber) is the source of truth.
-          console.warn('[ORDER] Strategy 4: No OperationalConfig for cafe — skipping table validation', {
-            cafeId: activeCafeId,
-            branchId: resolvedBranch.branchId,
-            tableNumber: activeTableNumber
-          });
-          opConfig = null;
-        }
-      }
-
-      // Final check: if we found a config with tables, validate the table exists in it
-      if (opConfig && opConfig.tables && opConfig.tables.length > 0) {
-        const tableExists = opConfig.tables.some(t =>
-          String(t.label).trim() === activeTableNumber ||
-          String(t.id).trim() === activeTableNumber
-        );
-        if (!tableExists) {
-          console.error('[ORDER] Table not found in matched config', {
-            requestedTable: activeTableNumber,
-            cafeId: activeCafeId,
-            bodyBranchId: branchId,
-            resolvedBranchId: resolvedBranch.branchId,
-            opConfigBranchId: opConfig.branchId,
-            availableTables: (opConfig.tables || []).map(t => ({ id: t.id, label: t.label })),
-            headerBranchId: req.headers['x-branch-id'],
-            contextBranchId: req.branchId
-          });
-          return res.status(404).json({
-            success: false,
-            message: `Table ${activeTableNumber} does not exist in this branch`
-          });
-        }
+      const tableExists = opConfig.tables.some(t => {
+        const labelClean = String(t.label).replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+        const idClean = String(t.id).replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+        const targetClean = String(activeTableNumber).replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+        return labelClean === targetClean || 
+               idClean === targetClean || 
+               labelClean === 'table' + targetClean || 
+               idClean === 't' + targetClean ||
+               targetClean === 'table' + labelClean ||
+               targetClean === 't' + idClean;
+      });
+      if (!tableExists) {
+        return res.status(400).json({ success: false, message: `Table ${activeTableNumber} does not exist in this branch` });
       }
     }
 
@@ -371,7 +278,7 @@ const createOrder = async (req, res, next) => {
       const cleanPhone = String(customerPhone).trim();
       const phoneRegex = /^[0-9]{10}$/;
       if (!phoneRegex.test(cleanPhone)) {
-        return res.status(422).json({
+        return res.status(400).json({
           success: false,
           message: 'Please enter a valid 10-digit mobile number.'
         });
@@ -398,7 +305,7 @@ const createOrder = async (req, res, next) => {
       }
 
       if (!dbItem) {
-        return res.status(404).json({ success: false, message: `Menu item "${item.name || itemId}" not found` });
+        return res.status(400).json({ success: false, message: `Menu item "${item.name || itemId}" not found` });
       }
 
       if (dbItem.available === false || dbItem.isHidden === true) {
@@ -419,19 +326,7 @@ const createOrder = async (req, res, next) => {
     }
 
     // 7. Payment Config tax and platformCharge
-    let paymentConfig = await PaymentConfig.findOne(
-      { cafeId: activeCafeId, branchId: resolvedBranch.branchId },
-      null,
-      { bypassBranchFilter: true }
-    ).lean();
-    // Fallback to default branch payment config if branch-specific one doesn't exist
-    if (!paymentConfig && resolvedBranch.branchId !== 'default') {
-      paymentConfig = await PaymentConfig.findOne(
-        { cafeId: activeCafeId, branchId: 'default' },
-        null,
-        { bypassBranchFilter: true }
-      ).lean();
-    }
+    const paymentConfig = await PaymentConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean();
     const taxRate = paymentConfig ? (paymentConfig.taxRate || 0) : 5; // Default 5%
     const platformCharge = paymentConfig ? (paymentConfig.platformCharge || 0) : 0;
 
