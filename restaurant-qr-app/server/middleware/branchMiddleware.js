@@ -164,9 +164,9 @@ const attachCafeAndBranch = async (req, res, next) => {
       } else {
         const branchStatus = await verifyBranchActive(cafeId, branchId);
         if (!branchStatus.exists) {
-          return res.status(403).json({
+          return res.status(404).json({
             success: false,
-            message: `Unauthorized access. Branch ID: ${branchId} does not exist.`
+            message: `Branch ID: ${branchId} does not exist.`
           });
         }
         if (!branchStatus.isActive) {

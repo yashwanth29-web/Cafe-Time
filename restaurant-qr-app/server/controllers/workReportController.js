@@ -54,29 +54,13 @@ const createReport = async (req, res) => {
     }
 
     let branch;
-    const hasBranches = await Branch.exists({ cafeId: staff.cafeId });
-    if (!hasBranches) {
-      // Single-Cafe Mode: Auto create/fetch default branch
-      branch = await Branch.findOne({ branchId: 'default', cafeId: staff.cafeId });
+    if (!staff.assignedBranch) {
+      // Find any branch belonging to this cafe
+      branch = await Branch.findOne({ cafeId: staff.cafeId });
       if (!branch) {
-        const cafe = await Cafe.findOne({ cafeId: staff.cafeId });
-        branch = await Branch.create({
-          branchId: 'default',
-          branchName: 'Primary Location',
-          cafeId: staff.cafeId,
-          address: (cafe && cafe.address) || 'Default Address',
-          manager: 'Owner',
-          latitude: 0,
-          longitude: 0,
-          allowedRadius: 30,
-          isActive: true
-        });
+        return res.status(400).json({ success: false, message: 'No branch has been created yet. Please contact the owner.' });
       }
     } else {
-      // Multi-Branch Mode: Enforce staff.assignedBranch
-      if (!staff.assignedBranch) {
-        return res.status(400).json({ success: false, message: 'No branch assigned to your account. You must be assigned to a branch to upload work reports.' });
-      }
       branch = await Branch.findOne({ branchId: staff.assignedBranch, cafeId: staff.cafeId });
       if (!branch) {
         return res.status(404).json({ success: false, message: 'Assigned branch details not found.' });

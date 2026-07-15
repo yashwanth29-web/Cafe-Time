@@ -70,16 +70,6 @@ const createOwner = async (req, res) => {
       printerFailures: 0
     });
 
-    // 6. Create default main Branch
-    await Branch.create({
-      branchId: `${cleanCafeId}-BR1`,
-      branchName: `${cafeName.trim()} Main`,
-      cafeId: cleanCafeId,
-      address: `${city.trim()}, ${state.trim()}`,
-      manager: name.trim(),
-      isActive: true
-    });
-
     // 7. Send Welcome email (async)
     emailService.sendWelcomeEmail(cleanEmail, name, 'admin', {
       cafeName: cafeName,
@@ -88,7 +78,7 @@ const createOwner = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Cafe Owner and Cafe registered successfully with default Branch and Health Monitor.',
+      message: 'Cafe Owner and Cafe registered successfully with Health Monitor. Please configure your branch in the setup wizard.',
       owner: newOwner,
       cafe: newCafe
     });

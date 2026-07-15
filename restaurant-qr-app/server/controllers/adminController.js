@@ -1781,20 +1781,35 @@ const getDashboardStats = async (req, res) => {
 
 const initializeTenantAssets = async (req, res) => {
   const cafeId = req.user.cafeId;
-  const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+  const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId;
   
   if (!cafeId) {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
 
+  if (!activeBranch) {
+    return res.status(400).json({ success: false, message: 'Branch ID is required to generate assets' });
+  }
+
   try {
+    const Branch = require('../models/Branch');
+    const branchesCount = await Branch.countDocuments({ cafeId });
+    if (branchesCount === 0) {
+      return res.status(409).json({ success: false, message: 'No branches registered. Please complete Step 2 (Branch Setup) before generating assets.' });
+    }
+
+    const branchExists = await Branch.findOne({ branchId: activeBranch, cafeId });
+    if (!branchExists) {
+      return res.status(404).json({ success: false, message: `Branch ID: ${activeBranch} does not exist.` });
+    }
+
     const Category = require('../models/Category');
     const MenuItem = require('../models/MenuItem');
     const InventoryCategory = require('../models/InventoryCategory');
     const Inventory = require('../models/Inventory');
 
     // 1. Seed Menu Categories
-    const existingCats = await Category.find({ cafeId });
+    const existingCats = await Category.find({ cafeId, branchId: activeBranch });
     if (existingCats.length === 0) {
       const categoriesToSeed = [
         { name: 'Signature Chai', cafeId, branchId: activeBranch },
@@ -1808,7 +1823,7 @@ const initializeTenantAssets = async (req, res) => {
     }
 
     // 2. Seed Menu Items
-    const existingItems = await MenuItem.find({ cafeId });
+    const existingItems = await MenuItem.find({ cafeId, branchId: activeBranch });
     if (existingItems.length === 0) {
       const masterItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).lean();
       let itemsToSeed = [];
@@ -1845,7 +1860,7 @@ const initializeTenantAssets = async (req, res) => {
     }
 
     // 3. Seed Inventory Categories
-    const existingInvCats = await InventoryCategory.find({ cafeId });
+    const existingInvCats = await InventoryCategory.find({ cafeId, branchId: activeBranch });
     if (existingInvCats.length === 0) {
       const invCategoriesToSeed = [
         { name: 'Tea Ingredients', cafeId, branchId: activeBranch },
@@ -1861,7 +1876,7 @@ const initializeTenantAssets = async (req, res) => {
     }
 
     // 4. Seed Inventory Items (ingredients)
-    const existingInventory = await Inventory.find({ cafeId });
+    const existingInventory = await Inventory.find({ cafeId, $or: [{ branch: activeBranch }, { branchId: activeBranch }] });
     if (existingInventory.length === 0) {
       const { seedDefaultInventory } = require('./inventoryController');
       await seedDefaultInventory(cafeId, activeBranch);

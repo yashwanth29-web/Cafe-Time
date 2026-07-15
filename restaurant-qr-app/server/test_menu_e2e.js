@@ -41,7 +41,17 @@ async function runTests() {
       { upsert: true, returnDocument: 'after' }
     );
     
-    const dummyUser = await User.findOne({ cafeId: TEST_CAFE });
+    let dummyUser = await User.findOne({ cafeId: TEST_CAFE });
+    if (!dummyUser) {
+      dummyUser = await User.create({
+        name: 'Test Owner',
+        email: 'testowner@test.com',
+        phone: '1234567890',
+        role: 'owner',
+        cafeId: TEST_CAFE,
+        isActive: true
+      });
+    }
     token = jwt.sign({ id: dummyUser._id.toString(), role: dummyUser.role || 'admin', cafeId: TEST_CAFE }, process.env.JWT_SECRET || 'super_secret_cafe_key_12345', { expiresIn: '1d' });
     
     reqConfig = (cafeId, branchId) => ({

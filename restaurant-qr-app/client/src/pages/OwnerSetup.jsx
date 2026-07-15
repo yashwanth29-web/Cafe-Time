@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranch } from '../context/BranchContext';
 import { 
   getSetupData, 
   saveSetupData, 
@@ -14,6 +15,7 @@ import {
 
 const OwnerSetup = () => {
   const { user, checkSession } = useAuth();
+  const { activeBranchId, switchBranch, loadBranches } = useBranch();
   const navigate = useNavigate();
 
   // Wizard active step (1 to 5)
@@ -152,6 +154,17 @@ const OwnerSetup = () => {
         setNewBranchAddress('');
         setNewBranchManager('');
         await fetchBranches();
+        const createdBranch = res.branch;
+        if (createdBranch && createdBranch.branchId) {
+          localStorage.setItem('activeBranchId', createdBranch.branchId);
+          localStorage.setItem('activeCafeId', createdBranch.cafeId);
+          if (switchBranch) {
+            switchBranch(createdBranch.branchId);
+          }
+          if (loadBranches) {
+            await loadBranches();
+          }
+        }
         setTimeout(() => setSuccessMsg(''), 2500);
       }
     } catch (err) {
@@ -159,7 +172,7 @@ const OwnerSetup = () => {
     } finally {
       setLoading(false);
     }
-  }, [newBranchName, newBranchAddress, newBranchManager, fetchBranches]);
+  }, [newBranchName, newBranchAddress, newBranchManager, fetchBranches, switchBranch, loadBranches]);
 
   const handleDeleteBranch = useCallback(async (id) => {
     if (window.confirm('Are you sure you want to delete this branch?')) {
@@ -167,14 +180,34 @@ const OwnerSetup = () => {
         const res = await deleteBranch(id);
         if (res.success) {
           setSuccessMsg('Branch deleted.');
-          await fetchBranches();
+          const branchRes = await getBranches();
+          if (branchRes.success) {
+            const remaining = branchRes.branches || [];
+            setBranches(remaining);
+            if (remaining.length > 0) {
+              const latestBranch = remaining[0];
+              localStorage.setItem('activeBranchId', latestBranch.branchId);
+              localStorage.setItem('activeCafeId', latestBranch.cafeId);
+              if (switchBranch) {
+                switchBranch(latestBranch.branchId);
+              }
+            } else {
+              localStorage.removeItem('activeBranchId');
+              if (switchBranch) {
+                switchBranch('default');
+              }
+            }
+            if (loadBranches) {
+              await loadBranches();
+            }
+          }
           setTimeout(() => setSuccessMsg(''), 2000);
         }
       } catch (err) {
         setErrorMsg('Failed to delete branch.');
       }
     }
-  }, [fetchBranches]);
+  }, [switchBranch, loadBranches]);
 
   // Upload Logo handler
   const handleLogoUpload = useCallback(async (e) => {
@@ -323,7 +356,7 @@ const OwnerSetup = () => {
   ]);
 
   // Wizard navigation validations
-  const validateAndNext = useCallback(() => {
+  const validateAndNext = useCallback(async () => {
     setErrorMsg('');
     if (step === 1) {
       if (!cafeName.trim()) {
@@ -344,6 +377,30 @@ const OwnerSetup = () => {
         setErrorMsg('Please setup at least one branch for this cafe.');
         return;
       }
+      try {
+        setLoading(true);
+        const res = await getBranches();
+        setLoading(false);
+        if (res.success && res.branches && res.branches.length > 0) {
+          // The backend returns branches sorted by createdAt: -1 (newest first)
+          const latestBranch = res.branches[0];
+          localStorage.setItem('activeBranchId', latestBranch.branchId);
+          localStorage.setItem('activeCafeId', latestBranch.cafeId);
+          if (switchBranch) {
+            switchBranch(latestBranch.branchId);
+          }
+          if (loadBranches) {
+            await loadBranches();
+          }
+        } else {
+          setErrorMsg('No branches found on server. Please create one.');
+          return;
+        }
+      } catch (err) {
+        setLoading(false);
+        setErrorMsg('Failed to sync branch details with server. Please try again.');
+        return;
+      }
     }
     if (step === 3) {
       if (!assetsGenerated) {
@@ -358,7 +415,7 @@ const OwnerSetup = () => {
       }
     }
     setStep((prev) => prev + 1);
-  }, [step, cafeName, address, supportNumber, branches, assetsGenerated, upiId]);
+  }, [step, cafeName, address, supportNumber, branches, assetsGenerated, upiId, switchBranch, loadBranches]);
 
   const stepTitles = [
     'Cafe Profile',
@@ -1022,7 +1079,7 @@ const OwnerSetup = () => {
 
             <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-text-secondary)' }}>Registered Branches ({branches.length})</h4>
             {branches.length === 0 ? (
-              <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No branches setup yet.</p>
+              <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No branches have been created yet.</p>
             ) : (
               <div>
                 {branches.map((b) => (
