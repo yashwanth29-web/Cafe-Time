@@ -116,8 +116,8 @@ const appendLegacyFallback = async (order, branchMap = null) => {
     } else {
       defaultBranch = await getCachedBranch(`cafe:${targetCafeId}`, () => Branch.findOne({ cafeId: targetCafeId }).lean()) || {
         _id: null,
-        branchName: 'DR . Chai Cafe',
-        address: 'Comrade Puchalapalli Sundarayya Road, Yerrapalem'
+        branchName: 'Primary Location',
+        address: ''
       };
       if (branchMap) branchMap.set(targetCafeId, defaultBranch);
     }
@@ -198,7 +198,8 @@ const createOrder = async (req, res) => {
     // Build the order document
     const newOrder = new Order({
       cafeId: activeCafeId,
-      branchId: resolvedBranch ? String(resolvedBranch._id) : (branchId || 'default'),
+      branchId: resolvedBranch ? resolvedBranch.branchId : (branchId || 'default'),
+      branchObjectId: resolvedBranch ? resolvedBranch._id : null,
       branchName: resolvedBranch ? resolvedBranch.branchName : 'Main Branch',
       branchAddress: resolvedBranch ? resolvedBranch.address : '',
       tableNumber,
@@ -252,13 +253,29 @@ const getOrders = async (req, res) => {
 
     const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
     const queryBranch = req.query.branchId || req.headers['x-branch-id'];
+    const activeBranchId = isStaff ? req.user?.assignedBranch : queryBranch;
     
-    if (isStaff && req.user?.assignedBranch) {
-      filterQuery.branchId = req.user.assignedBranch;
-    } else if (queryBranch) {
-      // If owner/admin filters by a branch
-      filterQuery.branchId = queryBranch;
-    } // If owner requests all branches (no queryBranch), don't restrict branchId!
+    if (activeBranchId && activeBranchId !== 'all') {
+      const branchDoc = await getCachedBranch(`mode:${activeBranchId}:${cafeId}`, () => Branch.findOne({
+        $or: [
+          { branchId: activeBranchId },
+          { _id: mongoose.isValidObjectId(activeBranchId) ? activeBranchId : undefined }
+        ],
+        cafeId
+      }).lean());
+
+      if (branchDoc) {
+        filterQuery.branchId = {
+          $in: [
+            branchDoc.branchId,
+            String(branchDoc._id),
+            branchDoc._id
+          ]
+        };
+      } else {
+        filterQuery.branchId = activeBranchId;
+      }
+    }
 
     if (req.query.active === 'true') {
       filterQuery.status = { $ne: 'Completed' };

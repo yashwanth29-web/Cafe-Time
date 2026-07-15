@@ -22,10 +22,10 @@ export const printPOSReceipt = (order, user = null, cafe = null, branch = null) 
 
   const cafeName = cafe?.name || 'Our Cafe';
   const displayBranchName = branch?.branchName || 'Main Branch';
-  const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const displayAddress = branch?.address || cafe?.address || '';
   const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
   const logoUrl = getAssetUrl(cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
-  const cafeGST = cafe?.gstNumber || '36AAAAA1111A1Z1';
+  const cafeGST = cafe?.gstNumber || '';
 
   const itemsHtml = order.items.map(item => `
     <tr>
@@ -199,7 +199,7 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
 
   const cafeName = cafe?.name || 'Our Cafe';
   const displayBranchName = branch?.branchName || 'Main Branch';
-  const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
+  const displayAddress = branch?.address || cafe?.address || '';
   const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
   const logoUrl = getAssetUrl(cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
 
