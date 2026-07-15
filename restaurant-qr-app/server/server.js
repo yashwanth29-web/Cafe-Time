@@ -172,9 +172,15 @@ app.use(cookieParser());
 app.use(express.json()); // Body parser
 
 // Connect to Database
-connectDB().then(() => {
+connectDB().then(async () => {
   const migrateData = require('./utils/migrate');
   migrateData();
+  try {
+    const { auditAndRepairAllTables } = require('./utils/tableHelper');
+    await auditAndRepairAllTables();
+  } catch (err) {
+    console.error('[TABLE AUDIT STARTUP ERROR]', err);
+  }
 });
 
 // Initialize Storage Maintenance Scheduled Jobs

@@ -62,16 +62,13 @@ const validateTenant = async (req, res, next) => {
     // 3. Validate table belongs to branch if table parameter is present
     const tableId = req.query?.table || req.body?.tableNumber || req.body?.table;
     if (tableId && tableId !== 'Takeaway' && tableId !== 'Walk-in') {
-      const opConfig = await OperationalConfig.findOne({ cafeId, branchId });
-      if (opConfig) {
-        const tableExists = opConfig.tables.some(t => 
-          String(t.id).toLowerCase() === String(tableId).toLowerCase() || 
-          String(t.label).toLowerCase() === String(tableId).toLowerCase()
-        );
-        if (!tableExists) {
-          return res.status(400).json({ success: false, message: `Table ${tableId} does not exist in branch ${branchId}.` });
-        }
+      const { resolveAndSelfHealTable } = require('../utils/tableHelper');
+      const resolvedTable = await resolveAndSelfHealTable(cafeId, branchId, tableId);
+      if (!resolvedTable) {
+        return res.status(400).json({ success: false, message: `Table ${tableId} does not exist in branch ${branchId}.` });
       }
+      // Put resolved table details on the request so controllers can use it directly
+      req.resolvedTable = resolvedTable;
     }
 
     // 4. Validate Order belongs to branch/cafe if order ID is specified in the route

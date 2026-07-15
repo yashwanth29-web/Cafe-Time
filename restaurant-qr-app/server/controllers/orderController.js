@@ -253,42 +253,37 @@ const createOrder = async (req, res, next) => {
 
     // 4. Table Validation
     const activeTableNumber = String(tableNumber).trim();
+    let validatedTable = req.resolvedTable;
     if (activeTableNumber !== 'Takeaway' && activeTableNumber !== 'Walk-in') {
-      // Validate table by performing a query including cafeId, branchId, and tableNumber
-      const opConfig = await OperationalConfig.findOne({
-        cafeId: activeCafeId,
-        branchId: resolvedBranch.branchId,
-        tables: {
-          $elemMatch: {
-            $or: [
-              { id: { $regex: new RegExp('^' + activeTableNumber + '$', 'i') } },
-              { label: { $regex: new RegExp('^' + activeTableNumber + '$', 'i') } },
-              { id: { $regex: new RegExp('^t' + activeTableNumber + '$', 'i') } },
-              { label: { $regex: new RegExp('^table[- ]?' + activeTableNumber + '$', 'i') } }
-            ]
-          }
-        }
-      }).lean();
-
-      if (!opConfig) {
+      if (!validatedTable) {
+        const { resolveAndSelfHealTable } = require('../utils/tableHelper');
+        validatedTable = await resolveAndSelfHealTable(activeCafeId, resolvedBranch.branchId, activeTableNumber);
+      }
+      if (!validatedTable) {
         return res.status(400).json({ success: false, message: `Table ${activeTableNumber} does not exist in this branch` });
       }
     }
 
+    // Extract customer details (handles both flat and nested 'customer' payload structure)
+    const customerObj = req.body.customer || {};
+    const finalCustomerName = (customerName || customerObj.name || '').trim();
+    const finalCustomerEmail = (customerEmail || customerObj.email || '').trim();
+    const finalCustomerPhone = (customerPhone || customerObj.phone || '').trim();
+
     // 5. Customer Validation (mandatory for QR orders)
     const isQR = (source === 'QR' || orderSource === 'QR' || (!source && !orderSource));
     if (isQR) {
-      if (!customerName || !customerName.trim()) {
+      if (!finalCustomerName) {
         return res.status(400).json({ success: false, message: 'Customer name is required' });
       }
-      if (!customerPhone || !customerPhone.trim()) {
+      if (!finalCustomerPhone) {
         return res.status(400).json({ success: false, message: 'Customer phone number is required' });
       }
     }
 
     // Strict 10-digit numeric phone number validation
-    if (customerPhone) {
-      const cleanPhone = String(customerPhone).trim();
+    if (finalCustomerPhone) {
+      const cleanPhone = String(finalCustomerPhone).trim();
       const phoneRegex = /^[0-9]{10}$/;
       if (!phoneRegex.test(cleanPhone)) {
         return res.status(400).json({
@@ -396,7 +391,7 @@ const createOrder = async (req, res, next) => {
       cafeGstNumber: resolvedCafe ? resolvedCafe.gstNumber : '',
       cafeSupportNumber: resolvedCafe ? resolvedCafe.supportNumber : '',
       ownerId: resolvedOwnerId,
-      customerId: customerPhone || customerEmail || '',
+      customerId: finalCustomerPhone || finalCustomerEmail || '',
       invoiceId: 'INV-' + uniqueId,
       receiptId: 'REC-' + uniqueId,
       kotId: 'KOT-' + uniqueId,
@@ -406,9 +401,9 @@ const createOrder = async (req, res, next) => {
       items: validatedItems,
       totalAmount: finalGrandTotal,
       status: 'Placed',
-      customerName: customerName || '',
-      customerEmail: customerEmail || '',
-      customerPhone: customerPhone || '',
+      customerName: finalCustomerName,
+      customerEmail: finalCustomerEmail,
+      customerPhone: finalCustomerPhone,
       specialInstructions: specialInstructions || '',
       paymentStatus: paymentStatus || 'Pending',
       paymentMethod: paymentMethod || 'Pending',

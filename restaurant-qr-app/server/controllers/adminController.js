@@ -602,7 +602,7 @@ const saveSetupData = async (req, res) => {
 
     // 3. Save OperationalConfig
     if (operationalConfig) {
-      await OperationalConfig.findOneAndUpdate(
+      const savedOpConfig = await OperationalConfig.findOneAndUpdate(
         { cafeId, branchId: activeBranch },
         {
           tables: operationalConfig.tables || [],
@@ -610,8 +610,39 @@ const saveSetupData = async (req, res) => {
           kitchenDisplayEnabled: operationalConfig.kitchenDisplayEnabled || false,
           inventoryEnabled: operationalConfig.inventoryEnabled || false
         },
-        { upsert: true, returnDocument: 'after' }
+        { upsert: true, returnDocument: 'after', new: true }
       );
+
+      // Keep Table collection in sync
+      if (operationalConfig.tables && Array.isArray(operationalConfig.tables)) {
+        const Table = require('../models/Table');
+        const { parseTableNumber } = require('../utils/tableHelper');
+        
+        const activeTableIds = [];
+        for (const t of operationalConfig.tables) {
+          const rawId = t.id || '';
+          const rawLabel = t.label || '';
+          const parsedNum = parseTableNumber(rawId) || parseTableNumber(rawLabel);
+          if (!parsedNum) continue;
+
+          const tableId = rawId || `T${parsedNum}`;
+          const tableNumber = parsedNum;
+          activeTableIds.push(tableId);
+
+          await Table.findOneAndUpdate(
+            { cafeId, branchId: activeBranch, tableNumber },
+            { tableId, tableNumber, branchId: activeBranch, cafeId, status: 'Active' },
+            { upsert: true, new: true }
+          );
+        }
+        
+        // Delete tables that are no longer in the list
+        await Table.deleteMany({
+          cafeId,
+          branchId: activeBranch,
+          tableId: { $nin: activeTableIds }
+        });
+      }
     }
 
     // 4. Create Staff list (if provided)
@@ -766,6 +797,41 @@ const createBranch = async (req, res) => {
       isActive: isActive !== undefined ? isActive : true,
       unifiedStaffMode: req.body.unifiedStaffMode !== undefined ? !!req.body.unifiedStaffMode : false
     });
+
+    // Automatically generate OperationalConfig and default tables for the new branch
+    try {
+      const OperationalConfig = require('../models/OperationalConfig');
+      const Table = require('../models/Table');
+      
+      await OperationalConfig.create({
+        cafeId,
+        branchId,
+        tables: [
+          { id: 'T1', label: 'Table-1' },
+          { id: 'T2', label: 'Table-2' },
+          { id: 'T3', label: 'Table-3' },
+          { id: 'T4', label: 'Table-4' },
+          { id: 'T5', label: 'Table-5' }
+        ],
+        printerEnabled: false,
+        kitchenDisplayEnabled: true,
+        inventoryEnabled: true
+      });
+
+      for (let i = 1; i <= 5; i++) {
+        await Table.create({
+          tableId: `T${i}`,
+          tableNumber: `${i}`,
+          branchId,
+          cafeId,
+          status: 'Active'
+        });
+      }
+      console.log(`[BRANCH CREATION] Generated default OperationalConfig and tables T1-T5 for branch ${branchId}`);
+    } catch (tblErr) {
+      console.error(`[BRANCH CREATION ERROR] Failed to generate default tables/config for branch ${branchId}:`, tblErr);
+    }
+
     return res.status(201).json({ success: true, branch: newBranch });
   } catch (error) {
     console.error('createBranch error:', error);

@@ -330,15 +330,21 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
       }));
 
       const orderPayload = {
+        cafeId: user?.cafeId || cafeId || sessionStorage.getItem('cafeId') || '',
+        branchId: user?.assignedBranch || sessionStorage.getItem('branchId') || 'default',
+        tableId: tableNumber ? `T${String(tableNumber).replace(/^(table[- ]?|t)/i, '')}` : 'Takeaway',
         tableNumber: tableNumber || 'Takeaway',
+        customer: {
+          name: customerName || (isStaff ? 'Walk-in Customer' : ''),
+          email: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
+          phone: customerPhone || (isStaff ? '0000000000' : '')
+        },
         items: itemsPayload,
         totalAmount: grandTotal,
         customerName: customerName || (isStaff ? 'Walk-in Customer' : ''),
         customerEmail: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
         customerPhone: customerPhone || (isStaff ? '0000000000' : ''),
         specialInstructions,
-        cafeId: user?.cafeId || cafeId || sessionStorage.getItem('cafeId') || '',
-        branchId: user?.assignedBranch || sessionStorage.getItem('branchId') || 'default',
         source: isStaff ? 'STAFF' : 'QR',
         staffId: isStaff && user ? user._id : undefined
       };
