@@ -4,10 +4,10 @@ let menuCache = {}; // Keyed by cafeId_branchId
 let categoryCache = {}; // Keyed by cafeId_branchId
 
 module.exports = {
-  getMenu: () => {
+  getMenu: (explicitCafeId, explicitBranchId) => {
     const context = getContext();
-    const cafeId = (context && context.cafeId) || 'CD001';
-    const branchId = (context && context.branchId) || 'default';
+    const cafeId = explicitCafeId || (context && context.cafeId) || 'CD001';
+    const branchId = explicitBranchId || (context && context.branchId) || 'default';
     const key = `${cafeId}_${branchId}`;
     if (menuCache[key]) {
       console.log(`[CACHE] Menu hit for ${key}: serving from memory cache`);
@@ -15,21 +15,28 @@ module.exports = {
     return menuCache[key];
   },
   
-  setMenu: (data) => {
-    const context = getContext();
-    const cafeId = (context && context.cafeId) || 'CD001';
-    const branchId = (context && context.branchId) || 'default';
+  setMenu: (explicitCafeId, explicitBranchId, data) => {
+    let cafeId, branchId, menuData;
+    if (data === undefined && Array.isArray(explicitCafeId)) {
+      menuData = explicitCafeId;
+      const context = getContext();
+      cafeId = (context && context.cafeId) || 'CD001';
+      branchId = (context && context.branchId) || 'default';
+    } else {
+      cafeId = explicitCafeId;
+      branchId = explicitBranchId;
+      menuData = data;
+    }
     const key = `${cafeId}_${branchId}`;
     console.log(`[CACHE] Menu populated for ${key}`);
-    menuCache[key] = data;
+    menuCache[key] = menuData;
   },
   
-  clearMenu: () => {
+  clearMenu: (explicitCafeId, explicitBranchId) => {
     const context = getContext();
-    const cafeId = (context && context.cafeId) || 'CD001';
-    const branchId = (context && context.branchId) || 'default';
+    const cafeId = explicitCafeId || (context && context.cafeId) || 'CD001';
+    const branchId = explicitBranchId || (context && context.branchId) || 'default';
     if (cafeId && branchId === 'default') {
-      // If default branch is cleared, it affects all branches because they inherit from master
       console.log(`[CACHE] Master branch updated. Invalidating ALL menu caches for ${cafeId}`);
       Object.keys(menuCache).forEach(k => {
         if (k.startsWith(`${cafeId}_`)) {
@@ -46,10 +53,10 @@ module.exports = {
     }
   },
   
-  getCategories: () => {
+  getCategories: (explicitCafeId, explicitBranchId) => {
     const context = getContext();
-    const cafeId = (context && context.cafeId) || 'CD001';
-    const branchId = (context && context.branchId) || 'default';
+    const cafeId = explicitCafeId || (context && context.cafeId) || 'CD001';
+    const branchId = explicitBranchId || (context && context.branchId) || 'default';
     const key = `${cafeId}_${branchId}`;
     if (categoryCache[key]) {
       console.log(`[CACHE] Category hit for ${key}: serving from memory cache`);
@@ -57,19 +64,27 @@ module.exports = {
     return categoryCache[key];
   },
   
-  setCategories: (data) => {
-    const context = getContext();
-    const cafeId = (context && context.cafeId) || 'CD001';
-    const branchId = (context && context.branchId) || 'default';
+  setCategories: (explicitCafeId, explicitBranchId, data) => {
+    let cafeId, branchId, catData;
+    if (data === undefined && Array.isArray(explicitCafeId)) {
+      catData = explicitCafeId;
+      const context = getContext();
+      cafeId = (context && context.cafeId) || 'CD001';
+      branchId = (context && context.branchId) || 'default';
+    } else {
+      cafeId = explicitCafeId;
+      branchId = explicitBranchId;
+      catData = data;
+    }
     const key = `${cafeId}_${branchId}`;
     console.log(`[CACHE] Category cache populated for ${key}`);
-    categoryCache[key] = data;
+    categoryCache[key] = catData;
   },
   
-  clearCategories: () => {
+  clearCategories: (explicitCafeId, explicitBranchId) => {
     const context = getContext();
-    const cafeId = (context && context.cafeId) || 'CD001';
-    const branchId = (context && context.branchId) || 'default';
+    const cafeId = explicitCafeId || (context && context.cafeId) || 'CD001';
+    const branchId = explicitBranchId || (context && context.branchId) || 'default';
     if (cafeId && branchId) {
       const key = `${cafeId}_${branchId}`;
       console.log(`[CACHE] Category cache invalidated for ${key}`);

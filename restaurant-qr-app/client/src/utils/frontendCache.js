@@ -1,30 +1,67 @@
 // In-memory frontend cache synchronized with Socket.io
 
+const getFrontendPartitionKey = () => {
+  const isCustomerView = window.location.pathname === '/' || window.location.pathname === '/history';
+  let cafeId, branchId;
+  if (isCustomerView) {
+    cafeId = sessionStorage.getItem('cafeId') || 'CD001';
+    branchId = sessionStorage.getItem('branchId') || 'default';
+  } else {
+    cafeId = localStorage.getItem('activeCafeId') || sessionStorage.getItem('cafeId') || 'CD001';
+    branchId = localStorage.getItem('activeBranchId') || sessionStorage.getItem('branchId') || 'default';
+  }
+  return `${cafeId}_${branchId}`;
+};
+
 const cache = {
-  menu: null,
-  categories: null,
-  inventory: null,
-  staff: null,
+  menu: {},
+  categories: {},
+  inventory: {},
+  staff: {},
 };
 
 export const frontendCache = {
-  getMenu: () => cache.menu,
-  setMenu: (menuData) => { cache.menu = menuData; },
+  getMenu: () => {
+    const key = getFrontendPartitionKey();
+    return cache.menu[key] || null;
+  },
+  setMenu: (menuData) => {
+    const key = getFrontendPartitionKey();
+    cache.menu[key] = menuData;
+  },
   
-  getCategories: () => cache.categories,
-  setCategories: (catData) => { cache.categories = catData; },
+  getCategories: () => {
+    const key = getFrontendPartitionKey();
+    return cache.categories[key] || null;
+  },
+  setCategories: (catData) => {
+    const key = getFrontendPartitionKey();
+    cache.categories[key] = catData;
+  },
   
-  getInventory: () => cache.inventory,
-  setInventory: (invData) => { cache.inventory = invData; },
+  getInventory: () => {
+    const key = getFrontendPartitionKey();
+    return cache.inventory[key] || null;
+  },
+  setInventory: (invData) => {
+    const key = getFrontendPartitionKey();
+    cache.inventory[key] = invData;
+  },
   
-  getStaff: () => cache.staff,
-  setStaff: (staffData) => { cache.staff = staffData; },
+  getStaff: () => {
+    const key = getFrontendPartitionKey();
+    return cache.staff[key] || null;
+  },
+  setStaff: (staffData) => {
+    const key = getFrontendPartitionKey();
+    cache.staff[key] = staffData;
+  },
   
   clear: () => {
-    cache.menu = null;
-    cache.categories = null;
-    cache.inventory = null;
-    cache.staff = null;
+    cache.menu = {};
+    cache.categories = {};
+    cache.inventory = {};
+    cache.staff = {};
   }
 };
 

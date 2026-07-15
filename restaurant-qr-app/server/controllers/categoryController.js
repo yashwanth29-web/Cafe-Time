@@ -28,7 +28,7 @@ const getCategories = async (req, res) => {
   try {
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
     const branchId = req.branchId || req.query.branchId || 'default';
-    const cached = menuCache.getCategories();
+    const cached = menuCache.getCategories(cafeId, branchId);
     if (cached) {
       return res.status(200).json({ success: true, count: cached.length, data: cached });
     }
@@ -65,7 +65,7 @@ const getCategories = async (req, res) => {
     }
 
     if (categories && Array.isArray(categories)) {
-      menuCache.setCategories(categories);
+      menuCache.setCategories(cafeId, branchId, categories);
     }
 
     return res.status(200).json({ success: true, count: categories.length, data: categories });
@@ -110,7 +110,7 @@ const createCategory = async (req, res) => {
     const savedCategory = await newCategory.save();
     
     // Clear category cache for this cafe/branch
-    menuCache.clearCategories();
+    menuCache.clearCategories(cafeId, finalBranchId);
 
     return res.status(201).json({ success: true, data: savedCategory });
   } catch (error) {
@@ -163,8 +163,8 @@ const updateCategory = async (req, res) => {
     );
 
     // Invalidate caches
-    menuCache.clearCategories();
-    menuCache.clearMenu();
+    menuCache.clearCategories(cafeId, finalBranchId);
+    menuCache.clearMenu(cafeId, finalBranchId);
 
     return res.status(200).json({ success: true, data: updatedCategory });
   } catch (error) {
@@ -203,8 +203,8 @@ const deleteCategory = async (req, res) => {
       { category: 'Uncategorized' }
     );
     // Invalidate caches
-    menuCache.clearCategories();
-    menuCache.clearMenu();
+    menuCache.clearCategories(cafeId, finalBranchId);
+    menuCache.clearMenu(cafeId, finalBranchId);
 
     return res.status(200).json({ success: true, message: 'Category deleted successfully, items moved to Uncategorized' });
   } catch (error) {
@@ -236,7 +236,7 @@ const reorderCategories = async (req, res) => {
     await Category.bulkWrite(bulkOps);
 
     // Invalidate categories cache
-    menuCache.clearCategories();
+    menuCache.clearCategories(cafeId, branchId);
 
     return res.status(200).json({ success: true, message: 'Categories reordered successfully' });
   } catch (error) {

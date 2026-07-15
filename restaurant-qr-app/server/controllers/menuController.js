@@ -12,7 +12,7 @@ const getMenuItems = async (req, res) => {
     const branchId = req.branchId || req.query.branchId || 'default';
     console.log(`[DEBUG getMenuItems] Request for cafeId: ${cafeId}, branchId: ${branchId}`);
 
-    const cached = menuCache.getMenu();
+    const cached = menuCache.getMenu(cafeId, branchId);
     if (cached) {
       console.log(`[DEBUG getMenuItems] Returning from cache. Count: ${cached.length}`);
       return res.status(200).json({ success: true, count: cached.length, data: cached });
@@ -79,7 +79,7 @@ const getMenuItems = async (req, res) => {
     });
 
     console.log(`[DEBUG getMenuItems] Final returned items: ${finalMenuItems.length}`);
-    menuCache.setMenu(finalMenuItems);
+    menuCache.setMenu(cafeId, branchId, finalMenuItems);
     return res.status(200).json({ success: true, count: finalMenuItems.length, data: finalMenuItems });
   } catch (error) {
     console.error('Error fetching menu items:', error);
@@ -123,7 +123,7 @@ const createMenuItem = async (req, res) => {
 
     // Fetch latest status
     const latestItem = await MenuItem.findOne({ _id: savedItem._id, cafeId, branchId });
-    menuCache.clearMenu();
+    menuCache.clearMenu(cafeId, branchId);
     try {
       const io = socket.getIO();
       if (io) {
@@ -239,7 +239,7 @@ const updateMenuItem = async (req, res) => {
 
     // Fetch the updated item again to return the latest availability status
     const latestItem = await MenuItem.findOne({ _id: updatedItem._id, cafeId, branchId }, null, { bypassBranchFilter: true });
-    menuCache.clearMenu();
+    menuCache.clearMenu(cafeId, branchId);
     try {
       const io = socket.getIO();
       if (io) {
@@ -322,7 +322,7 @@ const deleteMenuItem = async (req, res) => {
     }
 
     // Clear menu cache since an item was deleted/hidden
-    menuCache.clearMenu();
+    menuCache.clearMenu(cafeId, branchId);
 
     return res.status(200).json({ success: true, message: 'Menu item deleted successfully' });
   } catch (error) {

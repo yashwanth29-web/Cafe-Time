@@ -1868,8 +1868,8 @@ const initializeTenantAssets = async (req, res) => {
     }
 
     const menuCache = require('../utils/menuCache');
-    menuCache.clearMenu();
-    menuCache.clearCategories();
+    menuCache.clearMenu(cafeId, activeBranch);
+    menuCache.clearCategories(cafeId, activeBranch);
 
     return res.status(200).json({
       success: true,

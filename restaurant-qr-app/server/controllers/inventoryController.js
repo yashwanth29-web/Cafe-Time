@@ -636,7 +636,7 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, br
       await Promise.all(updatePromises);
     }
     
-    menuCache.clearMenu();
+    menuCache.clearMenu(cafeId, branchId);
   } catch (err) {
     console.error('Error auto-updating menu item availability:', err);
   }
