@@ -439,16 +439,33 @@ const getOwnerTodayDashboard = async (req, res) => {
   }
 
   try {
-    const activeBranch = req.branchId || 'default';
-    // Get all active staff members
-    const staffList = await User.find({
+    const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user?.role || '').toLowerCase());
+    const queryBranch = req.query.branchId || req.headers['x-branch-id'];
+    let activeBranch = 'default';
+    if (isStaff && req.user?.assignedBranch) {
+      activeBranch = req.user.assignedBranch;
+    } else if (queryBranch) {
+      activeBranch = queryBranch;
+    } else if (req.branchId) {
+      activeBranch = req.branchId;
+    }
+
+    const staffQuery = {
       cafeId,
-      assignedBranch: activeBranch,
       role: { $nin: ['super_admin', 'admin', 'owner', 'SUPER_ADMIN', 'ADMIN', 'OWNER'] },
       isActive: true
-    });
+    };
+    const attendanceQuery = { cafeId, date: todayStr };
 
-    const todayRecords = await Attendance.find({ cafeId, branchId: activeBranch, date: todayStr }).lean();
+    if (activeBranch !== 'all' && activeBranch !== '') {
+      staffQuery.assignedBranch = activeBranch;
+      attendanceQuery.branchId = activeBranch;
+    }
+
+    // Get all active staff members
+    const staffList = await User.find(staffQuery);
+
+    const todayRecords = await Attendance.find(attendanceQuery).lean();
 
     // Fetch Cafe to get openingTime and check if shift has started
     const cafe = await Cafe.findOne({ cafeId });
@@ -524,23 +541,27 @@ const getOwnerReports = async (req, res) => {
     const activeBranch = branchId || req.branchId || 'default';
     const query = {
       cafeId,
-      branchId: activeBranch,
       checkInTime: { $gte: startDate }
     };
 
     const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user.role || '').toLowerCase());
-    if (isStaff && req.user.assignedBranch) {
-      query.branchId = req.user.assignedBranch;
-    } else if (branchId) {
-      query.branchId = branchId;
-    }
-    const records = await Attendance.find(query).sort({ checkInTime: -1 }).lean();
-    const staffCount = await User.countDocuments({
+    
+    const staffQuery = {
       cafeId,
-      assignedBranch: activeBranch,
       role: { $nin: ['super_admin', 'admin', 'owner', 'SUPER_ADMIN', 'ADMIN', 'OWNER'] },
       isActive: true
-    });
+    };
+
+    if (isStaff && req.user.assignedBranch) {
+      query.branchId = req.user.assignedBranch;
+      staffQuery.assignedBranch = req.user.assignedBranch;
+    } else if (activeBranch && activeBranch !== 'all' && activeBranch !== '') {
+      query.branchId = activeBranch;
+      staffQuery.assignedBranch = activeBranch;
+    }
+
+    const records = await Attendance.find(query).sort({ checkInTime: -1 }).lean();
+    const staffCount = await User.countDocuments(staffQuery);
 
     // 1. Total working hours
     const totalWorkingMinutes = records.reduce((sum, r) => sum + (r.totalDuration || 0), 0);

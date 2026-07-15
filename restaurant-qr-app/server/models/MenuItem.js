@@ -78,6 +78,10 @@ const MenuItemSchema = new mongoose.Schema({
     quantity: {
       type: Number,
       required: true
+    },
+    unit: {
+      type: String,
+      default: ''
     }
   }],
   masterItemId: {

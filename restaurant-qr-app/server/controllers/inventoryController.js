@@ -101,30 +101,12 @@ const seedDefaultInventory = async (cafeId, branchId = 'default') => {
     { name: 'Floor Cleaner', quantity: 3000, reorderLevel: 500, unit: 'ml', costPrice: 0.10, category: 'Cleaning Supplies', supplier: 'Local Grocery', branch: 'Main' }
   ];
 
-  const branches = await Branch.find({ cafeId });
-  const itemsToCreate = [];
-  
-  if (branches.length > 0) {
-    for (const b of branches) {
-      for (const item of defaults) {
-        itemsToCreate.push({
-          ...item,
-          cafeId,
-          branch: b.branchId,
-          branchId: b.branchId
-        });
-      }
-    }
-  } else {
-    for (const item of defaults) {
-      itemsToCreate.push({
-        ...item,
-        cafeId,
-        branch: branchId || 'default',
-        branchId: branchId || 'default'
-      });
-    }
-  }
+  const itemsToCreate = defaults.map(item => ({
+    ...item,
+    cafeId,
+    branch: branchId,
+    branchId: branchId
+  }));
 
   return await Inventory.insertMany(itemsToCreate);
 };
@@ -145,11 +127,12 @@ const getInventory = async (req, res, next) => {
     const totalItemsCount = await Inventory.countDocuments(query);
     const hasDemo = await Inventory.exists({ cafeId, name: { $in: ['Burger Buns', 'Chicken Patties', 'Coffee Beans'] } });
 
-    // Auto-seed if database contains no inventory or contains old demo data
+    const seedBranch = reqBranchId || (isStaff ? req.user.assignedBranch : 'default');
+
+    // Auto-seed if database contains no inventory for this branch or contains old demo data
     if (totalItemsCount === 0 || hasDemo) {
-      console.log('Clearing old demo inventory items and seeding actual Dr. Chai Cafe inventory...');
-      const seedBranch = reqBranchId || 'default';
-      await Inventory.deleteMany({ cafeId });
+      console.log(`Clearing old demo inventory items and seeding actual Dr. Chai Cafe inventory for branch: ${seedBranch}...`);
+      await Inventory.deleteMany({ cafeId, $or: [{ branch: seedBranch }, { branchId: seedBranch }] });
       await seedDefaultInventory(cafeId, seedBranch);
     }
 
@@ -652,24 +635,48 @@ const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, br
   }
 };
 
-// Auto inventory deduction helper (Runs on status change to 'Completed' - optimized batch execution)
+// Centralized, transaction-safe dynamic inventory deduction service
 const deductInventoryForOrder = async (orderId, cafeId, items) => {
-  try {
-    const Order = require('../models/Order');
-    const MenuItem = require('../models/MenuItem');
-    const mongoose = require('mongoose');
+  const Order = require('../models/Order');
+  const MenuItem = require('../models/MenuItem');
+  const mongoose = require('mongoose');
 
-    const order = await Order.findOne({ _id: orderId }, null, { bypassBranchFilter: true });
-    if (!order || order.inventoryDeducted || !['Ready', 'Completed', 'Delivered'].includes(order.status)) {
+  let session = null;
+  try {
+    session = await mongoose.startSession();
+    session.startTransaction();
+
+    // 1. Atomically mark the order as deducted to prevent concurrent race conditions
+    // and verify paymentStatus is Paid and not cancelled/failed/expired
+    const order = await Order.findOneAndUpdate(
+      { 
+        _id: orderId, 
+        inventoryDeducted: { $ne: true },
+        paymentStatus: 'Paid',
+        status: { $nin: ['Cancelled', 'Failed', 'Expired'] }
+      },
+      { $set: { inventoryDeducted: true } },
+      { session, returnDocument: 'after', bypassBranchFilter: true }
+    );
+
+    if (!order) {
+      console.log(`[INVENTORY] Order ${orderId} already processed, unpaid, or cancelled. Skipping deduction.`);
+      await session.abortTransaction();
+      session.endSession();
       return;
     }
 
     const branchId = order.branchId || 'default';
-    const opConfig = await OperationalConfig.findOne({ cafeId, branchId });
+    const opConfig = await OperationalConfig.findOne({ cafeId, branchId }).session(session);
     const isEnabled = opConfig ? opConfig.inventoryEnabled : true;
-    if (!isEnabled) return;
+    if (!isEnabled) {
+      console.log(`[INVENTORY] Inventory tracking is disabled for branch ${branchId}. Committing and exiting.`);
+      await session.commitTransaction();
+      session.endSession();
+      return;
+    }
 
-    // Batch fetch menu items for the ordered items to resolve recipes in one roundtrip
+    // 2. Batch fetch MenuItem details matching itemIds or names, strictly scoped to this cafe and branch to prevent recipe leakages
     const itemIds = items.map(item => item.id).filter(id => mongoose.isValidObjectId(id));
     const itemNames = items.map(item => item.name);
     
@@ -678,8 +685,9 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
         { _id: { $in: itemIds } },
         { name: { $in: itemNames } }
       ],
-      cafeId
-    }).lean();
+      cafeId,
+      branchId
+    }).session(session).lean();
 
     const menuItemMap = new Map();
     menuItems.forEach(mi => {
@@ -691,52 +699,46 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     const ingredientNamesSet = new Set();
 
     for (const item of items) {
-      const itemNameLower = (item.name || '').toLowerCase();
       const orderQty = item.quantity || 0;
       if (orderQty <= 0) continue;
 
       const menuItem = menuItemMap.get(String(item.id)) || menuItemMap.get(item.name);
-      let matchedRecipe = menuItem && menuItem.recipe && menuItem.recipe.length > 0 
-        ? menuItem.recipe 
-        : null;
-
-      if (!matchedRecipe) {
-        // Fallback to hardcoded RECIPES mapping
-        for (const [key, ingredients] of Object.entries(RECIPES)) {
-          if (itemNameLower.includes(key)) {
-            matchedRecipe = ingredients;
-            break;
-          }
-        }
+      if (!menuItem || !menuItem.recipe || menuItem.recipe.length === 0) {
+        // Skip deduction when recipe is missing (Req 10)
+        console.log(`[INVENTORY] Recipe missing for item "${item.name}". Skipping deduction for this item.`);
+        continue;
       }
 
-      if (matchedRecipe) {
-        for (const ing of matchedRecipe) {
-          const qtyToDeduct = ing.quantity * orderQty;
-          ingredientNamesSet.add(ing.name);
-          ingredientDeductionList.push({
-            name: ing.name,
-            deductionQty: qtyToDeduct,
-            orderQty,
-            itemName: item.name
-          });
-        }
+      for (const ing of menuItem.recipe) {
+        const qtyToDeduct = ing.quantity * orderQty;
+        ingredientNamesSet.add(ing.name);
+        ingredientDeductionList.push({
+          name: ing.name,
+          deductionQty: qtyToDeduct,
+          orderQty,
+          itemName: item.name,
+          menuItemId: menuItem._id,
+          recipeUnit: ing.unit || ''
+        });
       }
     }
 
     if (ingredientDeductionList.length === 0) {
-      order.inventoryDeducted = true;
-      await order.save();
+      console.log(`[INVENTORY] No recipes or ingredients to deduct for order ${orderId}. Committing.`);
+      await session.commitTransaction();
+      session.endSession();
+      // Auto-update availability for the branch
+      await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
       return;
     }
 
-    // Batch fetch current inventory stock levels
+    // 3. Batch fetch current inventory stock levels and acquire transaction-level write lock
     const ingredientNames = Array.from(ingredientNamesSet);
     const inventoryItems = await Inventory.find({
       cafeId,
       branchId,
       name: { $in: ingredientNames }
-    });
+    }).session(session);
 
     const inventoryMap = new Map();
     inventoryItems.forEach(inv => {
@@ -747,65 +749,124 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     const logsToCreate = [];
     const affectedIngredients = [];
 
+    // Structured unit conversion helper (handles mass, volume, piece, unit, packet)
+    const convertUnits = (quantity, fromUnit, toUnit) => {
+      if (!fromUnit || !toUnit) return quantity;
+      const f = fromUnit.toLowerCase().trim();
+      const t = toUnit.toLowerCase().trim();
+      if (f === t) return quantity;
+
+      // Mass (kg <-> g)
+      if ((f === 'kg' || f === 'kilogram') && (t === 'g' || t === 'gram')) return quantity * 1000;
+      if ((f === 'g' || f === 'gram') && (t === 'kg' || t === 'kilogram')) return quantity / 1000;
+
+      // Volume (litre <-> ml)
+      if ((f === 'l' || f === 'litre' || f === 'liter') && (t === 'ml' || t === 'milliliter')) return quantity * 1000;
+      if ((f === 'ml' || f === 'milliliter') && (t === 'l' || t === 'litre' || t === 'liter')) return quantity / 1000;
+
+      return quantity; // Fallback for piece, unit, packet
+    };
+
     for (const ded of ingredientDeductionList) {
       const invItem = inventoryMap.get(ded.name);
-      if (invItem) {
-        const deductionQty = ded.deductionQty;
-        const newQty = Math.max(0, invItem.quantity - deductionQty);
+      if (!invItem) {
+        // Skip deduction when ingredient is missing (Req 10)
+        console.warn(`[INVENTORY] Ingredient "${ded.name}" missing in inventory. Skipping deduction for this ingredient.`);
+        continue;
+      }
 
-        let newStatus = 'IN_STOCK';
-        if (newQty <= 0) {
-          newStatus = 'OUT_OF_STOCK';
-        } else if (newQty <= invItem.reorderLevel) {
-          newStatus = 'LOW_STOCK';
-        }
+      // Skip deduction when inventory item is inactive (Req 10)
+      if (invItem.status === 'INACTIVE') {
+        console.warn(`[INVENTORY] Ingredient "${ded.name}" is INACTIVE. Skipping deduction.`);
+        continue;
+      }
 
-        bulkOps.push({
-          updateOne: {
-            filter: { _id: invItem._id },
-            update: {
-              $set: {
-                quantity: newQty,
-                stock: newQty,
-                status: newStatus
-              }
+      // Convert quantity from recipe unit to inventory unit
+      let convertedDeductionQty = ded.deductionQty;
+      if (ded.recipeUnit && invItem.unit) {
+        convertedDeductionQty = convertUnits(ded.deductionQty, ded.recipeUnit, invItem.unit);
+      }
+
+      const oldQty = invItem.quantity;
+      const newQty = oldQty - convertedDeductionQty;
+
+      // Prevent negative inventory under every circumstance (Req 13)
+      if (newQty < 0) {
+        throw new Error(`Insufficient stock for ingredient "${invItem.name}" in branch ${branchId}. Required: ${convertedDeductionQty} ${invItem.unit}, Available: ${oldQty} ${invItem.unit}`);
+      }
+
+      let newStatus = 'IN_STOCK';
+      if (newQty <= 0) {
+        newStatus = 'OUT_OF_STOCK';
+      } else if (newQty <= invItem.reorderLevel) {
+        newStatus = 'LOW_STOCK';
+      }
+
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: invItem._id },
+          update: {
+            $set: {
+              quantity: newQty,
+              stock: newQty,
+              status: newStatus
             }
           }
-        });
+        }
+      });
 
-        logsToCreate.push({
-          cafeId,
-          branchId,
-          itemId: invItem._id,
-          itemName: invItem.name,
-          orderId: order._id,
-          type: 'Deduction',
-          quantityChanged: -deductionQty,
-          cost: (invItem.costPrice || invItem.cost || 0) * deductionQty,
-          reason: `Sold ${ded.orderQty} x ${ded.itemName}`,
-          userEmail: 'system-auto-deduct'
-        });
+      // Save complete log with detailed audit info (Req 11 & 12)
+      logsToCreate.push({
+        cafeId,
+        branchId,
+        itemId: invItem._id,
+        itemName: invItem.name,
+        orderId: order._id,
+        type: 'Deduction',
+        quantityChanged: -convertedDeductionQty,
+        cost: Number(((invItem.costPrice || invItem.cost || 0) * convertedDeductionQty).toFixed(4)),
+        reason: `Sold ${ded.orderQty} x ${ded.itemName}`,
+        userEmail: 'system-auto-deduct',
+        paymentId: order.razorpayPaymentId || `UPI-${order._id}`,
+        menuItemId: ded.menuItemId,
+        ingredientId: invItem._id,
+        oldQuantity: oldQty,
+        remainingQuantity: newQty,
+        performedBy: 'system-auto-deduct'
+      });
 
-        affectedIngredients.push(invItem.name);
-        invItem.quantity = newQty; // update in-memory cache to handle repeated items
-      }
+      affectedIngredients.push(invItem.name);
+      invItem.quantity = newQty; // Update local cached quantity to handle multiple recipe occurrences in same order
     }
 
     if (bulkOps.length > 0) {
-      await Inventory.bulkWrite(bulkOps);
-      await InventoryLog.insertMany(logsToCreate);
-      emitInventoryUpdated(cafeId, branchId, inventoryItems);
+      await Inventory.bulkWrite(bulkOps, { session });
+      await InventoryLog.insertMany(logsToCreate, { session });
     }
 
-    order.inventoryDeducted = true;
-    await order.save();
-    
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log(`[INVENTORY] Successfully completed and committed transaction-safe stock deduction for order: ${orderId}`);
+
+    // 4. Emit real-time Socket.IO events to update Owner Dashboard and Cashier UI immediately (Req 15 & 20)
+    emitInventoryUpdated(cafeId, branchId, inventoryItems);
+
     // Auto-update availability only for menu items containing the affected ingredients
     if (affectedIngredients.length > 0) {
       await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
     }
   } catch (err) {
-    console.error('deductInventoryForOrder helper error:', err);
+    console.error(`[INVENTORY] Transaction failed for order ${orderId} and was rolled back:`, err.message);
+    if (session) {
+      try {
+        await session.abortTransaction();
+      } catch (abortErr) {
+        console.error('[INVENTORY] Error during transaction abort:', abortErr.message);
+      }
+      session.endSession();
+    }
+    throw err;
   }
 };
 

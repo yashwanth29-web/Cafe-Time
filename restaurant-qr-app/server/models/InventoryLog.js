@@ -47,6 +47,32 @@ const InventoryLogSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  paymentId: {
+    type: String,
+    default: ''
+  },
+  menuItemId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MenuItem',
+    default: null
+  },
+  ingredientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Inventory',
+    default: null
+  },
+  oldQuantity: {
+    type: Number,
+    default: 0
+  },
+  remainingQuantity: {
+    type: Number,
+    default: 0
+  },
+  performedBy: {
+    type: String,
+    default: ''
+  },
   createdAt: {
     type: Date,
     default: Date.now

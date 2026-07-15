@@ -253,7 +253,16 @@ const getBranchCache = (branchId) => {
         checkedOut: 0,
         currentlyWorking: 0
       },
-      attendanceReports: null,
+      attendanceReports: {
+        summary: {
+          attendancePercentage: 0,
+          totalHours: 0,
+          lateArrivals: 0,
+          recordCount: 0
+        },
+        branchReports: [],
+        records: []
+      },
       workReports: [],
       setupConfig: null,
       hasLoaded: {}
@@ -2477,13 +2486,25 @@ const exportStaffToCSV = () => {
         setAttendanceLoading(true);
       }
       if (cache.hasLoaded.workReports) {
-        setAttendanceReports(cache.attendanceReports);
         setWorkReports(cache.workReports);
         setReportsLoading(false);
       } else {
-        setAttendanceReports([]);
         setWorkReports([]);
         setReportsLoading(true);
+      }
+      if (cache.hasLoaded.attendanceReports) {
+        setAttendanceReports(cache.attendanceReports);
+      } else {
+        setAttendanceReports({
+          summary: {
+            attendancePercentage: 0,
+            totalHours: 0,
+            lateArrivals: 0,
+            recordCount: 0
+          },
+          branchReports: [],
+          records: []
+        });
       }
       if (cache.hasLoaded.statsData) {
         setStatsData(cache.statsData);
@@ -3804,28 +3825,28 @@ const exportStaffToCSV = () => {
 </div>
 </div>
 
- {attendanceReports &&
+ {attendanceReports && !Array.isArray(attendanceReports) && attendanceReports.summary &&
 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 <div className="analytics-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: 0 }}>
 <div className="analytics-card" style={{ background: 'rgba(0, 0, 0,0.01)' }}>
 <h4>Attendance Percentage (%)</h4>
-<span className="val" style={{ color: 'var(--color-primary)' }}>{attendanceReports.summary.attendancePercentage}%</span>
+<span className="val" style={{ color: 'var(--color-primary)' }}>{attendanceReports.summary.attendancePercentage || 0}%</span>
 
 </div>
 <div className="analytics-card" style={{ background: 'rgba(0, 0, 0,0.01)' }}>
 <h4>Cumulative Working Hours</h4>
-<span className="val" style={{ color: '#2ecc71' }}>{attendanceReports.summary.totalHours} hrs</span>
+<span className="val" style={{ color: '#2ecc71' }}>{attendanceReports.summary.totalHours || 0} hrs</span>
 
 </div>
 <div className="analytics-card" style={{ background: 'rgba(0, 0, 0,0.01)' }}>
 <h4>Late Arrival Incidents</h4>
-<span className="val" style={{ color: '#f1c40f' }}>{attendanceReports.summary.lateArrivals} times</span>
+<span className="val" style={{ color: '#f1c40f' }}>{attendanceReports.summary.lateArrivals || 0} times</span>
 
 </div>
 </div>
 
  {/* Branch wise performance */}
- {attendanceReports.branchReports && attendanceReports.branchReports.length >0 &&
+ {attendanceReports.branchReports && attendanceReports.branchReports.length > 0 &&
 <div style={{ marginTop: '10px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Branch Attendance Performance Breakdown</h4>
 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
@@ -3851,7 +3872,7 @@ const exportStaffToCSV = () => {
 
  {/* Filtered records detail log */}
 <div style={{ marginTop: '10px' }}>
-<h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Detailed History Records ({attendanceReports.records.length})</h4>
+<h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Detailed History Records ({attendanceReports.records?.length || 0})</h4>
 <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
 <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
@@ -3865,7 +3886,7 @@ const exportStaffToCSV = () => {
 </tr>
 </thead>
 <tbody>
- {attendanceReports.records.map((r) =>
+ {attendanceReports.records && attendanceReports.records.map((r) =>
 <tr key={r._id} style={{ borderBottom: '1px solid rgba(0, 0, 0,0.03)' }}>
 <td style={{ padding: '10px', color: 'var(--color-text-primary)' }}>{new Date(r.checkInTime).toLocaleDateString()}</td>
 <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{r.staffName}</td>

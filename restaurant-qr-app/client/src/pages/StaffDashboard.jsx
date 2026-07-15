@@ -1050,7 +1050,7 @@ const StaffDashboard = () => {
  width: '130px',
  height: '130px',
  borderRadius: '50%',
- background: `conic-gradient(var(--color-primary, #ff6b08) ${summary.attendancePercentage || 0}%, rgba(255,255,255,0.05) ${summary.attendancePercentage || 0}% 100%)`,
+ background: `conic-gradient(var(--color-primary, #ff6b08) ${summary?.attendancePercentage || 0}%, rgba(255,255,255,0.05) ${summary?.attendancePercentage || 0}% 100%)`,
  display: 'flex',
  alignItems: 'center',
  justifyContent: 'center',
@@ -1069,7 +1069,7 @@ const StaffDashboard = () => {
  zIndex: 2
  }}>
  <span style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--color-text-primary)' }}>
- {summary.attendancePercentage}%
+ {summary?.attendancePercentage || 0}%
  </span>
  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.5px' }}>
  Attendance

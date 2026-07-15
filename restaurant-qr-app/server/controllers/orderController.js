@@ -420,11 +420,10 @@ const createOrder = async (req, res, next) => {
       session.endSession();
     }
 
-    // 10. Auto deduct inventory stock (run asynchronously in background to not block response)
+    // 10. Auto update menu availability from inventory (run asynchronously in background)
     const activeBId = resolvedBranch ? resolvedBranch.branchId : 'default';
-    deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items)
-      .then(() => updateMenuItemAvailabilityFromInventory(activeCafeId, null, activeBId))
-      .catch(invErr => console.warn('Background inventory deduction warning during order creation:', invErr.message));
+    updateMenuItemAvailabilityFromInventory(activeCafeId, null, activeBId)
+      .catch(invErr => console.warn('Background menu availability update warning during order creation:', invErr.message));
 
     const formattedOrder = await appendLegacyFallback(savedOrder);
 
@@ -659,9 +658,7 @@ const updateOrderStatus = async (req, res, next) => {
 
     // Auto deduct inventory (run asynchronously in background to not block response)
     if (['Ready', 'Completed', 'Delivered'].includes(updatedOrder.status) && !updatedOrder.inventoryDeducted) {
-      const activeBId = branch ? branch.branchId : 'default';
       deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items)
-        .then(() => updateMenuItemAvailabilityFromInventory(updatedOrder.cafeId, null, activeBId))
         .catch(err => console.warn('Background inventory deduction warning during status update:', err.message));
     }
 
@@ -708,12 +705,7 @@ const updateOrderPaymentMethod = async (req, res, next) => {
     }
 
     // Deduct inventory (run asynchronously in background to not block response)
-    Branch.findOne({ branchId: updatedOrder.branchId, cafeId: updatedOrder.cafeId }).lean()
-      .then(branchDoc => {
-        const bId = branchDoc ? branchDoc.branchId : 'default';
-        return deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items)
-          .then(() => updateMenuItemAvailabilityFromInventory(updatedOrder.cafeId, null, bId));
-      })
+    deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items)
       .catch(err => console.warn('Background inventory deduction warning during payment update:', err.message));
 
     const formattedOrder = await appendLegacyFallback(updatedOrder);
