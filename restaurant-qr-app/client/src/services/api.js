@@ -255,8 +255,13 @@ export const updateCafe = async (id, cafeData) => {
   return response.data;
 };
 
-export const deleteCafe = async (id) => {
-  const response = await API.delete(`/superadmin/cafe/${id}`);
+export const deleteCafe = async (id, payload) => {
+  const response = await API.delete(`/superadmin/cafe/${id}`, { data: payload });
+  return response.data;
+};
+
+export const restoreCafe = async (id) => {
+  const response = await API.post(`/superadmin/cafe/${id}/restore`);
   return response.data;
 };
 

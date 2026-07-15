@@ -22,6 +22,26 @@ const CafeSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: String,
+    default: null
+  },
+  deletionReason: {
+    type: String,
+    default: null
+  },
+  scheduledPermanentDeletionAt: {
+    type: Date,
+    default: null
+  },
   // V2 Registration fields
   city: {
     type: String,

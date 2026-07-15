@@ -12,6 +12,12 @@ const getMenuItems = async (req, res, next) => {
     const branchId = req.branchId || req.query.branchId || 'default';
     console.log(`[DEBUG getMenuItems] Request for cafeId: ${cafeId}, branchId: ${branchId}`);
 
+    const Cafe = require('../models/Cafe');
+    const targetCafe = await Cafe.findOne({ cafeId });
+    if (targetCafe && targetCafe.isDeleted) {
+      return res.status(403).json({ success: false, message: 'This cafe has been deleted. Access denied.' });
+    }
+
     const cached = menuCache.getMenu(cafeId, branchId);
     if (cached) {
       console.log(`[DEBUG getMenuItems] Returning from cache. Count: ${cached.length}`);

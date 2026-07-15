@@ -200,10 +200,11 @@ const updateCafe = async (req, res) => {
 };
 
 /**
- * Delete Cafe (Soft delete by setting isActive to false)
+ * Delete Cafe (Soft delete with 7-day automatic deletion)
  */
 const deleteCafe = async (req, res) => {
   const { id } = req.params;
+  const { deletionReason } = req.body || {};
 
   try {
     const cafe = await Cafe.findById(id);
@@ -211,10 +212,17 @@ const deleteCafe = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Cafe record not found' });
     }
 
+    const now = new Date();
     cafe.isActive = false;
+    cafe.isDeleted = true;
+    cafe.deletedAt = now;
+    cafe.deletedBy = req.user ? req.user.email : 'system_admin';
+    cafe.deletionReason = deletionReason || '';
+    cafe.scheduledPermanentDeletionAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
     await cafe.save();
 
-    // Set all associated owners, staff, and branches to inactive
+    // Set all associated owners, staff, and branches to inactive to disable access
     await User.updateMany(
       { cafeId: cafe.cafeId },
       { isActive: false }
@@ -227,11 +235,53 @@ const deleteCafe = async (req, res) => {
 
     return res.status(200).json({ 
       success: true, 
-      message: `Cafe "${cafe.name}" soft-deleted successfully.` 
+      message: `Cafe "${cafe.name}" soft-deleted successfully and scheduled for permanent deletion in 7 days.` 
     });
   } catch (error) {
     console.error('deleteCafe error:', error);
     return res.status(500).json({ success: false, message: 'Server error soft-deleting cafe' });
+  }
+};
+
+/**
+ * Restore Soft-Deleted Cafe
+ */
+const restoreCafe = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const cafe = await Cafe.findById(id);
+    if (!cafe) {
+      return res.status(404).json({ success: false, message: 'Cafe record not found' });
+    }
+
+    cafe.isActive = true;
+    cafe.isDeleted = false;
+    cafe.deletedAt = null;
+    cafe.deletedBy = null;
+    cafe.deletionReason = null;
+    cafe.scheduledPermanentDeletionAt = null;
+
+    await cafe.save();
+
+    // Set all associated owners, staff, and branches to active to restore access
+    await User.updateMany(
+      { cafeId: cafe.cafeId },
+      { isActive: true }
+    );
+
+    await Branch.updateMany(
+      { cafeId: cafe.cafeId },
+      { isActive: true }
+    );
+
+    return res.status(200).json({ 
+      success: true, 
+      message: `Cafe "${cafe.name}" restored successfully.` 
+    });
+  } catch (error) {
+    console.error('restoreCafe error:', error);
+    return res.status(500).json({ success: false, message: 'Server error restoring cafe' });
   }
 };
 
@@ -323,6 +373,7 @@ module.exports = {
   getCafes,
   updateCafe,
   deleteCafe,
+  restoreCafe,
   getTickets,
   updateTicketStatus
 };

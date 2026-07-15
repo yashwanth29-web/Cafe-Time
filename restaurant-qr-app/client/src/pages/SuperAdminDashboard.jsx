@@ -2,7 +2,7 @@ import React from 'react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createOwner, getCafes, updateCafe, deleteCafe, getTickets, updateTicketStatus } from '../services/api';
+import { createOwner, getCafes, updateCafe, deleteCafe, restoreCafe, getTickets, updateTicketStatus } from '../services/api';
 import { Building, Activity, ShieldCheck, HeartPulse, CreditCard, Ticket, Plus, X, Server, Search, TerminalSquare, RefreshCw, Edit, Trash2, Banknote, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
 
 const getStatusBadge = (lastHeartbeat, services = {}) => {
@@ -216,24 +216,50 @@ const SuperAdminDashboard = () => {
   };
 
   const handleDeleteCafe = async (id) => {
-    if (!window.confirm('Are you sure you want to deactivate this cafe? This soft-deactivates the cafe, all branches, and associated owner/staff profiles to preserve histories.')) {
-      return;
-    }
+    const reason = window.prompt('Enter reason for soft deletion (optional):');
+    if (reason === null) return; // cancelled
 
     setErrorMsg('');
     setSuccessMsg('');
     try {
       setLoading(true);
-      const data = await deleteCafe(id);
+      // Wait, deleteCafe in api.js takes only id, we can send a custom payload or body if we want, but wait:
+      // Let's modify deleteCafe API call or just send the reason. Let's do it via axios directly in api.js?
+      // Actually, deleteCafe does: axios.delete(`/superadmin/cafe/${id}`).
+      // To pass reason, we can pass it in the request body, but axios delete usually doesn't have request body in standard signatures unless passed as data config.
+      // Let's modify deleteCafe in client/src/services/api.js to accept an optional reason and pass it as data!
+      // But first, let's keep it simple: we can do api.js call with reason if we want.
+      // Let's do: const data = await deleteCafe(id, { deletionReason: reason });
+      const data = await deleteCafe(id, { deletionReason: reason });
       if (data.success) {
         setSuccessMsg(data.message);
         loadCafes();
         if (selectedCafeForDetails && selectedCafeForDetails._id === id) {
-          setSelectedCafeForDetails((prev) => ({ ...prev, isActive: false }));
+          setSelectedCafeForDetails((prev) => ({ ...prev, isDeleted: true, isActive: false }));
         }
       }
     } catch (err) {
       setErrorMsg('Failed to soft-delete cafe.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreCafe = async (id) => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    try {
+      setLoading(true);
+      const data = await restoreCafe(id);
+      if (data.success) {
+        setSuccessMsg(data.message);
+        loadCafes();
+        if (selectedCafeForDetails && selectedCafeForDetails._id === id) {
+          setSelectedCafeForDetails((prev) => ({ ...prev, isDeleted: false, isActive: true }));
+        }
+      }
+    } catch (err) {
+      setErrorMsg('Failed to restore cafe.');
     } finally {
       setLoading(false);
     }
@@ -301,10 +327,12 @@ const SuperAdminDashboard = () => {
   };
 
   // Stats calculation
-  const totalCount = cafes.length;
-  const activeCount = cafes.filter((c) => c.isActive).length;
+  const activeCafes = cafes.filter((c) => !c.isDeleted);
+  const deletedCafes = cafes.filter((c) => c.isDeleted);
+  const totalCount = activeCafes.length;
+  const activeCount = activeCafes.filter((c) => c.isActive).length;
   const inactiveCount = totalCount - activeCount;
-  const completedSetupCount = cafes.filter((c) => c.setupCompleted).length;
+  const completedSetupCount = activeCafes.filter((c) => c.setupCompleted).length;
   const pendingSetupCount = totalCount - completedSetupCount;
 
   return (
@@ -737,16 +765,16 @@ const SuperAdminDashboard = () => {
                 {showAddForm ? <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}><X size={16} /> Close Form</div> : <div style={{display: 'flex', alignItems: 'center', gap: '4px'}}><Plus size={16} /> Register Cafe</div>}
               </button>
             </div>
-            {loading && cafes.length === 0 ?
+            {loading && activeCafes.length === 0 ?
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
                 <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading registered cafes...</p>
               </div> :
-          cafes.length === 0 ?
+          activeCafes.length === 0 ?
           <p style={{ color: '#9E8E8E', fontStyle: 'italic', textAlign: 'center', padding: '20px 0' }}>No cafes registered yet.</p> :
 
           <div className="cafe-grid">
-                {cafes.map((cafe) => {
+                {activeCafes.map((cafe) => {
               const healthObj = getHealthStatus(cafe.health);
               const isExpanded = expandedCafeId === cafe._id;
 
@@ -906,6 +934,69 @@ const SuperAdminDashboard = () => {
             })}
               </div>
           }
+
+          {/* Soft-Deleted / Recoverable Cafes section */}
+          {deletedCafes.length > 0 && (
+            <div style={{ marginTop: '40px', borderTop: '2px dashed var(--color-border)', paddingTop: '30px' }}>
+              <h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 15px 0', fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Trash2 size={20} style={{ color: '#EC5B5B' }} /> Soft-Deleted Cafes (7-Day Recovery Window)
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--color-text-primary)', opacity: 0.7, marginBottom: '20px' }}>
+                The following cafes have been soft-deleted. They can be restored with a single click within 7 days, after which they will be permanently and automatically deleted.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '16px' }}>
+                {deletedCafes.map((cafe) => {
+                  const scheduledDate = new Date(cafe.scheduledPermanentDeletionAt);
+                  const daysRemaining = Math.max(0, Math.ceil((scheduledDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                  return (
+                    <div key={cafe._id} style={{ background: 'var(--bg-card)', border: '1px solid #EC5B5B', borderRadius: '16px', padding: '20px', textAlign: 'left', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', borderBottom: '1px solid var(--color-border)', paddingBottom: '10px' }}>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>{cafe.name}</h4>
+                          <span style={{ backgroundColor: '#FDF2F2', color: '#EC5B5B', padding: '2px 6px', borderRadius: '8px', fontSize: '0.65rem', fontWeight: '700', marginTop: '4px', display: 'inline-block' }}>
+                            Deleted ({daysRemaining} days remaining)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="details-row">
+                        <span>Cafe Code:</span>
+                        <strong>{cafe.cafeId}</strong>
+                      </div>
+                      <div className="details-row">
+                        <span>Deleted By:</span>
+                        <strong>{cafe.deletedBy || 'N/A'}</strong>
+                      </div>
+                      {cafe.deletionReason && (
+                        <div className="details-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                          <span>Reason:</span>
+                          <span style={{ color: 'var(--color-text-primary)', fontSize: '0.8rem', fontStyle: 'italic' }}>"{cafe.deletionReason}"</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '15px', borderTop: '1px solid var(--color-border)', paddingTop: '12px', justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRestoreCafe(cafe._id);
+                          }}
+                          style={{
+                            backgroundColor: '#2ECC71',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '6px 14px',
+                            borderRadius: '9999px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            fontWeight: '700'
+                          }}>
+                          Restore Cafe
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           </div>
         </div>
       }
@@ -1486,106 +1577,145 @@ const SuperAdminDashboard = () => {
       }
 
       {/* VIEW DETAILS MODAL */}
-      {selectedCafeForDetails &&
-      <div className="modal-overlay" onClick={() => setSelectedCafeForDetails(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.25rem', fontWeight: 800 }}>Cafe Inspector</h3>
-              <button onClick={() => setSelectedCafeForDetails(null)} style={{ background: 'transparent', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--color-text-primary)' }}><X size={20} /></button>
+      {selectedCafeForDetails && (
+        <div className="modal-overlay" onClick={() => setSelectedCafeForDetails(null)}>
+          <div className="modal-card" style={{ maxWidth: '650px', padding: '30px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '16px', marginBottom: '24px' }}>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.4rem', fontWeight: 800 }}>Cafe Inspector</h3>
+              <button 
+                onClick={() => setSelectedCafeForDetails(null)} 
+                style={{ background: 'transparent', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px', borderRadius: '50%', transition: 'background 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <h4 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--color-text-primary)', fontWeight: 800 }}>{selectedCafeForDetails.name}</h4>
-                  <span className="badge-type">{selectedCafeForDetails.businessType}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <h4 style={{ margin: 0, fontSize: '1.35rem', color: 'var(--color-text-primary)', fontWeight: 800 }}>{selectedCafeForDetails.name}</h4>
+                  <span className="badge-type" style={{ background: 'var(--color-border)', color: 'var(--color-primary)', padding: '4px 10px', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: 700 }}>
+                    {selectedCafeForDetails.businessType}
+                  </span>
                 </div>
-                <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--color-text-primary)' }}>Cafe ID Code: <strong>{selectedCafeForDetails.cafeId}</strong></p>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+                  Cafe ID Code: <strong style={{ color: 'var(--color-text-primary)' }}>{selectedCafeForDetails.cafeId}</strong>
+                </p>
               </div>
 
               {/* Owner card */}
-              <div style={{ background: '#FFFDFB', border: '1px solid var(--color-border)', padding: '15px', borderRadius: '12px' }}>
-                <h5 style={{ margin: '0 0 10px 0', color: 'var(--color-text-primary)', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.5px' }}>Owner Profile</h5>
-                <p style={{ margin: '3px 0', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}><strong>Name:</strong> {selectedCafeForDetails.ownerName}</p>
-                <p style={{ margin: '3px 0', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}><strong>Email:</strong> {selectedCafeForDetails.ownerEmail}</p>
-                <p style={{ margin: '3px 0', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}><strong>Phone:</strong> {selectedCafeForDetails.ownerPhone}</p>
-                <p style={{ margin: '3px 0', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}><strong>Portal Access:</strong> {selectedCafeForDetails.ownerIsActive ? 'Active' : 'Inactive'}</p>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
+                <h5 style={{ margin: '0 0 12px 0', color: 'var(--color-primary)', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '1px' }}>Owner Profile</h5>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>Name:</strong> {selectedCafeForDetails.ownerName}</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>Email:</strong> {selectedCafeForDetails.ownerEmail}</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>Phone:</strong> {selectedCafeForDetails.ownerPhone}</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>
+                    <strong style={{ color: 'var(--color-text-primary)' }}>Portal Access:</strong>{' '}
+                    <span style={{ 
+                      color: selectedCafeForDetails.ownerIsActive ? 'var(--color-success)' : 'var(--color-danger)', 
+                      fontWeight: 700,
+                      backgroundColor: selectedCafeForDetails.ownerIsActive ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem'
+                    }}>
+                      {selectedCafeForDetails.ownerIsActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </p>
+                </div>
               </div>
 
-              {/* Location card */}
-              <div style={{ background: '#FFFDFB', border: '1px solid var(--color-border)', padding: '15px', borderRadius: '12px' }}>
-                <h5 style={{ margin: '0 0 10px 0', color: 'var(--color-text-primary)', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.5px' }}>Operational Profile</h5>
-                <p style={{ margin: '3px 0', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}><strong>City/State:</strong> {selectedCafeForDetails.city}, {selectedCafeForDetails.state}</p>
-                <p style={{ margin: '3px 0', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}><strong>Address:</strong> {selectedCafeForDetails.address || 'Pending onboarding...'}</p>
-                <p style={{ margin: '3px 0', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}><strong>GST Number:</strong> {selectedCafeForDetails.gstNumber || 'N/A'}</p>
-                <p style={{ margin: '3px 0', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}><strong>Support Number:</strong> {selectedCafeForDetails.supportNumber || 'N/A'}</p>
+              {/* Operational card */}
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
+                <h5 style={{ margin: '0 0 12px 0', color: 'var(--color-primary)', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '1px' }}>Operational Profile</h5>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>City/State:</strong> {selectedCafeForDetails.city}, {selectedCafeForDetails.state}</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>Address:</strong> {selectedCafeForDetails.address || 'Pending onboarding...'}</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>GST Number:</strong> {selectedCafeForDetails.gstNumber || 'N/A'}</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>Support Number:</strong> {selectedCafeForDetails.supportNumber || 'N/A'}</p>
+                </div>
               </div>
 
               {/* Branch list */}
-              <div style={{ background: '#FFFDFB', border: '1px solid var(--color-border)', padding: '15px', borderRadius: '12px' }}>
-                <h5 style={{ margin: '0 0 10px 0', color: 'var(--color-text-primary)', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.5px' }}>Branches Directory ({selectedCafeForDetails.branchesCount || 1})</h5>
-                {selectedCafeForDetails.branchesList && selectedCafeForDetails.branchesList.length > 0 ?
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {selectedCafeForDetails.branchesList.map((br) =>
-                <div key={br._id} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', paddingBottom: '4px' }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
+                <h5 style={{ margin: '0 0 12px 0', color: 'var(--color-primary)', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '1px' }}>Branches Directory ({selectedCafeForDetails.branchesCount || 1})</h5>
+                {selectedCafeForDetails.branchesList && selectedCafeForDetails.branchesList.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {selectedCafeForDetails.branchesList.map((br) => (
+                      <div key={br._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px' }}>
                         <div>
-                          <strong style={{ fontSize: '0.85rem', color: 'var(--color-text-primary)' }}>{br.branchName}</strong> ({br.branchId})
-                          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-primary)' }}>{br.address}</div>
+                          <strong style={{ fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>{br.branchName}</strong>{' '}
+                          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>({br.branchId})</span>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '2px' }}>{br.address}</div>
                         </div>
-                        <span style={{ fontSize: '0.8rem', color: br.isActive ? '#16A085' : '#EC5B5B', fontWeight: 'bold' }}>
+                        <span style={{ 
+                          fontSize: '0.75rem', 
+                          color: br.isActive ? 'var(--color-success)' : 'var(--color-danger)', 
+                          fontWeight: 700,
+                          backgroundColor: br.isActive ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+                          padding: '2px 8px',
+                          borderRadius: '6px'
+                        }}>
                           {br.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>Default main branch pending creation.</p>
                 )}
-                  </div> :
-
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-text-primary)', fontStyle: 'italic' }}>Default main branch pending creation.</p>
-              }
               </div>
 
               {/* System Health Card */}
-              <div style={{ background: '#FFFDFB', border: '1px solid var(--color-border)', padding: '15px', borderRadius: '12px' }}>
-                <h5 style={{ margin: '0 0 10px 0', color: 'var(--color-text-primary)', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.5px' }}>System Diagnostics Monitor</h5>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.85rem' }}>
-                  <div style={{ padding: '6px', background: '#FDF2F2', borderRadius: '4px', borderLeft: '3px solid #EC5B5B' }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '12px', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
+                <h5 style={{ margin: '0 0 12px 0', color: 'var(--color-primary)', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '1px' }}>System Diagnostics Monitor</h5>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.85rem' }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--color-danger-bg)', borderRadius: '6px', borderLeft: '4px solid var(--color-danger)', color: 'var(--color-danger)' }}>
                     <strong style={{ color: 'var(--color-text-primary)' }}>Printer Failures:</strong> {selectedCafeForDetails.health?.printerFailures || 0}
                   </div>
-                  <div style={{ padding: '6px', background: '#FDF2F2', borderRadius: '4px', borderLeft: '3px solid #EC5B5B' }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--color-danger-bg)', borderRadius: '6px', borderLeft: '4px solid var(--color-danger)', color: 'var(--color-danger)' }}>
                     <strong style={{ color: 'var(--color-text-primary)' }}>Payment Failures:</strong> {selectedCafeForDetails.health?.paymentFailures || 0}
                   </div>
-                  <div style={{ padding: '6px', background: '#FEF9E7', borderRadius: '4px', borderLeft: '3px solid #F39C12' }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--color-warning-bg)', borderRadius: '6px', borderLeft: '4px solid var(--color-warning)', color: 'var(--color-warning)' }}>
                     <strong style={{ color: 'var(--color-text-primary)' }}>Frontend Errors:</strong> {selectedCafeForDetails.health?.frontendErrors || 0}
                   </div>
-                  <div style={{ padding: '6px', background: '#FEF9E7', borderRadius: '4px', borderLeft: '3px solid #F39C12' }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--color-warning-bg)', borderRadius: '6px', borderLeft: '4px solid var(--color-warning)', color: 'var(--color-warning)' }}>
                     <strong style={{ color: 'var(--color-text-primary)' }}>Backend Errors:</strong> {selectedCafeForDetails.health?.backendErrors || 0}
                   </div>
                 </div>
-                <div style={{ marginTop: '10px', fontSize: '0.75rem', color: 'var(--color-text-primary)' }}>
-                  Last Status Heartbeat Checked: <strong>{formatDate(selectedCafeForDetails.health?.lastHeartbeat)}</strong>
+                <div style={{ marginTop: '12px', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                  Last Status Heartbeat Checked: <strong style={{ color: 'var(--color-text-primary)' }}>{formatDate(selectedCafeForDetails.health?.lastHeartbeat)}</strong>
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', borderTop: '1px solid var(--color-border)', paddingTop: '16px' }}>
               <button
-              onClick={() => setSelectedCafeForDetails(null)}
-              style={{
-                backgroundColor: 'transparent',
-                color: 'var(--color-text-primary)',
-                border: '1px solid var(--color-border)',
-                padding: '8px 20px',
-                borderRadius: '9999px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                fontSize: '0.85rem'
-              }}>
-              
+                onClick={() => setSelectedCafeForDetails(null)}
+                style={{
+                  backgroundColor: 'var(--color-primary)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 24px',
+                  borderRadius: '9999px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-primary)'}
+              >
                 Close
               </button>
             </div>
           </div>
         </div>
-      }
+      )}
 
       {/* EDIT CAFE MODAL */}
       {editingCafe &&

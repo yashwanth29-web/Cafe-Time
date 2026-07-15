@@ -181,6 +181,10 @@ connectDB().then(() => {
 const { initStorageMaintenanceJobs } = require('./jobs/storageMaintenanceJob');
 initStorageMaintenanceJobs();
 
+// Initialize Cafe Soft-Deletion Automatic Cleanup Job
+const { initCafeDeletionJob } = require('./jobs/cafeDeletionJob');
+initCafeDeletionJob();
+
 const fs = require('fs');
 
 // Ensure uploads folder exists on startup

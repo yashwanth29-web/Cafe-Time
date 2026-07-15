@@ -14,6 +14,10 @@ router.get('/:id', async (req, res) => {
       cafe = await Cafe.findOne({ cafeId: req.params.id });
     }
 
+    if (cafe && cafe.isDeleted) {
+      return res.status(403).json({ success: false, message: 'This cafe has been deleted. Access denied.' });
+    }
+
     if (!cafe) {
       // Return default info so we don't break if CD001 doesn't exist yet
       return res.status(200).json({

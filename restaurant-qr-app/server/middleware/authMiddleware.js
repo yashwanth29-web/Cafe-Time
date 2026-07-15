@@ -34,6 +34,15 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Account deactivated. Contact system admin.' });
     }
 
+    // Check if associated cafe is soft-deleted
+    if (user.cafeId) {
+      const Cafe = require('../models/Cafe');
+      const cafe = await Cafe.findOne({ cafeId: user.cafeId });
+      if (cafe && cafe.isDeleted) {
+        return res.status(401).json({ success: false, message: 'This cafe has been deleted. Access denied.' });
+      }
+    }
+
     // 4. Update lastSeen with throttling (only write to DB if lastSeen is older than 2 minutes)
     const now = new Date();
     if (!user.lastSeen || (now - user.lastSeen) > 2 * 60 * 1000) {

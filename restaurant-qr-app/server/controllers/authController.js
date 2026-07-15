@@ -160,6 +160,14 @@ const verifyOTP = async (req, res) => {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
       }
 
+      if (user.cafeId) {
+        const Cafe = require('../models/Cafe');
+        const cafe = await Cafe.findOne({ cafeId: user.cafeId });
+        if (cafe && cafe.isDeleted) {
+          return res.status(401).json({ success: false, message: 'Access denied. The cafe associated with this account has been deleted.' });
+        }
+      }
+
       // Self-heal existing corrupted demo users who have an empty cafeId
       if (user.role === 'owner' && !user.cafeId) {
         user.cafeId = 'CD001';
@@ -388,6 +396,14 @@ const googleLogin = async (req, res) => {
         });
       } else if (!user.isActive) {
         return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
+      }
+
+      if (user.cafeId) {
+        const Cafe = require('../models/Cafe');
+        const cafe = await Cafe.findOne({ cafeId: user.cafeId });
+        if (cafe && cafe.isDeleted) {
+          return res.status(401).json({ success: false, message: 'Access denied. The cafe associated with this account has been deleted.' });
+        }
       }
 
       // Self-heal existing corrupted demo users who have an empty cafeId

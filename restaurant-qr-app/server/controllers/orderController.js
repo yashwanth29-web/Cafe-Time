@@ -194,6 +194,13 @@ const createOrder = async (req, res, next) => {
       razorpayPaymentId
     } = req.body;
 
+    const targetCafeId = cafeId || 'CD001';
+    const Cafe = require('../models/Cafe');
+    const targetCafe = await Cafe.findOne({ cafeId: targetCafeId });
+    if (targetCafe && targetCafe.isDeleted) {
+      return res.status(403).json({ success: false, message: 'This cafe has been deleted. Order placement is disabled.' });
+    }
+
     // 1. Simple validation
     if (!tableNumber) {
       return res.status(400).json({ success: false, message: 'Table number is required' });
