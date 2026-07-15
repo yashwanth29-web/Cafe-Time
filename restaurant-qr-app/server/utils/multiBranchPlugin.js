@@ -62,12 +62,20 @@ module.exports = function multiBranchPlugin(schema) {
     schema.pre(method, applyBranchFilter);
   });
 
-  // 2. Pre-save hook to ensure documents are saved with active branch context
+  // 2. Pre-save hook to ensure documents are saved with active branch context.
+  // Only applies context values as defaults when the document doesn't already
+  // have explicitly set values. This prevents the middleware context from
+  // overwriting controller-level assignments (critical for QR order creation
+  // where the controller resolves the correct branchId from the QR code).
   schema.pre('save', function(next) {
     const context = getContext();
     if (context && context.cafeId && context.branchId) {
-      this.cafeId = context.cafeId;
-      if (context.branchId !== 'all') {
+      // Only set cafeId/branchId from context if not explicitly provided
+      // by the controller (i.e., the field was not modified on the document).
+      if (!this.isModified('cafeId') && !this.cafeId) {
+        this.cafeId = context.cafeId;
+      }
+      if (!this.isModified('branchId') && !this.branchId && context.branchId !== 'all') {
         this.branchId = context.branchId;
       }
     }
@@ -79,8 +87,10 @@ module.exports = function multiBranchPlugin(schema) {
   schema.pre('validate', function(next) {
     const context = getContext();
     if (context && context.cafeId && context.branchId) {
-      this.cafeId = context.cafeId;
-      if (context.branchId !== 'all') {
+      if (!this.isModified('cafeId') && !this.cafeId) {
+        this.cafeId = context.cafeId;
+      }
+      if (!this.isModified('branchId') && !this.branchId && context.branchId !== 'all') {
         this.branchId = context.branchId;
       }
     }

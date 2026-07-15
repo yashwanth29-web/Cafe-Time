@@ -60,8 +60,21 @@ const attachCafeAndBranch = async (req, res, next) => {
       path.startsWith('/cafe') ||
       path.includes('/branches');
 
+    // For public order creation (POST /orders from QR scans), the request body's
+    // branchId is the authoritative source (set from the QR code parameters stored
+    // in sessionStorage). The x-branch-id header may come from stale localStorage
+    // if an owner previously used the same browser for their dashboard.
+    // We detect QR order requests by path + method, not by auth header, because
+    // the Axios interceptor always sends a token if one exists in localStorage.
+    const isOrderCreation = req.method === 'POST' && (path === '/orders' || path === '/orders/');
     let cafeId = req.headers['x-cafe-id'] || req.query?.cafeId || req.body?.cafeId;
-    let branchId = req.headers['x-branch-id'] || req.query?.branchId || req.body?.branchId || 'default';
+    let branchId;
+    if (isOrderCreation && req.body?.branchId) {
+      // For order creation, body branchId takes priority (QR source of truth)
+      branchId = req.body.branchId;
+    } else {
+      branchId = req.headers['x-branch-id'] || req.query?.branchId || req.body?.branchId || 'default';
+    }
 
     // If req.user is already set by protect middleware, use it
     let user = req.user;

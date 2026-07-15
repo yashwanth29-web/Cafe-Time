@@ -33,7 +33,7 @@ const OperationalConfigSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { bypassBranchFilter: true });
 
 OperationalConfigSchema.index({ cafeId: 1, branchId: 1 }, { unique: true });
 

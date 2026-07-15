@@ -222,16 +222,23 @@ const createOrder = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'This cafe subscription is suspended or expired' });
     }
 
-    // 3. Branch Validation
+    // 3. Branch Validation - resolve branch from QR-encoded branchId
+    const branchOrConditions = [{ branchId: branchId }];
+    if (mongoose.isValidObjectId(branchId)) {
+      branchOrConditions.push({ _id: branchId });
+    }
     const resolvedBranch = await Branch.findOne({
-      $or: [
-        { branchId: branchId },
-        { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
-      ],
+      $or: branchOrConditions,
       cafeId: activeCafeId
     }).lean();
 
     if (!resolvedBranch) {
+      console.error('[ORDER] Branch resolution failed', {
+        requestedBranchId: branchId,
+        cafeId: activeCafeId,
+        headerBranchId: req.headers['x-branch-id'],
+        bodyBranchId: req.body?.branchId
+      });
       return res.status(404).json({ success: false, message: 'Branch not found' });
     }
     if (resolvedBranch.isActive === false) {
@@ -241,13 +248,48 @@ const createOrder = async (req, res, next) => {
     // 4. Table Validation
     const activeTableNumber = String(tableNumber).trim();
     if (activeTableNumber !== 'Takeaway' && activeTableNumber !== 'Walk-in') {
-      const opConfig = await OperationalConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean();
+      // Use bypassBranchFilter to prevent the multiBranchPlugin from injecting
+      // the request context's branchId into this query. The context branchId comes
+      // from the x-branch-id header which may differ from the QR-encoded branchId
+      // when an owner tests QR codes from their own browser.
+      let opConfig = await OperationalConfig.findOne(
+        { cafeId: activeCafeId, branchId: resolvedBranch.branchId },
+        null,
+        { bypassBranchFilter: true }
+      ).lean();
+
+      // Fallback: if no branch-specific config exists, try the 'default' branch config.
+      // This handles cases where tables were configured before multi-branch was set up.
+      if (!opConfig && resolvedBranch.branchId !== 'default') {
+        opConfig = await OperationalConfig.findOne(
+          { cafeId: activeCafeId, branchId: 'default' },
+          null,
+          { bypassBranchFilter: true }
+        ).lean();
+      }
+
       if (!opConfig) {
+        console.error('[ORDER] Table validation failed - no OperationalConfig found', {
+          cafeId: activeCafeId,
+          branchId: resolvedBranch.branchId,
+          tableNumber: activeTableNumber
+        });
         return res.status(400).json({ success: false, message: 'Operational configuration not found for this branch' });
       }
 
       const tableExists = opConfig.tables.some(t => String(t.label).trim() === activeTableNumber || String(t.id).trim() === activeTableNumber);
       if (!tableExists) {
+        // Diagnostic logging: this should never happen for valid QR orders
+        console.error('[ORDER] Table validation FAILED - table not found in opConfig', {
+          requestedTable: activeTableNumber,
+          cafeId: activeCafeId,
+          bodyBranchId: branchId,
+          resolvedBranchId: resolvedBranch.branchId,
+          opConfigBranchId: opConfig.branchId,
+          availableTables: opConfig.tables.map(t => ({ id: t.id, label: t.label })),
+          headerBranchId: req.headers['x-branch-id'],
+          contextBranchId: req.branchId
+        });
         return res.status(404).json({ success: false, message: `Table ${activeTableNumber} does not exist in this branch` });
       }
     }
@@ -316,7 +358,19 @@ const createOrder = async (req, res, next) => {
     }
 
     // 7. Payment Config tax and platformCharge
-    const paymentConfig = await PaymentConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean();
+    let paymentConfig = await PaymentConfig.findOne(
+      { cafeId: activeCafeId, branchId: resolvedBranch.branchId },
+      null,
+      { bypassBranchFilter: true }
+    ).lean();
+    // Fallback to default branch payment config if branch-specific one doesn't exist
+    if (!paymentConfig && resolvedBranch.branchId !== 'default') {
+      paymentConfig = await PaymentConfig.findOne(
+        { cafeId: activeCafeId, branchId: 'default' },
+        null,
+        { bypassBranchFilter: true }
+      ).lean();
+    }
     const taxRate = paymentConfig ? (paymentConfig.taxRate || 0) : 5; // Default 5%
     const platformCharge = paymentConfig ? (paymentConfig.platformCharge || 0) : 0;
 

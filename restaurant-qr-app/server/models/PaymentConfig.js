@@ -56,7 +56,7 @@ const PaymentConfigSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-});
+}, { bypassBranchFilter: true });
 
 PaymentConfigSchema.index({ cafeId: 1, branchId: 1 }, { unique: true });
 

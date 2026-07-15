@@ -76,12 +76,18 @@ API.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-    const isCustomerView = window.location.pathname === '/' || window.location.pathname === '/history';
+    // Customer-facing paths must always prioritize the QR-encoded branchId/cafeId
+    // stored in sessionStorage by App.jsx, NOT the owner's localStorage activeBranchId.
+    // This is critical for multi-tenant isolation: QR orders must always use the
+    // branch encoded in the QR code, never the owner's currently-selected dashboard branch.
+    const customerPaths = ['/', '/cart', '/history', '/menu', '/order', '/payment'];
+    const isCustomerView = customerPaths.some(p => window.location.pathname === p || window.location.pathname.startsWith(p + '/'));
     
     let activeBranchId;
     let activeCafeId;
     if (isCustomerView) {
-      // In customer view, strictly prefer the branchId and cafeId from the URL (which App.jsx puts in sessionStorage)
+      // In customer view, strictly prefer the branchId and cafeId from the QR URL
+      // (which App.jsx stores in sessionStorage). Never use localStorage here.
       activeBranchId = sessionStorage.getItem('branchId') || localStorage.getItem('activeBranchId');
       activeCafeId = sessionStorage.getItem('cafeId') || localStorage.getItem('activeCafeId');
     } else {
