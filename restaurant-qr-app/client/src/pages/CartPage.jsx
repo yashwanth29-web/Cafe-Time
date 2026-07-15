@@ -428,7 +428,11 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 </div>
                 
                 <div>
+                  <label htmlFor="customer-fullname" style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: '0' }}>Full Name</label>
                   <input
+                  id="customer-fullname"
+                  name="name"
+                  autoComplete="name"
                   type="text"
                   placeholder="Full Name"
                   value={customerName}
@@ -443,11 +447,14 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                     outline: 'none',
                     fontSize: '13px'
                   }} />
-                
                 </div>
 
                 <div>
+                  <label htmlFor="customer-phone" style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: '0' }}>Contact Mobile Number</label>
                   <input
+                  id="customer-phone"
+                  name="tel"
+                  autoComplete="tel"
                   type="tel"
                   placeholder="Contact Mobile Number"
                   value={customerPhone}
@@ -462,11 +469,14 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                     outline: 'none',
                     fontSize: '13px'
                   }} />
-                
                 </div>
 
                 <div>
+                  <label htmlFor="special-instructions" style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: '0' }}>Special Instructions</label>
                   <textarea
+                  id="special-instructions"
+                  name="specialInstructions"
+                  autoComplete="off"
                   placeholder="Special Instructions (e.g. Less sugar, make it spicy...)"
                   value={specialInstructions}
                   onChange={(e) => setSpecialInstructions(e.target.value)}

@@ -117,38 +117,36 @@ const StaffDashboard = () => {
     };
   }, [activeBranchId]);
 
- // Update live shift duration timer
- useEffect(() => {
- if (todayStatus?.checkedIn && !todayStatus?.checkedOut && todayStatus?.attendance?.checkInTime) {
- const startTime = new Date(todayStatus.attendance.checkInTime).getTime();
+  // Update live shift duration timer
+  useEffect(() => {
+    let interval = null;
+    if (todayStatus?.checkedIn && !todayStatus?.checkedOut && todayStatus?.attendance?.checkInTime) {
+      const startTime = new Date(todayStatus.attendance.checkInTime).getTime();
 
- if (timerRef.current) clearInterval(timerRef.current);
+      const updateTimer = () => {
+        const diffMs = Date.now() - startTime;
+        if (diffMs < 0) {
+          setElapsedTime('00h 00m 00s');
+          return;
+        }
+        const totalSecs = Math.floor(diffMs / 1000);
+        const hours = Math.floor(totalSecs / 3600);
+        const minutes = Math.floor(totalSecs % 3600 / 60);
+        const seconds = totalSecs % 60;
 
- const updateTimer = () => {
- const diffMs = Date.now() - startTime;
- if (diffMs < 0) {
- setElapsedTime('00h 00m 00s');
- return;
- }
- const totalSecs = Math.floor(diffMs / 1000);
- const hours = Math.floor(totalSecs / 3600);
- const minutes = Math.floor(totalSecs % 3600 / 60);
- const seconds = totalSecs % 60;
+        const pad = (num) => String(num).padStart(2, '0');
+        setElapsedTime(`${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`);
+      };
 
- const pad = (num) => String(num).padStart(2, '0');
- setElapsedTime(`${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`);
- };
-
- updateTimer();
- timerRef.current = setInterval(updateTimer, 1000);
- } else {
- if (timerRef.current) {
- clearInterval(timerRef.current);
- timerRef.current = null;
- }
- setElapsedTime('00h 00m 00s');
- }
- }, [todayStatus]);
+      updateTimer();
+      interval = setInterval(updateTimer, 1000);
+    } else {
+      setElapsedTime('00h 00m 00s');
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [todayStatus]);
 
  // Request location and perform Check-In
  const handleCheckIn = () => {

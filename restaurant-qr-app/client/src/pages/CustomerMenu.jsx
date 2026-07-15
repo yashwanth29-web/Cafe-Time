@@ -177,8 +177,11 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
           position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)',
           fontSize: '16px', pointerEvents: 'none', opacity: 0.45
         }}>🔍</span>
+        <label htmlFor="customer-menu-search" style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: '0' }}>Search dishes</label>
         <input
           id="customer-menu-search"
+          name="search"
+          autoComplete="off"
           type="text"
           placeholder="Search dishes..."
           value={searchQuery}
