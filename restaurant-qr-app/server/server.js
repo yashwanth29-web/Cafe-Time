@@ -185,6 +185,14 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(indexPath)) {
   // Set static folder
   app.use(express.static(clientDistPath));
 
+  // Prevent falling back to index.html for missing static assets (which triggers strict MIME type checking error)
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/assets/') || req.path.startsWith('/static/') || req.path.includes('.')) {
+      return res.status(404).send('Asset not found');
+    }
+    next();
+  });
+
   // Direct all other unmatched requests to index.html (React Router)
   app.use((req, res) => {
     res.sendFile(indexPath);
