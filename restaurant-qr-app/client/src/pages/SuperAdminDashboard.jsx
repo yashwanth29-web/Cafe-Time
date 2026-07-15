@@ -1608,7 +1608,7 @@ const SuperAdminDashboard = () => {
                 type="text"
                 value={editFormData.name}
                 onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#FFFDFB' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
                 required />
               
               </div>
@@ -1618,7 +1618,7 @@ const SuperAdminDashboard = () => {
                 <select
                 value={editFormData.businessType}
                 onChange={(e) => setEditFormData({ ...editFormData, businessType: e.target.value })}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', background: 'var(--bg-primary)', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
                 
                   <option value="Cafe">Cafe</option>
                   <option value="Restaurant">Restaurant</option>
@@ -1634,7 +1634,7 @@ const SuperAdminDashboard = () => {
                   type="text"
                   value={editFormData.city}
                   onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#FFFDFB' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
                   required />
                 
                 </div>
@@ -1644,7 +1644,7 @@ const SuperAdminDashboard = () => {
                   type="text"
                   value={editFormData.state}
                   onChange={(e) => setEditFormData({ ...editFormData, state: e.target.value })}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#FFFDFB' }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
                   required />
                 
                 </div>
@@ -1656,7 +1656,7 @@ const SuperAdminDashboard = () => {
                 type="number"
                 value={editFormData.branchCount}
                 onChange={(e) => setEditFormData({ ...editFormData, branchCount: Number(e.target.value) })}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#FFFDFB' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
                 min={1}
                 required />
               
@@ -1715,7 +1715,7 @@ const SuperAdminDashboard = () => {
                 <input
                 type="text"
                 value={editingSubscriptionCafe.name}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '0.9rem', color: '#888', background: '#F5F5F5' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', fontSize: '0.9rem', color: 'var(--color-text-secondary)', background: 'var(--bg-secondary)' }}
                 disabled />
               
               </div>
@@ -1725,7 +1725,7 @@ const SuperAdminDashboard = () => {
                 <select
                 value={subEditFormData.subscriptionPlan}
                 onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionPlan: e.target.value })}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', background: 'var(--bg-primary)', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
                 
                   <option value="Basic">Basic (₹3,999/mo)</option>
                   <option value="Premium">Premium (₹7,999/mo)</option>
@@ -1738,7 +1738,7 @@ const SuperAdminDashboard = () => {
                 <select
                 value={subEditFormData.subscriptionStatus}
                 onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionStatus: e.target.value })}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', background: '#FFFDFB', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', background: 'var(--bg-primary)', fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
                 
                   <option value="Active">Active</option>
                   <option value="Suspended">Suspended</option>
@@ -1752,7 +1752,7 @@ const SuperAdminDashboard = () => {
                 type="date"
                 value={subEditFormData.subscriptionRenewal}
                 onChange={(e) => setSubEditFormData({ ...subEditFormData, subscriptionRenewal: e.target.value })}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: '#FFFDFB' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
                 required />
               
               </div>
