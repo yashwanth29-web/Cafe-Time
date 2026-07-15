@@ -20,12 +20,12 @@ router.get('/:id', async (req, res) => {
         success: true,
         data: {
           cafeId: req.params.id,
-          name: 'Dr. Chai Cafe',
+          name: 'Our Cafe',
           logoUrl: '',
-          ownerName: 'Kamala Bevara', // Fallback owner name
-          address: 'Main Road, Near Metro Station, Hyderabad',
-          gstNumber: '36AAAAA1111A1Z1',
-          supportNumber: '+91 9876543210'
+          ownerName: 'Owner', // Fallback owner name
+          address: '',
+          gstNumber: '',
+          supportNumber: ''
         }
       });
     }

@@ -116,7 +116,26 @@ const OwnerProfilePage = () => {
     {setLoading(false);}
   };
 
-  useEffect(() => {load();}, []);
+  useEffect(() => {
+    // Reset cache and local states when user changes to prevent cross-tenant data leakage
+    profileCache.cafeData = null;
+    profileCache.paymentConfig = null;
+    profileCache.operationalConfig = null;
+    profileCache.branches = [];
+    profileCache.staffCount = 0;
+    profileCache.hasLoaded = false;
+
+    setCafeData(null);
+    setPaymentConfig(null);
+    setOpsConfig(null);
+    setBranches([]);
+    setStaffCount(0);
+    setLoading(true);
+
+    if (user) {
+      load();
+    }
+  }, [user?._id]);
 
   const openModal = (key) => {
     const prefill = {
@@ -651,7 +670,13 @@ const OwnerProfilePage = () => {
           {/* Banner */}
           <div className="pp-banner">
             <div className="pp-avatar-wrap">
-              <div className="pp-avatar"><img src="/logo.png" alt="Dr. Chai Cafe Logo" /></div>
+              <div className="pp-avatar">
+                {cafeData?.logoUrl ? (
+                  <img src={getAssetUrl(cafeData.logoUrl)} alt={`${cafeData?.name || 'Cafe'} Logo`} />
+                ) : (
+                  <span style={{ fontSize: '0.65rem', color: '#A0826C', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '2px' }}>No Logo Uploaded</span>
+                )}
+              </div>
               <div className="pp-identity">
                 <h2>{cafeData?.name || 'My Cafe'}</h2>
                 <p>{cafeData?.cafeId} · {cafeData?.businessType || 'Cafe'}</p>

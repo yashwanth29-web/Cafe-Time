@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getInventory, getNotifications, markNotificationRead } from '../services/api';
+import { getInventory, getNotifications, markNotificationRead, getCafeInfo, getAssetUrl } from '../services/api';
 import BranchSwitcher from './BranchSwitcher';
 import { useBranch } from '../context/BranchContext';
 
@@ -27,6 +27,33 @@ const SaaSLayout = ({ children }) => {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState(() => layoutCache.notifications);
   const [notificationsDisabled, setNotificationsDisabled] = useState(false);
+  const [cafeInfo, setCafeInfo] = useState(null);
+
+  useEffect(() => {
+    // Reset layoutCache when user changes to prevent cross-tenant data leakage
+    layoutCache.notifications = [];
+    layoutCache.lowStockAlerts = [];
+    layoutCache.hasLoaded = false;
+
+    setNotifications([]);
+    setLowStockAlerts([]);
+    setCafeInfo(null);
+
+    const fetchCafe = async () => {
+      try {
+        const id = user?.cafeId || sessionStorage.getItem('cafeId') || 'CD001';
+        const res = await getCafeInfo(id);
+        if (res.success) {
+          setCafeInfo(res.data);
+        }
+      } catch (e) {
+        console.error('Error fetching cafe info in SaaSLayout:', e);
+      }
+    };
+    if (user) {
+      fetchCafe();
+    }
+  }, [user]);
 
   const fetchNotifications = async () => {
     if (notificationsDisabled) return;
@@ -525,8 +552,12 @@ const SaaSLayout = ({ children }) => {
             style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
             title="Go to Home"
           >
-            <div className="mh-logo">☕</div>
-            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>Dr. Chai Cafe</span>
+            {cafeInfo?.logoUrl ? (
+              <img src={getAssetUrl(cafeInfo.logoUrl)} alt={`${cafeInfo.name} Logo`} style={{ height: '32px', width: '32px', borderRadius: '50%', objectFit: 'contain', border: '1px solid #6F4E37' }} />
+            ) : (
+              <div className="mh-logo">☕</div>
+            )}
+            <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)' }}>{cafeInfo?.name || 'Cafe'}</span>
           </div>
           <button className="drawer-close-btn" onClick={() => setMobileDrawerOpen(false)}>×</button>
         </div>
@@ -609,8 +640,12 @@ const SaaSLayout = ({ children }) => {
             style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
             title="Go to Home"
           >
-            <div className="mh-logo">☕</div>
-            <span className="mh-name">Dr. Chai</span>
+            {cafeInfo?.logoUrl ? (
+              <img src={getAssetUrl(cafeInfo.logoUrl)} alt={`${cafeInfo.name} Logo`} style={{ height: '24px', width: '24px', borderRadius: '50%', objectFit: 'contain', border: '1px solid #6F4E37' }} />
+            ) : (
+              <div className="mh-logo">☕</div>
+            )}
+            <span className="mh-name">{cafeInfo?.name || 'Cafe'}</span>
           </div>
         </div>
 
@@ -751,28 +786,32 @@ const SaaSLayout = ({ children }) => {
             }}
             title="Go to Home"
           >
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--bg-card-hover) 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
-              flexShrink: 0
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
-                <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
-                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
-                <line x1="6" y1="1" x2="6" y2="4"></line>
-                <line x1="10" y1="1" x2="10" y2="4"></line>
-                <line x1="14" y1="1" x2="14" y2="4"></line>
-              </svg>
-            </div>
+            {cafeInfo?.logoUrl ? (
+              <img src={getAssetUrl(cafeInfo.logoUrl)} alt={`${cafeInfo.name} Logo`} style={{ height: '32px', width: '32px', borderRadius: '50%', objectFit: 'contain', border: '1px solid #6F4E37', flexShrink: 0 }} />
+            ) : (
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(111, 78, 55, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '18px',
+                flexShrink: 0
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
+                  <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+                  <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+                  <line x1="6" y1="1" x2="6" y2="4"></line>
+                  <line x1="10" y1="1" x2="10" y2="4"></line>
+                  <line x1="14" y1="1" x2="14" y2="4"></line>
+                </svg>
+              </div>
+            )}
             {!sidebarCollapsed &&
             <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-text-primary)', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
-                Dr. Chai Cafe
+                {cafeInfo?.name || 'Cafe'}
               </span>
             }
           </div>

@@ -105,7 +105,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   const speakThankYou = () => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cafeNameStr = cafeInfo?.name || 'Dr. Chai Cafe';
+      const cafeNameStr = cafeInfo?.name || 'Our Cafe';
       const text = `Payment successful. Thank you for visiting ${cafeNameStr}! Have a wonderful day.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.95;

@@ -20,7 +20,7 @@ export const printPOSReceipt = (order, user = null, cafe = null, branch = null) 
   const gstAmount = itemsSubtotal * (gstRate / 100);
   const grandTotal = order.totalAmount || (itemsSubtotal + gstAmount + platformCharge);
 
-  const cafeName = cafe?.name || 'Dr. Chai Cafe';
+  const cafeName = cafe?.name || 'Our Cafe';
   const displayBranchName = branch?.branchName || 'Main Branch';
   const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
   const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
@@ -197,7 +197,7 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
     document.body.appendChild(iframe);
   }
 
-  const cafeName = cafe?.name || 'Dr. Chai Cafe';
+  const cafeName = cafe?.name || 'Our Cafe';
   const displayBranchName = branch?.branchName || 'Main Branch';
   const displayAddress = branch?.address || cafe?.address || 'Main Road, Near Metro Station, Hyderabad';
   const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';

@@ -103,7 +103,7 @@ const OrderHistory = ({ cafeId }) => {
   const speakThankYou = () => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cafeNameStr = cafeInfo?.name || 'Dr. Chai Cafe';
+      const cafeNameStr = cafeInfo?.name || 'Our Cafe';
       const text = `Payment successful. Thank you for visiting ${cafeNameStr}! Have a wonderful day.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.95;
@@ -693,7 +693,7 @@ const OrderHistory = ({ cafeId }) => {
                     fontFamily: "'Courier New', Courier, monospace"
                   }}>
                     <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '12px', marginBottom: '12px' }}>
-                      <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>{cafeInfo?.name || 'Dr. Chai Cafe'}</h3>
+                      <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>{cafeInfo?.name || 'Our Cafe'}</h3>
                       <p style={{ margin: '2px 0', fontSize: '10px' }}>{cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
                       {cafeInfo?.gstNumber && <p style={{ margin: '2px 0', fontSize: '10px', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
                     </div>

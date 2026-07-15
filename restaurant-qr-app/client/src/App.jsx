@@ -158,7 +158,7 @@ function AppContent() {
       )}
       
       <main className={`main-content${isAdminOrAuthRoute ? ' admin-full-width' : ''}`}>
-        <Suspense fallback={<div className="initial-splash"><img src="/logo.png" alt="Loading Dr. Chai Cafe..." /></div>}>
+        <Suspense fallback={<div className="initial-splash"><div className="spinner" style={{ border: '2px solid #5C4331', borderTop: '2px solid #6F4E37', borderRadius: '50%', width: '30px', height: '30px', animation: 'spin 0.8s linear infinite' }}></div><div style={{ marginTop: '10px', color: '#A0826C' }}>Loading Cafe Portal...</div></div>}>
           <Routes>
             {/* Customer / Ordering Flow */}
           <Route 

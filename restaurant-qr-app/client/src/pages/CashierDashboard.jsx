@@ -350,7 +350,7 @@ const CashierDashboard = () =>{
  boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
  }}>
 <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '15px', marginBottom: '15px' }}>
-<h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>{cafeInfo?.name || 'Dr. Chai Cafe'}</h2>
+<h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>{cafeInfo?.name || 'Our Cafe'}</h2>
 <p style={{ margin: '4px 0', fontSize: '0.8rem' }}>{cafeInfo?.address || 'Main Road, Near Metro Station, Hyderabad'}</p>
  {cafeInfo?.gstNumber &&<p style={{ margin: '2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
 <p style={{ margin: '2px 0', fontSize: '0.8rem' }}>Tel: {cafeInfo?.supportNumber || user?.phone || '+91 9876543210'}</p>

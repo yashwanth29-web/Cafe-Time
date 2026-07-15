@@ -23,6 +23,18 @@ const OwnerLayout = ({ children }) => {
   const [logoUrl, setLogoUrl] = useState(() => ownerLayoutCache.logoUrl);
   const [currentBranchName, setCurrentBranchName] = useState(() => ownerLayoutCache.currentBranchName);
 
+  // Reset cache and local states when user changes to prevent cross-tenant data leakage
+  useEffect(() => {
+    ownerLayoutCache.cafeName = 'My Cafe';
+    ownerLayoutCache.logoUrl = '';
+    ownerLayoutCache.currentBranchName = 'Main Branch';
+    ownerLayoutCache.hasLoaded = false;
+    
+    setCafeName('My Cafe');
+    setLogoUrl('');
+    setCurrentBranchName('Main Branch');
+  }, [user?._id]);
+
   // Load cafe header data on each page change
   useEffect(() => {
     if (ownerLayoutCache.hasLoaded) return;

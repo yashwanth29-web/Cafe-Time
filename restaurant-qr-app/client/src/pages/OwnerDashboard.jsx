@@ -264,6 +264,12 @@ const getBranchCache = (branchId) => {
 
 const OwnerDashboard = () =>{
  const { user } = useAuth();
+  useEffect(() => {
+    // Clear global singleton dashboardCache on user identity change to prevent cross-tenant data leakage
+    for (const key in dashboardCache) {
+      delete dashboardCache[key];
+    }
+  }, [user?._id]);
  const { branches, branchesLoading, activeBranchId, onBranchSwitch, loadBranches } = useBranch();
  const navigate = useNavigate();
  const location = useLocation();
