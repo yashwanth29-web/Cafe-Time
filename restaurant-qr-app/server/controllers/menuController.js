@@ -165,9 +165,18 @@ const createMenuItem = async (req, res) => {
 const updateMenuItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
     const cafeId = (req.user && req.user.cafeId) || 'CD001';
     const branchId = req.branchId || 'default';
+
+    // Strip immutable or restricted tenant fields to prevent Cast/MongoServerError on update
+    delete updateData._id;
+    delete updateData.id;
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
+    delete updateData.__v;
+    delete updateData.cafeId;
+    delete updateData.branchId;
 
     if (updateData.price !== undefined) {
       updateData.price = parseFloat(updateData.price);
@@ -232,6 +241,10 @@ const updateMenuItem = async (req, res) => {
     } else {
       // Unauthorized cross-cafe edit
       return res.status(403).json({ success: false, message: 'Unauthorized to edit this item from this branch' });
+    }
+
+    if (!updatedItem) {
+      return res.status(404).json({ success: false, message: 'Menu item update target not found' });
     }
 
     // Auto-update availability based on inventory
