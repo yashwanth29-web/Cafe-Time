@@ -627,7 +627,7 @@ const StaffOrderWorkspace = () => {
                         
                         {/* Print KOT helper */}
                         <button
-                          onClick={() => printKOT(order, user, currentBranch)}
+                          onClick={() => printKOT(order, user, cafeInfo, currentBranch)}
                           style={{
                             background: '#7f8c8d', color: 'white', border: 'none', padding: '6px 10px',
                             borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold'

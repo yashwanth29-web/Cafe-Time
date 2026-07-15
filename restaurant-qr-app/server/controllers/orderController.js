@@ -126,6 +126,23 @@ const appendLegacyFallback = async (order, branchMap = null) => {
     orderObj.branchAddress = orderObj.branchAddress || defaultBranch.address;
   }
 
+  if (!orderObj.cafeName || !orderObj.cafeLogo || !orderObj.cafeGstNumber) {
+    const targetCafeId = orderObj.cafeId || 'CD001';
+    const Cafe = require('../models/Cafe');
+    const defaultCafe = await getCachedBranch(`cafeInfo:${targetCafeId}`, () => Cafe.findOne({ cafeId: targetCafeId }).lean());
+    if (defaultCafe) {
+      orderObj.cafeName = orderObj.cafeName || defaultCafe.name || 'Our Cafe';
+      orderObj.cafeLogo = orderObj.cafeLogo || defaultCafe.logoUrl || '';
+      orderObj.cafeGstNumber = orderObj.cafeGstNumber || defaultCafe.gstNumber || '';
+      orderObj.cafeSupportNumber = orderObj.cafeSupportNumber || defaultCafe.supportNumber || '';
+    } else {
+      orderObj.cafeName = orderObj.cafeName || 'Our Cafe';
+      orderObj.cafeLogo = orderObj.cafeLogo || '';
+      orderObj.cafeGstNumber = orderObj.cafeGstNumber || '';
+      orderObj.cafeSupportNumber = orderObj.cafeSupportNumber || '';
+    }
+  }
+
   if (!orderObj.grandTotal) {
     orderObj.grandTotal = orderObj.totalAmount || 0;
     orderObj.subtotal = Number((orderObj.grandTotal / 1.05).toFixed(2));
@@ -195,6 +212,9 @@ const createOrder = async (req, res) => {
     const finalTax = tax !== undefined ? tax : Number((totalAmount - finalSubtotal).toFixed(2));
     const finalGrandTotal = grandTotal !== undefined ? grandTotal : totalAmount;
 
+    const Cafe = require('../models/Cafe');
+    const resolvedCafe = await Cafe.findOne({ cafeId: activeCafeId }).lean();
+
     // Build the order document
     const newOrder = new Order({
       cafeId: activeCafeId,
@@ -202,6 +222,10 @@ const createOrder = async (req, res) => {
       branchObjectId: resolvedBranch ? resolvedBranch._id : null,
       branchName: resolvedBranch ? resolvedBranch.branchName : 'Main Branch',
       branchAddress: resolvedBranch ? resolvedBranch.address : '',
+      cafeName: resolvedCafe ? resolvedCafe.name : 'Our Cafe',
+      cafeLogo: resolvedCafe ? resolvedCafe.logoUrl : '',
+      cafeGstNumber: resolvedCafe ? resolvedCafe.gstNumber : '',
+      cafeSupportNumber: resolvedCafe ? resolvedCafe.supportNumber : '',
       tableNumber,
       items,
       totalAmount,

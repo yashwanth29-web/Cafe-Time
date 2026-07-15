@@ -107,6 +107,22 @@ const OrderSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  cafeName: {
+    type: String,
+    default: ''
+  },
+  cafeLogo: {
+    type: String,
+    default: ''
+  },
+  cafeGstNumber: {
+    type: String,
+    default: ''
+  },
+  cafeSupportNumber: {
+    type: String,
+    default: ''
+  },
   subtotal: {
     type: Number,
     default: 0

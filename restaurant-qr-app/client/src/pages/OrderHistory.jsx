@@ -693,9 +693,9 @@ const OrderHistory = ({ cafeId }) => {
                     fontFamily: "'Courier New', Courier, monospace"
                   }}>
                     <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '12px', marginBottom: '12px' }}>
-                      <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>{cafeInfo?.name || 'Our Cafe'}</h3>
-                      <p style={{ margin: '2px 0', fontSize: '10px' }}>{cafeInfo?.address || ''}</p>
-                      {cafeInfo?.gstNumber && <p style={{ margin: '2px 0', fontSize: '10px', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
+                      <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 'bold' }}>{order.cafeName || cafeInfo?.name || 'Our Cafe'}</h3>
+                      <p style={{ margin: '2px 0', fontSize: '10px' }}>{order.branchAddress || cafeInfo?.address || ''}</p>
+                      {(order.cafeGstNumber || cafeInfo?.gstNumber) && <p style={{ margin: '2px 0', fontSize: '10px', fontWeight: 'bold' }}>GSTIN: {order.cafeGstNumber || cafeInfo.gstNumber}</p>}
                     </div>
 
                     <div style={{ fontSize: '11px', marginBottom: '12px' }}>

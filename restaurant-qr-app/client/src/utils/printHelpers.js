@@ -20,12 +20,12 @@ export const printPOSReceipt = (order, user = null, cafe = null, branch = null) 
   const gstAmount = itemsSubtotal * (gstRate / 100);
   const grandTotal = order.totalAmount || (itemsSubtotal + gstAmount + platformCharge);
 
-  const cafeName = cafe?.name || 'Our Cafe';
-  const displayBranchName = branch?.branchName || 'Main Branch';
-  const displayAddress = branch?.address || cafe?.address || '';
-  const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
-  const logoUrl = getAssetUrl(cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
-  const cafeGST = cafe?.gstNumber || '';
+  const cafeName = order.cafeName || cafe?.name || 'Our Cafe';
+  const displayBranchName = order.branchName || branch?.branchName || 'Main Branch';
+  const displayAddress = order.branchAddress || branch?.address || cafe?.address || '';
+  const displayContact = order.cafeSupportNumber || cafe?.phone || cafe?.contact || branch?.manager || '';
+  const logoUrl = getAssetUrl(order.cafeLogo || cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
+  const cafeGST = order.cafeGstNumber || cafe?.gstNumber || '';
 
   const itemsHtml = order.items.map(item => `
     <tr>
@@ -197,11 +197,11 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
     document.body.appendChild(iframe);
   }
 
-  const cafeName = cafe?.name || 'Our Cafe';
-  const displayBranchName = branch?.branchName || 'Main Branch';
-  const displayAddress = branch?.address || cafe?.address || '';
-  const displayContact = cafe?.phone || cafe?.contact || branch?.manager || '';
-  const logoUrl = getAssetUrl(cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
+  const cafeName = order.cafeName || cafe?.name || 'Our Cafe';
+  const displayBranchName = order.branchName || branch?.branchName || 'Main Branch';
+  const displayAddress = order.branchAddress || branch?.address || cafe?.address || '';
+  const displayContact = order.cafeSupportNumber || cafe?.phone || cafe?.contact || branch?.manager || '';
+  const logoUrl = getAssetUrl(order.cafeLogo || cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
 
   const itemsHtml = order.items.map(item => `
     <tr>
