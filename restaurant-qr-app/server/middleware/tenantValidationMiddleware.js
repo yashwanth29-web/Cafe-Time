@@ -19,6 +19,8 @@ const validateTenant = async (req, res, next) => {
       return next();
     }
 
+    console.log(`[TENANT VALIDATION] Body entering middleware for path "${path}":`, req.body);
+
     // Bypass check for super admins
     if (req.user && req.user.role === 'super_admin') {
       return next();
@@ -115,6 +117,7 @@ const validateTenant = async (req, res, next) => {
       }
     }
 
+    console.log(`[TENANT VALIDATION SUCCESS] Body after middleware:`, req.body);
     next();
   } catch (error) {
     console.error('[TENANT VALIDATION MIDDLEWARE ERROR]', error);

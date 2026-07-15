@@ -171,6 +171,7 @@ const createOrder = async (req, res, next) => {
   let useTransaction = false;
 
   try {
+    console.log(`[ORDER CONTROLLER] Body entering createOrder controller:`, req.body);
     const { 
       cafeId, 
       branchId, 
@@ -377,6 +378,16 @@ const createOrder = async (req, res, next) => {
         normalizedOrderSource = 'STAFF';
       }
     }
+
+    console.log(`[ORDER CONTROLLER] About to instantiate and save Order. Payload:`, {
+      cafeId: activeCafeId,
+      branchId: resolvedBranch ? resolvedBranch.branchId : (branchId || 'default'),
+      tableNumber: activeTableNumber,
+      customerName: finalCustomerName,
+      customerPhone: finalCustomerPhone,
+      items: validatedItems,
+      totalAmount: finalGrandTotal
+    });
 
     // Build the order document
     const newOrder = new Order({

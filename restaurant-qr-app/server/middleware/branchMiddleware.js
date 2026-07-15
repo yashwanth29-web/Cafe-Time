@@ -68,6 +68,11 @@ const attachCafeAndBranch = async (req, res, next) => {
     // For public order creation (POST /orders from QR scans), the request body's
     // branchId is the authoritative source (set from the QR code parameters stored
     // in sessionStorage).
+    console.log(`\n--- INCOMING REQUEST CONTEXT LOG ---`);
+    console.log(`Method/Path: ${req.method} ${req.originalUrl}`);
+    console.log(`Incoming Query:`, req.query);
+    console.log(`Incoming Body:`, req.body);
+
     const isOrderCreation = req.method === 'POST' && (path === '/orders' || path === '/orders/');
     let cafeId = req.headers['x-cafe-id'] || req.query?.cafeId || req.body?.cafeId;
     let branchId;
@@ -76,6 +81,28 @@ const attachCafeAndBranch = async (req, res, next) => {
     } else {
       branchId = req.headers['x-branch-id'] || req.query?.branchId || req.body?.branchId;
     }
+
+    // Resolve and self-heal identifiers immediately
+    const { resolveIdentifiers } = require('../utils/tableHelper');
+    const resolved = await resolveIdentifiers({
+      cafeId,
+      branchId,
+      tableNumber: req.body?.tableNumber || req.query?.table || req.body?.table,
+      tableId: req.body?.tableId || (req.query?.table && String(req.query.table).startsWith('T') ? req.query.table : '')
+    });
+
+    cafeId = resolved.cafeId;
+    branchId = resolved.branchId;
+
+    // Inject back into request body to satisfy Mongo schema validation requirements
+    if (req.body && typeof req.body === 'object') {
+      if (!req.body.cafeId) req.body.cafeId = cafeId;
+      if (!req.body.branchId) req.body.branchId = branchId;
+    }
+
+    console.log(`Resolved Identifiers: cafeId="${cafeId}", branchId="${branchId}", tableId="${resolved.tableId}"`);
+    console.log(`Body after context resolution:`, req.body);
+    console.log(`-------------------------------------\n`);
 
     // Try to extract cafeId from URL path parameter for Cafe details endpoint e.g., /api/cafe/CD002
     if (!cafeId && path.startsWith('/cafe/')) {

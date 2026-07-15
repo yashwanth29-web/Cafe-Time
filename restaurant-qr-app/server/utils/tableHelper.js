@@ -214,8 +214,115 @@ const auditAndRepairAllTables = async () => {
   }
 };
 
+/**
+ * Robust self-healing function to resolve cafeId and branchId from partial or complete parameters.
+ */
+const resolveIdentifiers = async (payload) => {
+  let { cafeId, branchId, tableNumber, tableId } = payload;
+
+  cafeId = (cafeId || '').trim();
+  branchId = (branchId || '').trim();
+  tableId = (tableId || '').trim();
+  tableNumber = (tableNumber || '').trim();
+
+  // Standardize takeaway/walk-in orders
+  if (tableNumber.toLowerCase() === 'takeaway' || tableNumber.toLowerCase() === 'walk-in' ||
+      tableId.toLowerCase() === 'takeaway' || tableId.toLowerCase() === 'walk-in') {
+    return {
+      cafeId: cafeId || 'CD001',
+      branchId: branchId || 'default',
+      tableId: 'Takeaway',
+      tableNumber: 'Takeaway'
+    };
+  }
+
+  // Derive missing tableId / tableNumber
+  if (tableNumber && !tableId) {
+    tableId = `T${parseTableNumber(tableNumber)}`;
+  } else if (tableId && !tableNumber) {
+    tableNumber = parseTableNumber(tableId);
+  }
+
+  const mongoose = require('mongoose');
+
+  // Self-heal 1: missing cafeId but branchId exists
+  if (!cafeId && branchId) {
+    const branchDoc = await Branch.findOne({
+      $or: [
+        { branchId: branchId },
+        { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
+      ]
+    }).lean();
+    if (branchDoc) {
+      cafeId = branchDoc.cafeId;
+      console.log(`[IDENTIFIER SELF-HEAL] Resolved cafeId: "${cafeId}" from branchId: "${branchId}"`);
+    }
+  }
+
+  // Self-heal 2: have cafeId and table number, missing branchId
+  if (cafeId && (!branchId || branchId === 'default') && (tableId || tableNumber)) {
+    const queryParts = [];
+    if (tableNumber) queryParts.push({ tableNumber });
+    if (tableId) queryParts.push({ tableId });
+
+    const tableDoc = await Table.findOne({
+      cafeId,
+      $or: queryParts
+    }).lean();
+    if (tableDoc) {
+      branchId = tableDoc.branchId;
+      console.log(`[IDENTIFIER SELF-HEAL] Resolved branchId: "${branchId}" from tableNumber: "${tableNumber}" for cafeId: "${cafeId}"`);
+    }
+  }
+
+  // Self-heal 3: have branchId and table number, missing cafeId
+  if ((!cafeId || cafeId === 'CD001') && branchId && branchId !== 'default' && (tableId || tableNumber)) {
+    const queryParts = [];
+    if (tableNumber) queryParts.push({ tableNumber });
+    if (tableId) queryParts.push({ tableId });
+
+    const tableDoc = await Table.findOne({
+      branchId,
+      $or: queryParts
+    }).lean();
+    if (tableDoc) {
+      cafeId = tableDoc.cafeId;
+      console.log(`[IDENTIFIER SELF-HEAL] Resolved cafeId: "${cafeId}" from tableNumber: "${tableNumber}" for branchId: "${branchId}"`);
+    }
+  }
+
+  // Self-heal 4: missing both cafeId and branchId, lookup by table number
+  if ((!cafeId || cafeId === 'CD001') && (!branchId || branchId === 'default') && (tableId || tableNumber)) {
+    const queryParts = [];
+    if (tableNumber) queryParts.push({ tableNumber });
+    if (tableId) queryParts.push({ tableId });
+
+    const tableDoc = await Table.findOne({
+      $or: queryParts
+    }).lean();
+    if (tableDoc) {
+      cafeId = tableDoc.cafeId;
+      branchId = tableDoc.branchId;
+      tableId = tableDoc.tableId;
+      tableNumber = tableDoc.tableNumber;
+      console.log(`[IDENTIFIER SELF-HEAL] Resolved cafeId: "${cafeId}" and branchId: "${branchId}" from tableNumber: "${tableNumber}"`);
+    }
+  }
+
+  // Fallbacks if still unresolved
+  if (!cafeId) {
+    cafeId = 'CD001';
+  }
+  if (!branchId) {
+    branchId = 'default';
+  }
+
+  return { cafeId, branchId, tableId, tableNumber };
+};
+
 module.exports = {
   parseTableNumber,
   resolveAndSelfHealTable,
-  auditAndRepairAllTables
+  auditAndRepairAllTables,
+  resolveIdentifiers
 };

@@ -24,6 +24,7 @@ const errorHandler = (err, req, res, next) => {
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {
+    console.error(`[MONGO VALIDATION ERROR] Fields failed validation:`, err.errors);
     const message = Object.values(err.errors).map(val => val.message).join(', ');
     error = new Error(message);
     error.statusCode = 400;
