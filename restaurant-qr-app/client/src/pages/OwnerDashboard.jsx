@@ -3839,7 +3839,7 @@ const exportStaffToCSV = () => {
 <tbody>
  {attendanceReports.branchReports.map((br, idx) =>
 <tr key={idx} style={{ borderBottom: '1px solid rgba(0, 0, 0,0.03)' }}>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{br.branchName || 'Main Branch'}</td>
+<td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{br.branchName || 'Unknown Branch'}</td>
 <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold' }}>{br.presentCount}</td>
 <td style={{ padding: '10px 8px', textAlign: 'right', color: '#2ecc71', fontWeight: 'bold' }}>{br.workingHours} hrs</td>
 </tr>

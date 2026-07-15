@@ -71,21 +71,19 @@ const migrateData = async () => {
       cafes.push({ cafeId: 'CD001' });
     }
 
-    // 3. For each cafe, ensure default branch exists
-    for (const cafe of cafes) {
-      const defaultBranch = await Branch.findOne({ branchId: 'default', cafeId: cafe.cafeId });
-      if (!defaultBranch) {
-        console.log(`Creating default branch for cafe ${cafe.cafeId}...`);
-        await Branch.create({
-          branchId: 'default',
-          branchName: 'Main Branch',
-          cafeId: cafe.cafeId,
-          address: cafe.address || 'Main Location Address',
-          latitude: 16.5062,
-          longitude: 80.6480,
-          isActive: true
-        });
-      }
+    // 3. For the default demo cafe 'CD001', ensure default branch exists
+    const defaultBranch = await Branch.findOne({ branchId: 'default', cafeId: 'CD001' });
+    if (!defaultBranch) {
+      console.log(`Creating default branch for cafe CD001...`);
+      await Branch.create({
+        branchId: 'default',
+        branchName: 'Main Branch',
+        cafeId: 'CD001',
+        address: 'Main Location Address',
+        latitude: 16.5062,
+        longitude: 80.6480,
+        isActive: true
+      });
     }
 
     // 4. Migrate operational collections

@@ -21,7 +21,7 @@ export const printPOSReceipt = (order, user = null, cafe = null, branch = null) 
   const grandTotal = order.totalAmount || (itemsSubtotal + gstAmount + platformCharge);
 
   const cafeName = order.cafeName || cafe?.name || 'Our Cafe';
-  const displayBranchName = order.branchName || branch?.branchName || 'Main Branch';
+  const displayBranchName = order.branchName || branch?.branchName || '';
   const displayAddress = order.branchAddress || branch?.address || cafe?.address || '';
   const displayContact = order.cafeSupportNumber || cafe?.phone || cafe?.contact || branch?.manager || '';
   const logoUrl = getAssetUrl(order.cafeLogo || cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
@@ -198,7 +198,7 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
   }
 
   const cafeName = order.cafeName || cafe?.name || 'Our Cafe';
-  const displayBranchName = order.branchName || branch?.branchName || 'Main Branch';
+  const displayBranchName = order.branchName || branch?.branchName || '';
   const displayAddress = order.branchAddress || branch?.address || cafe?.address || '';
   const displayContact = order.cafeSupportNumber || cafe?.phone || cafe?.contact || branch?.manager || '';
   const logoUrl = getAssetUrl(order.cafeLogo || cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));

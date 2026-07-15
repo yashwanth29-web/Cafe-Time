@@ -1138,7 +1138,7 @@ const StaffDashboard = () => {
  {formatDate(record.date)}
  </td>
  <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
- {record.branchName || 'Main Branch'}
+ {record.branchName || 'Unknown Branch'}
  </td>
  <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
  {formatTime(record.checkInTime)}
