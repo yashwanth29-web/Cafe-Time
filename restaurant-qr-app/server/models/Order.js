@@ -83,7 +83,7 @@ const OrderSchema = new mongoose.Schema({
   },
   orderSource: {
     type: String,
-    enum: ['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN'],
+    enum: ['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF'],
     default: 'QR'
   },
   createdBy: {

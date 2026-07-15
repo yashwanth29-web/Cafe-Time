@@ -361,6 +361,18 @@ const createOrder = async (req, res, next) => {
       useTransaction = false;
     }
 
+    // Normalize source and orderSource to keep them perfectly synchronized
+    let normalizedSource = 'QR';
+    let normalizedOrderSource = 'QR';
+    const staffSourceValues = ['STAFF', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN'];
+    if (staffSourceValues.includes(String(source).toUpperCase()) || staffSourceValues.includes(String(orderSource).toUpperCase())) {
+      normalizedSource = 'STAFF';
+      normalizedOrderSource = orderSource ? String(orderSource).toUpperCase() : 'STAFF';
+      if (!['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF'].includes(normalizedOrderSource)) {
+        normalizedOrderSource = 'STAFF';
+      }
+    }
+
     // Build the order document
     const newOrder = new Order({
       _id: newOrderId,
@@ -390,13 +402,13 @@ const createOrder = async (req, res, next) => {
       specialInstructions: specialInstructions || '',
       paymentStatus: paymentStatus || 'Pending',
       paymentMethod: paymentMethod || 'Pending',
-      orderSource: orderSource || source || 'QR',
+      orderSource: normalizedOrderSource,
       createdBy: createdBy || '',
       createdByRole: createdByRole || '',
       subtotal: finalSubtotal,
       tax: finalTax,
       grandTotal: finalGrandTotal,
-      source: source || orderSource || 'QR',
+      source: normalizedSource,
       staffId: staffId || null
     });
 

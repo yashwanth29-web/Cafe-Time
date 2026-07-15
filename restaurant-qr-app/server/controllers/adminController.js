@@ -1680,7 +1680,7 @@ const getDashboardStats = async (req, res) => {
     const orderSourceData = { QR: 0, POS: 0, Counter: 0 };
     sourceStats.forEach(stat => {
       if (stat._id === 'QR') orderSourceData.QR = stat.count;
-      else if (stat._id === 'Staff POS' || stat._id === 'Waiter' || stat._id === 'POS' || stat._id === 'MANUAL') orderSourceData.POS += stat.count;
+      else if (stat._id === 'Staff POS' || stat._id === 'Waiter' || stat._id === 'POS' || stat._id === 'MANUAL' || stat._id === 'DINE_IN' || stat._id === 'STAFF') orderSourceData.POS += stat.count;
       else orderSourceData.Counter += stat.count;
     });
     
