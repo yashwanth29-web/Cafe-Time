@@ -1,8 +1,12 @@
 const Order = require('../models/Order');
 const Branch = require('../models/Branch');
+const Cafe = require('../models/Cafe');
+const OperationalConfig = require('../models/OperationalConfig');
+const PaymentConfig = require('../models/PaymentConfig');
+const MenuItem = require('../models/MenuItem');
+const User = require('../models/User');
 const mongoose = require('mongoose');
 const { deductInventoryForOrder, updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
-const socket = require('../socket');
 
 // Active branches in-memory cache with 60s TTL
 const branchCache = new Map();
@@ -128,7 +132,6 @@ const appendLegacyFallback = async (order, branchMap = null) => {
 
   if (!orderObj.cafeName || !orderObj.cafeLogo || !orderObj.cafeGstNumber) {
     const targetCafeId = orderObj.cafeId || 'CD001';
-    const Cafe = require('../models/Cafe');
     const defaultCafe = await getCachedBranch(`cafeInfo:${targetCafeId}`, () => Cafe.findOne({ cafeId: targetCafeId }).lean());
     if (defaultCafe) {
       orderObj.cafeName = orderObj.cafeName || defaultCafe.name || 'Our Cafe';
@@ -156,14 +159,17 @@ const appendLegacyFallback = async (order, branchMap = null) => {
     orderObj.subtotal = Number((orderObj.grandTotal / 1.05).toFixed(2));
     orderObj.tax = Number((orderObj.grandTotal - orderObj.subtotal).toFixed(2));
   }
-  
+
   return orderObj;
 };
 
 // @desc    Create a new order
 // @route   POST /api/orders
 // @access  Public
-const createOrder = async (req, res) => {
+const createOrder = async (req, res, next) => {
+  let session = null;
+  let useTransaction = false;
+
   try {
     const { 
       cafeId, 
@@ -184,10 +190,11 @@ const createOrder = async (req, res) => {
       createdByRole,
       subtotal,
       tax,
-      grandTotal
+      grandTotal,
+      razorpayPaymentId
     } = req.body;
 
-    // Simple validation
+    // 1. Simple validation
     if (!tableNumber) {
       return res.status(400).json({ success: false, message: 'Table number is required' });
     }
@@ -203,7 +210,19 @@ const createOrder = async (req, res) => {
 
     const activeCafeId = cafeId || 'CD001';
 
-    // Find the branch
+    // 2. Cafe Validation
+    const resolvedCafe = await Cafe.findOne({ cafeId: activeCafeId }).lean();
+    if (!resolvedCafe) {
+      return res.status(404).json({ success: false, message: 'Cafe not found' });
+    }
+    if (resolvedCafe.isActive === false) {
+      return res.status(403).json({ success: false, message: 'This cafe is currently inactive' });
+    }
+    if (resolvedCafe.subscriptionStatus !== 'Active') {
+      return res.status(403).json({ success: false, message: 'This cafe subscription is suspended or expired' });
+    }
+
+    // 3. Branch Validation
     const resolvedBranch = await Branch.findOne({
       $or: [
         { branchId: branchId },
@@ -215,20 +234,90 @@ const createOrder = async (req, res) => {
     if (!resolvedBranch) {
       return res.status(404).json({ success: false, message: 'Branch not found' });
     }
+    if (resolvedBranch.isActive === false) {
+      return res.status(403).json({ success: false, message: 'This branch is currently inactive' });
+    }
 
-    const finalSubtotal = subtotal !== undefined ? subtotal : Number((totalAmount / 1.05).toFixed(2));
-    const finalTax = tax !== undefined ? tax : Number((totalAmount - finalSubtotal).toFixed(2));
-    const finalGrandTotal = grandTotal !== undefined ? grandTotal : totalAmount;
+    // 4. Table Validation
+    const activeTableNumber = String(tableNumber).trim();
+    if (activeTableNumber !== 'Takeaway' && activeTableNumber !== 'Walk-in') {
+      const opConfig = await OperationalConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean();
+      if (!opConfig) {
+        return res.status(400).json({ success: false, message: 'Operational configuration not found for this branch' });
+      }
 
-    const Cafe = require('../models/Cafe');
-    const resolvedCafe = await Cafe.findOne({ cafeId: activeCafeId }).lean();
+      const tableExists = opConfig.tables.some(t => String(t.label).trim() === activeTableNumber || String(t.id).trim() === activeTableNumber);
+      if (!tableExists) {
+        return res.status(404).json({ success: false, message: `Table ${activeTableNumber} does not exist in this branch` });
+      }
+    }
 
+    // 5. Customer Validation (mandatory for QR orders)
+    const isQR = (source === 'QR' || orderSource === 'QR' || (!source && !orderSource));
+    if (isQR) {
+      if (!customerName || !customerName.trim()) {
+        return res.status(400).json({ success: false, message: 'Customer name is required' });
+      }
+      if (!customerPhone || !customerPhone.trim()) {
+        return res.status(400).json({ success: false, message: 'Customer phone number is required' });
+      }
+    }
+
+    // 6. Menu and Cart Item Validation
+    let computedTotal = 0;
+    const validatedItems = [];
+
+    for (const item of items) {
+      const itemId = item.id || item._id;
+      if (!mongoose.isValidObjectId(itemId)) {
+        return res.status(400).json({ success: false, message: `Invalid item ID: ${itemId}` });
+      }
+      if (!item.quantity || Number(item.quantity) <= 0) {
+        return res.status(400).json({ success: false, message: `Invalid quantity for item ${item.name || 'Unnamed'}` });
+      }
+
+      // Find the menu item bypassing branch filter
+      let dbItem = await MenuItem.findOne({ _id: itemId, cafeId: activeCafeId }, null, { bypassBranchFilter: true }).lean();
+      if (!dbItem) {
+        dbItem = await MenuItem.findOne({ _id: itemId, cafeId: 'CD001', branchId: 'default' }, null, { bypassBranchFilter: true }).lean();
+      }
+
+      if (!dbItem) {
+        return res.status(404).json({ success: false, message: `Menu item "${item.name || itemId}" not found` });
+      }
+
+      if (dbItem.available === false || dbItem.isHidden === true) {
+        return res.status(400).json({ success: false, message: `Menu item "${dbItem.name}" is currently out of stock or unavailable` });
+      }
+
+      const itemPrice = dbItem.price;
+      const itemQty = Number(item.quantity);
+      computedTotal += itemPrice * itemQty;
+
+      validatedItems.push({
+        id: String(dbItem._id),
+        name: dbItem.name,
+        price: itemPrice,
+        quantity: itemQty,
+        image: dbItem.image || dbItem.imageUrl || '/images/default-food.png'
+      });
+    }
+
+    // 7. Payment Config tax and platformCharge
+    const paymentConfig = await PaymentConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean();
+    const taxRate = paymentConfig ? (paymentConfig.taxRate || 0) : 5; // Default 5%
+    const platformCharge = paymentConfig ? (paymentConfig.platformCharge || 0) : 0;
+
+    const finalSubtotal = computedTotal;
+    const finalTax = Number((finalSubtotal * (taxRate / 100)).toFixed(2));
+    const finalGrandTotal = Number((finalSubtotal + finalTax + platformCharge).toFixed(2));
+
+    // Resolve ownerId
     let resolvedOwnerId = null;
     if (resolvedCafe) {
       if (resolvedCafe.ownerId) {
         resolvedOwnerId = resolvedCafe.ownerId;
       } else if (resolvedCafe.ownerEmail) {
-        const User = require('../models/User');
         const ownerUser = await User.findOne({ email: resolvedCafe.ownerEmail, role: { $in: ['admin', 'owner', 'ADMIN', 'OWNER'] } }).lean();
         if (ownerUser) {
           resolvedOwnerId = ownerUser._id;
@@ -236,10 +325,23 @@ const createOrder = async (req, res) => {
       }
     }
 
-    const uniqueId = new mongoose.Types.ObjectId().toString().slice(-6).toUpperCase();
+    // 8. Unique ID and Sequence Generation
+    const newOrderId = new mongoose.Types.ObjectId();
+    const uniqueId = String(newOrderId).slice(-8).toUpperCase();
+
+    // 9. Transaction session instantiation
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+      useTransaction = true;
+    } catch (sessionErr) {
+      session = null;
+      useTransaction = false;
+    }
 
     // Build the order document
     const newOrder = new Order({
+      _id: newOrderId,
       cafeId: activeCafeId,
       branchId: resolvedBranch ? resolvedBranch.branchId : (branchId || 'default'),
       branchObjectId: resolvedBranch ? resolvedBranch._id : null,
@@ -255,10 +357,10 @@ const createOrder = async (req, res) => {
       receiptId: 'REC-' + uniqueId,
       kotId: 'KOT-' + uniqueId,
       potId: 'POT-' + uniqueId,
-      paymentId: razorpayPaymentId || '',
-      tableNumber,
-      items,
-      totalAmount,
+      razorpayPaymentId: razorpayPaymentId || '',
+      tableNumber: activeTableNumber,
+      items: validatedItems,
+      totalAmount: finalGrandTotal,
       status: 'Placed',
       customerName: customerName || '',
       customerEmail: customerEmail || '',
@@ -276,9 +378,15 @@ const createOrder = async (req, res) => {
       staffId: staffId || null
     });
 
-    const savedOrder = await newOrder.save();
-    
-    // Auto deduct inventory stock (run asynchronously in background to not block response)
+    const savedOrder = await newOrder.save(useTransaction ? { session } : undefined);
+
+    // If session transaction is active, commit the transaction!
+    if (useTransaction && session) {
+      await session.commitTransaction();
+      session.endSession();
+    }
+
+    // 10. Auto deduct inventory stock (run asynchronously in background to not block response)
     const activeBId = resolvedBranch ? resolvedBranch.branchId : 'default';
     deductInventoryForOrder(savedOrder._id, savedOrder.cafeId, savedOrder.items)
       .then(() => updateMenuItemAvailabilityFromInventory(activeCafeId, null, activeBId))
@@ -291,15 +399,20 @@ const createOrder = async (req, res) => {
 
     return res.status(201).json({ success: true, data: formattedOrder });
   } catch (error) {
-    console.error('Error creating order:', error);
-    return res.status(500).json({ success: false, message: 'Server error while placing order', error: error.message });
+    if (useTransaction && session) {
+      await session.abortTransaction();
+      session.endSession();
+    }
+    error.controllerName = 'orderController';
+    error.serviceName = 'createOrder';
+    next(error);
   }
 };
 
 // @desc    Get all orders
 // @route   GET /api/orders
 // @access  Public (Owner/Staff Dashboards)
-const getOrders = async (req, res) => {
+const getOrders = async (req, res, next) => {
   try {
     const filterQuery = {};
     const cafeId = req.query.cafeId || (req.user && req.user.cafeId) || 'CD001';
@@ -350,7 +463,7 @@ const getOrders = async (req, res) => {
       }
     }
 
-    const orders = await Order.find(filterQuery).sort({ createdAt: -1 }).limit(200).lean();
+    const orders = await Order.find(filterQuery, null, { bypassBranchFilter: true }).sort({ createdAt: -1 }).limit(200).lean();
     const branchMap = new Map();
     const allBranches = await Branch.find({ cafeId }).lean();
     allBranches.forEach(b => {
@@ -365,20 +478,21 @@ const getOrders = async (req, res) => {
 
     return res.status(200).json({ success: true, count: formattedOrders.length, data: formattedOrders });
   } catch (error) {
-    console.error('Error fetching orders:', error);
-    return res.status(500).json({ success: false, message: 'Server error while fetching orders', error: error.message });
+    error.controllerName = 'orderController';
+    error.serviceName = 'getOrders';
+    next(error);
   }
 };
 
 // @desc    Get order by ID
 // @route   GET /api/orders/:id
 // @access  Public (Customer Live Tracker)
-const getOrderById = async (req, res) => {
+const getOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const cafeId = req.query.cafeId || req.cafeId || 'CD001';
     
-    let order = await Order.findOne({ _id: id, cafeId }).lean();
+    let order = await Order.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true }).lean();
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found under this cafe context' });
     }
@@ -386,15 +500,16 @@ const getOrderById = async (req, res) => {
     const formattedOrder = await appendLegacyFallback(order);
     return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {
-    console.error('Error fetching single order:', error);
-    return res.status(500).json({ success: false, message: 'Server error while retrieving order status', error: error.message });
+    error.controllerName = 'orderController';
+    error.serviceName = 'getOrderById';
+    next(error);
   }
 };
 
 // @desc    Update order status
 // @route   PATCH /api/orders/:id
 // @access  Public (Owner Dashboard)
-const updateOrderStatus = async (req, res) => {
+const updateOrderStatus = async (req, res, next) => {
   try {
     const { status, paymentStatus, paymentMethod } = req.body;
     const { id } = req.params;
@@ -402,18 +517,17 @@ const updateOrderStatus = async (req, res) => {
     const userRole = (req.user?.role || '').toLowerCase();
     const isOwnerOrAdmin = ['owner', 'admin', 'super_admin'].includes(userRole);
 
-    // 1. Strict Branch/Cafe Isolation Query
+    // Strict Branch/Cafe Isolation Query
     const query = { _id: id, cafeId: req.cafeId || 'CD001' };
     if (!isOwnerOrAdmin) {
       query.branchId = req.branchId || 'default';
     }
 
-    const order = await Order.findOne(query);
+    const order = await Order.findOne(query, null, { bypassBranchFilter: true });
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found in this branch context' });
     }
 
-    // 2. Load Branch config for Unified Staff Mode check
     const activeBranchId = order.branchId || req.branchId || 'default';
     const branch = await getCachedBranch(`mode:${activeBranchId}:${req.cafeId || 'CD001'}`, () => Branch.findOne({ 
       $or: [
@@ -502,7 +616,7 @@ const updateOrderStatus = async (req, res) => {
     const updatedOrder = await Order.findOneAndUpdate(
       { _id: id },
       { $set: updateFields },
-      { returnDocument: 'after', runValidators: true }
+      { returnDocument: 'after', runValidators: true, bypassBranchFilter: true }
     ).lean();
 
     if (!updatedOrder) {
@@ -530,15 +644,16 @@ const updateOrderStatus = async (req, res) => {
 
     return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {
-    console.error('Error updating order status:', error);
-    return res.status(500).json({ success: false, message: 'Server error while updating order status', error: error.message });
+    error.controllerName = 'orderController';
+    error.serviceName = 'updateOrderStatus';
+    next(error);
   }
 };
 
 // @desc    Update order payment method (Public for customers)
 // @route   PATCH /api/orders/:id/payment-method
 // @access  Public
-const updateOrderPaymentMethod = async (req, res) => {
+const updateOrderPaymentMethod = async (req, res, next) => {
   try {
     const { paymentMethod } = req.body;
     const { id } = req.params;
@@ -548,10 +663,10 @@ const updateOrderPaymentMethod = async (req, res) => {
       return res.status(400).json({ success: false, message: `Invalid paymentMethod. Must be one of: ${allowedPaymentMethods.join(', ')}` });
     }
 
-    const updatedOrder = await Order.findByIdAndUpdate(
-      id,
+    const updatedOrder = await Order.findOneAndUpdate(
+      { _id: id },
       { paymentMethod, paymentStatus: 'Paid', paidAt: new Date() },
-      { returnDocument: 'after', runValidators: true }
+      { returnDocument: 'after', runValidators: true, bypassBranchFilter: true }
     ).lean();
 
     if (!updatedOrder) {
@@ -559,8 +674,7 @@ const updateOrderPaymentMethod = async (req, res) => {
     }
 
     // Deduct inventory (run asynchronously in background to not block response)
-    const Branch = require('../models/Branch');
-    Branch.findById(updatedOrder.branchId).lean()
+    Branch.findOne({ branchId: updatedOrder.branchId, cafeId: updatedOrder.cafeId }).lean()
       .then(branchDoc => {
         const bId = branchDoc ? branchDoc.branchId : 'default';
         return deductInventoryForOrder(updatedOrder._id, updatedOrder.cafeId, updatedOrder.items)
@@ -575,8 +689,9 @@ const updateOrderPaymentMethod = async (req, res) => {
 
     return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {
-    console.error('Error updating order payment method:', error);
-    return res.status(500).json({ success: false, message: 'Server error while updating payment method', error: error.message });
+    error.controllerName = 'orderController';
+    error.serviceName = 'updateOrderPaymentMethod';
+    next(error);
   }
 };
 

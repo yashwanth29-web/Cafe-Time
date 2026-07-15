@@ -659,7 +659,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     const MenuItem = require('../models/MenuItem');
     const mongoose = require('mongoose');
 
-    const order = await Order.findById(orderId);
+    const order = await Order.findOne({ _id: orderId }, null, { bypassBranchFilter: true });
     if (!order || order.inventoryDeducted || !['Ready', 'Completed', 'Delivered'].includes(order.status)) {
       return;
     }
