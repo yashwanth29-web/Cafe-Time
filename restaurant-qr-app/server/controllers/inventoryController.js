@@ -44,71 +44,94 @@ const emitInventoryUpdated = async (cafeId, branchId, itemsList) => {
 const menuCache = require('../utils/menuCache');
 
 // Helper to seed default inventory items for a cafe if empty (using updated fields)
-const seedDefaultInventory = async (cafeId, branchId = 'default') => {
+const seedDefaultInventory = async (cafeId, branchId = 'default', createdBy = 'system', options = {}) => {
   const defaults = [
     // Tea Ingredients
-    { name: 'Tea Leaves', quantity: 5000, reorderLevel: 1000, unit: 'g', costPrice: 0.5, category: 'Tea Ingredients', supplier: 'Dr. Chai Wholesale', branch: 'Main' },
-    { name: 'Milk', quantity: 20000, reorderLevel: 5000, unit: 'ml', costPrice: 0.06, category: 'Tea Ingredients', supplier: 'Local Dairy', branch: 'Main' },
-    { name: 'Sugar', quantity: 10000, reorderLevel: 2000, unit: 'g', costPrice: 0.04, category: 'Tea Ingredients', supplier: 'Local Grocery', branch: 'Main' },
-    { name: 'Cardamom', quantity: 500, reorderLevel: 100, unit: 'g', costPrice: 2.5, category: 'Tea Ingredients', supplier: 'Spices Emporium', branch: 'Main' },
-    { name: 'Ginger', quantity: 1000, reorderLevel: 200, unit: 'g', costPrice: 0.15, category: 'Tea Ingredients', supplier: 'Spices Emporium', branch: 'Main' },
-    { name: 'Jaggery', quantity: 2000, reorderLevel: 500, unit: 'g', costPrice: 0.08, category: 'Tea Ingredients', supplier: 'Local Grocery', branch: 'Main' },
+    { name: 'Tea Leaves', quantity: 5000, reorderLevel: 1000, unit: 'g', costPrice: 0.5, category: 'Tea Ingredients', supplier: 'Dr. Chai Wholesale', branch: branchId },
+    { name: 'Milk', quantity: 20000, reorderLevel: 5000, unit: 'ml', costPrice: 0.06, category: 'Tea Ingredients', supplier: 'Local Dairy', branch: branchId },
+    { name: 'Sugar', quantity: 10000, reorderLevel: 2000, unit: 'g', costPrice: 0.04, category: 'Tea Ingredients', supplier: 'Local Grocery', branch: branchId },
+    { name: 'Cardamom', quantity: 500, reorderLevel: 100, unit: 'g', costPrice: 2.5, category: 'Tea Ingredients', supplier: 'Spices Emporium', branch: branchId },
+    { name: 'Ginger', quantity: 1000, reorderLevel: 200, unit: 'g', costPrice: 0.15, category: 'Tea Ingredients', supplier: 'Spices Emporium', branch: branchId },
+    { name: 'Jaggery', quantity: 2000, reorderLevel: 500, unit: 'g', costPrice: 0.08, category: 'Tea Ingredients', supplier: 'Local Grocery', branch: branchId },
 
     // Coffee Ingredients
-    { name: 'Coffee Powder', quantity: 3000, reorderLevel: 500, unit: 'g', costPrice: 0.8, category: 'Coffee Ingredients', supplier: 'Dr. Chai Wholesale', branch: 'Main' },
-    { name: 'Chocolate Syrup', quantity: 2000, reorderLevel: 500, unit: 'ml', costPrice: 0.3, category: 'Coffee Ingredients', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Hazelnut Syrup', quantity: 1000, reorderLevel: 250, unit: 'ml', costPrice: 0.4, category: 'Coffee Ingredients', supplier: 'Baker Premium', branch: 'Main' },
+    { name: 'Coffee Powder', quantity: 3000, reorderLevel: 500, unit: 'g', costPrice: 0.8, category: 'Coffee Ingredients', supplier: 'Dr. Chai Wholesale', branch: branchId },
+    { name: 'Chocolate Syrup', quantity: 2000, reorderLevel: 500, unit: 'ml', costPrice: 0.3, category: 'Coffee Ingredients', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Hazelnut Syrup', quantity: 1000, reorderLevel: 250, unit: 'ml', costPrice: 0.4, category: 'Coffee Ingredients', supplier: 'Baker Premium', branch: branchId },
 
     // Juice Ingredients
-    { name: 'Lemon Juice', quantity: 2000, reorderLevel: 500, unit: 'ml', costPrice: 0.1, category: 'Juice Ingredients', supplier: 'Fresh Fruits Ltd', branch: 'Main' },
-    { name: 'Soda Water', quantity: 15000, reorderLevel: 3000, unit: 'ml', costPrice: 0.02, category: 'Juice Ingredients', supplier: 'SodaHub', branch: 'Main' },
-    { name: 'Sugar Syrup', quantity: 5000, reorderLevel: 1000, unit: 'ml', costPrice: 0.03, category: 'Juice Ingredients', supplier: 'Local Grocery', branch: 'Main' },
-    { name: 'Watermelon Fruit', quantity: 10000, reorderLevel: 2000, unit: 'g', costPrice: 0.05, category: 'Juice Ingredients', supplier: 'Fresh Fruits Ltd', branch: 'Main' },
-    { name: 'Musk Melon Fruit', quantity: 10000, reorderLevel: 2000, unit: 'g', costPrice: 0.06, category: 'Juice Ingredients', supplier: 'Fresh Fruits Ltd', branch: 'Main' },
-    { name: 'Curd', quantity: 8000, reorderLevel: 2000, unit: 'g', costPrice: 0.08, category: 'Juice Ingredients', supplier: 'Local Dairy', branch: 'Main' },
-    { name: 'Mango Pulp', quantity: 5000, reorderLevel: 1000, unit: 'ml', costPrice: 0.15, category: 'Juice Ingredients', supplier: 'Fresh Fruits Ltd', branch: 'Main' },
+    { name: 'Lemon Juice', quantity: 2000, reorderLevel: 500, unit: 'ml', costPrice: 0.1, category: 'Juice Ingredients', supplier: 'Fresh Fruits Ltd', branch: branchId },
+    { name: 'Soda Water', quantity: 15000, reorderLevel: 3000, unit: 'ml', costPrice: 0.02, category: 'Juice Ingredients', supplier: 'SodaHub', branch: branchId },
+    { name: 'Sugar Syrup', quantity: 5000, reorderLevel: 1000, unit: 'ml', costPrice: 0.03, category: 'Juice Ingredients', supplier: 'Local Grocery', branch: branchId },
+    { name: 'Watermelon Fruit', quantity: 10000, reorderLevel: 2000, unit: 'g', costPrice: 0.05, category: 'Juice Ingredients', supplier: 'Fresh Fruits Ltd', branch: branchId },
+    { name: 'Musk Melon Fruit', quantity: 10000, reorderLevel: 2000, unit: 'g', costPrice: 0.06, category: 'Juice Ingredients', supplier: 'Fresh Fruits Ltd', branch: branchId },
+    { name: 'Curd', quantity: 8000, reorderLevel: 2000, unit: 'g', costPrice: 0.08, category: 'Juice Ingredients', supplier: 'Local Dairy', branch: branchId },
+    { name: 'Mango Pulp', quantity: 5000, reorderLevel: 1000, unit: 'ml', costPrice: 0.15, category: 'Juice Ingredients', supplier: 'Fresh Fruits Ltd', branch: branchId },
 
     // Milkshake Ingredients
-    { name: 'Vanilla Essence', quantity: 500, reorderLevel: 100, unit: 'ml', costPrice: 0.5, category: 'Milkshake Ingredients', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Strawberry Syrup', quantity: 2000, reorderLevel: 500, unit: 'ml', costPrice: 0.3, category: 'Milkshake Ingredients', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Ice Cream', quantity: 5000, reorderLevel: 1000, unit: 'g', costPrice: 0.25, category: 'Milkshake Ingredients', supplier: 'Local Dairy', branch: 'Main' },
+    { name: 'Vanilla Essence', quantity: 500, reorderLevel: 100, unit: 'ml', costPrice: 0.5, category: 'Milkshake Ingredients', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Strawberry Syrup', quantity: 2000, reorderLevel: 500, unit: 'ml', costPrice: 0.3, category: 'Milkshake Ingredients', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Ice Cream', quantity: 5000, reorderLevel: 1000, unit: 'g', costPrice: 0.25, category: 'Milkshake Ingredients', supplier: 'Local Dairy', branch: branchId },
 
     // Bakery Items
-    { name: 'Biscuit Pack', quantity: 100, reorderLevel: 20, unit: 'pc', costPrice: 5, category: 'Bakery Items', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Veg Puff Raw', quantity: 50, reorderLevel: 10, unit: 'pc', costPrice: 10, category: 'Bakery Items', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Egg Puff Raw', quantity: 50, reorderLevel: 10, unit: 'pc', costPrice: 12, category: 'Bakery Items', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Chicken Puff Raw', quantity: 50, reorderLevel: 10, unit: 'pc', costPrice: 15, category: 'Bakery Items', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Bun', quantity: 60, reorderLevel: 15, unit: 'pc', costPrice: 8, category: 'Bakery Items', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Butter', quantity: 2000, reorderLevel: 500, unit: 'g', costPrice: 0.45, category: 'Bakery Items', supplier: 'Local Dairy', branch: 'Main' },
+    { name: 'Biscuit Pack', quantity: 100, reorderLevel: 20, unit: 'pc', costPrice: 5, category: 'Bakery Items', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Veg Puff Raw', quantity: 50, reorderLevel: 10, unit: 'pc', costPrice: 10, category: 'Bakery Items', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Egg Puff Raw', quantity: 50, reorderLevel: 10, unit: 'pc', costPrice: 12, category: 'Bakery Items', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Chicken Puff Raw', quantity: 50, reorderLevel: 10, unit: 'pc', costPrice: 15, category: 'Bakery Items', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Bun', quantity: 60, reorderLevel: 15, unit: 'pc', costPrice: 8, category: 'Bakery Items', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Butter', quantity: 2000, reorderLevel: 500, unit: 'g', costPrice: 0.45, category: 'Bakery Items', supplier: 'Local Dairy', branch: branchId },
 
     // Snacks
-    { name: 'Samosa Raw', quantity: 100, reorderLevel: 20, unit: 'pc', costPrice: 6, category: 'Snacks', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Bread Slices', quantity: 120, reorderLevel: 30, unit: 'pc', costPrice: 1.5, category: 'Snacks', supplier: 'Baker Premium', branch: 'Main' },
-    { name: 'Cucumber', quantity: 3000, reorderLevel: 500, unit: 'g', costPrice: 0.05, category: 'Snacks', supplier: 'Fresh Fruits Ltd', branch: 'Main' },
-    { name: 'Tomato', quantity: 3000, reorderLevel: 500, unit: 'g', costPrice: 0.06, category: 'Snacks', supplier: 'Fresh Fruits Ltd', branch: 'Main' },
-    { name: 'Potato Fries Raw', quantity: 10000, reorderLevel: 2000, unit: 'g', costPrice: 0.12, category: 'Snacks', supplier: 'Dr. Chai Wholesale', branch: 'Main' },
-    { name: 'Salt', quantity: 5000, reorderLevel: 1000, unit: 'g', costPrice: 0.02, category: 'Snacks', supplier: 'Local Grocery', branch: 'Main' },
+    { name: 'Samosa Raw', quantity: 100, reorderLevel: 20, unit: 'pc', costPrice: 6, category: 'Snacks', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Bread Slices', quantity: 120, reorderLevel: 30, unit: 'pc', costPrice: 1.5, category: 'Snacks', supplier: 'Baker Premium', branch: branchId },
+    { name: 'Cucumber', quantity: 3000, reorderLevel: 500, unit: 'g', costPrice: 0.05, category: 'Snacks', supplier: 'Fresh Fruits Ltd', branch: branchId },
+    { name: 'Tomato', quantity: 3000, reorderLevel: 500, unit: 'g', costPrice: 0.06, category: 'Snacks', supplier: 'Fresh Fruits Ltd', branch: branchId },
+    { name: 'Potato Fries Raw', quantity: 10000, reorderLevel: 2000, unit: 'g', costPrice: 0.12, category: 'Snacks', supplier: 'Dr. Chai Wholesale', branch: branchId },
+    { name: 'Salt', quantity: 5000, reorderLevel: 1000, unit: 'g', costPrice: 0.02, category: 'Snacks', supplier: 'Local Grocery', branch: branchId },
 
     // Packaging Materials
-    { name: 'Tea Cups', quantity: 500, reorderLevel: 100, unit: 'pc', costPrice: 1.2, category: 'Packaging Materials', supplier: 'PackSource', branch: 'Main' },
-    { name: 'Coffee Cups', quantity: 400, reorderLevel: 100, unit: 'pc', costPrice: 1.5, category: 'Packaging Materials', supplier: 'PackSource', branch: 'Main' },
-    { name: 'Paper Bags', quantity: 300, reorderLevel: 50, unit: 'pc', costPrice: 2.0, category: 'Packaging Materials', supplier: 'PackSource', branch: 'Main' },
-    { name: 'Straws', quantity: 1000, reorderLevel: 200, unit: 'pc', costPrice: 0.2, category: 'Packaging Materials', supplier: 'PackSource', branch: 'Main' },
+    { name: 'Tea Cups', quantity: 500, reorderLevel: 100, unit: 'pc', costPrice: 1.2, category: 'Packaging Materials', supplier: 'PackSource', branch: branchId },
+    { name: 'Coffee Cups', quantity: 400, reorderLevel: 100, unit: 'pc', costPrice: 1.5, category: 'Packaging Materials', supplier: 'PackSource', branch: branchId },
+    { name: 'Paper Bags', quantity: 300, reorderLevel: 50, unit: 'pc', costPrice: 2.0, category: 'Packaging Materials', supplier: 'PackSource', branch: branchId },
+    { name: 'Straws', quantity: 1000, reorderLevel: 200, unit: 'pc', costPrice: 0.2, category: 'Packaging Materials', supplier: 'PackSource', branch: branchId },
 
     // Cleaning Supplies
-    { name: 'Dish Soap', quantity: 5000, reorderLevel: 1000, unit: 'ml', costPrice: 0.08, category: 'Cleaning Supplies', supplier: 'Local Grocery', branch: 'Main' },
-    { name: 'Hand Sanitizer', quantity: 2000, reorderLevel: 500, unit: 'ml', costPrice: 0.15, category: 'Cleaning Supplies', supplier: 'Local Grocery', branch: 'Main' },
-    { name: 'Floor Cleaner', quantity: 3000, reorderLevel: 500, unit: 'ml', costPrice: 0.10, category: 'Cleaning Supplies', supplier: 'Local Grocery', branch: 'Main' }
+    { name: 'Dish Soap', quantity: 5000, reorderLevel: 1000, unit: 'ml', costPrice: 0.08, category: 'Cleaning Supplies', supplier: 'Local Grocery', branch: branchId },
+    { name: 'Hand Sanitizer', quantity: 2000, reorderLevel: 500, unit: 'ml', costPrice: 0.15, category: 'Cleaning Supplies', supplier: 'Local Grocery', branch: branchId },
+    { name: 'Floor Cleaner', quantity: 3000, reorderLevel: 500, unit: 'ml', costPrice: 0.10, category: 'Cleaning Supplies', supplier: 'Local Grocery', branch: branchId }
   ];
 
-  const itemsToCreate = defaults.map(item => ({
-    ...item,
+  const existingItems = await Inventory.find({
     cafeId,
-    branch: branchId,
-    branchId: branchId
-  }));
+    $or: [{ branch: branchId }, { branchId: branchId }]
+  }).session(options.session || null).lean();
 
-  return await Inventory.insertMany(itemsToCreate);
+  const existingNames = new Set(existingItems.map(i => i.name.toLowerCase().trim()));
+
+  const itemsToCreate = defaults
+    .filter(item => !existingNames.has(item.name.toLowerCase().trim()))
+    .map(item => {
+      const qty = item.quantity || 0;
+      const reorder = item.reorderLevel || 0;
+      const status = qty <= 0 ? 'OUT_OF_STOCK' : (qty <= reorder ? 'LOW_STOCK' : 'IN_STOCK');
+      return {
+        ...item,
+        cafeId,
+        branch: branchId,
+        branchId: branchId,
+        stock: qty,
+        minStock: reorder,
+        cost: item.costPrice || 0,
+        sellingPrice: 0,
+        createdBy,
+        status
+      };
+    });
+
+  if (itemsToCreate.length > 0) {
+    return await Inventory.insertMany(itemsToCreate, options);
+  }
+  return [];
 };
 
 const getInventory = async (req, res, next) => {
@@ -882,5 +905,6 @@ module.exports = {
   getWastageReport,
   getConsumptionReport,
   deductInventoryForOrder,
-  updateMenuItemAvailabilityFromInventory
+  updateMenuItemAvailabilityFromInventory,
+  seedDefaultInventory
 };

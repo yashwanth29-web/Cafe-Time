@@ -20,6 +20,14 @@ const CategorySchema = new mongoose.Schema({
     type: Number,
     required: true,
     default: 0
+  },
+  createdBy: {
+    type: String,
+    default: 'system'
+  },
+  status: {
+    type: String,
+    default: 'ACTIVE'
   }
 }, {
   timestamps: true

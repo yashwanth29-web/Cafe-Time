@@ -76,6 +76,10 @@ const InventorySchema = new mongoose.Schema({
     type: String,
     enum: ['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK'],
     default: 'IN_STOCK'
+  },
+  createdBy: {
+    type: String,
+    default: 'system'
   }
 }, {
   timestamps: true

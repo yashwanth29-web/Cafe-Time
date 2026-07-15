@@ -92,6 +92,14 @@ const MenuItemSchema = new mongoose.Schema({
   isHidden: {
     type: Boolean,
     default: false
+  },
+  createdBy: {
+    type: String,
+    default: 'system'
+  },
+  status: {
+    type: String,
+    default: 'ACTIVE'
   }
 }, {
   timestamps: true,

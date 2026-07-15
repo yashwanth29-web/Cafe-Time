@@ -1782,25 +1782,79 @@ const getDashboardStats = async (req, res) => {
 const initializeTenantAssets = async (req, res) => {
   const cafeId = req.user.cafeId;
   const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId;
-  
+
+  // Structured Logging for Incoming Request
+  console.log('[SETUP] POST /api/admin/setup/seed-assets initiated:', {
+    requestId: req.requestId,
+    authenticatedUser: {
+      id: req.user._id,
+      email: req.user.email,
+      role: req.user.role
+    },
+    cafeId,
+    activeBranchHeader: req.headers['x-branch-id'],
+    activeBranchQuery: req.query.branchId,
+    userAssignedBranch: req.user.assignedBranch,
+    reqBranchIdContext: req.branchId,
+    resolvedActiveBranch: activeBranch
+  });
+
   if (!cafeId) {
+    console.error('[SETUP] Seed assets failed: No cafe assignment for user');
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
 
-  if (!activeBranch) {
-    return res.status(400).json({ success: false, message: 'Branch ID is required to generate assets' });
-  }
-
   try {
+    const Cafe = require('../models/Cafe');
     const Branch = require('../models/Branch');
-    const branchesCount = await Branch.countDocuments({ cafeId });
-    if (branchesCount === 0) {
+
+    // 1. Verify Cafe exists and is not deleted
+    const cafe = await Cafe.findOne({ cafeId });
+    if (!cafe) {
+      console.error('[SETUP] Seed assets failed: Cafe does not exist in DB', { cafeId });
+      return res.status(404).json({ success: false, message: `Cafe ID: ${cafeId} does not exist.` });
+    }
+    if (cafe.isDeleted) {
+      console.error('[SETUP] Seed assets failed: Cafe is soft-deleted', { cafeId });
+      return res.status(410).json({ success: false, message: `Cafe ID: ${cafeId} has been deleted.` });
+    }
+
+    // 2. Verify Wizard Step 2: Branch exists
+    const branches = await Branch.find({ cafeId });
+    if (branches.length === 0) {
+      console.error('[SETUP] Seed assets failed: Wizard Step 2 not completed (no branches found)', { cafeId });
       return res.status(409).json({ success: false, message: 'No branches registered. Please complete Step 2 (Branch Setup) before generating assets.' });
     }
 
-    const branchExists = await Branch.findOne({ branchId: activeBranch, cafeId });
-    if (!branchExists) {
-      return res.status(404).json({ success: false, message: `Branch ID: ${activeBranch} does not exist.` });
+    // 3. Resolve the branch to seed
+    let targetBranch = null;
+    if (activeBranch && activeBranch !== 'default' && activeBranch !== 'all') {
+      targetBranch = branches.find(b => b.branchId === activeBranch || b._id.toString() === activeBranch);
+    }
+    if (!targetBranch) {
+      // Fallback: pick the first active branch
+      targetBranch = branches.find(b => b.isActive);
+    }
+    if (!targetBranch) {
+      // Fallback: pick the first registered branch
+      targetBranch = branches[0];
+    }
+
+    if (!targetBranch) {
+      console.error('[SETUP] Seed assets failed: No branches found under cafe', { cafeId });
+      return res.status(404).json({ success: false, message: 'No branches found. Please complete Step 2 (Branch Setup).' });
+    }
+
+    const branchIdToSeed = targetBranch.branchId;
+    console.log('[SETUP] Resolved target branch for seeding:', {
+      branchId: branchIdToSeed,
+      branchName: targetBranch.branchName,
+      isActive: targetBranch.isActive
+    });
+
+    if (!targetBranch.isActive) {
+      console.error('[SETUP] Seed assets failed: Resolved branch is inactive', { branchId: branchIdToSeed });
+      return res.status(400).json({ success: false, message: `Resolved Branch ID: ${branchIdToSeed} is inactive.` });
     }
 
     const Category = require('../models/Category');
@@ -1808,91 +1862,349 @@ const initializeTenantAssets = async (req, res) => {
     const InventoryCategory = require('../models/InventoryCategory');
     const Inventory = require('../models/Inventory');
 
-    // 1. Seed Menu Categories
-    const existingCats = await Category.find({ cafeId, branchId: activeBranch });
-    if (existingCats.length === 0) {
-      const categoriesToSeed = [
-        { name: 'Signature Chai', cafeId, branchId: activeBranch },
-        { name: 'Coffee Selection', cafeId, branchId: activeBranch },
-        { name: 'Fresh Juices & Coolers', cafeId, branchId: activeBranch },
-        { name: 'Thick Milkshakes', cafeId, branchId: activeBranch },
-        { name: 'Starters & Bites', cafeId, branchId: activeBranch },
-        { name: 'French Fries', cafeId, branchId: activeBranch }
-      ];
-      await Category.insertMany(categoriesToSeed);
-    }
+    const mongoose = require('mongoose');
+    let session = null;
 
-    // 2. Seed Menu Items
-    const existingItems = await MenuItem.find({ cafeId, branchId: activeBranch });
-    if (existingItems.length === 0) {
-      const masterItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).lean();
-      let itemsToSeed = [];
-      if (masterItems.length > 0) {
-        itemsToSeed = masterItems.map(item => {
-          const { _id, ...rest } = item;
+    try {
+      session = await mongoose.startSession();
+      session.startTransaction();
+      console.log('[SETUP] MongoDB transaction session started successfully');
+
+      const createdBy = req.user._id.toString();
+
+      // 1. Seed Menu Categories if missing (Idempotent)
+      const existingCats = await Category.find({ cafeId, branchId: branchIdToSeed }).session(session).lean();
+      const existingCatNames = new Set(existingCats.map(c => c.name.toLowerCase().trim()));
+
+      const categoriesToSeedRaw = [
+        { name: 'Signature Chai', displayOrder: 0 },
+        { name: 'Coffee Selection', displayOrder: 1 },
+        { name: 'Fresh Juices & Coolers', displayOrder: 2 },
+        { name: 'Thick Milkshakes', displayOrder: 3 },
+        { name: 'Starters & Bites', displayOrder: 4 },
+        { name: 'French Fries', displayOrder: 5 }
+      ];
+
+      const categoriesToSeed = categoriesToSeedRaw
+        .filter(c => !existingCatNames.has(c.name.toLowerCase().trim()))
+        .map(c => ({
+          name: c.name,
+          displayOrder: c.displayOrder,
+          cafeId,
+          branchId: branchIdToSeed,
+          createdBy,
+          status: 'ACTIVE'
+        }));
+
+      if (categoriesToSeed.length > 0) {
+        console.log('[SETUP] Seeding missing categories...', { categoriesToSeed });
+        await Category.insertMany(categoriesToSeed, { session });
+      }
+
+      // 2. Seed Inventory Categories if missing (Idempotent)
+      const existingInvCats = await InventoryCategory.find({ cafeId, branchId: branchIdToSeed }).session(session).lean();
+      const existingInvCatNames = new Set(existingInvCats.map(c => c.name.toLowerCase().trim()));
+
+      const invCategoriesToSeedRaw = [
+        'Tea Ingredients',
+        'Coffee Ingredients',
+        'Juice Ingredients',
+        'Milkshake Ingredients',
+        'Bakery Items',
+        'Snacks',
+        'Packaging Materials',
+        'Cleaning Supplies'
+      ];
+
+      const invCategoriesToSeed = invCategoriesToSeedRaw
+        .filter(name => !existingInvCatNames.has(name.toLowerCase().trim()))
+        .map(name => ({
+          name,
+          cafeId,
+          branchId: branchIdToSeed,
+          createdBy,
+          status: 'ACTIVE'
+        }));
+
+      if (invCategoriesToSeed.length > 0) {
+        console.log('[SETUP] Seeding missing inventory categories...', { invCategoriesToSeed });
+        await InventoryCategory.insertMany(invCategoriesToSeed, { session });
+      }
+
+      // 3. Seed Inventory (Ingredients) if missing (Idempotent call)
+      console.log('[SETUP] Seeding missing inventory items...');
+      const { seedDefaultInventory } = require('./inventoryController');
+      await seedDefaultInventory(cafeId, branchIdToSeed, createdBy, { session });
+
+      // 4. Seed Menu Items & Recipes if missing (Idempotent)
+      const existingItems = await MenuItem.find({ cafeId, branchId: branchIdToSeed }).session(session).lean();
+      const existingItemNames = new Set(existingItems.map(item => item.name.toLowerCase().trim()));
+
+      const menuItemsToSeedRaw = [
+        // Signature Chai
+        {
+          name: 'Regular Tea',
+          price: 20,
+          category: 'Signature Chai',
+          description: 'Traditional regular chai brewed to perfection with fresh milk and tea leaves.',
+          preparationTime: 5,
+          recipe: [
+            { name: 'Tea Leaves', quantity: 10, unit: 'g' },
+            { name: 'Milk', quantity: 100, unit: 'ml' },
+            { name: 'Sugar', quantity: 8, unit: 'g' },
+            { name: 'Tea Cups', quantity: 1, unit: 'pc' }
+          ]
+        },
+        {
+          name: 'Cardamom Tea',
+          price: 25,
+          category: 'Signature Chai',
+          description: 'Fragrant cardamom infused milk tea.',
+          preparationTime: 5,
+          recipe: [
+            { name: 'Tea Leaves', quantity: 10, unit: 'g' },
+            { name: 'Milk', quantity: 100, unit: 'ml' },
+            { name: 'Sugar', quantity: 8, unit: 'g' },
+            { name: 'Cardamom', quantity: 2, unit: 'g' },
+            { name: 'Tea Cups', quantity: 1, unit: 'pc' }
+          ]
+        },
+        {
+          name: 'Ginger Tea',
+          price: 25,
+          category: 'Signature Chai',
+          description: 'Zesty ginger infused hot milk tea.',
+          preparationTime: 5,
+          recipe: [
+            { name: 'Tea Leaves', quantity: 10, unit: 'g' },
+            { name: 'Milk', quantity: 100, unit: 'ml' },
+            { name: 'Sugar', quantity: 8, unit: 'g' },
+            { name: 'Ginger', quantity: 5, unit: 'g' },
+            { name: 'Tea Cups', quantity: 1, unit: 'pc' }
+          ]
+        },
+        {
+          name: 'Jaggery Tea',
+          price: 30,
+          category: 'Signature Chai',
+          description: 'Chai sweetened with healthy jaggery instead of sugar.',
+          preparationTime: 5,
+          recipe: [
+            { name: 'Tea Leaves', quantity: 10, unit: 'g' },
+            { name: 'Milk', quantity: 100, unit: 'ml' },
+            { name: 'Jaggery', quantity: 10, unit: 'g' },
+            { name: 'Tea Cups', quantity: 1, unit: 'pc' }
+          ]
+        },
+        // Coffee Selection
+        {
+          name: 'Filter Coffee',
+          price: 30,
+          category: 'Coffee Selection',
+          description: 'Authentic South Indian filter coffee.',
+          preparationTime: 5,
+          recipe: [
+            { name: 'Coffee Powder', quantity: 15, unit: 'g' },
+            { name: 'Milk', quantity: 120, unit: 'ml' },
+            { name: 'Sugar', quantity: 10, unit: 'g' },
+            { name: 'Coffee Cups', quantity: 1, unit: 'pc' }
+          ]
+        },
+        {
+          name: 'Frappe (Cold Coffee)',
+          price: 80,
+          category: 'Coffee Selection',
+          description: 'Chilled blended coffee topped with chocolate syrup.',
+          preparationTime: 8,
+          recipe: [
+            { name: 'Coffee Powder', quantity: 10, unit: 'g' },
+            { name: 'Milk', quantity: 150, unit: 'ml' },
+            { name: 'Sugar', quantity: 12, unit: 'g' },
+            { name: 'Chocolate Syrup', quantity: 15, unit: 'ml' },
+            { name: 'Ice Cream', quantity: 50, unit: 'g' },
+            { name: 'Coffee Cups', quantity: 1, unit: 'pc' },
+            { name: 'Straws', quantity: 1, unit: 'pc' }
+          ]
+        },
+        // Fresh Juices & Coolers
+        {
+          name: 'Fresh Lemonade',
+          price: 40,
+          category: 'Fresh Juices & Coolers',
+          description: 'Refreshing sweet and sour lemon drink with soda.',
+          preparationTime: 4,
+          recipe: [
+            { name: 'Lemon Juice', quantity: 30, unit: 'ml' },
+            { name: 'Soda Water', quantity: 200, unit: 'ml' },
+            { name: 'Sugar Syrup', quantity: 20, unit: 'ml' },
+            { name: 'Salt', quantity: 2, unit: 'g' },
+            { name: 'Straws', quantity: 1, unit: 'pc' }
+          ]
+        },
+        {
+          name: 'Watermelon Juice',
+          price: 60,
+          category: 'Fresh Juices & Coolers',
+          description: 'Freshly blended pure watermelon juice.',
+          preparationTime: 5,
+          recipe: [
+            { name: 'Watermelon Fruit', quantity: 250, unit: 'g' },
+            { name: 'Sugar Syrup', quantity: 15, unit: 'ml' },
+            { name: 'Straws', quantity: 1, unit: 'pc' }
+          ]
+        },
+        // Thick Milkshakes
+        {
+          name: 'Classic Vanilla Shake',
+          price: 90,
+          category: 'Thick Milkshakes',
+          description: 'Creamy thick shake blended with vanilla ice cream.',
+          preparationTime: 7,
+          recipe: [
+            { name: 'Milk', quantity: 150, unit: 'ml' },
+            { name: 'Vanilla Essence', quantity: 5, unit: 'ml' },
+            { name: 'Ice Cream', quantity: 100, unit: 'g' },
+            { name: 'Straws', quantity: 1, unit: 'pc' }
+          ]
+        },
+        {
+          name: 'Strawberry Milkshake',
+          price: 100,
+          category: 'Thick Milkshakes',
+          description: 'Sweet strawberry blended shake.',
+          preparationTime: 7,
+          recipe: [
+            { name: 'Milk', quantity: 150, unit: 'ml' },
+            { name: 'Strawberry Syrup', quantity: 20, unit: 'ml' },
+            { name: 'Ice Cream', quantity: 100, unit: 'g' },
+            { name: 'Straws', quantity: 1, unit: 'pc' }
+          ]
+        },
+        // Starters & Bites
+        {
+          name: 'Veg Puff',
+          price: 30,
+          category: 'Starters & Bites',
+          description: 'Crispy baked puff pastry stuffed with spiced mixed vegetables.',
+          preparationTime: 5,
+          recipe: [
+            { name: 'Veg Puff Raw', quantity: 1, unit: 'pc' },
+            { name: 'Butter', quantity: 5, unit: 'g' },
+            { name: 'Paper Bags', quantity: 1, unit: 'pc' }
+          ]
+        },
+        {
+          name: 'Bun Butter Jam',
+          price: 35,
+          category: 'Starters & Bites',
+          description: 'Soft sweet bun sliced and spread with rich butter.',
+          preparationTime: 3,
+          recipe: [
+            { name: 'Bun', quantity: 1, unit: 'pc' },
+            { name: 'Butter', quantity: 15, unit: 'g' },
+            { name: 'Paper Bags', quantity: 1, unit: 'pc' }
+          ]
+        },
+        {
+          name: 'Samosa (2 Pcs)',
+          price: 30,
+          category: 'Starters & Bites',
+          description: 'Traditional crispy pastry filled with spiced potato.',
+          preparationTime: 5,
+          recipe: [
+            { name: 'Samosa Raw', quantity: 2, unit: 'pc' },
+            { name: 'Paper Bags', quantity: 1, unit: 'pc' }
+          ]
+        },
+        // French Fries
+        {
+          name: 'Salted French Fries',
+          price: 70,
+          category: 'French Fries',
+          description: 'Crispy golden potato fries lightly salted.',
+          preparationTime: 6,
+          recipe: [
+            { name: 'Potato Fries Raw', quantity: 150, unit: 'g' },
+            { name: 'Salt', quantity: 3, unit: 'g' },
+            { name: 'Paper Bags', quantity: 1, unit: 'pc' }
+          ]
+        }
+      ];
+
+      const preparedMenuItems = menuItemsToSeedRaw
+        .filter(item => !existingItemNames.has(item.name.toLowerCase().trim()))
+        .map(item => {
+          const itemId = new mongoose.Types.ObjectId();
           return {
-            ...rest,
+            _id: itemId,
+            menuId: itemId.toString(),
+            name: item.name,
+            price: item.price,
+            category: item.category,
+            description: item.description,
+            preparationTime: item.preparationTime,
+            recipe: item.recipe,
             cafeId,
-            branchId: activeBranch
+            branchId: branchIdToSeed,
+            createdBy,
+            status: 'ACTIVE',
+            image: '/images/default-food.png',
+            imageUrl: '/images/default-food.png',
+            imagePath: '/images/default-food.png',
+            imageKey: 'default-food.png',
+            available: true,
+            isCombo: false,
+            isHidden: false
           };
         });
-      } else {
-        itemsToSeed = [
-          {
-            name: 'Regular Tea',
-            image: '/images/default-food.png',
-            price: 20,
-            category: 'Signature Chai',
-            available: true,
-            description: 'Traditional regular chai brewed to perfection with fresh milk and tea leaves.',
-            preparationTime: 5,
-            recipe: [
-              { name: 'Tea Leaves', quantity: 10 },
-              { name: 'Milk', quantity: 100 },
-              { name: 'Sugar', quantity: 8 }
-            ],
-            cafeId,
-            branchId: activeBranch
-          }
-        ];
+
+      if (preparedMenuItems.length > 0) {
+        console.log('[SETUP] Seeding missing menu items & recipes...', { count: preparedMenuItems.length });
+        await MenuItem.insertMany(preparedMenuItems, { session });
       }
-      await MenuItem.insertMany(itemsToSeed);
+
+      await session.commitTransaction();
+      session.endSession();
+      console.log('[SETUP] MongoDB transaction committed successfully. Seeding complete!');
+
+      // Clear cache to reflect changes immediately
+      const menuCache = require('../utils/menuCache');
+      menuCache.clearMenu(cafeId, branchIdToSeed);
+      menuCache.clearCategories(cafeId, branchIdToSeed);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Menu items, recipes, inventory, and ingredients generated successfully!'
+      });
+    } catch (transactionError) {
+      console.error('[SETUP] Transaction failed. Rolling back changes...', {
+        message: transactionError.message,
+        stack: transactionError.stack
+      });
+      if (session) {
+        await session.abortTransaction();
+        session.endSession();
+      }
+      throw transactionError; // Rethrow to outer block for structured error logging
     }
-
-    // 3. Seed Inventory Categories
-    const existingInvCats = await InventoryCategory.find({ cafeId, branchId: activeBranch });
-    if (existingInvCats.length === 0) {
-      const invCategoriesToSeed = [
-        { name: 'Tea Ingredients', cafeId, branchId: activeBranch },
-        { name: 'Coffee Ingredients', cafeId, branchId: activeBranch },
-        { name: 'Juice Ingredients', cafeId, branchId: activeBranch },
-        { name: 'Milkshake Ingredients', cafeId, branchId: activeBranch },
-        { name: 'Bakery Items', cafeId, branchId: activeBranch },
-        { name: 'Snacks', cafeId, branchId: activeBranch },
-        { name: 'Packaging Materials', cafeId, branchId: activeBranch },
-        { name: 'Cleaning Supplies', cafeId, branchId: activeBranch }
-      ];
-      await InventoryCategory.insertMany(invCategoriesToSeed);
-    }
-
-    // 4. Seed Inventory Items (ingredients)
-    const existingInventory = await Inventory.find({ cafeId, $or: [{ branch: activeBranch }, { branchId: activeBranch }] });
-    if (existingInventory.length === 0) {
-      const { seedDefaultInventory } = require('./inventoryController');
-      await seedDefaultInventory(cafeId, activeBranch);
-    }
-
-    const menuCache = require('../utils/menuCache');
-    menuCache.clearMenu(cafeId, activeBranch);
-    menuCache.clearCategories(cafeId, activeBranch);
-
-    return res.status(200).json({
-      success: true,
-      message: 'Menu items, recipes, inventory, and ingredients generated successfully!'
-    });
   } catch (error) {
-    console.error('initializeTenantAssets error:', error);
-    return res.status(500).json({ success: false, message: 'Server error generating assets' });
+    // Structured Logging for Error
+    console.error('[SETUP] POST /api/admin/setup/seed-assets Server Error:', {
+      requestId: req.requestId,
+      cafeId,
+      activeBranch,
+      errorName: error.name,
+      errorMessage: error.message,
+      errorStack: error.stack,
+      validationErrors: error.errors ? Object.keys(error.errors).map(k => ({ field: k, message: error.errors[k].message })) : null
+    });
+    
+    // Do NOT hide the error. Respond with 500 containing error details if required, or keep message clear but log trace.
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Server error generating assets',
+      error: error.message
+    });
   }
 };
 

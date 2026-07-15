@@ -15,6 +15,14 @@ const InventoryCategorySchema = new mongoose.Schema({
     type: String,
     required: true,
     default: 'default'
+  },
+  createdBy: {
+    type: String,
+    default: 'system'
+  },
+  status: {
+    type: String,
+    default: 'ACTIVE'
   }
 }, {
   timestamps: true
