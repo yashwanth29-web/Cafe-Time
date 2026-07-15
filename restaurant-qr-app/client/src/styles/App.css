@@ -1527,9 +1527,9 @@ textarea.form-input {
   flex-shrink: 0;
   padding: 8px 14px;
   border-radius: 20px;
-  border: 1px solid #333;
+  border: 1px solid var(--color-border);
   background: transparent;
-  color: #A0826C; font-size: 13px; font-weight: 600;
+  color: var(--color-text-secondary); font-size: 13px; font-weight: 600;
   cursor: pointer; min-height: 36px;
   display: flex; align-items: center; gap: 6px;
   font-family: 'Outfit', sans-serif;

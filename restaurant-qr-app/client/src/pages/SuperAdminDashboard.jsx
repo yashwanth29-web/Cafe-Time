@@ -848,58 +848,54 @@ const SuperAdminDashboard = () => {
                           {/* Actions Inside Card */}
                           <div className="cafe-card-actions">
                             <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedCafeForDetails(cafe);
-                        }}
-                        style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--color-text-primary)', border: 'none', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
-                        
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCafeForDetails(cafe);
+                              }}
+                              style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
                               Inspect
                             </button>
                             <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startEditing(cafe);
-                        }}
-                        style={{ backgroundColor: 'transparent', color: 'var(--color-text-primary)', border: '1px solid #6F4E37', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
-                        
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditing(cafe);
+                              }}
+                              style={{ backgroundColor: 'transparent', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
                               Edit
                             </button>
                             <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleActive(cafe._id, cafe.isActive);
-                        }}
-                        style={{
-                          backgroundColor: cafe.isActive ? '#FDF2F2' : '#E8F8F5',
-                          color: cafe.isActive ? '#16A085' : '#EC5B5B',
-                          border: cafe.isActive ? '1px solid #FDE2E2' : '1px solid #D1F2EB',
-                          padding: '6px 14px',
-                          borderRadius: '9999px',
-                          cursor: 'pointer',
-                          fontSize: '0.75rem',
-                          fontWeight: '700'
-                        }}>
-                        
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleActive(cafe._id, cafe.isActive);
+                              }}
+                              style={{
+                                backgroundColor: cafe.isActive ? 'var(--color-danger-bg)' : 'var(--color-success-bg)',
+                                color: cafe.isActive ? 'var(--color-danger)' : 'var(--color-success)',
+                                border: cafe.isActive ? '1px solid var(--color-danger)' : '1px solid var(--color-success)',
+                                padding: '6px 14px',
+                                borderRadius: '9999px',
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                fontWeight: '700'
+                              }}>
                               {cafe.isActive ? 'Deactivate' : 'Activate'}
                             </button>
                             <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteCafe(cafe._id);
-                        }}
-                        style={{
-                          backgroundColor: '#E74C3C',
-                          color: 'var(--color-text-primary)',
-                          border: 'none',
-                          padding: '6px 14px',
-                          borderRadius: '9999px',
-                          cursor: 'pointer',
-                          fontSize: '0.75rem',
-                          fontWeight: '700'
-                        }}
-                        disabled={!cafe.isActive}>
-                        
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCafe(cafe._id);
+                              }}
+                              style={{
+                                backgroundColor: '#E74C3C',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                padding: '6px 14px',
+                                borderRadius: '9999px',
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                fontWeight: '700'
+                              }}
+                              disabled={!cafe.isActive}>
                               Delete
                             </button>
                           </div>
@@ -1082,8 +1078,8 @@ const SuperAdminDashboard = () => {
                         });
                       }}
                       style={{
-                        backgroundColor: '#6F4E37',
-                        color: 'var(--color-text-primary)',
+                        backgroundColor: 'var(--color-primary)',
+                        color: '#FFFFFF',
                         border: 'none',
                         padding: '6px 12px',
                         borderRadius: '6px',
@@ -1091,7 +1087,6 @@ const SuperAdminDashboard = () => {
                         fontSize: '0.75rem',
                         fontWeight: 'bold'
                       }}>
-                      
                         Modify Plan
                       </button>
                     </td>
@@ -1151,7 +1146,7 @@ const SuperAdminDashboard = () => {
 
                       {/* Cafe Health Metrics Badges */}
                       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.75rem', background: 'rgba(111,78,55,0.15)', color: '#6F4E37', border: '1px solid #6F4E37', padding: '3px 8px', borderRadius: '6px', fontWeight: 'bold' }}>
+                        <span style={{ fontSize: '0.75rem', background: 'var(--bg-card)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', padding: '3px 8px', borderRadius: '6px', fontWeight: 'bold' }}>
                           Sub: {cafe.subscriptionStatus || 'Active'}
                         </span>
                         <span style={{ fontSize: '0.75rem', background: 'var(--bg-card)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', padding: '3px 8px', borderRadius: '6px', fontWeight: 'bold' }}>
@@ -1680,18 +1675,17 @@ const SuperAdminDashboard = () => {
                   Cancel
                 </button>
                 <button
-                type="submit"
-                style={{
-                  backgroundColor: '#6F4E37',
-                  color: 'var(--color-text-primary)',
-                  border: 'none',
-                  padding: '8px 20px',
-                  borderRadius: '9999px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem'
-                }}>
-                
+                  type="submit"
+                  style={{
+                    backgroundColor: 'var(--color-primary)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '8px 20px',
+                    borderRadius: '9999px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem'
+                  }}>
                   Save Updates
                 </button>
               </div>
@@ -1775,18 +1769,17 @@ const SuperAdminDashboard = () => {
                   Cancel
                 </button>
                 <button
-                type="submit"
-                style={{
-                  backgroundColor: '#6F4E37',
-                  color: 'var(--color-text-primary)',
-                  border: 'none',
-                  padding: '8px 20px',
-                  borderRadius: '9999px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem'
-                }}>
-                
+                  type="submit"
+                  style={{
+                    backgroundColor: 'var(--color-primary)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    padding: '8px 20px',
+                    borderRadius: '9999px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    fontSize: '0.85rem'
+                  }}>
                   Save Subscription
                 </button>
               </div>
