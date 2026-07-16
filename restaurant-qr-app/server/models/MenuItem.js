@@ -1,4 +1,17 @@
-const mongoose = require('mongoose');
+const RecipeItemSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  quantity: {
+    type: Number,
+    required: true
+  },
+  unit: {
+    type: String,
+    default: ''
+  }
+}, { _id: false, bypassBranchFilter: true });
 
 const MenuItemSchema = new mongoose.Schema({
   cafeId: {
@@ -70,20 +83,7 @@ const MenuItemSchema = new mongoose.Schema({
     type: Number,
     default: 10
   },
-  recipe: [{
-    name: {
-      type: String,
-      required: true
-    },
-    quantity: {
-      type: Number,
-      required: true
-    },
-    unit: {
-      type: String,
-      default: ''
-    }
-  }],
+  recipe: [RecipeItemSchema],
   masterItemId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'MenuItem',
