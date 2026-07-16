@@ -523,7 +523,15 @@ const saveSetupData = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Cafe not found' });
     }
 
-    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+    let activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId;
+    if (!activeBranch || activeBranch === 'default') {
+      const existingBranch = await Branch.findOne({ cafeId });
+      if (existingBranch) {
+        activeBranch = existingBranch.branchId;
+      } else {
+        activeBranch = `${cafeId}_MAIN`;
+      }
+    }
 
     if (name) cafe.name = name;
     if (businessType) cafe.businessType = businessType;
@@ -757,14 +765,24 @@ const getBranches = async (req, res) => {
  */
 const createBranch = async (req, res) => {
   const cafeId = req.user.cafeId;
-  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
+  const { branchId, branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
+  if (!branchId || !branchId.trim()) {
+    return res.status(400).json({ success: false, message: 'Branch Code is required' });
+  }
+  const cleanBranchId = branchId.trim();
+  if (cleanBranchId.toLowerCase() === 'default') {
+    return res.status(400).json({ success: false, message: 'Branch Code cannot be "default"' });
+  }
   if (!branchName || !address) {
     return res.status(400).json({ success: false, message: 'Branch Name and Address are required' });
   }
   try {
-    const branchId = `${cafeId}_BR_${Date.now()}`;
+    const existingBranch = await Branch.findOne({ branchId: cleanBranchId, cafeId });
+    if (existingBranch) {
+      return res.status(400).json({ success: false, message: `Branch Code "${cleanBranchId}" is already in use for this cafe.` });
+    }
     const newBranch = await Branch.create({
-      branchId,
+      branchId: cleanBranchId,
       branchName: branchName.trim(),
       cafeId,
       address: address.trim(),
@@ -910,7 +928,7 @@ const uploadLogo = async (req, res) => {
 const updateBranch = async (req, res) => {
   const { id } = req.params;
   const cafeId = req.user.cafeId;
-  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
+  const { branchId, branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
 
   if (!cafeId) {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
@@ -920,6 +938,21 @@ const updateBranch = async (req, res) => {
     const branch = await Branch.findOne({ _id: id, cafeId });
     if (!branch) {
       return res.status(404).json({ success: false, message: 'Branch not found or does not belong to your cafe' });
+    }
+
+    if (branchId !== undefined) {
+      const trimmed = (branchId || '').trim();
+      if (!trimmed) {
+        return res.status(400).json({ success: false, message: 'Branch Code cannot be empty' });
+      }
+      if (trimmed.toLowerCase() === 'default') {
+        return res.status(400).json({ success: false, message: 'Branch Code cannot be "default"' });
+      }
+      const existingBranch = await Branch.findOne({ branchId: trimmed, cafeId, _id: { $ne: id } });
+      if (existingBranch) {
+        return res.status(400).json({ success: false, message: `Branch Code "${trimmed}" is already in use.` });
+      }
+      branch.branchId = trimmed;
     }
 
     if (branchName !== undefined) {

@@ -80,7 +80,7 @@ const CashierDashboard = () =>{
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
  const [selectedOrder, setSelectedOrder] = useState(null);
- const [refreshCountdown, setRefreshCountdown] = useState(12);
+ const [refreshCountdown, setRefreshCountdown] = useState(5);
 
   const playNotificationSound = () => {
     try {
@@ -169,11 +169,11 @@ const CashierDashboard = () =>{
 
   const pollingInterval = setInterval(() =>{
   fetchOrders();
-  setRefreshCountdown(12);
-  }, 12000);
+  setRefreshCountdown(5);
+  }, 5000);
 
   const countdownInterval = setInterval(() =>{
-  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 12);
+  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
   }, 1000);
 
   return () =>{

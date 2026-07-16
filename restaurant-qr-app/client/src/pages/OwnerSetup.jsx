@@ -46,6 +46,7 @@ const OwnerSetup = () => {
   // Step 2: Branch Setup States
   const [branches, setBranches] = useState([]);
   const [newBranchName, setNewBranchName] = useState('');
+  const [newBranchCode, setNewBranchCode] = useState('');
   const [newBranchAddress, setNewBranchAddress] = useState('');
   const [newBranchManager, setNewBranchManager] = useState('');
 
@@ -135,6 +136,14 @@ const OwnerSetup = () => {
   }, [step, fetchBranches]);
 
   const handleAddBranch = useCallback(async () => {
+    if (!newBranchCode || !newBranchCode.trim()) {
+      setErrorMsg('Branch Code is required.');
+      return;
+    }
+    if (newBranchCode.trim().toLowerCase() === 'default') {
+      setErrorMsg('Branch Code cannot be "default".');
+      return;
+    }
     if (!newBranchName || !newBranchAddress) {
       setErrorMsg('Branch Name and Address are required.');
       return;
@@ -143,6 +152,7 @@ const OwnerSetup = () => {
     setLoading(true);
     try {
       const res = await createBranch({
+        branchId: newBranchCode.trim(),
         branchName: newBranchName,
         address: newBranchAddress,
         manager: newBranchManager,
@@ -150,6 +160,7 @@ const OwnerSetup = () => {
       });
       if (res.success) {
         setSuccessMsg('Branch added successfully!');
+        setNewBranchCode('');
         setNewBranchName('');
         setNewBranchAddress('');
         setNewBranchManager('');
@@ -172,7 +183,7 @@ const OwnerSetup = () => {
     } finally {
       setLoading(false);
     }
-  }, [newBranchName, newBranchAddress, newBranchManager, fetchBranches, switchBranch, loadBranches]);
+  }, [newBranchCode, newBranchName, newBranchAddress, newBranchManager, fetchBranches, switchBranch, loadBranches]);
 
   const handleDeleteBranch = useCallback(async (id) => {
     if (window.confirm('Are you sure you want to delete this branch?')) {
@@ -1037,13 +1048,23 @@ const OwnerSetup = () => {
               <h4 style={{ margin: '0 0 15px 0', color: 'var(--color-text-secondary)' }}>Add New Branch</h4>
               <div className="form-grid" style={{ marginBottom: '15px' }}>
                 <div className="form-group">
-                  <label htmlFor="new-branch-name">Branch Name</label>
+                  <label htmlFor="new-branch-name">Branch Name *</label>
                   <input
                     type="text"
                     id="new-branch-name"
                     value={newBranchName}
                     onChange={(e) => setNewBranchName(e.target.value)}
                     placeholder="Vijayawada Main"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="new-branch-code">Branch Code *</label>
+                  <input
+                    type="text"
+                    id="new-branch-code"
+                    value={newBranchCode}
+                    onChange={(e) => setNewBranchCode(e.target.value)}
+                    placeholder="e.g. VJY-MAIN"
                   />
                 </div>
                 <div className="form-group">
@@ -1056,8 +1077,8 @@ const OwnerSetup = () => {
                     placeholder="Siva Prasad"
                   />
                 </div>
-                <div className="form-group col-span-2">
-                  <label htmlFor="new-branch-address">Branch Street Address</label>
+                <div className="form-group">
+                  <label htmlFor="new-branch-address">Branch Street Address *</label>
                   <input
                     type="text"
                     id="new-branch-address"

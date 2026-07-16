@@ -561,6 +561,7 @@ const OwnerDashboard = () =>{
  const [showEditBranchModal, setShowEditBranchModal] = useState(false);
  const [editingBranch, setEditingBranch] = useState(null);
   const [newBranch, setNewBranch] = useState({
+    branchId: '',
     branchName: '',
     address: '',
     manager: '',
@@ -1601,12 +1602,21 @@ const exportStaffToCSV = () => {
  // Branch Handlers
   const handleAddBranch = async (e) =>{
     e.preventDefault();
+    if (!newBranch.branchId || !newBranch.branchId.trim()) {
+      alert('Branch Code is required.');
+      return;
+    }
+    if (newBranch.branchId.trim().toLowerCase() === 'default') {
+      alert('Branch Code cannot be "default".');
+      return;
+    }
     if (!newBranch.branchName || !newBranch.address) {
       alert('Branch Name and Address are required.');
       return;
     }
     try {
       const res = await createBranch({
+        branchId: newBranch.branchId.trim(),
         branchName: newBranch.branchName,
         address: newBranch.address,
         manager: newBranch.manager,
@@ -1625,6 +1635,7 @@ const exportStaffToCSV = () => {
       if (res.success) {
         alert(`Branch "${newBranch.branchName}" created successfully.`);
         setNewBranch({
+          branchId: '',
           branchName: '', address: '', manager: '', latitude: '', longitude: '', allowedRadius: 100,
           city: '', state: '', pincode: '', googleMapsUrl: '', openingTime: '09:00 AM', closingTime: '10:00 PM',
           unifiedStaffMode: false
@@ -1640,12 +1651,21 @@ const exportStaffToCSV = () => {
 
   const handleEditBranch = async (e) =>{
     e.preventDefault();
+    if (!editingBranch.branchId || !editingBranch.branchId.trim()) {
+      alert('Branch Code is required.');
+      return;
+    }
+    if (editingBranch.branchId.trim().toLowerCase() === 'default') {
+      alert('Branch Code cannot be "default".');
+      return;
+    }
     if (!editingBranch.branchName || !editingBranch.address) {
       alert('Branch Name and Address are required.');
       return;
     }
     try {
       const res = await updateBranch(editingBranch._id, {
+        branchId: editingBranch.branchId.trim(),
         branchName: editingBranch.branchName,
         address: editingBranch.address,
         manager: editingBranch.manager,
@@ -6009,6 +6029,10 @@ const exportStaffToCSV = () => {
 <input type="text" required value={newBranch.branchName} onChange={(e) =>setNewBranch({ ...newBranch, branchName: e.target.value })} className="form-input" placeholder="e.g. Uptown Branch" />
 </div>
 <div className="form-group">
+<label className="form-label">Branch Code *</label>
+<input type="text" required value={newBranch.branchId} onChange={(e) =>setNewBranch({ ...newBranch, branchId: e.target.value })} className="form-input" placeholder="e.g. UPTN-01" />
+</div>
+<div className="form-group">
 <label className="form-label">Branch Address *</label>
 <input type="text" required value={newBranch.address} onChange={(e) =>setNewBranch({ ...newBranch, address: e.target.value })} className="form-input" placeholder="123 Main Street" />
 </div>
@@ -6123,6 +6147,10 @@ const exportStaffToCSV = () => {
 <div className="form-group">
 <label className="form-label">Branch Name *</label>
 <input type="text" required value={editingBranch.branchName} onChange={(e) =>setEditingBranch({ ...editingBranch, branchName: e.target.value })} className="form-input" />
+</div>
+<div className="form-group">
+<label className="form-label">Branch Code *</label>
+<input type="text" required value={editingBranch.branchId || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, branchId: e.target.value })} className="form-input" />
 </div>
 <div className="form-group">
 <label className="form-label">Branch Address *</label>

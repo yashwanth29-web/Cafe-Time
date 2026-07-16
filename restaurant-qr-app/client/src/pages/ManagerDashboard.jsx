@@ -229,10 +229,10 @@ const ManagerDashboard = () =>{
 
   fetchInitialData();
 
-  // Polling every 15 seconds for updates
+  // Polling every 5 seconds for updates
   const pollingInterval = setInterval(() =>{
   fetchInitialData();
-  }, 15000);
+  }, 5000);
 
   return () =>clearInterval(pollingInterval);
   }, [user, activeBranchId]);

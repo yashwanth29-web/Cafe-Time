@@ -256,7 +256,7 @@ const StaffOrderWorkspace = () => {
         if (socket && !socket.connected) {
           fetchWorkspaceOrders();
         }
-      }, 10000);
+      }, 5000);
 
       return () => {
         socket.off('order_created', handleOrderCreated);

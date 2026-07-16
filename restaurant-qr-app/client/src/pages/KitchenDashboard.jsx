@@ -218,6 +218,10 @@ const KitchenDashboard = () =>{
 
     fetchOrders();
 
+    const pollInterval = setInterval(() => {
+      fetchOrders();
+    }, 5000);
+
     if (user && user.cafeId) {
       connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);
 
@@ -259,8 +263,13 @@ const KitchenDashboard = () =>{
       return () => {
         socket.off('order_created', handleOrderCreated);
         socket.off('order_updated', handleOrderUpdated);
+        clearInterval(pollInterval);
       };
     }
+
+    return () => {
+      clearInterval(pollInterval);
+    };
   }, [user, activeBranchId]);
 
  const handleStatusUpdate = async (id, newStatus) =>{
