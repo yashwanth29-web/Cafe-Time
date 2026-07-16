@@ -207,6 +207,8 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
     <tr>
       <td style="padding: 8px 0; font-size: 16px; font-weight: bold; font-family: monospace;">${item.name}</td>
       <td style="padding: 8px 0; text-align: center; font-size: 18px; font-weight: bold; font-family: monospace;">${item.quantity}</td>
+      <td style="padding: 8px 0; text-align: right; font-size: 16px; font-weight: bold; font-family: monospace;">₹${item.price.toFixed(2)}</td>
+      <td style="padding: 8px 0; text-align: right; font-size: 16px; font-weight: bold; font-family: monospace;">₹${(item.price * item.quantity).toFixed(2)}</td>
     </tr>
   `).join('');
 
@@ -288,10 +290,16 @@ export const printKOT = (order, user = null, cafe = null, branch = null) => {
               <tr>
                 <th style="text-align: left;">Item Name</th>
                 <th>Qty</th>
+                <th style="text-align: right;">Price</th>
+                <th style="text-align: right;">Total</th>
               </tr>
             </thead>
             <tbody>
               ${itemsHtml}
+              <tr>
+                <td colspan="3" style="border-top: 1px dashed #000; padding: 6px 0; font-weight: bold;">GRAND TOTAL:</td>
+                <td style="border-top: 1px dashed #000; padding: 6px 0; text-align: right; font-weight: bold; font-family: monospace; font-size: 16px;">₹${(order.totalAmount || order.grandTotal || 0).toFixed(2)}</td>
+              </tr>
             </tbody>
           </table>
 
