@@ -9,7 +9,7 @@ import '../styles/App.css';
 
 const KitchenDashboard = () =>{
  const { logout, user } = useAuth();
- const { activeBranchId } = useBranch();
+ const { activeBranchId, branches } = useBranch();
  const [orders, setOrders] = useState([]);
  const [loading, setLoading] = useState(true);
  const [errorMsg, setErrorMsg] = useState('');
@@ -222,6 +222,18 @@ const KitchenDashboard = () =>{
       connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);
 
       const handleOrderCreated = (newOrder) => {
+        // Only accept real-time order creation if it matches the current branch context
+        if (activeBranchId && activeBranchId !== 'all') {
+          const activeBranchDoc = (branches || []).find(b => b.branchId === activeBranchId || b._id === activeBranchId);
+          const orderBranchDoc = (branches || []).find(b => b.branchId === newOrder.branchId || b._id === newOrder.branchId);
+          const activeBranchObjectId = activeBranchDoc ? String(activeBranchDoc._id) : '';
+          const orderBranchObjectId = orderBranchDoc ? String(orderBranchDoc._id) : newOrder.branchId;
+
+          if (activeBranchObjectId && activeBranchObjectId !== orderBranchObjectId) {
+            return; // Ignore order from another branch
+          }
+        }
+
         setOrders((prev) => {
           if (prev.some((o) => o._id === newOrder._id)) return prev;
           
