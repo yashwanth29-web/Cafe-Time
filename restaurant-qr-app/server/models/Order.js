@@ -21,7 +21,7 @@ const OrderItemSchema = new mongoose.Schema({
     type: String,
     default: '/images/default-food.png'
   }
-});
+}, { _id: false, bypassBranchFilter: true });
 
 const OrderSchema = new mongoose.Schema({
   cafeId: {

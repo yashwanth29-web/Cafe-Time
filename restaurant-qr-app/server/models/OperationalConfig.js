@@ -1,5 +1,10 @@
 const mongoose = require('mongoose');
 
+const TableConfigSchema = new mongoose.Schema({
+  id: { type: String, required: true },
+  label: { type: String, required: true }
+}, { _id: false, bypassBranchFilter: true });
+
 const OperationalConfigSchema = new mongoose.Schema({
   cafeId: {
     type: String,
@@ -11,12 +16,7 @@ const OperationalConfigSchema = new mongoose.Schema({
     required: true,
     default: 'default'
   },
-  tables: [
-    {
-      id: { type: String, required: true },
-      label: { type: String, required: true }
-    }
-  ],
+  tables: [TableConfigSchema],
   printerEnabled: {
     type: Boolean,
     default: false
