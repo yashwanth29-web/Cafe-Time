@@ -80,7 +80,25 @@ const validateTenant = async (req, res, next) => {
       if (mongoose.isValidObjectId(orderId)) {
         const order = await Order.findOne({ _id: orderId }, null, { bypassBranchFilter: true });
         if (order) {
-          if (order.cafeId !== cafeId || (branchId !== 'all' && order.branchId !== branchId)) {
+          // Resolve both order.branchId and context branchId to their canonical database ObjectIds
+          const orderBranch = await Branch.findOne({
+            $or: [
+              { branchId: order.branchId },
+              { _id: mongoose.isValidObjectId(order.branchId) ? order.branchId : undefined }
+            ]
+          }).lean();
+          
+          const contextBranch = await Branch.findOne({
+            $or: [
+              { branchId: branchId },
+              { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
+            ]
+          }).lean();
+
+          const orderBranchObjectId = orderBranch ? String(orderBranch._id) : order.branchId;
+          const contextBranchObjectId = contextBranch ? String(contextBranch._id) : branchId;
+
+          if (order.cafeId !== cafeId || (branchId !== 'all' && orderBranchObjectId !== contextBranchObjectId)) {
             return res.status(403).json({ success: false, message: 'Access denied. Order does not belong to this cafe/branch tenant.' });
           }
         }
