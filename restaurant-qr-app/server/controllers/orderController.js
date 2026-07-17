@@ -395,7 +395,7 @@ const createOrder = async (req, res, next) => {
       cafeId: activeCafeId,
       branchId: resolvedBranch ? resolvedBranch.branchId : (branchId || 'default'),
       branchObjectId: resolvedBranch ? resolvedBranch._id : null,
-      branchName: resolvedBranch ? resolvedBranch.branchName : '',
+      branchName: resolvedBranch ? resolvedBranch.branchId : (branchId || 'default'),
       branchAddress: resolvedBranch ? resolvedBranch.address : '',
       cafeName: resolvedCafe ? resolvedCafe.name : 'Our Cafe',
       cafeLogo: resolvedCafe ? resolvedCafe.logoUrl : '',

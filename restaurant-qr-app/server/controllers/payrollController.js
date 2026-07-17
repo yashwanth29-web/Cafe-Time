@@ -377,7 +377,7 @@ const payPayroll = async (req, res) => {
         employeeName: payroll.employeeName,
         cafeId: payroll.cafeId,
         branchId: payroll.branchId,
-        branchName: branch ? branch.branchName : 'Main',
+        branchName: branch ? branch.branchId : (payroll.branchId || 'default'),
         payrollWeek: `${payroll.weekStart} to ${payroll.weekEnd}`,
         weekStart: payroll.weekStart,
         weekEnd: payroll.weekEnd,

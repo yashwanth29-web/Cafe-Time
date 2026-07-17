@@ -96,6 +96,6 @@ const BranchSchema = new mongoose.Schema({
   }
 }, { bypassBranchFilter: true });
 
-BranchSchema.index({ branchId: 1, cafeId: 1 }, { unique: true });
+BranchSchema.index({ branchId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Branch', BranchSchema);

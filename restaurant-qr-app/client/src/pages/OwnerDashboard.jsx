@@ -1549,7 +1549,7 @@ const exportStaffToCSV = () => {
   const headers = ['Employee ID', 'Name', 'Role', 'Email', 'Phone', 'Branch', 'Salary Type', 'Daily Wage', 'Weekly Wage', 'Monthly Wage', 'Current Week Salary', 'Orders Today', 'Status', 'Joined Date'];
   const csvRows = [headers.join(',')];
   staff.forEach(member => {
-    const branchName = branches.find(b => b.branchId === member.assignedBranch)?.branchName || 'Unassigned';
+    const branchName = member.assignedBranch || 'Unassigned';
     const row = [
       member.employeeId || 'N/A',
       `"${member.name || ''}"`,
@@ -1602,21 +1602,12 @@ const exportStaffToCSV = () => {
  // Branch Handlers
   const handleAddBranch = async (e) =>{
     e.preventDefault();
-    if (!newBranch.branchId || !newBranch.branchId.trim()) {
-      alert('Branch Code is required.');
-      return;
-    }
-    if (newBranch.branchId.trim().toLowerCase() === 'default') {
-      alert('Branch Code cannot be "default".');
-      return;
-    }
     if (!newBranch.branchName || !newBranch.address) {
       alert('Branch Name and Address are required.');
       return;
     }
     try {
       const res = await createBranch({
-        branchId: newBranch.branchId.trim(),
         branchName: newBranch.branchName,
         address: newBranch.address,
         manager: newBranch.manager,
@@ -1651,21 +1642,12 @@ const exportStaffToCSV = () => {
 
   const handleEditBranch = async (e) =>{
     e.preventDefault();
-    if (!editingBranch.branchId || !editingBranch.branchId.trim()) {
-      alert('Branch Code is required.');
-      return;
-    }
-    if (editingBranch.branchId.trim().toLowerCase() === 'default') {
-      alert('Branch Code cannot be "default".');
-      return;
-    }
     if (!editingBranch.branchName || !editingBranch.address) {
       alert('Branch Name and Address are required.');
       return;
     }
     try {
       const res = await updateBranch(editingBranch._id, {
-        branchId: editingBranch.branchId.trim(),
         branchName: editingBranch.branchName,
         address: editingBranch.address,
         manager: editingBranch.manager,
@@ -3464,11 +3446,11 @@ const exportStaffToCSV = () => {
 </select>
 </div>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="roster-assigned-branch" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Branch *</label>
+<label htmlFor="roster-assigned-branch" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Branch Code *</label>
 <select id="roster-assigned-branch" name="roster-assigned-branch" className="form-input" value={newStaff.assignedBranch} onChange={(e) =>setNewStaff({ ...newStaff, assignedBranch: e.target.value })} required>
 <option value="">-- Select --</option>
  {branches.map((b) =>
-<option key={b.branchId} value={b.branchId}>{b.branchName}</option>
+<option key={b.branchId} value={b.branchId}>{b.branchId} ({b.branchName})</option>
 )}
 </select>
 </div>
@@ -3578,7 +3560,7 @@ const exportStaffToCSV = () => {
 <span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
 </td>
 <td style={{ padding: '12px 10px' }}>
- {branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}
+ {member.assignedBranch || 'Unassigned'}
 </td>
 <td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
  ₹{member.dailyRate || 0}
@@ -3662,7 +3644,7 @@ const exportStaffToCSV = () => {
 <div>🆔 ID:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</span></div>
 <div>{member.email || 'No Email'}</div>
 <div>{member.phone}</div>
-<div>Branch:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{branches.find((b) =>b.branchId === member.assignedBranch)?.branchName || 'Unassigned'}</span></div>
+<div>Branch Code:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{member.assignedBranch || 'Unassigned'}</span></div>
 <div>Daily Wage:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> ₹{member.dailyRate || 0}</span></div>
 <div>Required Hours:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.requiredHours || 8} hrs</span></div>
 <div>Current Week Salary:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}> ₹{member.currentWeekSalary || 0}</span></div>
@@ -3839,7 +3821,7 @@ const exportStaffToCSV = () => {
 <select className="form-input" style={{ width: '180px', margin: 0 }} value={reportBranch} onChange={(e) =>setReportBranch(e.target.value)}>
 <option value="">All Branches</option>
  {branches.map((b) =>
-<option key={b.branchId} value={b.branchId}>{b.branchName}</option>
+<option key={b.branchId} value={b.branchId}>{b.branchId} ({b.branchName})</option>
 )}
 </select>
 </div>
@@ -3872,7 +3854,7 @@ const exportStaffToCSV = () => {
 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
 <thead>
 <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
-<th style={{ padding: '8px' }}>Branch Name</th>
+<th style={{ padding: '8px' }}>Branch Code</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Total Check-ins</th>
 <th style={{ padding: '8px', textAlign: 'right' }}>Total Hours Logged</th>
 </tr>
@@ -3899,7 +3881,7 @@ const exportStaffToCSV = () => {
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
 <th style={{ padding: '10px' }}>Date</th>
 <th style={{ padding: '10px' }}>Staff Name</th>
-<th style={{ padding: '10px' }}>Branch</th>
+<th style={{ padding: '10px' }}>Branch Code</th>
 <th style={{ padding: '10px' }}>Check In</th>
 <th style={{ padding: '10px' }}>Check Out</th>
 <th style={{ padding: '10px' }}>Status</th>
@@ -4109,7 +4091,7 @@ const exportStaffToCSV = () => {
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
 <div>
 <strong style={{ color: 'var(--color-text-primary)', fontSize: '0.95rem', display: 'block' }}>{report.staffName}</strong>
-<span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Branch: {report.branchName}</span>
+<span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Branch Code: {report.branchName}</span>
 </div>
 <span style={{
  backgroundColor: 'rgba(255, 107, 8, 0.1)',
@@ -4253,7 +4235,7 @@ const exportStaffToCSV = () => {
                     <th style={{ padding: '12px 10px' }}>Staff Name</th>
                     <th style={{ padding: '12px 10px' }}>Employee ID</th>
                     <th style={{ padding: '12px 10px' }}>Cafe</th>
-                    <th style={{ padding: '12px 10px' }}>Branch</th>
+                    <th style={{ padding: '12px 10px' }}>Branch Code</th>
                     <th style={{ padding: '12px 10px' }}>Daily Wage</th>
                     <th style={{ padding: '12px 10px' }}>Req. Hours</th>
                     <th style={{ padding: '12px 10px' }}>Worked This Week</th>
@@ -4287,7 +4269,7 @@ const exportStaffToCSV = () => {
                           <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
                           <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>{member.employeeId || '—'}</td>
                           <td style={{ padding: '12px 10px' }}>{member.cafeName || '—'}</td>
-                          <td style={{ padding: '12px 10px' }}>{member.branchName || '—'}</td>
+                          <td style={{ padding: '12px 10px' }}>{member.assignedBranch || '—'}</td>
                           <td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}</td>
                           <td style={{ padding: '12px 10px' }}>{member.requiredHours || 8} hrs</td>
                           <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{member.actualHoursWorked || 0} hrs</td>
@@ -4380,7 +4362,7 @@ const exportStaffToCSV = () => {
                     <th style={{ padding: '12px 10px' }}>Payroll Week</th>
                     <th style={{ padding: '12px 10px' }}>Staff Name</th>
                     <th style={{ padding: '12px 10px' }}>Cafe</th>
-                    <th style={{ padding: '12px 10px' }}>Branch</th>
+                    <th style={{ padding: '12px 10px' }}>Branch Code</th>
                     <th style={{ padding: '12px 10px' }}>Worked Days</th>
                     <th style={{ padding: '12px 10px' }}>Worked Hours</th>
                     <th style={{ padding: '12px 10px' }}>Gross Salary</th>
@@ -4396,7 +4378,7 @@ const exportStaffToCSV = () => {
                       <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{record.payrollWeek}</td>
                       <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{record.employeeName}</td>
                       <td style={{ padding: '12px 10px' }}>{record.cafeId}</td>
-                      <td style={{ padding: '12px 10px' }}>{record.branchName || record.branchId}</td>
+                      <td style={{ padding: '12px 10px' }}>{record.branchId}</td>
                       <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{record.workedDays} days</td>
                       <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{record.workedHours} hrs</td>
                       <td style={{ padding: '12px 10px', fontWeight: 600 }}>₹{record.grossSalary}</td>
@@ -5076,6 +5058,7 @@ const exportStaffToCSV = () => {
 <div key={b._id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
 <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '15px', fontWeight: 'bold' }}>{b.branchName}</h4>
+<div><strong>Branch Code:</strong> {b.branchId}</div>
 <span style={{
  backgroundColor: b.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
  color: b.isActive ? '#2ecc71' : '#e74c3c',
@@ -5173,7 +5156,7 @@ const exportStaffToCSV = () => {
             >
               <option value="all">All Branches (Cafe-wide)</option>
               {branches.map(b => (
-                <option key={b._id} value={b.branchId || b._id}>{b.branchName}</option>
+                <option key={b._id} value={b.branchId || b._id}>{b.branchId || b.branchName} ({b.branchName})</option>
               ))}
             </select>
           </div>
@@ -6029,8 +6012,8 @@ const exportStaffToCSV = () => {
 <input type="text" required value={newBranch.branchName} onChange={(e) =>setNewBranch({ ...newBranch, branchName: e.target.value })} className="form-input" placeholder="e.g. Uptown Branch" />
 </div>
 <div className="form-group">
-<label className="form-label">Branch Code *</label>
-<input type="text" required value={newBranch.branchId} onChange={(e) =>setNewBranch({ ...newBranch, branchId: e.target.value })} className="form-input" placeholder="e.g. UPTN-01" />
+<label className="form-label">Branch Code</label>
+<input type="text" disabled readOnly value="Auto-generated on creation" className="form-input" />
 </div>
 <div className="form-group">
 <label className="form-label">Branch Address *</label>
@@ -6149,8 +6132,8 @@ const exportStaffToCSV = () => {
 <input type="text" required value={editingBranch.branchName} onChange={(e) =>setEditingBranch({ ...editingBranch, branchName: e.target.value })} className="form-input" />
 </div>
 <div className="form-group">
-<label className="form-label">Branch Code *</label>
-<input type="text" required value={editingBranch.branchId || ''} onChange={(e) =>setEditingBranch({ ...editingBranch, branchId: e.target.value })} className="form-input" />
+<label className="form-label">Branch Code</label>
+<input type="text" disabled readOnly value={editingBranch.branchId || ''} className="form-input" />
 </div>
 <div className="form-group">
 <label className="form-label">Branch Address *</label>

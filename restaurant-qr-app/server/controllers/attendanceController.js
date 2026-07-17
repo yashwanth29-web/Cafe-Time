@@ -203,7 +203,7 @@ const checkIn = async (req, res) => {
       staffId,
       staffName: staff.name,
       branchId: branch.branchId,
-      branchName: branch.branchName,
+      branchName: branch.branchId,
       cafeId: staff.cafeId,
       date: todayStr,
       checkInTime: new Date(),

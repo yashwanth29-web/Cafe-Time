@@ -94,7 +94,7 @@ const createReport = async (req, res) => {
       staffId,
       staffName: staff.name,
       branchId: branch.branchId,
-      branchName: branch.branchName,
+      branchName: branch.branchId,
       cafeId: staff.cafeId,
       notes: notes || '',
       photos,

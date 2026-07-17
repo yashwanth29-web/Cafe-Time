@@ -191,15 +191,62 @@ const getStaff = async (req, res) => {
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    const staffWithOrders = await Promise.all(staff.map(async (s) => {
-      const ordersCount = await Order.countDocuments({
-        cafeId,
-        staffId: s._id,
-        source: 'STAFF',
-        createdAt: { $gte: todayStart }
-      });
+    // Batched DB queries to avoid N+1 query performance bottleneck
+    const staffIds = staff.map(s => String(s._id));
+    
+    // 1. Batch ordersCount
+    const ordersCounts = await Order.aggregate([
+      {
+        $match: {
+          cafeId,
+          staffId: { $in: staffIds },
+          source: 'STAFF',
+          createdAt: { $gte: todayStart }
+        }
+      },
+      {
+        $group: {
+          _id: '$staffId',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    const ordersMap = {};
+    ordersCounts.forEach(o => {
+      ordersMap[String(o._id)] = o.count;
+    });
 
-      const pr = await Payroll.findOne({ employeeId: s._id, weekStart, weekEnd });
+    // 2. Batch Payrolls
+    const payrollList = await Payroll.find({
+      employeeId: { $in: staffIds },
+      weekStart,
+      weekEnd
+    }).lean();
+    const payrollMap = {};
+    payrollList.forEach(p => {
+      payrollMap[String(p.employeeId)] = p;
+    });
+
+    // 3. Batch Attendances
+    const attendances = await Attendance.find({
+      staffId: { $in: staffIds },
+      cafeId,
+      branchId: activeBranch,
+      date: { $gte: weekStart, $lte: weekEnd }
+    }).lean();
+    const attendanceMap = {};
+    attendances.forEach(att => {
+      const sId = String(att.staffId);
+      if (!attendanceMap[sId]) {
+        attendanceMap[sId] = [];
+      }
+      attendanceMap[sId].push(att);
+    });
+
+    const staffWithOrders = staff.map(s => {
+      const sIdStr = String(s._id);
+      const ordersCount = ordersMap[sIdStr] || 0;
+      const pr = payrollMap[sIdStr];
       
       let workingDays = 0;
       let absentDays = 0;
@@ -214,13 +261,7 @@ const getStaff = async (req, res) => {
         currentWeekSalary = pr.netSalary || 0;
         payrollStatus = pr.paymentStatus || 'Pending';
       } else {
-        const weeklyAttendances = await Attendance.find({
-          staffId: s._id,
-          cafeId,
-          branchId: activeBranch,
-          date: { $gte: weekStart, $lte: weekEnd },
-          checkOutTime: { $exists: true, $ne: null }
-        });
+        const weeklyAttendances = (attendanceMap[sIdStr] || []).filter(att => att.checkOutTime !== undefined && att.checkOutTime !== null);
 
         let presentCount = 0;
         let halfCount = 0;
@@ -266,12 +307,7 @@ const getStaff = async (req, res) => {
       const weeklyBreakdown = {
         'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0, 'Friday': 0, 'Saturday': 0, 'Sunday': 0
       };
-      const rawAttendances = await Attendance.find({
-        staffId: s._id,
-        cafeId,
-        branchId: activeBranch,
-        date: { $gte: weekStart, $lte: weekEnd }
-      });
+      const rawAttendances = attendanceMap[sIdStr] || [];
       rawAttendances.forEach(att => {
         const attDate = new Date(att.date || att.createdAt);
         const dayName = dayNames[attDate.getDay()];
@@ -313,7 +349,7 @@ const getStaff = async (req, res) => {
         branchName,
         attendances: formattedAttendances
       };
-    }));
+    });
     
     return res.status(200).json({ success: true, staff: staffWithOrders });
   } catch (error) {
@@ -765,22 +801,28 @@ const getBranches = async (req, res) => {
  */
 const createBranch = async (req, res) => {
   const cafeId = req.user.cafeId;
-  const { branchId, branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
-  if (!branchId || !branchId.trim()) {
-    return res.status(400).json({ success: false, message: 'Branch Code is required' });
-  }
-  const cleanBranchId = branchId.trim();
-  if (cleanBranchId.toLowerCase() === 'default') {
-    return res.status(400).json({ success: false, message: 'Branch Code cannot be "default"' });
-  }
+  const { branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
+  
   if (!branchName || !address) {
     return res.status(400).json({ success: false, message: 'Branch Name and Address are required' });
   }
   try {
-    const existingBranch = await Branch.findOne({ branchId: cleanBranchId, cafeId });
-    if (existingBranch) {
-      return res.status(400).json({ success: false, message: `Branch Code "${cleanBranchId}" is already in use for this cafe.` });
+    // Auto-generate globally unique Branch Code (e.g. BR-XXXXXX)
+    let cleanBranchId;
+    let isUnique = false;
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    while (!isUnique) {
+      let randomPart = '';
+      for (let i = 0; i < 6; i++) {
+        randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      cleanBranchId = `BR-${randomPart}`;
+      const existingBranch = await Branch.findOne({ branchId: cleanBranchId });
+      if (!existingBranch) {
+        isUnique = true;
+      }
     }
+
     const newBranch = await Branch.create({
       branchId: cleanBranchId,
       branchName: branchName.trim(),
@@ -823,7 +865,7 @@ const createBranch = async (req, res) => {
       
       await OperationalConfig.create({
         cafeId,
-        branchId,
+        branchId: cleanBranchId,
         tables: [
           { id: 'T1', label: 'Table-1' },
           { id: 'T2', label: 'Table-2' },
@@ -840,14 +882,14 @@ const createBranch = async (req, res) => {
         await Table.create({
           tableId: `T${i}`,
           tableNumber: `${i}`,
-          branchId,
+          branchId: cleanBranchId,
           cafeId,
           status: 'Active'
         });
       }
-      console.log(`[BRANCH CREATION] Generated default OperationalConfig and tables T1-T5 for branch ${branchId}`);
+      console.log(`[BRANCH CREATION] Generated default OperationalConfig and tables T1-T5 for branch ${cleanBranchId}`);
     } catch (tblErr) {
-      console.error(`[BRANCH CREATION ERROR] Failed to generate default tables/config for branch ${branchId}:`, tblErr);
+      console.error(`[BRANCH CREATION ERROR] Failed to generate default tables/config for branch ${cleanBranchId}:`, tblErr);
     }
 
     return res.status(201).json({ success: true, branch: newBranch });
@@ -870,7 +912,7 @@ const getStaffSummary = async (req, res) => {
     const staffMembers = await User.find({
       cafeId,
       assignedBranch: activeBranchId,
-      role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] }
+      role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'staff', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] }
     });
 
     const totalStaff = staffMembers.length;
@@ -940,19 +982,8 @@ const updateBranch = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Branch not found or does not belong to your cafe' });
     }
 
-    if (branchId !== undefined) {
-      const trimmed = (branchId || '').trim();
-      if (!trimmed) {
-        return res.status(400).json({ success: false, message: 'Branch Code cannot be empty' });
-      }
-      if (trimmed.toLowerCase() === 'default') {
-        return res.status(400).json({ success: false, message: 'Branch Code cannot be "default"' });
-      }
-      const existingBranch = await Branch.findOne({ branchId: trimmed, cafeId, _id: { $ne: id } });
-      if (existingBranch) {
-        return res.status(400).json({ success: false, message: `Branch Code "${trimmed}" is already in use.` });
-      }
-      branch.branchId = trimmed;
+    if (branchId !== undefined && branchId !== branch.branchId) {
+      return res.status(400).json({ success: false, message: 'Branch Code cannot be edited after creation' });
     }
 
     if (branchName !== undefined) {

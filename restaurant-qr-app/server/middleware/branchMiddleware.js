@@ -97,7 +97,7 @@ const attachCafeAndBranch = async (req, res, next) => {
     // Inject back into request body to satisfy Mongo schema validation requirements
     if (req.body && typeof req.body === 'object') {
       if (!req.body.cafeId) req.body.cafeId = cafeId;
-      if (!req.body.branchId) req.body.branchId = branchId;
+      if (!isExempt && !req.body.branchId) req.body.branchId = branchId;
     }
 
     console.log(`Resolved Identifiers: cafeId="${cafeId}", branchId="${branchId}", tableId="${resolved.tableId}"`);

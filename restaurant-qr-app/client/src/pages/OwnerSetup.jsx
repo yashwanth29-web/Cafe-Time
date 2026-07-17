@@ -136,14 +136,6 @@ const OwnerSetup = () => {
   }, [step, fetchBranches]);
 
   const handleAddBranch = useCallback(async () => {
-    if (!newBranchCode || !newBranchCode.trim()) {
-      setErrorMsg('Branch Code is required.');
-      return;
-    }
-    if (newBranchCode.trim().toLowerCase() === 'default') {
-      setErrorMsg('Branch Code cannot be "default".');
-      return;
-    }
     if (!newBranchName || !newBranchAddress) {
       setErrorMsg('Branch Name and Address are required.');
       return;
@@ -152,7 +144,6 @@ const OwnerSetup = () => {
     setLoading(true);
     try {
       const res = await createBranch({
-        branchId: newBranchCode.trim(),
         branchName: newBranchName,
         address: newBranchAddress,
         manager: newBranchManager,
@@ -1058,13 +1049,13 @@ const OwnerSetup = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="new-branch-code">Branch Code *</label>
+                  <label htmlFor="new-branch-code">Branch Code</label>
                   <input
                     type="text"
                     id="new-branch-code"
-                    value={newBranchCode}
-                    onChange={(e) => setNewBranchCode(e.target.value)}
-                    placeholder="e.g. VJY-MAIN"
+                    value="Auto-generated on creation"
+                    disabled
+                    readOnly
                   />
                 </div>
                 <div className="form-group">
