@@ -1,6 +1,16 @@
-import { getAssetUrl } from '../services/api';
+import API, { getAssetUrl } from '../services/api';
 
-export const printPOSReceipt = (order, user = null, cafe = null, branch = null) => {
+export const printPOSReceipt = async (order, user = null, cafe = null, branch = null) => {
+  try {
+    const response = await API.post(`/orders/${order._id}/print`, { type: 'POS' });
+    if (response.data?.success) {
+      console.log('[PRINT] POS receipt sent to network printer successfully.');
+      return;
+    }
+  } catch (err) {
+    console.error('[PRINT] Failed to print POS receipt via network printer, falling back to browser print:', err.message);
+  }
+
   let iframe = document.getElementById('receipt-print-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');
@@ -183,7 +193,17 @@ export const printPOSReceipt = (order, user = null, cafe = null, branch = null) 
   }, 300);
 };
 
-export const printKOT = (order, user = null, cafe = null, branch = null) => {
+export const printKOT = async (order, user = null, cafe = null, branch = null) => {
+  try {
+    const response = await API.post(`/orders/${order._id}/print`, { type: 'KOT' });
+    if (response.data?.success) {
+      console.log('[PRINT] KOT sent to network printer successfully.');
+      return;
+    }
+  } catch (err) {
+    console.error('[PRINT] Failed to print KOT via network printer, falling back to browser print:', err.message);
+  }
+
   let iframe = document.getElementById('kot-print-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');

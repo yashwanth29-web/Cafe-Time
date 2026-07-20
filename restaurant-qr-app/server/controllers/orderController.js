@@ -7,6 +7,7 @@ const MenuItem = require('../models/MenuItem');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const { deductInventoryForOrder, updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
+const { printReceipt } = require('../services/printerService');
 
 // Active branches in-memory cache with 60s TTL
 const branchCache = new Map();
@@ -446,6 +447,11 @@ const createOrder = async (req, res, next) => {
     // Broadcast the new order over socket
     await emitOrderUpdated(formattedOrder);
 
+    // Trigger printing receipt asynchronously (fire-and-forget) to not block user response
+    printReceipt(formattedOrder).catch(err => {
+      console.error('[ORDER CONTROLLER] Error invoking printReceipt in background:', err.message);
+    });
+
     return res.status(201).json({ success: true, data: formattedOrder });
   } catch (error) {
     if (useTransaction && session) {
@@ -746,10 +752,40 @@ const updateOrderPaymentMethod = async (req, res, next) => {
   }
 };
 
+// @desc    Print order receipt (POS or KOT) on-demand
+// @route   POST /api/orders/:id/print
+// @access  Private (Staff/Owner)
+const printOrderReceipt = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { type } = req.body; // 'KOT' or 'POS' (default 'POS')
+
+    const order = await Order.findOne({ _id: id }, null, { bypassBranchFilter: true }).lean();
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const formattedOrder = await appendLegacyFallback(order);
+
+    const success = await printReceipt(formattedOrder, type || 'POS');
+
+    if (success) {
+      return res.status(200).json({ success: true, message: `Receipt (${type || 'POS'}) sent to printer successfully` });
+    } else {
+      return res.status(500).json({ success: false, message: 'Failed to send print job to printer' });
+    }
+  } catch (error) {
+    error.controllerName = 'orderController';
+    error.serviceName = 'printOrderReceipt';
+    next(error);
+  }
+};
+
 module.exports = {
   createOrder,
   getOrders,
   getOrderById,
   updateOrderStatus,
-  updateOrderPaymentMethod
+  updateOrderPaymentMethod,
+  printOrderReceipt
 };
