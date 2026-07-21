@@ -607,7 +607,9 @@ const saveSetupData = async (req, res) => {
         longitude: lngVal,
         address: cafe.address || address || 'Default Address',
         allowedRadius: 30,
-        isActive: true
+        isActive: true,
+        ...(openingTime && { openingTime: openingTime.trim() }),
+        ...(closingTime && { closingTime: closingTime.trim() })
       },
       { upsert: true }
     );
@@ -1215,21 +1217,25 @@ const getReports = async (req, res) => {
           { $sort: { name: 1 } }
         ];
         const items = await Inventory.aggregate(pipeline);
-        reportData = items.map(item => ({
-          ingredient: item.name,
-          category: item.category || 'General',
-          currentStock: item.quantity || 0,
-          minimumStock: item.minStock || 0,
-          unit: item.unit || 'units',
-          unitCost: item.cost || 0,
-          inventoryValue: (item.quantity || 0) * (item.cost || 0),
-          supplier: item.supplier || 'N/A'
-        }));
+        reportData = items.map(item => {
+          const uCost = item.costPrice !== undefined ? item.costPrice : (item.cost || 0);
+          const minStk = item.reorderLevel !== undefined ? item.reorderLevel : (item.minStock || 0);
+          return {
+            ingredient: item.name,
+            category: item.category || 'General',
+            currentStock: item.quantity || 0,
+            minimumStock: minStk,
+            unit: item.unit || 'units',
+            unitCost: uCost,
+            inventoryValue: (item.quantity || 0) * uCost,
+            supplier: item.supplier || 'N/A'
+          };
+        });
         break;
       }
       case 'inventory_consumption': {
         const pipeline = [
-          { $match: { ...dateMatchQuery, type: 'Deduction' } },
+          { $match: { ...dateMatchQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } } },
           {
             $lookup: {
               from: 'orders',
@@ -1247,20 +1253,46 @@ const getReports = async (req, res) => {
               ]
             }
           },
+          {
+            $lookup: {
+              from: 'inventories',
+              let: { item_id: '$itemId', item_name: '$itemName' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $or: [
+                        { $eq: ['$_id', '$$item_id'] },
+                        { $eq: ['$name', '$$item_name'] }
+                      ]
+                    }
+                  }
+                }
+              ],
+              as: 'inventoryItem'
+            }
+          },
+          {
+            $unwind: {
+              path: '$inventoryItem',
+              preserveNullAndEmptyArrays: true
+            }
+          },
           { $group: {
             _id: '$itemName',
             consumedQuantity: { $sum: { $abs: '$quantityChanged' } },
             consumedCost: { $sum: '$cost' },
-            logCount: { $sum: 1 }
+            unit: { $first: '$inventoryItem.unit' },
+            timesUsed: { $sum: 1 }
           }},
           { $sort: { consumedCost: -1 } }
         ];
         const logs = await InventoryLog.aggregate(pipeline);
         reportData = logs.map(log => ({
           ingredient: log._id,
-          consumedQuantity: log.consumedQuantity,
-          consumedCost: log.consumedCost,
-          logCount: log.logCount
+          consumedQuantity: `${log.consumedQuantity} ${log.unit || ''}`.trim(),
+          totalCostValue: log.consumedCost,
+          timesUsed: log.timesUsed
         }));
         break;
       }

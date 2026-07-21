@@ -678,7 +678,7 @@ const SaaSLayout = ({ children }) => {
               padding: '16px',
               zIndex: 700
             }}>
-                <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: 'var(--color-text-primary)' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: '#FFFFFF' }}>
                   Notifications & Alerts
                 </div>
                 {renderNotificationList()}
@@ -995,7 +995,7 @@ const SaaSLayout = ({ children }) => {
                 padding: '16px',
                 zIndex: 200
               }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: 'var(--color-text-primary)' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: '#FFFFFF' }}>
                     Notifications & Alerts
                   </div>
                   {renderNotificationList()}

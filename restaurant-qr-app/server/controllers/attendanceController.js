@@ -155,10 +155,11 @@ const checkIn = async (req, res) => {
     // 5. Late Check-in detection (opening time + 15 mins grace period)
     let isLate = false;
     try {
-      if (branch && branch.openingTime) {
-        const timeStr = branch.openingTime.replace(/\s*(AM|PM)\s*/i, '');
+      const opTimeStr = (cafe && cafe.openingTime) || (branch && branch.openingTime);
+      if (opTimeStr) {
+        const timeStr = opTimeStr.replace(/\s*(AM|PM)\s*/i, '');
         const [opHour, opMin] = timeStr.split(':').map(Number);
-        const isPM = /PM/i.test(branch.openingTime);
+        const isPM = /PM/i.test(opTimeStr);
         
         const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
         const opHour24 = isPM && opHour < 12 ? opHour + 12 : (!isPM && opHour === 12 ? 0 : opHour);

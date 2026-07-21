@@ -395,7 +395,7 @@ const OwnerDashboard = () =>{
 
   // POS/ERP Reports States
   const [reportType, setReportType] = useState(() => {
-    return tabParam === 'financial_reports' ? 'financial_summary' : 'revenue';
+    return 'revenue';
   });
   const [reportBranchId, setReportBranchId] = useState('all');
   const [reportDateRange, setReportDateRange] = useState('today');
@@ -2189,7 +2189,7 @@ const exportStaffToCSV = () => {
         setMenuSubTab('reviews');
       } else if (tabParam === 'reports' || tabParam === 'financial_reports') {
         setActiveTab('reports');
-        if (tabParam === 'financial_reports') setReportType('financial_summary');
+        if (tabParam === 'financial_reports') setReportType('revenue');
       } else if (tabParam === 'attendance') {
         setActiveTab('staff');
         setStaffSubTab('attendance');
@@ -5141,7 +5141,6 @@ const exportStaffToCSV = () => {
               <option value="inventory">Current Stock Valuation</option>
               <option value="inventory_consumption">Stock Consumption Report</option>
               <option value="payment">Payment Mode Breakdown</option>
-              <option value="financial_summary">Comprehensive Financial Summary</option>
             </select>
           </div>
 

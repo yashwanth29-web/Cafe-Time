@@ -473,7 +473,9 @@ const saveSetupData = async (req, res) => {
         longitude: lngVal,
         address: cafe.address || address || 'Default Address',
         allowedRadius: 30,
-        isActive: true
+        isActive: true,
+        ...(openingTime && { openingTime: openingTime.trim() }),
+        ...(closingTime && { closingTime: closingTime.trim() })
       },
       { upsert: true }
     );
@@ -962,40 +964,51 @@ const getReports = async (req, res) => {
 
       case 'inventory': {
         const items = await Inventory.find(inventoryQuery).sort({ name: 1 }).lean();
-        reportData = items.map(item => ({
-          ingredient: item.name,
-          category: item.category || 'General',
-          currentStock: item.quantity || 0,
-          minimumStock: item.minStock || 0,
-          maximumStock: item.maxStock || 'N/A',
-          unit: item.unit || 'units',
-          unitCost: item.cost || 0,
-          inventoryValue: (item.quantity || 0) * (item.cost || 0),
-          supplier: item.supplier || 'N/A'
-        }));
+        reportData = items.map(item => {
+          const uCost = item.costPrice !== undefined ? item.costPrice : (item.cost || 0);
+          const minStk = item.reorderLevel !== undefined ? item.reorderLevel : (item.minStock || 0);
+          return {
+            ingredient: item.name,
+            category: item.category || 'General',
+            currentStock: item.quantity || 0,
+            minimumStock: minStk,
+            maximumStock: item.maxStock || 'N/A',
+            unit: item.unit || 'units',
+            unitCost: uCost,
+            inventoryValue: (item.quantity || 0) * uCost,
+            supplier: item.supplier || 'N/A'
+          };
+        });
         break;
       }
 
       case 'inventory_consumption': {
         const query = { ...logQuery, type: { $in: ['Deduction', 'Wastage', 'Damaged', 'Shortage'] } };
-        const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).lean();
+        const logs = await InventoryLog.find(query).populate('itemId', 'unit').sort({ createdAt: -1 }).lean();
         const grouped = {};
         for (const log of logs) {
           const name = log.itemName;
+          const unit = log.itemId?.unit || '';
           if (!grouped[name]) {
             grouped[name] = {
               ingredient: name,
-              consumedQuantity: 0,
-              consumedCost: 0,
-              logCount: 0
+              totalConsumedQuantity: 0,
+              unit: unit,
+              totalCostValue: 0,
+              timesUsed: 0
             };
           }
           const qty = Math.abs(log.quantityChanged || 0);
-          grouped[name].consumedQuantity += qty;
-          grouped[name].consumedCost += log.cost || 0;
-          grouped[name].logCount += 1;
+          grouped[name].totalConsumedQuantity += qty;
+          grouped[name].totalCostValue += log.cost || 0;
+          grouped[name].timesUsed += 1;
         }
-        reportData = Object.values(grouped);
+        reportData = Object.values(grouped).map(item => ({
+          ingredient: item.ingredient,
+          consumedQuantity: `${item.totalConsumedQuantity} ${item.unit}`.trim(),
+          totalCostValue: item.totalCostValue,
+          timesUsed: item.timesUsed
+        }));
         break;
       }
 
