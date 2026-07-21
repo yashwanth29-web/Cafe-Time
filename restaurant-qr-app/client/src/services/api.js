@@ -564,8 +564,8 @@ export const getCafeInfo = async (cafeId) => {
   return response.data;
 };
 
-export const getPaymentInfo = async () => {
-  const response = await API.get('/cafe/payment-info/config');
+export const getPaymentInfo = async (params) => {
+  const response = await API.get('/cafe/payment-info/config', { params });
   return response.data;
 };
 

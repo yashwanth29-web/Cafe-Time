@@ -114,12 +114,34 @@ const OrderHistory = ({ cafeId }) => {
     }
   };
 
+  // Helper to read voice announcement when order is Ready or Completed
+  const speakOrderReady = (orderNumber) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const numStr = orderNumber ? ` order number ${orderNumber}` : '';
+      const text = `Your order is ready! Please pick up your food${numStr}.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1.1;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const triggerReadyFeedback = (orderId, orderNumber) => {
+    setVoicedOrderIds((prev) => {
+      if (prev.includes(`ready_${orderId}`)) return prev;
+      playChime();
+      speakOrderReady(orderNumber);
+      return [...prev, `ready_${orderId}`];
+    });
+  };
+
   const triggerPaidFeedback = (orderId) => {
     setVoicedOrderIds((prev) => {
-      if (prev.includes(orderId)) return prev;
+      if (prev.includes(`paid_${orderId}`)) return prev;
       playChime();
       speakThankYou();
-      return [...prev, orderId];
+      return [...prev, `paid_${orderId}`];
     });
   };
 
@@ -242,6 +264,11 @@ const OrderHistory = ({ cafeId }) => {
       setActiveOrders((prevActive) => {
         const orderExists = prevActive.some((o) => o._id === updatedOrder._id);
         
+        // Trigger voice announcement when order status becomes Ready or Served
+        if (updatedOrder.status === 'Ready' || updatedOrder.status === 'Served') {
+          triggerReadyFeedback(updatedOrder._id, updatedOrder.orderNumber);
+        }
+
         // If order transitioned to paid or completed, move it to completed list
         if (updatedOrder.paymentStatus === 'Paid' || updatedOrder.status === 'Completed') {
           const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
@@ -265,7 +292,8 @@ const OrderHistory = ({ cafeId }) => {
             return [...prevComp, updatedOrder];
           });
           
-          if (!voicedOrderIds.includes(updatedOrder._id)) {
+          triggerReadyFeedback(updatedOrder._id, updatedOrder.orderNumber);
+          if (updatedOrder.paymentStatus === 'Paid') {
             triggerPaidFeedback(updatedOrder._id);
           }
           return prevActive.filter((o) => o._id !== updatedOrder._id);

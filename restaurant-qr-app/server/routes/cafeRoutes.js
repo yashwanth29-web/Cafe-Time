@@ -7,20 +7,40 @@ const User = require('../models/User');
 router.get('/payment-info/config', async (req, res) => {
   try {
     const PaymentConfig = require('../models/PaymentConfig');
-    // Ensure we have cafeId and branchId from middleware
-    const cafeId = req.cafeId;
-    const branchId = req.branchId;
+    // Ensure we have cafeId and branchId from middleware or query params
+    const cafeId = req.cafeId || req.query.cafeId;
+    const branchId = req.branchId || req.query.branchId || 'default';
 
-    if (!cafeId || !branchId) {
-       return res.status(400).json({ success: false, message: 'Missing cafeId or branchId context' });
+    if (!cafeId) {
+       return res.status(400).json({ success: false, message: 'Missing cafeId context' });
     }
 
-    const config = await PaymentConfig.findOne({ cafeId, branchId });
+    let config = await PaymentConfig.findOne({ cafeId, branchId });
+    if (!config && branchId !== 'default') {
+      config = await PaymentConfig.findOne({ cafeId, branchId: 'default' });
+    }
     if (!config) {
-      return res.status(200).json({ success: true, data: { enableUpi: false, upiId: '', taxRate: 0, platformCharge: 0 } });
+      config = await PaymentConfig.findOne({ cafeId });
+    }
+
+    const Cafe = require('../models/Cafe');
+    const cafeDoc = await Cafe.findOne({ cafeId }).lean();
+    const defaultGst = cafeDoc?.gstRate || 0;
+    const defaultPlatform = cafeDoc?.serviceChargeRate || 0;
+
+    if (!config) {
+      return res.status(200).json({ success: true, data: { enableUpi: false, upiId: '', taxRate: defaultGst, platformCharge: defaultPlatform } });
     }
     
-    return res.status(200).json({ success: true, data: { enableUpi: config.enableUpi, upiId: config.upiId, taxRate: config.taxRate, platformCharge: config.platformCharge } });
+    return res.status(200).json({ 
+      success: true, 
+      data: { 
+        enableUpi: config.enableUpi, 
+        upiId: config.upiId, 
+        taxRate: config.taxRate || defaultGst, 
+        platformCharge: config.platformCharge || defaultPlatform 
+      } 
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error fetching payment info', error: error.message });
   }

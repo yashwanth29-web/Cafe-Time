@@ -70,7 +70,10 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   useEffect(() => {
     const fetchPaymentConfig = async () => {
       try {
-        const res = await getPaymentInfo();
+        const searchParams = new URLSearchParams(window.location.search);
+        const currentCafeId = cafeId || searchParams.get('cafeId') || sessionStorage.getItem('cafeId');
+        const currentBranchId = searchParams.get('branchId') || sessionStorage.getItem('branchId') || localStorage.getItem('activeBranchId');
+        const res = await getPaymentInfo({ cafeId: currentCafeId, branchId: currentBranchId });
         if (res.success) {
           setPaymentConfig(res.data);
         }
@@ -290,8 +293,12 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   // Totals calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
-  const gstRate = paymentConfig ? (paymentConfig.taxRate ?? 0) : (cafeInfo?.gstRate || 0);
-  const platformCharge = paymentConfig ? (paymentConfig.platformCharge ?? 0) : (cafeInfo?.serviceChargeRate || 0);
+  const gstRate = paymentConfig?.taxRate !== undefined && paymentConfig?.taxRate !== null && paymentConfig.taxRate > 0 
+    ? paymentConfig.taxRate 
+    : (cafeInfo?.gstRate || 0);
+  const platformCharge = paymentConfig?.platformCharge !== undefined && paymentConfig?.platformCharge !== null && paymentConfig.platformCharge > 0 
+    ? paymentConfig.platformCharge 
+    : (cafeInfo?.serviceChargeRate || 0);
   const gstAmount = subtotal * (gstRate / 100);
   const grandTotal = subtotal + gstAmount + platformCharge;
 
