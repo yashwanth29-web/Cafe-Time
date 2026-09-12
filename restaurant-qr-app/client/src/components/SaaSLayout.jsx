@@ -153,8 +153,9 @@ const SaaSLayout = ({ children }) => {
         break;
       case 'chef':
       case 'waiter':
-      case 'staff':
       case 'cashier':
+      case 'waiter_cashier':
+      case 'staff':
         dashboardPath = '/staff/workspace';
         break;
     }
@@ -278,14 +279,9 @@ const SaaSLayout = ({ children }) => {
         { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
 
       case 'waiter':
-      case 'staff':
-        return [
-        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
-        { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
-        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
-
       case 'cashier':
+      case 'waiter_cashier':
+      case 'staff':
         return [
         { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
         { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
@@ -334,14 +330,9 @@ const SaaSLayout = ({ children }) => {
         break;
 
       case 'waiter':
-      case 'staff':
-        primary = allItems.filter((item) =>
-        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
-        );
-        remaining = allItems.filter((item) => !primary.includes(item));
-        break;
-
       case 'cashier':
+      case 'waiter_cashier':
+      case 'staff':
         primary = allItems.filter((item) =>
         ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
         );

@@ -4,11 +4,11 @@ const { createOrder, getOrders, getOrderById, updateOrderStatus, updateOrderPaym
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 router.post('/', createOrder);
-router.get('/', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), getOrders);
-router.post('/:id/print', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), printOrderReceipt);
+router.get('/', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'), getOrders);
+router.post('/:id/print', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'), printOrderReceipt);
 router.get('/:id', getOrderById);
 router.patch('/:id/payment-method', updateOrderPaymentMethod);
-router.patch('/:id', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), updateOrderStatus);
-router.patch('/:id/status', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), updateOrderStatus);
+router.patch('/:id', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'), updateOrderStatus);
+router.patch('/:id/status', protect, restrictTo('admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'), updateOrderStatus);
 
 module.exports = router;

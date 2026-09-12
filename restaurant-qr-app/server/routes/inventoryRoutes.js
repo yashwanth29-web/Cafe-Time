@@ -21,7 +21,7 @@ const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
-router.get('/', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'staff', 'cashier'), getInventory);
+router.get('/', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'staff', 'cashier', 'waiter_cashier'), getInventory);
 router.post('/', restrictTo('super_admin', 'admin', 'owner'), createInventoryItem);
 router.patch('/:id', restrictTo('super_admin', 'admin', 'owner', 'manager'), updateInventoryItem);
 router.delete('/:id', restrictTo('super_admin', 'admin', 'owner'), deleteInventoryItem);
@@ -33,7 +33,7 @@ router.post('/wastage', restrictTo('super_admin', 'admin', 'owner', 'manager'), 
 router.post('/shortage', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef'), reportShortage);
 
 // Inventory Category routes
-router.get('/categories', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), getInventoryCategories);
+router.get('/categories', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'), getInventoryCategories);
 router.post('/categories', restrictTo('super_admin', 'admin', 'owner'), createInventoryCategory);
 router.delete('/categories/:id', restrictTo('super_admin', 'admin', 'owner'), deleteInventoryCategory);
 

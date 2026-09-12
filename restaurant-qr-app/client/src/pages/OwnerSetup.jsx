@@ -1029,69 +1029,25 @@ const OwnerSetup = () => {
         {step === 2 && (
           <div className="fade-in">
             <h2 style={{ color: 'var(--color-text-secondary)', margin: '0 0 25px 0', borderBottom: '1px solid #5C4331', paddingBottom: '10px' }}>
-              Step 2: Branch Setup
+              Step 2: Branch Information
             </h2>
             <p style={{ color: '#A0826C', fontSize: '0.9rem', marginBottom: '20px' }}>
-              Setup and manage branches belonging only to your cafe. Branch sharing is not permitted.
+              Branch locations are configured and managed by the Platform Super Admin.
             </p>
 
-            <div className="setup-card">
-              <h4 style={{ margin: '0 0 15px 0', color: 'var(--color-text-secondary)' }}>Add New Branch</h4>
-              <div className="form-grid" style={{ marginBottom: '15px' }}>
-                <div className="form-group">
-                  <label htmlFor="new-branch-name">Branch Name *</label>
-                  <input
-                    type="text"
-                    id="new-branch-name"
-                    value={newBranchName}
-                    onChange={(e) => setNewBranchName(e.target.value)}
-                    placeholder="Vijayawada Main"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="new-branch-code">Branch Code</label>
-                  <input
-                    type="text"
-                    id="new-branch-code"
-                    value="Auto-generated on creation"
-                    disabled
-                    readOnly
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="new-branch-manager">Manager Name</label>
-                  <input
-                    type="text"
-                    id="new-branch-manager"
-                    value={newBranchManager}
-                    onChange={(e) => setNewBranchManager(e.target.value)}
-                    placeholder="Siva Prasad"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="new-branch-address">Branch Street Address *</label>
-                  <input
-                    type="text"
-                    id="new-branch-address"
-                    value={newBranchAddress}
-                    onChange={(e) => setNewBranchAddress(e.target.value)}
-                    placeholder="Benz Circle, Vijayawada"
-                  />
-                </div>
+            <div className="setup-card" style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h4 style={{ margin: 0, color: 'var(--color-text-secondary)' }}>Assigned Branch Configuration</h4>
+                <span style={{ fontSize: '0.75rem', color: '#60a5fa', background: 'rgba(96,165,250,0.12)', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>🔒 Super Admin Managed</span>
               </div>
-              <button
-                type="button"
-                onClick={handleAddBranch}
-                disabled={loading}
-                className="wizard-button btn-secondary"
-              >
-                + Create Branch
-              </button>
+              <p style={{ color: '#D4C3B3', fontSize: '0.85rem', margin: 0 }}>
+                Your cafe branch was provisioned by the Super Admin. Adding sub-branches is restricted to Super Admin.
+              </p>
             </div>
 
             <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-text-secondary)' }}>Registered Branches ({branches.length})</h4>
             {branches.length === 0 ? (
-              <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No branches have been created yet.</p>
+              <p style={{ color: '#A0826C', fontStyle: 'italic', fontSize: '0.85rem' }}>No branches assigned yet. Please contact Super Admin.</p>
             ) : (
               <div>
                 {branches.map((b) => (
@@ -1103,13 +1059,6 @@ const OwnerSetup = () => {
                         📍 {b.address} {b.manager && `| Manager: ${b.manager}`}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteBranch(b._id)}
-                      style={{ background: 'transparent', border: 'none', color: '#E74C3C', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0, padding: '5px' }}
-                    >
-                      ✕
-                    </button>
                   </div>
                 ))}
               </div>

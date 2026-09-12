@@ -164,13 +164,21 @@ const getCurrentEmployeePayroll = async (req, res) => {
     const weekStartStr = monday.toISOString().split('T')[0];
     const weekEndStr = sunday.toISOString().split('T')[0];
 
-    // 2. Fetch all attendance records for this employee within the current week range
+    // Current Month range
+    const todayStr = new Date().toISOString().split('T')[0];
+    const [currYear, currMonth] = todayStr.split('-').map(Number);
+    const monthStartStr = `${currYear}-${String(currMonth).padStart(2, '0')}-01`;
+    const lastDayOfMonth = new Date(currYear, currMonth, 0).getDate();
+    const monthEndStr = `${currYear}-${String(currMonth).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+    const monthName = new Date(currYear, currMonth - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    // 2. Fetch all attendance records for this employee within the current month
     const Attendance = require('../models/Attendance');
     const attendanceRecords = await Attendance.find({
       staffId: userId,
       cafeId,
       branchId: activeBranch,
-      date: { $gte: weekStartStr, $lte: weekEndStr }
+      date: { $gte: monthStartStr, $lte: monthEndStr }
     }).sort({ date: 1 }).lean();
 
     // 3. Perform calculations
@@ -179,6 +187,7 @@ const getCurrentEmployeePayroll = async (req, res) => {
     let halfDays = 0;
     let actualHoursWorked = 0;
     let overtimeHours = 0;
+    let monthEarned = 0;
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const weeklyBreakdown = {
@@ -205,32 +214,55 @@ const getCurrentEmployeePayroll = async (req, res) => {
       actualHoursWorked += workingHours;
       overtimeHours += otHours;
 
-      // Calculate daily salary for this attendance
+      // Calculate daily salary for this attendance - FULL DAY SALARY ON ATTENDANCE MARKED
       const baseDailyRate = user.dailyRate || 0;
       const requiredHours = user.requiredHours || 8;
 
-      let dailySalary = (baseDailyRate * (workingHours + otHours)) / requiredHours;
+      let dailySalary = 0;
+      if (att.status === 'Half Day') {
+        dailySalary = baseDailyRate * 0.5;
+      } else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) {
+        dailySalary = baseDailyRate;
+      } else if (att.status === 'Absent') {
+        dailySalary = 0;
+      } else {
+        dailySalary = (baseDailyRate * (workingHours + otHours)) / requiredHours;
+      }
+      if (otHours > 0) {
+        dailySalary += (baseDailyRate / requiredHours) * otHours;
+      }
       dailySalary = Number(dailySalary.toFixed(2));
+      monthEarned += dailySalary;
       
-      const attDate = new Date(att.date || att.createdAt);
-      const dayName = dayNames[attDate.getDay()];
-      if (weeklyBreakdown.hasOwnProperty(dayName)) {
-        weeklyBreakdown[dayName] = Number(((weeklyBreakdown[dayName] || 0) + dailySalary).toFixed(2));
+      // Weekly breakdown for active week
+      if (att.date >= weekStartStr && att.date <= weekEndStr) {
+        const attDate = new Date(att.date || att.createdAt);
+        const dayName = dayNames[attDate.getDay()];
+        if (weeklyBreakdown.hasOwnProperty(dayName)) {
+          weeklyBreakdown[dayName] = Number(((weeklyBreakdown[dayName] || 0) + dailySalary).toFixed(2));
+        }
       }
 
       return {
         date: att.date || new Date(att.createdAt).toISOString().split('T')[0],
         checkInTime: att.checkInTime,
         checkOutTime: att.checkOutTime,
+        status: att.status,
         workingHours: Number((workingHours + otHours).toFixed(2)),
         dailySalary
       };
     });
 
     const currentWeekSalary = Object.values(weeklyBreakdown).reduce((sum, val) => sum + val, 0);
+    const currentMonthSalary = Number(monthEarned.toFixed(2));
 
     const salaryData = {
+      currentMonthSalary,
+      currentSalary: currentMonthSalary,
       currentWeekSalary: Number(currentWeekSalary.toFixed(2)),
+      monthName,
+      monthStart: monthStartStr,
+      monthEnd: monthEndStr,
       weekStart: weekStartStr,
       weekEnd: weekEndStr,
       dailyRate: user.dailyRate || 0,

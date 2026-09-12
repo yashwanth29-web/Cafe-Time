@@ -110,18 +110,38 @@ const AdminMenuImage = React.memo(({ item }) =>{
   onError={() =>setImgFailed(true)} />);
 });
 
-const AdminMenuCard = React.memo(({ item, onEdit, onDelete }) => {
+const AdminMenuCard = React.memo(({ item, onEdit, onDelete, onToggle }) => {
   return (
     <div className={`admin-menu-card ${!item.available ? 'unavailable' : ''}`}>
       <AdminMenuImage item={item} />
       <div className="admin-menu-info">
-        <div className="admin-menu-title">{item.name}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <div className="admin-menu-title" style={{ margin: 0, flex: 1 }}>{item.name}</div>
+          <button
+            type="button"
+            onClick={() => onToggle && onToggle(item)}
+            title={item.available ? "Click to mark Out of Stock" : "Click to mark In Stock"}
+            style={{
+              padding: '3px 8px',
+              fontSize: '11px',
+              fontWeight: 700,
+              borderRadius: '6px',
+              border: item.available ? '1px solid #2ecc71' : '1px solid #e74c3c',
+              cursor: 'pointer',
+              background: item.available ? 'rgba(46, 204, 113, 0.12)' : 'rgba(231, 76, 60, 0.12)',
+              color: item.available ? '#2ecc71' : '#e74c3c',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {item.available ? '✓ In Stock' : '✕ Out'}
+          </button>
+        </div>
         <div className="admin-menu-desc">{item.description}</div>
         <div className="admin-menu-meta">
           <span className="admin-menu-price">₹{parseFloat(item.price).toFixed(2)}</span>
           <div className="menu-card-actions">
             <button onClick={() => onEdit(item)} className="btn btn-secondary menu-card-btn">✏️<span className="btn-text"> Edit</span></button>
-            <button onClick={() => onDelete(item._id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
+            <button onClick={() => onDelete(item._id || item.id)} className="btn btn-secondary menu-card-btn" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>🗑️<span className="btn-text"> Del</span></button>
           </div>
         </div>
       </div>
@@ -173,6 +193,16 @@ const InvMobileCard = React.memo(({ item, onPurchase, onWastage, onEdit, onDelet
           <div style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginTop: '2px' }}>Reorder at</div>
         </div>
       </div>
+      {item.supplier && (
+        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '4px 8px', borderRadius: '6px' }}>
+          <span>Supplier: <strong style={{ color: 'var(--color-text-primary)' }}>{item.supplier}</strong></span>
+          {item.supplierPhone && (
+            <a href={`tel:${item.supplierPhone}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
+              📞 {item.supplierPhone}
+            </a>
+          )}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid rgba(0, 0, 0,0.06)', paddingTop: '10px' }}>
         <button
           onClick={() => onPurchase(item)}
@@ -214,8 +244,17 @@ const InvTableRow = React.memo(({ item, onPurchase, onWastage, onEdit, onDelete 
         </span>
       </td>
       <td style={{ padding: '10px 8px', textAlign: 'right' }}>₹{costPriceVal?.toFixed(2)}</td>
-      <td style={{ padding: '10px 8px', textAlign: 'right' }}>₹{(item.sellingPrice || 0).toFixed(2)}</td>
-      <td style={{ padding: '10px 8px' }}>{item.supplier || 'N/A'}</td>
+      <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 'bold', color: '#2ECC71' }}>₹{((qtyVal || 0) * (costPriceVal || 0)).toFixed(2)}</td>
+      <td style={{ padding: '10px 8px' }}>
+        <div style={{ fontWeight: 600 }}>{item.supplier || 'N/A'}</div>
+        {item.supplierPhone && (
+          <div style={{ fontSize: '11px', marginTop: '2px' }}>
+            <a href={`tel:${item.supplierPhone}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
+              📞 {item.supplierPhone}
+            </a>
+          </div>
+        )}
+      </td>
       <td style={{ padding: '10px 8px' }}>{item.branch || 'Main'}</td>
       <td style={{ padding: '10px 8px', textAlign: 'center' }}>{reorderVal} {item.unit}</td>
       <td style={{ padding: '10px 8px', textAlign: 'center' }}>
@@ -308,6 +347,10 @@ const OwnerDashboard = () =>{
 
   const handleDeleteMenuCallback = useCallback((id) => {
     handleDeleteMenuItem(id);
+  }, []);
+
+  const handleToggleMenuCallback = useCallback((item) => {
+    handleToggleAvailability(item);
   }, []);
 
   const handlePurchaseInventoryCallback = useCallback((item) => {
@@ -668,6 +711,7 @@ const OwnerDashboard = () =>{
  const [newItem, setNewItem] = useState({
  name: '',
  price: '',
+ makingCost: '',
  category: 'Signature Chai',
  description: '',
  available: true,
@@ -759,14 +803,16 @@ const OwnerDashboard = () =>{
  const [newInventoryItem, setNewInventoryItem] = useState({
  name: '',
  quantity: 0,
- stock: 0,
+ stock: '',
  reorderLevel: 0,
- minStock: 0,
- unit: '',
+ minStock: '',
+ unit: 'g',
  costPrice: 0,
  cost: 0,
+ totalPurchaseCost: '',
  sellingPrice: 0,
  supplier: '',
+ supplierPhone: '',
  branch: 'Main',
  category: 'Ingredients'
  });
@@ -1035,64 +1081,79 @@ const OwnerDashboard = () =>{
     }
   };
 
- const handleCreateCategory = async (e) =>{
- e.preventDefault();
- if (!newCategoryName.trim()) return;
- try {
- const response = await createCategory({ name: newCategoryName });
- if (response.success) {
- setCategories([...categories, response.data]);
- setNewCategoryName('');
- alert('Category created successfully!');
- } else {
- alert(response.message || 'Failed to create category.');
- }
- } catch (err) {
- console.error(err);
- alert(err.response?.data?.message || 'Error creating category.');
- }
- };
+  const handleCreateCategory = async (e) =>{
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    try {
+      const response = await createCategory({ name: newCategoryName });
+      if (response.success) {
+        const updatedCats = [...categories, response.data];
+        setCategories(updatedCats);
+        const cache = getBranchCache(activeBranchId);
+        if (cache.categories) {
+          cache.categories = updatedCats;
+        }
+        setNewCategoryName('');
+        alert('Category created successfully!');
+      } else {
+        alert(response.message || 'Failed to create category.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Error creating category.');
+    }
+  };
 
- const handleUpdateCategory = async (e) =>{
- e.preventDefault();
- if (!editingCategory || !categoryNameInput.trim()) return;
- try {
- const response = await updateCategory(editingCategory._id, { name: categoryNameInput });
- if (response.success) {
- setCategories(categories.map((c) =>c._id === editingCategory._id ? response.data : c));
- // Update menu items in local state
- setMenuItems(menuItems.map((item) =>item.category === editingCategory.name ? { ...item, category: response.data.name } : item));
- setEditingCategory(null);
- setCategoryNameInput('');
- alert('Category updated successfully!');
- } else {
- alert(response.message || 'Failed to update category.');
- }
- } catch (err) {
- console.error(err);
- alert(err.response?.data?.message || 'Error updating category.');
- }
- };
+  const handleUpdateCategory = async (e) =>{
+    e.preventDefault();
+    if (!editingCategory || !categoryNameInput.trim()) return;
+    try {
+      const response = await updateCategory(editingCategory._id, { name: categoryNameInput });
+      if (response.success) {
+        const updatedCats = categories.map((c) => c._id === editingCategory._id ? response.data : c);
+        setCategories(updatedCats);
+        const updatedMenuItems = menuItems.map((item) => item.category === editingCategory.name ? { ...item, category: response.data.name } : item);
+        setMenuItems(updatedMenuItems);
+        const cache = getBranchCache(activeBranchId);
+        if (cache.categories) cache.categories = updatedCats;
+        if (cache.menuItems) cache.menuItems = updatedMenuItems;
+        setEditingCategory(null);
+        setCategoryNameInput('');
+        alert('Category updated successfully!');
+      } else {
+        alert(response.message || 'Failed to update category.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Error updating category.');
+    }
+  };
 
- const handleDeleteCategory = async (catId) =>{
- if (!window.confirm('Are you sure you want to delete this category? All menu items in this category will be moved to Uncategorized.')) return;
- try {
- const categoryToDelete = categories.find((c) =>c._id === catId);
- const response = await deleteCategory(catId);
- if (response.success) {
- setCategories(categories.filter((c) =>c._id !== catId));
- if (categoryToDelete) {
- setMenuItems(menuItems.map((item) =>item.category === categoryToDelete.name ? { ...item, category: 'Uncategorized' } : item));
- }
- alert('Category deleted successfully.');
- } else {
- alert(response.message || 'Failed to delete category.');
- }
- } catch (err) {
- console.error(err);
- alert(err.response?.data?.message || 'Error deleting category.');
- }
- };
+  const handleDeleteCategory = async (catId) =>{
+    if (!window.confirm('Are you sure you want to delete this category? All menu items in this category will be moved to Uncategorized.')) return;
+    try {
+      const categoryToDelete = categories.find((c) => c._id === catId);
+      const response = await deleteCategory(catId);
+      if (response.success) {
+        const updatedCats = categories.filter((c) => c._id !== catId);
+        setCategories(updatedCats);
+        let updatedMenuItems = menuItems;
+        if (categoryToDelete) {
+          updatedMenuItems = menuItems.map((item) => item.category === categoryToDelete.name ? { ...item, category: 'Uncategorized' } : item);
+          setMenuItems(updatedMenuItems);
+        }
+        const cache = getBranchCache(activeBranchId);
+        if (cache.categories) cache.categories = updatedCats;
+        if (cache.menuItems) cache.menuItems = updatedMenuItems;
+        alert('Category deleted successfully.');
+      } else {
+        alert(response.message || 'Failed to delete category.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Error deleting category.');
+    }
+  };
 
  const handleCategoryDragStart = (e, index) =>{
  e.dataTransfer.setData('text/plain', index);
@@ -1546,7 +1607,7 @@ const exportStaffToCSV = () => {
     alert("No staff data to export.");
     return;
   }
-  const headers = ['Employee ID', 'Name', 'Role', 'Email', 'Phone', 'Branch', 'Salary Type', 'Daily Wage', 'Weekly Wage', 'Monthly Wage', 'Current Week Salary', 'Orders Today', 'Status', 'Joined Date'];
+  const headers = ['Employee ID', 'Name', 'Role', 'Email', 'Phone', 'Branch', 'Salary Type', 'Daily Wage', 'Weekly Wage', 'Monthly Wage', 'Current Month Salary', 'Orders Today', 'Status', 'Joined Date'];
   const csvRows = [headers.join(',')];
   staff.forEach(member => {
     const branchName = member.assignedBranch || 'Unassigned';
@@ -1561,7 +1622,7 @@ const exportStaffToCSV = () => {
       member.dailyRate || 0,
       member.weeklyRate || 0,
       member.monthlyRate || 0,
-      member.currentWeekSalary || 0,
+      member.currentMonthSalary ?? member.currentWeekSalary ?? 0,
       member.ordersHandledToday || 0,
       member.isActive ? 'Active' : 'Inactive',
       new Date(member.createdAt).toLocaleDateString()
@@ -1756,32 +1817,62 @@ const exportStaffToCSV = () => {
  };
 
  // Menu toggles
- const handleToggleAvailability = async (item) =>{
- const updatedStatus = !item.available;
- try {
- const response = await updateMenuItem(item._id, { available: updatedStatus });
- if (response.success) {
- setMenuItems((prevItems) =>
- prevItems.map((m) =>m._id === item._id ? { ...m, available: updatedStatus } : m)
-);
- }
- } catch (error) {
- console.error('Error toggling availability:', error);
- }
- };
+  const handleToggleAvailability = async (item) =>{
+    const targetId = item._id || item.id;
+    const updatedStatus = !item.available;
+    // Optimistic UI update
+    setMenuItems((prevItems) =>
+      prevItems.map((m) => (String(m._id || m.id) === String(targetId)) ? { ...m, available: updatedStatus } : m)
+    );
+    const cache = getBranchCache(activeBranchId);
+    if (cache.menuItems) {
+      cache.menuItems = cache.menuItems.map((m) => (String(m._id || m.id) === String(targetId)) ? { ...m, available: updatedStatus } : m);
+    }
+    try {
+      const response = await updateMenuItem(targetId, { available: updatedStatus });
+      if (!response.success) {
+        // Revert on failure
+        setMenuItems((prevItems) =>
+          prevItems.map((m) => (String(m._id || m.id) === String(targetId)) ? { ...m, available: item.available } : m)
+        );
+        if (cache.menuItems) {
+          cache.menuItems = cache.menuItems.map((m) => (String(m._id || m.id) === String(targetId)) ? { ...m, available: item.available } : m);
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling availability:', error);
+      // Revert on error
+      setMenuItems((prevItems) =>
+        prevItems.map((m) => (String(m._id || m.id) === String(targetId)) ? { ...m, available: item.available } : m)
+      );
+      if (cache.menuItems) {
+        cache.menuItems = cache.menuItems.map((m) => (String(m._id || m.id) === String(targetId)) ? { ...m, available: item.available } : m);
+      }
+    }
+  };
 
- // Delete menu item
+  // Delete menu item
   const handleDeleteMenuItem = async (id) =>{
     if (isMenuSubmitting) return;
     if (window.confirm('Are you sure you want to remove this menu item?')) {
       setIsMenuSubmitting(true);
+      const cleanId = String(id);
+      // Instant optimistic UI update
+      setMenuItems((prevItems) => prevItems.filter((item) => String(item._id || item.id) !== cleanId));
+      const cache = getBranchCache(activeBranchId);
+      if (cache.menuItems) {
+        cache.menuItems = cache.menuItems.filter((item) => String(item._id || item.id) !== cleanId);
+      }
       try {
         const response = await deleteMenuItem(id);
-        if (response.success) {
-          setMenuItems((prevItems) =>prevItems.filter((item) =>item._id !== id));
+        if (!response.success) {
+          alert(response.message || 'Failed to remove menu item.');
+          fetchMenu(true, activeBranchId);
         }
       } catch (error) {
         console.error('Error deleting item:', error);
+        alert(error.response?.data?.message || 'Error deleting menu item.');
+        fetchMenu(true, activeBranchId);
       } finally {
         setIsMenuSubmitting(false);
       }
@@ -1799,12 +1890,22 @@ const exportStaffToCSV = () => {
     setIsMenuSubmitting(true);
     try {
       const response = await createMenuItem(newItem);
-      if (response.success) {
-        setMenuItems((prevItems) => [...prevItems, response.data]);
+      if (response.success && response.data) {
+        const itemWithId = {
+          ...response.data,
+          id: response.data._id || response.data.id
+        };
+        // Instant state & cache update
+        setMenuItems((prevItems) => [...prevItems, itemWithId]);
+        const cache = getBranchCache(activeBranchId);
+        if (cache.menuItems) {
+          cache.menuItems = [...cache.menuItems, itemWithId];
+        }
         setShowAddModal(false);
         setNewItem({
           name: '',
           price: '',
+          makingCost: '',
           category: 'Signature Chai',
           description: '',
           available: true,
@@ -1831,11 +1932,28 @@ const exportStaffToCSV = () => {
     }
     setIsMenuSubmitting(true);
     try {
-      const response = await updateMenuItem(editingItem._id, editingItem);
-      if (response.success) {
+      const editId = editingItem._id || editingItem.id;
+      const response = await updateMenuItem(editId, editingItem);
+      if (response.success && response.data) {
+        const updatedWithId = {
+          ...response.data,
+          id: response.data._id || response.data.id
+        };
+        const targetIdStr = String(editId);
+        // Instant state & cache update
         setMenuItems((prevItems) =>
-          prevItems.map((m) => m._id === editingItem._id ? response.data : m)
+          prevItems.map((m) => {
+            const mIdStr = String(m._id || m.id);
+            return (mIdStr === targetIdStr || (m.masterItemId && String(m.masterItemId) === targetIdStr)) ? updatedWithId : m;
+          })
         );
+        const cache = getBranchCache(activeBranchId);
+        if (cache.menuItems) {
+          cache.menuItems = cache.menuItems.map((m) => {
+            const mIdStr = String(m._id || m.id);
+            return (mIdStr === targetIdStr || (m.masterItemId && String(m.masterItemId) === targetIdStr)) ? updatedWithId : m;
+          });
+        }
         setShowEditModal(false);
         setEditingItem(null);
       }
@@ -1903,57 +2021,80 @@ const exportStaffToCSV = () => {
  };
 
  const handleAddInventoryItem = async (e) =>{
- e.preventDefault();
- if (isInventorySubmitting) return;
- try {
- setIsInventorySubmitting(true);
- const response = await createInventoryItem(newInventoryItem);
- if (response.success) {
- setInventoryList((prev) =>[...prev, response.data]);
- setShowAddInventoryModal(false);
- setNewInventoryItem({
- name: '',
- quantity: 0,
- stock: 0,
- reorderLevel: 0,
- minStock: 0,
- unit: '',
- costPrice: 0,
- cost: 0,
- sellingPrice: 0,
- supplier: '',
- branch: 'Main',
- category: 'Ingredients'
- });
- fetchInventoryList(true); // reload all stats & logs as well silently
- }
- } catch (error) {
- console.error('Error adding inventory item:', error);
- alert(error.response?.data?.message || 'Error creating inventory item');
- } finally {
- setIsInventorySubmitting(false);
- }
- };
+   e.preventDefault();
+   if (isInventorySubmitting) return;
+   try {
+   setIsInventorySubmitting(true);
+   const stockVal = Number(newInventoryItem.stock || 0);
+   const totalCostVal = Number(newInventoryItem.totalPurchaseCost || 0);
+   const calculatedUnitCost = (totalCostVal > 0 && stockVal > 0)
+     ? Number((totalCostVal / stockVal).toFixed(4))
+     : Number(newInventoryItem.costPrice || newInventoryItem.cost || 0);
 
- // Edit Inventory Item
- const handleEditInventoryItem = async (e) =>{
- e.preventDefault();
- if (isInventorySubmitting) return;
- try {
- setIsInventorySubmitting(true);
- const response = await updateInventoryItem(editingInventoryItem._id, editingInventoryItem);
- if (response.success) {
- setInventoryList((prev) =>prev.map((item) =>item._id === editingInventoryItem._id ? response.data : item));
- setShowEditInventoryModal(false);
- setEditingInventoryItem(null);
- }
- } catch (error) {
- console.error('Error updating inventory item:', error);
- alert(error.response?.data?.message || 'Error updating inventory item');
- } finally {
- setIsInventorySubmitting(false);
- }
- };
+   const payload = {
+     ...newInventoryItem,
+     stock: stockVal,
+     quantity: stockVal,
+     cost: calculatedUnitCost,
+     costPrice: calculatedUnitCost,
+     sellingPrice: 0,
+     branch: activeBranch?.name || newInventoryItem.branch || 'Main',
+     branchId: activeBranchId === 'all' ? 'default' : (activeBranchId || 'default')
+   };
+   const response = await createInventoryItem(payload);
+   if (response.success) {
+   setInventoryList((prev) =>[...prev, response.data]);
+   setShowAddInventoryModal(false);
+   setNewInventoryItem({
+   name: '',
+   quantity: 0,
+   stock: '',
+   reorderLevel: 0,
+   minStock: '',
+   unit: 'g',
+   costPrice: 0,
+   cost: 0,
+   totalPurchaseCost: '',
+   sellingPrice: 0,
+   supplier: '',
+   supplierPhone: '',
+   branch: 'Main',
+   category: 'Ingredients'
+   });
+   fetchInventoryList(true); // reload all stats & logs as well silently
+   }
+   } catch (error) {
+   console.error('Error adding inventory item:', error);
+   alert(error.response?.data?.message || 'Error creating inventory item');
+   } finally {
+   setIsInventorySubmitting(false);
+   }
+   };
+
+  // Edit Inventory Item
+  const handleEditInventoryItem = async (e) =>{
+  e.preventDefault();
+  if (isInventorySubmitting) return;
+  try {
+  setIsInventorySubmitting(true);
+  const payload = {
+    ...editingInventoryItem,
+    sellingPrice: 0,
+    branch: editingInventoryItem.branch || activeBranch?.name || 'Main'
+  };
+  const response = await updateInventoryItem(editingInventoryItem._id, payload);
+  if (response.success) {
+  setInventoryList((prev) =>prev.map((item) =>item._id === editingInventoryItem._id ? response.data : item));
+  setShowEditInventoryModal(false);
+  setEditingInventoryItem(null);
+  }
+  } catch (error) {
+  console.error('Error updating inventory item:', error);
+  alert(error.response?.data?.message || 'Error updating inventory item');
+  } finally {
+  setIsInventorySubmitting(false);
+  }
+  };
 
   // Delete Inventory Item
   const handleDeleteInventoryItem = async (id) =>{
@@ -2319,9 +2460,37 @@ const exportStaffToCSV = () => {
         fetchDashboardStats(true, activeBranchId);
       };
 
-      const handleMenuUpdated = () => {
-        fetchMenu(true, activeBranchId);
-        fetchCategories(true, activeBranchId);
+      const handleMenuUpdated = (payload) => {
+        if (payload && payload.deletedId) {
+          const dId = String(payload.deletedId);
+          setMenuItems(prev => prev.filter(item => String(item._id || item.id) !== dId));
+          const cache = getBranchCache(activeBranchId);
+          if (cache.menuItems) {
+            cache.menuItems = cache.menuItems.filter(item => String(item._id || item.id) !== dId);
+          }
+        } else if (payload && (payload._id || payload.id)) {
+          const pId = String(payload._id || payload.id);
+          const itemWithId = { ...payload, id: pId };
+          setMenuItems(prev => {
+            const exists = prev.some(item => String(item._id || item.id) === pId);
+            if (exists) {
+              return prev.map(item => String(item._id || item.id) === pId ? itemWithId : item);
+            }
+            return [...prev, itemWithId];
+          });
+          const cache = getBranchCache(activeBranchId);
+          if (cache.menuItems) {
+            const exists = cache.menuItems.some(item => String(item._id || item.id) === pId);
+            if (exists) {
+              cache.menuItems = cache.menuItems.map(item => String(item._id || item.id) === pId ? itemWithId : item);
+            } else {
+              cache.menuItems = [...cache.menuItems, itemWithId];
+            }
+          }
+        } else {
+          fetchMenu(true, activeBranchId);
+          fetchCategories(true, activeBranchId);
+        }
       };
 
       const handleRealtimeSync = (payload) => {
@@ -3075,10 +3244,11 @@ const exportStaffToCSV = () => {
 <div className="menu-grid-admin">
   {filteredMenuItems.map((item) => (
     <AdminMenuCard
-      key={item._id}
+      key={item._id || item.id}
       item={item}
       onEdit={handleEditMenuCallback}
       onDelete={handleDeleteMenuCallback}
+      onToggle={handleToggleMenuCallback}
     />
   ))}
 </div>
@@ -3437,12 +3607,11 @@ const exportStaffToCSV = () => {
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
 <label htmlFor="roster-staff-role" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Staff Role *</label>
 <select id="roster-staff-role" name="roster-staff-role" className="form-input" value={newStaff.staffRole ? newStaff.staffRole.toLowerCase() : 'waiter'} onChange={(e) =>setNewStaff({ ...newStaff, staffRole: e.target.value })} required>
-<option value="chef">Chef</option>
-<option value="waiter">Waiter</option>
+<option value="waiter">Waiter / Cashier (Floor &amp; Billing)</option>
+<option value="chef">Chef / Kitchen</option>
 <option value="barista">Barista</option>
-<option value="cashier">Cashier</option>
 <option value="manager">Manager</option>
-<option value="staff">Staff / Server</option>
+<option value="staff">General Staff</option>
 </select>
 </div>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -3538,7 +3707,7 @@ const exportStaffToCSV = () => {
 <th style={{ padding: '10px' }}>Branch</th>
 <th style={{ padding: '10px' }}>Daily Wage</th>
 <th style={{ padding: '10px' }}>Req. Hours</th>
-<th style={{ padding: '10px' }}>Current Week Salary</th>
+<th style={{ padding: '10px' }}>Current Month Salary</th>
 <th style={{ padding: '10px' }}>Last Login</th>
 <th style={{ padding: '10px' }}>Orders (Today)</th>
 <th style={{ padding: '10px' }}>Joined Date</th>
@@ -3571,9 +3740,9 @@ const exportStaffToCSV = () => {
 <td 
   style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)', cursor: 'pointer', userSelect: 'none' }}
   onClick={() => setExpandedStaffId(expandedStaffId === member._id ? null : member._id)}
-  title="Click to view weekly breakdown"
+  title="Click to view monthly & daily breakdown"
 >
-  ₹{member.currentWeekSalary || 0} <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{expandedStaffId === member._id ? '▲' : '▼'}</span>
+  ₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0} <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{expandedStaffId === member._id ? '▲' : '▼'}</span>
 </td>
 <td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
  {formatLastSeen(member.lastSeen || member.lastLogin)}
@@ -3606,21 +3775,44 @@ const exportStaffToCSV = () => {
 {expandedStaffId === member._id && (
   <tr style={{ background: 'rgba(0,0,0,0.15)' }}>
     <td colSpan={13} style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontWeight: 'bold', color: 'var(--color-primary)', fontSize: '13px' }}>
-          Weekly Salary Breakdown (Monday - Sunday):
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{ fontWeight: 'bold', color: 'var(--color-primary)', fontSize: '13px' }}>
+              Monthly Salary & Daily Breakdown ({member.monthName || 'Current Month'}):
+            </span>
+            <span style={{ marginLeft: '10px', fontSize: '11px', background: 'rgba(46, 204, 113, 0.15)', color: '#2ecc71', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
+              ✓ Attendance Marked: Full Day Salary Credited
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              Days Attended: <strong style={{ color: 'var(--color-text-primary)' }}>{member.workingDays || 0} days</strong>
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>•</span>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              Daily Wage: <strong style={{ color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}/day</strong>
+            </span>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
             <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', minWidth: '85px' }}>
               <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>{day}</span>
-              <span style={{ fontWeight: 'bold', color: 'var(--color-text-primary)', marginTop: '2px', fontSize: '13px' }}>₹{member.weeklyBreakdown?.[day] || 0}</span>
+              <span style={{ fontWeight: 'bold', color: (member.weeklyBreakdown?.[day] || 0) > 0 ? '#10B981' : 'var(--color-text-primary)', marginTop: '2px', fontSize: '13px' }}>
+                ₹{member.weeklyBreakdown?.[day] || 0}
+              </span>
             </div>
           ))}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(143,168,155,0.1)', padding: '6px 16px', borderRadius: '8px', border: '1px solid var(--color-primary)' }}>
-          <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 'bold' }}>Total Weekly Salary</span>
-          <span style={{ fontWeight: 800, color: 'var(--color-primary)', fontSize: '15px', marginTop: '2px' }}>₹{member.currentWeekSalary || 0}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(143,168,155,0.1)', padding: '6px 14px', borderRadius: '8px', border: '1px solid var(--color-primary)' }}>
+            <span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>Week Total</span>
+            <span style={{ fontWeight: 800, color: 'var(--color-primary)', fontSize: '14px', marginTop: '2px' }}>₹{member.currentWeekSalary || 0}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(46, 204, 113, 0.15)', padding: '6px 16px', borderRadius: '8px', border: '1px solid #2ecc71' }}>
+            <span style={{ fontSize: '10px', color: '#2ecc71', fontWeight: 'bold' }}>Current Month Total</span>
+            <span style={{ fontWeight: 800, color: '#2ecc71', fontSize: '16px', marginTop: '2px' }}>₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0}</span>
+          </div>
         </div>
       </div>
     </td>
@@ -3647,7 +3839,7 @@ const exportStaffToCSV = () => {
 <div>Branch Code:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{member.assignedBranch || 'Unassigned'}</span></div>
 <div>Daily Wage:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> ₹{member.dailyRate || 0}</span></div>
 <div>Required Hours:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.requiredHours || 8} hrs</span></div>
-<div>Current Week Salary:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}> ₹{member.currentWeekSalary || 0}</span></div>
+<div>Current Month Salary:<span style={{ color: '#2ecc71', fontWeight: 'bold' }}> ₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0}</span></div>
 <div>Orders Today: <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.ordersHandledToday || 0}</span></div>
 <div>Joined: {new Date(member.createdAt).toLocaleDateString()}</div>
 <div style={{ marginTop: '4px' }}>Login: {formatLastSeen(member.lastSeen || member.lastLogin)}</div>
@@ -3667,12 +3859,12 @@ const exportStaffToCSV = () => {
   {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
     <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <span style={{ color: 'var(--color-text-secondary)', fontSize: '9px', fontWeight: 600 }}>{day.slice(0, 3)}</span>
-      <span style={{ fontWeight: 'bold', color: 'var(--color-text-primary)' }}>₹{member.weeklyBreakdown?.[day] || 0}</span>
+      <span style={{ fontWeight: 'bold', color: (member.weeklyBreakdown?.[day] || 0) > 0 ? '#10B981' : 'var(--color-text-primary)' }}>₹{member.weeklyBreakdown?.[day] || 0}</span>
     </div>
   ))}
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gridColumn: 'span 1', background: 'rgba(143,168,155,0.1)', borderRadius: '4px' }}>
-    <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', fontSize: '9px' }}>Total</span>
-    <span style={{ fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{member.currentWeekSalary || 0}</span>
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gridColumn: 'span 1', background: 'rgba(46, 204, 113, 0.15)', borderRadius: '4px' }}>
+    <span style={{ color: '#2ecc71', fontWeight: 'bold', fontSize: '9px' }}>Month Total</span>
+    <span style={{ fontWeight: 'bold', color: '#2ecc71' }}>₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0}</span>
   </div>
 </div>
 
@@ -4238,10 +4430,10 @@ const exportStaffToCSV = () => {
                     <th style={{ padding: '12px 10px' }}>Branch Code</th>
                     <th style={{ padding: '12px 10px' }}>Daily Wage</th>
                     <th style={{ padding: '12px 10px' }}>Req. Hours</th>
-                    <th style={{ padding: '12px 10px' }}>Worked This Week</th>
+                    <th style={{ padding: '12px 10px' }}>Worked This Month</th>
                     <th style={{ padding: '12px 10px' }}>Present Days</th>
                     <th style={{ padding: '12px 10px' }}>Absent Days</th>
-                    <th style={{ padding: '12px 10px' }}>Current Week Salary</th>
+                    <th style={{ padding: '12px 10px' }}>Current Month Salary</th>
                     <th style={{ padding: '12px 10px' }}>Payroll Status</th>
                     <th style={{ padding: '12px 10px', textAlign: 'center' }}>Actions</th>
                   </tr>
@@ -4275,7 +4467,7 @@ const exportStaffToCSV = () => {
                           <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{member.actualHoursWorked || 0} hrs</td>
                           <td style={{ padding: '12px 10px', color: '#2ecc71', fontWeight: 'bold' }}>{member.workingDays || 0} days</td>
                           <td style={{ padding: '12px 10px', color: '#e74c3c', fontWeight: 'bold' }}>{member.absentDays || 0} days</td>
-                          <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{member.currentWeekSalary || 0}</td>
+                          <td style={{ padding: '12px 10px', fontWeight: 'bold', color: '#2ecc71' }}>₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0}</td>
                           <td style={{ padding: '12px 10px' }}>
                             <span style={{ backgroundColor: statusBg, color: statusColor, padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', border: `1px solid ${statusColor}` }}>
                               {member.payrollStatus || 'Pending'}
@@ -4425,15 +4617,15 @@ const exportStaffToCSV = () => {
               <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{selectedSalaryStaff.requiredHours || 8} hrs</div>
             </div>
             <div>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Weekly Total:</span>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-primary)' }}>₹{selectedSalaryStaff.currentWeekSalary || 0}</div>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Month Total:</span>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: '#2ecc71' }}>₹{selectedSalaryStaff.currentMonthSalary ?? selectedSalaryStaff.currentWeekSalary ?? 0}</div>
             </div>
           </div>
           <div>
             <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attendance Log & Daily Salary</h4>
             {(!selectedSalaryStaff.attendances || selectedSalaryStaff.attendances.length === 0) ? (
               <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', background: 'rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-                No attendance logs found for this week.
+                No attendance logs found for this month.
               </div>
             ) : (
               <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
@@ -4553,8 +4745,8 @@ const exportStaffToCSV = () => {
 <th style={{ padding: '8px' }}>Category</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Status</th>
-<th style={{ padding: '8px', textAlign: 'right' }}>Cost Price</th>
-<th style={{ padding: '8px', textAlign: 'right' }}>Selling Price</th>
+<th style={{ padding: '8px', textAlign: 'right' }}>Unit Cost</th>
+<th style={{ padding: '8px', textAlign: 'right' }}>Total Value</th>
 <th style={{ padding: '8px' }}>Supplier</th>
 <th style={{ padding: '8px' }}>Branch</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Reorder Level</th>
@@ -4692,8 +4884,18 @@ const exportStaffToCSV = () => {
  const totalSupplierValue = supItems.reduce((sum, i) =>sum + (i.quantity || i.stock) * (i.costPrice || i.cost), 0);
  return (
 <div key={sup} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '12px' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '12px' }}>
+<div>
 <strong style={{ color: 'var(--color-text-primary)', fontSize: '1rem' }}>{sup}</strong>
+{(() => {
+  const phone = supItems.find(i => i.supplierPhone)?.supplierPhone;
+  return phone ? (
+    <div style={{ fontSize: '12px', marginTop: '3px' }}>
+      <a href={`tel:${phone}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>📞 {phone}</a>
+    </div>
+  ) : null;
+})()}
+</div>
 <span style={{ fontSize: '11px', background: 'var(--color-primary)', color: '#ffffff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
  {supItems.length} Products
 </span>
@@ -5035,12 +5237,12 @@ const exportStaffToCSV = () => {
 <div>
 <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Cafe Branch & Location Management</h3>
 <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
- Configure physical branch geofences for attendance tracking validation.
+  Assigned branch locations and geofences for attendance tracking. Only Super Admin can provision or modify branches.
 </p>
 </div>
-<button onClick={() =>setShowAddBranchModal(true)} className="btn btn-primary" style={{ width: 'auto', padding: '10px 20px' }}>
- Add New Branch
-</button>
+<div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.25)', padding: '6px 14px', borderRadius: '20px', fontSize: '12.5px', fontWeight: 600 }}>
+  🔒 Managed by Super Admin
+</div>
 </div>
 
  {branchesLoading && branches.length === 0 ?
@@ -5077,13 +5279,8 @@ const exportStaffToCSV = () => {
 <div><strong>Geo-Fence:</strong>{b.allowedRadius} meters radius</div>
 <div><strong>Unified Staff Mode:</strong> {b.unifiedStaffMode ? 'Enabled' : 'Disabled'}</div>
 </div>
-<div style={{ display: 'flex', gap: '10px', marginTop: '10px', borderTop: '1px solid var(--color-border)', paddingTop: '10px' }}>
-<button onClick={() =>{setEditingBranch({ ...b });setShowEditBranchModal(true);}} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', flex: 1, minHeight: '34px' }}>
-  Edit
-</button>
-<button onClick={() =>handleDeleteBranch(b._id)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', flex: 1, minHeight: '34px' }}>
-  Delete
-</button>
+<div style={{ marginTop: '6px', borderTop: '1px solid var(--color-border)', paddingTop: '8px', fontSize: '11px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
+  Read Only (Super Admin Configured)
 </div>
 </div>
 )}
@@ -5289,15 +5486,13 @@ const exportStaffToCSV = () => {
 </div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="add-item-price" className="form-label">Price (₹) *</label>
-<input type="number" id="add-item-price" name="add-item-price" required step="0.01" min="0.01" value={newItem.price} onChange={(e) =>setNewItem({ ...newItem, price: e.target.value })} className="form-input" />
+<label htmlFor="add-item-price" className="form-label">Selling Price (₹) *</label>
+<input type="number" id="add-item-price" name="add-item-price" required step="0.01" min="0.01" placeholder="e.g. 20 (Customer price)" value={newItem.price} onChange={(e) =>setNewItem({ ...newItem, price: e.target.value })} className="form-input" />
 </div>
-{newItem.isCombo && (
 <div className="form-group">
-<label htmlFor="add-item-original-price" className="form-label">Orig. Price (₹)</label>
-<input type="number" id="add-item-original-price" name="add-item-original-price" step="0.01" min="0.01" placeholder="Optional" value={newItem.originalPrice || ''} onChange={(e) =>setNewItem({ ...newItem, originalPrice: e.target.value })} className="form-input" />
+<label htmlFor="add-item-making-cost" className="form-label">Total Making Cost (₹)</label>
+<input type="number" id="add-item-making-cost" name="add-item-making-cost" step="0.01" min="0" placeholder="e.g. 6 (Prep/raw cost)" value={newItem.makingCost ?? ''} onChange={(e) =>setNewItem({ ...newItem, makingCost: e.target.value })} className="form-input" />
 </div>
-)}
 <div className="form-group">
 <label htmlFor="add-item-category" className="form-label">Category *</label>
 <select id="add-item-category" name="add-item-category" value={newItem.category} onChange={(e) =>setNewItem({ ...newItem, category: e.target.value })} className="form-input" disabled={newItem.isCombo}>
@@ -5307,15 +5502,43 @@ const exportStaffToCSV = () => {
 </select>
 </div>
 </div>
-<div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
-<label className="switch">
-  <input type="checkbox" checked={newItem.isCombo || false} onChange={(e) => {
-    const isCombo = e.target.checked;
-    setNewItem({ ...newItem, isCombo, category: isCombo ? 'Combos' : newItem.category });
-  }} />
-  <span className="slider round"></span>
-</label>
-<span style={{ fontSize: '14px', fontWeight: 'bold' }}>Is this a Combo?</span>
+{newItem.isCombo && (
+<div className="form-group">
+<label htmlFor="add-item-original-price" className="form-label">Orig. Price (₹)</label>
+<input type="number" id="add-item-original-price" name="add-item-original-price" step="0.01" min="0.01" placeholder="Optional" value={newItem.originalPrice || ''} onChange={(e) =>setNewItem({ ...newItem, originalPrice: e.target.value })} className="form-input" />
+</div>
+)}
+
+{Number(newItem.price || 0) > 0 && Number(newItem.makingCost || 0) > 0 && (
+<div style={{ background: 'rgba(46, 204, 113, 0.12)', border: '1px solid #2ECC71', borderRadius: '8px', padding: '10px 14px', marginTop: '6px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+  <span style={{ fontSize: '13.5px', color: '#2ECC71', fontWeight: 700 }}>
+    💰 Estimated Profit: ₹{(Number(newItem.price) - Number(newItem.makingCost)).toFixed(2)} per item
+  </span>
+  <span style={{ fontSize: '12px', background: '#2ECC71', color: '#1B120C', padding: '3px 8px', borderRadius: '6px', fontWeight: 800 }}>
+    {(((Number(newItem.price) - Number(newItem.makingCost)) / Number(newItem.price)) * 100).toFixed(1)}% Profit Margin
+  </span>
+</div>
+)}
+<div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginTop: '10px' }}>
+  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+    <label className="switch">
+      <input type="checkbox" checked={newItem.isCombo || false} onChange={(e) => {
+        const isCombo = e.target.checked;
+        setNewItem({ ...newItem, isCombo, category: isCombo ? 'Combos' : newItem.category });
+      }} />
+      <span className="slider round"></span>
+    </label>
+    <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Is this a Combo?</span>
+  </div>
+  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+    <label className="switch">
+      <input type="checkbox" checked={newItem.available !== false} onChange={(e) => {
+        setNewItem({ ...newItem, available: e.target.checked });
+      }} />
+      <span className="slider round"></span>
+    </label>
+    <span style={{ fontSize: '14px', fontWeight: 'bold' }}>In Stock (Available)</span>
+  </div>
 </div>
 <div className="form-group">
 <label htmlFor="add-item-description" className="form-label">Description *</label>
@@ -5389,7 +5612,27 @@ const exportStaffToCSV = () => {
 
  })}
 </div>
- }
+  }
+{newItem.recipe && newItem.recipe.length > 0 && (() => {
+  const calcMakingCost = newItem.recipe.reduce((sum, ing) => {
+    const inv = inventoryList.find(i => i.name === ing.name);
+    return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+  }, 0);
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 107, 8, 0.08)', border: '1px dashed var(--color-primary)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px' }}>
+      <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>
+        Ingredient Cost from Recipe: <strong style={{ color: 'var(--color-primary)' }}>₹{calcMakingCost.toFixed(2)}</strong>
+      </span>
+      <button
+        type="button"
+        onClick={() => setNewItem({ ...newItem, makingCost: calcMakingCost.toFixed(2) })}
+        className="btn btn-secondary"
+        style={{ padding: '4px 10px', fontSize: '12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', height: 'auto' }}>
+        Use as Making Cost
+      </button>
+    </div>
+  );
+})()}
 <div className="recipe-map-grid" aria-labelledby="add-item-recipe-label">
 <div className="form-group" style={{ marginBottom: 0 }}>
 <label htmlFor="add-item-ingredient-select" className="form-label" style={{ fontSize: '11px' }}>Select Ingredient</label>
@@ -5433,15 +5676,13 @@ const exportStaffToCSV = () => {
 </div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="edit-item-price" className="form-label">Price (₹) *</label>
-<input type="number" id="edit-item-price" name="edit-item-price" required step="0.01" min="0.01" value={editingItem.price} onChange={(e) =>setEditingItem({ ...editingItem, price: e.target.value })} className="form-input" />
+<label htmlFor="edit-item-price" className="form-label">Selling Price (₹) *</label>
+<input type="number" id="edit-item-price" name="edit-item-price" required step="0.01" min="0.01" placeholder="e.g. 20 (Customer price)" value={editingItem.price} onChange={(e) =>setEditingItem({ ...editingItem, price: e.target.value })} className="form-input" />
 </div>
-{editingItem.isCombo && (
 <div className="form-group">
-<label htmlFor="edit-item-original-price" className="form-label">Orig. Price (₹)</label>
-<input type="number" id="edit-item-original-price" name="edit-item-original-price" step="0.01" min="0.01" placeholder="Optional" value={editingItem.originalPrice || ''} onChange={(e) =>setEditingItem({ ...editingItem, originalPrice: e.target.value })} className="form-input" />
+<label htmlFor="edit-item-making-cost" className="form-label">Total Making Cost (₹)</label>
+<input type="number" id="edit-item-making-cost" name="edit-item-making-cost" step="0.01" min="0" placeholder="e.g. 6 (Prep/raw cost)" value={editingItem.makingCost ?? ''} onChange={(e) =>setEditingItem({ ...editingItem, makingCost: e.target.value })} className="form-input" />
 </div>
-)}
 <div className="form-group">
 <label htmlFor="edit-item-category" className="form-label">Category *</label>
 <select id="edit-item-category" name="edit-item-category" value={editingItem.category} onChange={(e) =>setEditingItem({ ...editingItem, category: e.target.value })} className="form-input" disabled={editingItem.isCombo}>
@@ -5451,15 +5692,43 @@ const exportStaffToCSV = () => {
 </select>
 </div>
 </div>
-<div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
-<label className="switch">
-  <input type="checkbox" checked={editingItem.isCombo || false} onChange={(e) => {
-    const isCombo = e.target.checked;
-    setEditingItem({ ...editingItem, isCombo, category: isCombo ? 'Combos' : editingItem.category });
-  }} />
-  <span className="slider round"></span>
-</label>
-<span style={{ fontSize: '14px', fontWeight: 'bold' }}>Is this a Combo?</span>
+{editingItem.isCombo && (
+<div className="form-group">
+<label htmlFor="edit-item-original-price" className="form-label">Orig. Price (₹)</label>
+<input type="number" id="edit-item-original-price" name="edit-item-original-price" step="0.01" min="0.01" placeholder="Optional" value={editingItem.originalPrice || ''} onChange={(e) =>setEditingItem({ ...editingItem, originalPrice: e.target.value })} className="form-input" />
+</div>
+)}
+
+{Number(editingItem.price || 0) > 0 && Number(editingItem.makingCost || 0) > 0 && (
+<div style={{ background: 'rgba(46, 204, 113, 0.12)', border: '1px solid #2ECC71', borderRadius: '8px', padding: '10px 14px', marginTop: '6px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+  <span style={{ fontSize: '13.5px', color: '#2ECC71', fontWeight: 700 }}>
+    💰 Estimated Profit: ₹{(Number(editingItem.price) - Number(editingItem.makingCost)).toFixed(2)} per item
+  </span>
+  <span style={{ fontSize: '12px', background: '#2ECC71', color: '#1B120C', padding: '3px 8px', borderRadius: '6px', fontWeight: 800 }}>
+    {(((Number(editingItem.price) - Number(editingItem.makingCost)) / Number(editingItem.price)) * 100).toFixed(1)}% Profit Margin
+  </span>
+</div>
+)}
+<div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginTop: '10px' }}>
+  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+    <label className="switch">
+      <input type="checkbox" checked={editingItem.isCombo || false} onChange={(e) => {
+        const isCombo = e.target.checked;
+        setEditingItem({ ...editingItem, isCombo, category: isCombo ? 'Combos' : editingItem.category });
+      }} />
+      <span className="slider round"></span>
+    </label>
+    <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Is this a Combo?</span>
+  </div>
+  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
+    <label className="switch">
+      <input type="checkbox" checked={editingItem.available !== false} onChange={(e) => {
+        setEditingItem({ ...editingItem, available: e.target.checked });
+      }} />
+      <span className="slider round"></span>
+    </label>
+    <span style={{ fontSize: '14px', fontWeight: 'bold' }}>In Stock (Available)</span>
+  </div>
 </div>
 <div className="form-group">
 <label htmlFor="edit-item-description" className="form-label">Description *</label>
@@ -5533,7 +5802,27 @@ const exportStaffToCSV = () => {
 
  })}
 </div>
- }
+  }
+{editingItem.recipe && editingItem.recipe.length > 0 && (() => {
+  const calcMakingCost = editingItem.recipe.reduce((sum, ing) => {
+    const inv = inventoryList.find(i => i.name === ing.name);
+    return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+  }, 0);
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 107, 8, 0.08)', border: '1px dashed var(--color-primary)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px' }}>
+      <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>
+        Ingredient Cost from Recipe: <strong style={{ color: 'var(--color-primary)' }}>₹{calcMakingCost.toFixed(2)}</strong>
+      </span>
+      <button
+        type="button"
+        onClick={() => setEditingItem({ ...editingItem, makingCost: calcMakingCost.toFixed(2) })}
+        className="btn btn-secondary"
+        style={{ padding: '4px 10px', fontSize: '12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', height: 'auto' }}>
+        Use as Making Cost
+      </button>
+    </div>
+  );
+})()}
 <div className="recipe-map-grid" aria-labelledby="edit-item-recipe-label">
 <div className="form-group" style={{ marginBottom: 0 }}>
 <label htmlFor="edit-item-ingredient-select" className="form-label" style={{ fontSize: '11px' }}>Select Ingredient</label>
@@ -5732,48 +6021,114 @@ const exportStaffToCSV = () => {
 </div>
 <form onSubmit={handleAddInventoryItem}>
 <div className="modal-body">
+<div className="form-row">
 <div className="form-group">
 <label htmlFor="add-inv-name" className="form-label">Ingredient Name *</label>
-<input type="text" id="add-inv-name" name="add-inv-name" required value={newInventoryItem.name} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, name: e.target.value })} className="form-input" placeholder="e.g. Tomato Sauce" />
-</div>
-<div className="form-row">
-<div className="form-group">
-<label htmlFor="add-inv-stock" className="form-label">Initial Stock *</label>
-<input type="number" id="add-inv-stock" name="add-inv-stock" required value={newInventoryItem.stock ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, stock: e.target.value === '' ? '' : Number(e.target.value), quantity: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
-</div>
-<div className="form-group">
-<label htmlFor="add-inv-minstock" className="form-label">Safety Minimum *</label>
-<input type="number" id="add-inv-minstock" name="add-inv-minstock" required value={newInventoryItem.minStock ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, minStock: e.target.value === '' ? '' : Number(e.target.value), reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
-</div>
-</div>
-<div className="form-row">
-<div className="form-group">
-<label htmlFor="add-inv-unit" className="form-label">Unit of Measurement *</label>
-<input type="text" id="add-inv-unit" name="add-inv-unit" required value={newInventoryItem.unit} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })} className="form-input" placeholder="e.g. kg, pcs, g, liters" />
-</div>
-<div className="form-group">
-<label htmlFor="add-inv-cost" className="form-label">Cost per Unit (₹) *</label>
-<input type="number" step="0.001" id="add-inv-cost" name="add-inv-cost" required value={newInventoryItem.cost ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, cost: e.target.value === '' ? '' : Number(e.target.value), costPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
-</div>
-</div>
-<div className="form-row">
-<div className="form-group">
-<label htmlFor="add-inv-sellingprice" className="form-label">Selling Price (₹) *</label>
-<input type="number" step="0.01" id="add-inv-sellingprice" name="add-inv-sellingprice" required value={newInventoryItem.sellingPrice ?? ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, sellingPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
+<input type="text" id="add-inv-name" name="add-inv-name" required value={newInventoryItem.name} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, name: e.target.value })} className="form-input" placeholder="e.g. Sugar, Assam Tea, Milk" />
 </div>
 <div className="form-group">
 <label htmlFor="add-inv-category" className="form-label">Category *</label>
-<input type="text" id="add-inv-category" name="add-inv-category" required value={newInventoryItem.category} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, category: e.target.value })} className="form-input" placeholder="e.g. Ingredients, Dairy, Beverage Raw" />
+<input type="text" id="add-inv-category" name="add-inv-category" required value={newInventoryItem.category} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, category: e.target.value })} className="form-input" placeholder="e.g. Ingredients, Dairy, Grocery" />
 </div>
 </div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="add-inv-supplier" className="form-label">Supplier *</label>
-<input type="text" id="add-inv-supplier" name="add-inv-supplier" required value={newInventoryItem.supplier} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, supplier: e.target.value })} className="form-input" placeholder="Supplier name" />
+<label htmlFor="add-inv-stock" className="form-label">Quantity / Stock Purchased *</label>
+<input
+  type="number"
+  id="add-inv-stock"
+  name="add-inv-stock"
+  required
+  min="0.001"
+  step="any"
+  placeholder="e.g. 1000"
+  value={newInventoryItem.stock ?? ''}
+  onChange={(e) => {
+    const qty = e.target.value === '' ? '' : Number(e.target.value);
+    const totalPaid = Number(newInventoryItem.totalPurchaseCost || 0);
+    const computedCost = (totalPaid > 0 && qty > 0) ? Number((totalPaid / qty).toFixed(4)) : (newInventoryItem.cost || 0);
+    setNewInventoryItem({
+      ...newInventoryItem,
+      stock: qty,
+      quantity: qty,
+      cost: computedCost,
+      costPrice: computedCost
+    });
+  }}
+  className="form-input"
+/>
 </div>
 <div className="form-group">
-<label htmlFor="add-inv-branch" className="form-label">Branch *</label>
-<input type="text" id="add-inv-branch" name="add-inv-branch" required value={newInventoryItem.branch} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, branch: e.target.value })} className="form-input" placeholder="e.g. Main, Uptown" />
+<label htmlFor="add-inv-unit" className="form-label">Unit of Measurement *</label>
+<input
+  type="text"
+  id="add-inv-unit"
+  name="add-inv-unit"
+  required
+  value={newInventoryItem.unit}
+  onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, unit: e.target.value })}
+  className="form-input"
+  placeholder="e.g. g, ml, pcs, kg, liters"
+/>
+</div>
+</div>
+<div className="form-row">
+<div className="form-group">
+<label htmlFor="add-inv-total-paid" className="form-label">Total Amount Paid to Buy This (₹) *</label>
+<input
+  type="number"
+  step="any"
+  min="0"
+  id="add-inv-total-paid"
+  name="add-inv-total-paid"
+  required
+  placeholder="e.g. 50 (if 1000g cost ₹50)"
+  value={newInventoryItem.totalPurchaseCost ?? ''}
+  onChange={(e) => {
+    const total = e.target.value === '' ? '' : Number(e.target.value);
+    const qty = Number(newInventoryItem.stock || 0);
+    const computedCost = (total > 0 && qty > 0) ? Number((total / qty).toFixed(4)) : (total || 0);
+    setNewInventoryItem({
+      ...newInventoryItem,
+      totalPurchaseCost: total,
+      cost: computedCost,
+      costPrice: computedCost
+    });
+  }}
+  className="form-input"
+/>
+</div>
+<div className="form-group">
+<label htmlFor="add-inv-minstock" className="form-label">Safety Minimum (Low Stock Alert) *</label>
+<input
+  type="number"
+  id="add-inv-minstock"
+  name="add-inv-minstock"
+  required
+  min="0"
+  placeholder="e.g. 100"
+  value={newInventoryItem.minStock ?? ''}
+  onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, minStock: e.target.value === '' ? '' : Number(e.target.value), reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })}
+  className="form-input"
+/>
+</div>
+</div>
+
+{Number(newInventoryItem.stock || 0) > 0 && Number(newInventoryItem.totalPurchaseCost || 0) > 0 && (
+  <div style={{ background: 'rgba(46, 204, 113, 0.12)', border: '1px solid #2ECC71', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '13px', color: '#2ECC71', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+    <span>✓ <strong>Calculated Cost:</strong> ₹{Number((newInventoryItem.totalPurchaseCost / newInventoryItem.stock).toFixed(4))} per {newInventoryItem.unit || 'unit'}</span>
+    <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>(₹{newInventoryItem.totalPurchaseCost} paid for {newInventoryItem.stock} {newInventoryItem.unit || 'units'})</span>
+  </div>
+)}
+
+<div className="form-row">
+<div className="form-group">
+<label htmlFor="add-inv-supplier" className="form-label">Supplier Name *</label>
+<input type="text" id="add-inv-supplier" name="add-inv-supplier" required value={newInventoryItem.supplier} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry, Dairy Fresh" />
+</div>
+<div className="form-group">
+<label htmlFor="add-inv-supplier-phone" className="form-label">Supplier Phone Number</label>
+<input type="tel" id="add-inv-supplier-phone" name="add-inv-supplier-phone" value={newInventoryItem.supplierPhone || ''} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, supplierPhone: e.target.value })} className="form-input" placeholder="e.g. 9876543210" />
 </div>
 </div>
 </div>
@@ -5806,38 +6161,32 @@ const exportStaffToCSV = () => {
 <input type="number" id="edit-inv-stock" name="edit-inv-stock" required value={editingInventoryItem.quantity ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, quantity: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
-<label htmlFor="edit-inv-minstock" className="form-label">Safety Minimum *</label>
-<input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.reorderLevel ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
-</div>
-</div>
-<div className="form-row">
-<div className="form-group">
 <label htmlFor="edit-inv-unit" className="form-label">Unit of Measurement *</label>
 <input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
 </div>
-<div className="form-group">
-<label htmlFor="edit-inv-cost" className="form-label">Cost per Unit (₹) *</label>
-<input type="number" step="0.001" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
-</div>
 </div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="edit-inv-sellingprice" className="form-label">Selling Price (₹) *</label>
-<input type="number" step="0.01" id="edit-inv-sellingprice" name="edit-inv-sellingprice" required value={editingInventoryItem.sellingPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, sellingPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
+<label htmlFor="edit-inv-cost" className="form-label">Cost per Unit (₹) *</label>
+<input type="number" step="0.0001" min="0" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
+</div>
+<div className="form-group">
+<label htmlFor="edit-inv-minstock" className="form-label">Safety Minimum *</label>
+<input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.reorderLevel ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
+</div>
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-category" className="form-label">Category *</label>
 <input type="text" id="edit-inv-category" name="edit-inv-category" required value={editingInventoryItem.category || 'Ingredients'} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, category: e.target.value })} className="form-input" />
 </div>
-</div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="edit-inv-supplier" className="form-label">Supplier *</label>
-<input type="text" id="edit-inv-supplier" name="edit-inv-supplier" required value={editingInventoryItem.supplier || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, supplier: e.target.value })} className="form-input" />
+<label htmlFor="edit-inv-supplier" className="form-label">Supplier Name *</label>
+<input type="text" id="edit-inv-supplier" name="edit-inv-supplier" required value={editingInventoryItem.supplier || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry" />
 </div>
 <div className="form-group">
-<label htmlFor="edit-inv-branch" className="form-label">Branch *</label>
-<input type="text" id="edit-inv-branch" name="edit-inv-branch" required value={editingInventoryItem.branch || 'Main'} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, branch: e.target.value })} className="form-input" />
+<label htmlFor="edit-inv-supplier-phone" className="form-label">Supplier Phone Number</label>
+<input type="tel" id="edit-inv-supplier-phone" name="edit-inv-supplier-phone" value={editingInventoryItem.supplierPhone || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, supplierPhone: e.target.value })} className="form-input" placeholder="e.g. 9876543210" />
 </div>
 </div>
 </div>
@@ -5970,12 +6319,11 @@ const exportStaffToCSV = () => {
 <div className="form-group">
 <label className="form-label">Staff Role *</label>
 <select value={editingStaff.staffRole ? editingStaff.staffRole.toLowerCase() : ''} onChange={(e) =>setEditingStaff({ ...editingStaff, staffRole: e.target.value })} className="form-input">
-<option value="chef">Chef</option>
-<option value="waiter">Waiter</option>
+<option value="waiter">Waiter / Cashier (Floor &amp; Billing)</option>
+<option value="chef">Chef / Kitchen</option>
 <option value="barista">Barista</option>
-<option value="cashier">Cashier</option>
 <option value="manager">Manager</option>
-<option value="staff">Staff / Server</option>
+<option value="staff">General Staff</option>
 </select>
 </div>
 <div className="form-group">

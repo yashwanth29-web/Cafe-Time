@@ -20,7 +20,7 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff', 'OWNER', 'MANAGER', 'CHEF', 'WAITER', 'CASHIER'],
+    enum: ['super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'OWNER', 'MANAGER', 'CHEF', 'WAITER', 'CASHIER', 'WAITER_CASHIER'],
     default: 'staff'
   },
   staffRole: {
@@ -90,6 +90,14 @@ const UserSchema = new mongoose.Schema({
     default: 0
   },
   salaryEarnedThisWeek: {
+    type: Number,
+    default: 0
+  },
+  actualWorkedHoursThisMonth: {
+    type: Number,
+    default: 0
+  },
+  salaryEarnedThisMonth: {
     type: Number,
     default: 0
   },

@@ -299,8 +299,8 @@ export const seedTenantAssets = async () => {
 };
 
 // Branches Management APIs
-export const getBranches = async () => {
-  const response = await API.get('/admin/branches');
+export const getBranches = async (params = {}) => {
+  const response = await API.get('/admin/branches', { params });
   return response.data;
 };
 

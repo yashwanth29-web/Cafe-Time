@@ -719,11 +719,14 @@ const OwnerProfilePage = () => {
 
             {/* Branches card — full width */}
             <div className="sec-card sec-card-full">
-              <div className="sec-card-head">
-                <span className="sec-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>
-                <span className="sec-card-title">Branches ({branches.length})</span>
+              <div className="sec-card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="sec-card-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>
+                  <span className="sec-card-title">Branches ({branches.length})</span>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: '#60a5fa', background: 'rgba(96,165,250,0.12)', padding: '3px 8px', borderRadius: '12px', fontWeight: 600 }}>🔒 Super Admin Managed</span>
               </div>
-              {branches.length === 0 && <p style={{ color: '#A2B9AC', fontStyle: 'italic', fontSize: '.85rem', margin: '4px 0 10px' }}>No branches added yet.</p>}
+              {branches.length === 0 && <p style={{ color: '#A2B9AC', fontStyle: 'italic', fontSize: '.85rem', margin: '4px 0 10px' }}>No branches assigned yet.</p>}
               {branches.map((b) =>
               <div key={b._id} className="branch-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid rgba(230,213,195,.06)' }}>
                   <div>
@@ -731,24 +734,13 @@ const OwnerProfilePage = () => {
                     <div className="branch-addr" style={{ fontSize: '.75rem', color: '#B4C4B9', marginTop: '2px' }}>{b.address}{b.manager ? ` · ${b.manager}` : ''}</div>
                     <span className={b.isActive ? 'badge-on' : 'badge-off'} style={{ display: 'inline-block', marginTop: '4px' }}>{b.isActive ? 'Active' : 'Inactive'}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                    onClick={(e) => {e.stopPropagation();openEditBranchModal(b);}}
-                    style={{ background: '#3E2723', color: 'var(--color-text-primary)', border: '1px solid rgba(230,213,195,.18)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                    
-                      ✏️ Edit
-                    </button>
-                    <button
-                    onClick={(e) => {e.stopPropagation();handleDeleteBranch(b._id, b.branchName);}}
-                    style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>
-                    
-                      🗑️ Delete
-                    </button>
+                  <div style={{ fontSize: '0.75rem', color: '#A2B9AC' }}>
+                    Code: <strong>{b.branchId}</strong>
                   </div>
                 </div>
               )}
-              <div className="add-branch-row">
-                <button className="btn-add" onClick={(e) => {e.stopPropagation();openModal('branch');}}>＋ Add New Branch</button>
+              <div style={{ fontSize: '0.75rem', color: '#B4C4B9', marginTop: '12px', fontStyle: 'italic' }}>
+                Branch provisioning and modification is managed exclusively by the Platform Super Admin.
               </div>
             </div>
           </div>

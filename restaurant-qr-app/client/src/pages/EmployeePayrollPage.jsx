@@ -69,13 +69,13 @@ const EmployeePayrollPage = () => {
             <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0 }}>
               <div>
                 <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 800, borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '8px' }}>
-                  Current Week Earnings
+                  Current Month Earnings
                 </h3>
                 <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Weekly Salary</span>
-                  <strong style={{ fontSize: '2.8rem', color: 'var(--color-primary)', display: 'block', margin: '8px 0' }}>₹{salaryData.currentWeekSalary || 0}</strong>
-                  <span style={{ background: 'rgba(143,168,155,0.15)', color: 'var(--color-primary)', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                    Period: {salaryData.weekStart || 'N/A'} - {salaryData.weekEnd || 'N/A'}
+                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Month Salary</span>
+                  <strong style={{ fontSize: '2.8rem', color: '#10B981', display: 'block', margin: '8px 0' }}>₹{salaryData.currentMonthSalary ?? salaryData.currentWeekSalary ?? 0}</strong>
+                  <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                    {salaryData.monthName || `${salaryData.monthStart || ''} to ${salaryData.monthEnd || ''}`}
                   </span>
                 </div>
               </div>

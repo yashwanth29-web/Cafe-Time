@@ -249,7 +249,7 @@ function AppContent() {
           <Route 
             path="/employee/payroll" 
             element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'chef', 'cashier', 'staff']}>
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'chef', 'cashier', 'waiter_cashier', 'staff']}>
                 <SaaSLayout>
                   <EmployeePayrollPage />
                 </SaaSLayout>
@@ -269,7 +269,7 @@ function AppContent() {
           <Route 
             path="/staff/workspace" 
             element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff']}>
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff']}>
                 <SaaSLayout>
                   <StaffOrderWorkspace />
                 </SaaSLayout>
@@ -282,7 +282,7 @@ function AppContent() {
           <Route 
             path="/staff/attendance" 
             element={
-              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'chef', 'cashier', 'staff']}>
+              <ProtectedRoute allowedRoles={['admin', 'owner', 'manager', 'waiter', 'chef', 'cashier', 'waiter_cashier', 'staff']}>
                 <SaaSLayout>
                   <StaffDashboard />
                 </SaaSLayout>

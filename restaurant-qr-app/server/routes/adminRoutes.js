@@ -69,11 +69,11 @@ router.put('/staff/:id', restrictTo('admin', 'owner'), updateStaff);
 router.delete('/staff/:id', restrictTo('admin', 'owner'), deleteStaff);
 router.get('/staff-summary', restrictTo('admin', 'owner', 'manager'), getStaffSummary);
 
-// Branches Management Routes
-router.get('/branches', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'staff'), getBranches);
-router.post('/branches', restrictTo('admin', 'owner'), createBranch);
-router.put('/branches/:id', restrictTo('admin', 'owner'), updateBranch);
-router.delete('/branches/:id', restrictTo('admin', 'owner'), deleteBranch);
+// Branches Management Routes (Branch creation & alteration restricted strictly to Super Admin)
+router.get('/branches', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'), getBranches);
+router.post('/branches', restrictTo('super_admin'), createBranch);
+router.put('/branches/:id', restrictTo('super_admin'), updateBranch);
+router.delete('/branches/:id', restrictTo('super_admin'), deleteBranch);
 
 // Profile Management Route
 router.put('/profile/owner', restrictTo('admin', 'owner'), updateOwnerProfile);

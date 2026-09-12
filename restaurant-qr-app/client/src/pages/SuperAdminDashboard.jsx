@@ -2,7 +2,7 @@ import React from 'react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createOwner, getCafes, updateCafe, deleteCafe, restoreCafe, getTickets, updateTicketStatus } from '../services/api';
+import { createOwner, getCafes, updateCafe, deleteCafe, restoreCafe, getTickets, updateTicketStatus, createBranch, updateBranch, deleteBranch } from '../services/api';
 import { Building, Activity, ShieldCheck, HeartPulse, CreditCard, Ticket, Plus, X, Server, Search, TerminalSquare, RefreshCw, Edit, Trash2, Banknote, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
 
 const getStatusBadge = (lastHeartbeat, services = {}) => {
@@ -77,6 +77,114 @@ const SuperAdminDashboard = () => {
     subscriptionStatus: 'Active',
     subscriptionRenewal: ''
   });
+
+  // Super Admin Branch Management States
+  const [showAddBranchModal, setShowAddBranchModal] = useState(false);
+  const [targetCafeForBranch, setTargetCafeForBranch] = useState(null);
+  const [editingBranch, setEditingBranch] = useState(null);
+  const [branchFormData, setBranchFormData] = useState({
+    branchName: '',
+    address: '',
+    manager: '',
+    city: '',
+    state: '',
+    pincode: '',
+    allowedRadius: 100,
+    openingTime: '09:00 AM',
+    closingTime: '10:00 PM',
+    unifiedStaffMode: false,
+    isActive: true
+  });
+
+  const handleOpenAddBranch = (cafe) => {
+    setTargetCafeForBranch(cafe);
+    setEditingBranch(null);
+    setBranchFormData({
+      branchName: '',
+      address: '',
+      manager: '',
+      city: cafe.city || '',
+      state: cafe.state || '',
+      pincode: '',
+      allowedRadius: 100,
+      openingTime: '09:00 AM',
+      closingTime: '10:00 PM',
+      unifiedStaffMode: false,
+      isActive: true
+    });
+    setShowAddBranchModal(true);
+  };
+
+  const handleOpenEditBranch = (cafe, branch) => {
+    setTargetCafeForBranch(cafe);
+    setEditingBranch(branch);
+    setBranchFormData({
+      branchName: branch.branchName || '',
+      address: branch.address || '',
+      manager: branch.manager || '',
+      city: branch.city || '',
+      state: branch.state || '',
+      pincode: branch.pincode || '',
+      allowedRadius: branch.allowedRadius || 100,
+      openingTime: branch.openingTime || '09:00 AM',
+      closingTime: branch.closingTime || '10:00 PM',
+      unifiedStaffMode: !!branch.unifiedStaffMode,
+      isActive: branch.isActive !== undefined ? branch.isActive : true
+    });
+    setShowAddBranchModal(true);
+  };
+
+  const handleSaveBranch = async (e) => {
+    e.preventDefault();
+    if (!branchFormData.branchName || !branchFormData.address) {
+      setErrorMsg('Branch Name and Address are required.');
+      return;
+    }
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      if (editingBranch) {
+        const res = await updateBranch(editingBranch._id, {
+          ...branchFormData,
+          cafeId: targetCafeForBranch.cafeId
+        });
+        if (res.success) {
+          setSuccessMsg(`Branch "${branchFormData.branchName}" updated successfully.`);
+        }
+      } else {
+        const res = await createBranch({
+          ...branchFormData,
+          cafeId: targetCafeForBranch.cafeId
+        });
+        if (res.success) {
+          setSuccessMsg(`Branch "${branchFormData.branchName}" created successfully for ${targetCafeForBranch.name}.`);
+        }
+      }
+      setShowAddBranchModal(false);
+      await loadCafes();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to save branch.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteBranch = async (branchId, branchName) => {
+    if (!window.confirm(`Are you sure you want to delete branch "${branchName}"? This will also remove its associated tables.`)) return;
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await deleteBranch(branchId);
+      if (res.success) {
+        setSuccessMsg(`Branch "${branchName}" deleted.`);
+        await loadCafes();
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to delete branch.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadTickets = async () => {
     try {
@@ -1257,6 +1365,13 @@ const SuperAdminDashboard = () => {
                         }}>
                           {cafeStatus.dot} {cafeStatus.text}
                         </span>
+                        <button
+                          onClick={() => handleOpenAddBranch(cafe)}
+                          className="btn btn-primary"
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', fontSize: '0.75rem', width: 'auto' }}
+                        >
+                          <Plus size={13} /> Add Branch
+                        </button>
                       </div>
                     </div>
 
@@ -1353,8 +1468,24 @@ const SuperAdminDashboard = () => {
                                 </div>
                               </div>
 
-                              <div style={{ borderTop: '1px dashed var(--color-border)', marginTop: '12px', paddingTop: '8px', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                                Manager: <strong style={{ color: 'var(--color-text-primary)' }}>{br.manager || 'Not Assigned'}</strong>
+                              <div style={{ borderTop: '1px dashed var(--color-border)', marginTop: '12px', paddingTop: '8px', fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>Manager: <strong style={{ color: 'var(--color-text-primary)' }}>{br.manager || 'Not Assigned'}</strong></span>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button 
+                                    onClick={() => handleOpenEditBranch(cafe, br)}
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                  >
+                                    <Edit size={11} /> Edit
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteBranch(br._id, br.branchName)}
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '3px 8px', fontSize: '11px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                  >
+                                    <Trash2 size={11} /> Delete
+                                  </button>
+                                </div>
                               </div>
 
                             </div>
@@ -1917,6 +2048,204 @@ const SuperAdminDashboard = () => {
           </div>
         </div>
       }
+      {/* Super Admin Branch Management Modal */}
+      {showAddBranchModal && targetCafeForBranch && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '560px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            padding: '24px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.25rem', fontWeight: 800 }}>
+                  {editingBranch ? `Edit Branch: ${editingBranch.branchName}` : `Add Branch for ${targetCafeForBranch.name}`}
+                </h3>
+                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                  Cafe ID: <strong>{targetCafeForBranch.cafeId}</strong>
+                </span>
+              </div>
+              <button 
+                onClick={() => setShowAddBranchModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBranch} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>Branch Name *</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="e.g. Downtown Express"
+                  value={branchFormData.branchName}
+                  onChange={(e) => setBranchFormData({ ...branchFormData, branchName: e.target.value })}
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>Street Address *</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="e.g. 45 Park Avenue, Ground Floor"
+                  value={branchFormData.address}
+                  onChange={(e) => setBranchFormData({ ...branchFormData, address: e.target.value })}
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>City</label>
+                  <input 
+                    type="text"
+                    value={branchFormData.city}
+                    onChange={(e) => setBranchFormData({ ...branchFormData, city: e.target.value })}
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>State</label>
+                  <input 
+                    type="text"
+                    value={branchFormData.state}
+                    onChange={(e) => setBranchFormData({ ...branchFormData, state: e.target.value })}
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>Branch Manager</label>
+                  <input 
+                    type="text"
+                    placeholder="e.g. Siva Kumar"
+                    value={branchFormData.manager}
+                    onChange={(e) => setBranchFormData({ ...branchFormData, manager: e.target.value })}
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>Geo-fence Radius (meters)</label>
+                  <input 
+                    type="number"
+                    min="10"
+                    value={branchFormData.allowedRadius}
+                    onChange={(e) => setBranchFormData({ ...branchFormData, allowedRadius: Number(e.target.value) })}
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>Opening Time</label>
+                  <input 
+                    type="text"
+                    placeholder="09:00 AM"
+                    value={branchFormData.openingTime}
+                    onChange={(e) => setBranchFormData({ ...branchFormData, openingTime: e.target.value })}
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 600 }}>Closing Time</label>
+                  <input 
+                    type="text"
+                    placeholder="10:00 PM"
+                    value={branchFormData.closingTime}
+                    onChange={(e) => setBranchFormData({ ...branchFormData, closingTime: e.target.value })}
+                    className="form-input"
+                    style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '6px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--color-text-primary)', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox"
+                    checked={branchFormData.isActive}
+                    onChange={(e) => setBranchFormData({ ...branchFormData, isActive: e.target.checked })}
+                  />
+                  Active Branch
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--color-text-primary)', cursor: 'pointer' }}>
+                  <input 
+                    type="checkbox"
+                    checked={branchFormData.unifiedStaffMode}
+                    onChange={(e) => setBranchFormData({ ...branchFormData, unifiedStaffMode: e.target.checked })}
+                  />
+                  Unified Staff Mode
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px', borderTop: '1px solid var(--color-border)', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddBranchModal(false)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: 'var(--color-text-primary)',
+                    border: '1px solid var(--color-border)',
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    backgroundColor: 'var(--color-primary)',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {loading ? 'Saving...' : editingBranch ? 'Update Branch' : 'Create Branch'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>);
 
 };

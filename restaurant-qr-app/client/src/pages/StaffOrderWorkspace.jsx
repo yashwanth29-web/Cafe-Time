@@ -366,10 +366,10 @@ const StaffOrderWorkspace = () => {
   const isUnifiedMode = currentBranch ? !!currentBranch.unifiedStaffMode : false;
   const userRole = (user?.role || '').toLowerCase();
 
-  // Permission helpers
+  // Permission helpers (Waiter and Cashier unified: Floor Service + Payment Collection)
   const canPrepare = isUnifiedMode || ['admin', 'owner', 'manager', 'chef'].includes(userRole);
-  const canServe = isUnifiedMode || ['admin', 'owner', 'manager', 'waiter'].includes(userRole);
-  const canCollect = isUnifiedMode || ['admin', 'owner', 'manager', 'waiter', 'cashier'].includes(userRole);
+  const canServe = isUnifiedMode || ['admin', 'owner', 'manager', 'waiter', 'cashier', 'waiter_cashier'].includes(userRole);
+  const canCollect = isUnifiedMode || ['admin', 'owner', 'manager', 'waiter', 'cashier', 'waiter_cashier'].includes(userRole);
 
   // Filter orders by sub-tab columns
   const filteredOrders = useMemo(() => {

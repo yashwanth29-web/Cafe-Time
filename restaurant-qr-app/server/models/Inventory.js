@@ -47,6 +47,11 @@ const InventorySchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  supplierPhone: {
+    type: String,
+    default: '',
+    trim: true
+  },
   branch: {
     type: String,
     default: 'Main',

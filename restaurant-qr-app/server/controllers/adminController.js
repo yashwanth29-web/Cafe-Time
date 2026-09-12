@@ -70,7 +70,7 @@ const createStaff = async (req, res) => {
     // Staff accounts can have a role of 'staff', and custom roles like 'chef', 'manager', 'waiter', or 'cashier'
     let targetRole = 'staff';
     const sRoleLower = staffRole.toLowerCase();
-    if (['manager', 'chef', 'waiter', 'cashier'].includes(sRoleLower)) {
+    if (['manager', 'chef', 'waiter', 'cashier', 'waiter_cashier'].includes(sRoleLower)) {
       targetRole = sRoleLower;
     }
 
@@ -177,8 +177,16 @@ const getStaff = async (req, res) => {
     const sunday = new Date(monday);
     sunday.setUTCDate(monday.getUTCDate() + 6);
 
+    // Current Week range
     const weekStart = monday.toISOString().split('T')[0];
     const weekEnd = sunday.toISOString().split('T')[0];
+
+    // Current Month range (e.g. 2026-09-01 to 2026-09-30)
+    const [currYear, currMonth] = todayStr.split('-').map(Number);
+    const monthStart = `${currYear}-${String(currMonth).padStart(2, '0')}-01`;
+    const lastDayOfMonth = new Date(currYear, currMonth, 0).getDate();
+    const monthEnd = `${currYear}-${String(currMonth).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+    const monthName = new Date(currYear, currMonth - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
 
     const activeBranch = query.assignedBranch;
     const Attendance = require('../models/Attendance');
@@ -216,23 +224,25 @@ const getStaff = async (req, res) => {
       ordersMap[String(o._id)] = o.count;
     });
 
-    // 2. Batch Payrolls
+    // 2. Batch Payrolls (Check current month or active week)
     const payrollList = await Payroll.find({
       employeeId: { $in: staffIds },
-      weekStart,
-      weekEnd
+      $or: [
+        { weekStart, weekEnd },
+        { weekStart: { $gte: monthStart, $lte: monthEnd } }
+      ]
     }).lean();
     const payrollMap = {};
     payrollList.forEach(p => {
       payrollMap[String(p.employeeId)] = p;
     });
 
-    // 3. Batch Attendances
+    // 3. Batch Attendances for the current month
     const attendances = await Attendance.find({
       staffId: { $in: staffIds },
       cafeId,
       branchId: activeBranch,
-      date: { $gte: weekStart, $lte: weekEnd }
+      date: { $gte: monthStart, $lte: monthEnd }
     }).lean();
     const attendanceMap = {};
     attendances.forEach(att => {
@@ -248,89 +258,89 @@ const getStaff = async (req, res) => {
       const ordersCount = ordersMap[sIdStr] || 0;
       const pr = payrollMap[sIdStr];
       
-      let workingDays = 0;
-      let absentDays = 0;
-      let actualHoursWorked = 0;
-      let currentWeekSalary = 0;
-      let payrollStatus = 'Pending';
+      let presentCount = 0;
+      let halfCount = 0;
+      let absentCount = 0;
+      let totalWorkHours = 0;
+      let totalOtHours = 0;
+      let monthEarned = 0;
 
-      if (pr) {
-        workingDays = pr.presentDays + (pr.halfDays || 0) * 0.5;
-        absentDays = pr.absentDays || 0;
-        actualHoursWorked = pr.workingHours + (pr.overtimeHours || 0);
-        currentWeekSalary = pr.netSalary || 0;
-        payrollStatus = pr.paymentStatus || 'Pending';
-      } else {
-        const weeklyAttendances = (attendanceMap[sIdStr] || []).filter(att => att.checkOutTime !== undefined && att.checkOutTime !== null);
+      const baseDailyRate = s.dailyRate || 0;
+      const reqHours = s.requiredHours || 8;
 
-        let presentCount = 0;
-        let halfCount = 0;
-        let absentCount = 0;
-        let workHrs = 0;
-        let otHrs = 0;
-        let earned = 0;
-
-        const baseDailyRate = s.dailyRate || 0;
-        const reqHours = s.requiredHours || 8;
-
-        weeklyAttendances.forEach(att => {
-          if (att.status === 'Present' || att.status === 'Late') {
-            presentCount += 1;
-          } else if (att.status === 'Half Day') {
-            halfCount += 1;
-          } else if (att.status === 'Absent') {
-            absentCount += 1;
-          }
-
-          const recWorkHours = att.workingHours || 0;
-          const recOtHours = att.overtimeHours || 0;
-
-          workHrs += recWorkHours;
-          otHrs += recOtHours;
-
-          const regularSalary = recWorkHours >= reqHours 
-            ? baseDailyRate 
-            : (baseDailyRate * recWorkHours) / reqHours;
-          const overtimeSalary = (baseDailyRate * recOtHours) / reqHours;
-
-          earned += regularSalary + overtimeSalary;
-        });
-
-        workingDays = presentCount + halfCount * 0.5;
-        absentDays = absentCount;
-        actualHoursWorked = Number((workHrs + otHrs).toFixed(2));
-        currentWeekSalary = Number(earned.toFixed(2));
-        payrollStatus = 'Pending';
-      }
-
-      // Compute weekly breakdown for display
       const weeklyBreakdown = {
         'Monday': 0, 'Tuesday': 0, 'Wednesday': 0, 'Thursday': 0, 'Friday': 0, 'Saturday': 0, 'Sunday': 0
       };
+
       const rawAttendances = attendanceMap[sIdStr] || [];
+
       rawAttendances.forEach(att => {
-        const attDate = new Date(att.date || att.createdAt);
-        const dayName = dayNames[attDate.getDay()];
-        const wh = att.workingHours || 0;
+        let durationMin = att.totalDuration || 0;
+        if (!att.checkOutTime && att.checkInTime) {
+          durationMin = Math.max(0, Math.floor((Date.now() - new Date(att.checkInTime).getTime()) / 60000));
+        }
+        const wh = Number((durationMin / 60).toFixed(2));
         const oh = att.overtimeHours || 0;
-        const baseDailyRate = s.dailyRate || 0;
-        const reqHours = s.requiredHours || 8;
-        const regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+
+        totalWorkHours += wh;
+        totalOtHours += oh;
+
+        let regularSalary = 0;
+        if (att.status === 'Half Day') {
+          halfCount += 1;
+          regularSalary = baseDailyRate * 0.5;
+        } else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) {
+          presentCount += 1;
+          // When attendance is marked, they get their full day's salary!
+          regularSalary = baseDailyRate;
+        } else if (att.status === 'Absent') {
+          absentCount += 1;
+          regularSalary = 0;
+        } else {
+          regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+        }
+
         const overtimeSalary = (baseDailyRate * oh) / reqHours;
-        weeklyBreakdown[dayName] = Number((regularSalary + overtimeSalary).toFixed(2));
+        const daySalary = Number((regularSalary + overtimeSalary).toFixed(2));
+
+        monthEarned += daySalary;
+
+        // Populate weekly breakdown if within current week
+        if (att.date >= weekStart && att.date <= weekEnd) {
+          const attDate = new Date(att.date || att.createdAt);
+          const dayName = dayNames[attDate.getDay()];
+          weeklyBreakdown[dayName] = daySalary;
+        }
       });
 
+      const currentMonthSalary = Number(monthEarned.toFixed(2));
+      const currentWeekSalary = Number(Object.values(weeklyBreakdown).reduce((sum, val) => sum + val, 0).toFixed(2));
+      const workingDays = presentCount + halfCount * 0.5;
+      const actualHoursWorked = Number((totalWorkHours + totalOtHours).toFixed(2));
+
       const formattedAttendances = rawAttendances.map(att => {
-        const wh = att.workingHours || 0;
+        let durationMin = att.totalDuration || 0;
+        if (!att.checkOutTime && att.checkInTime) {
+          durationMin = Math.max(0, Math.floor((Date.now() - new Date(att.checkInTime).getTime()) / 60000));
+        }
+        const wh = Number((durationMin / 60).toFixed(2));
         const oh = att.overtimeHours || 0;
-        const baseDailyRate = s.dailyRate || 0;
-        const reqHours = s.requiredHours || 8;
-        const regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+        let regularSalary = 0;
+        if (att.status === 'Half Day') {
+          regularSalary = baseDailyRate * 0.5;
+        } else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) {
+          regularSalary = baseDailyRate;
+        } else if (att.status === 'Absent') {
+          regularSalary = 0;
+        } else {
+          regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+        }
         const overtimeSalary = (baseDailyRate * oh) / reqHours;
         return {
           date: att.date || new Date(att.createdAt).toISOString().split('T')[0],
           checkInTime: att.checkInTime,
           checkOutTime: att.checkOutTime,
+          status: att.status,
           workingHours: Number((wh + oh).toFixed(2)),
           dailySalary: Number((regularSalary + overtimeSalary).toFixed(2))
         };
@@ -341,10 +351,15 @@ const getStaff = async (req, res) => {
         ordersHandledToday: ordersCount,
         weeklyBreakdown,
         workingDays,
-        absentDays,
+        absentDays: absentCount,
         actualHoursWorked,
+        currentMonthSalary,
         currentWeekSalary,
-        payrollStatus,
+        currentSalary: currentMonthSalary,
+        monthName,
+        monthStart,
+        monthEnd,
+        payrollStatus: pr ? (pr.paymentStatus || 'Pending') : 'Pending',
         cafeName,
         branchName,
         attendances: formattedAttendances
@@ -408,7 +423,7 @@ const updateStaff = async (req, res) => {
       staffMember.staffRole = staffRole.trim();
       let targetRole = 'staff';
       const sRoleLower = staffRole.toLowerCase();
-      if (['manager', 'chef', 'waiter', 'cashier'].includes(sRoleLower)) {
+      if (['manager', 'chef', 'waiter', 'cashier', 'waiter_cashier'].includes(sRoleLower)) {
         targetRole = sRoleLower;
       }
       staffMember.role = targetRole;
@@ -701,7 +716,7 @@ const saveSetupData = async (req, res) => {
             // Determine targeted role from staffRole
             let targetRole = 'staff';
             const sRole = (staff.staffRole || '').trim().toLowerCase();
-            if (['manager', 'chef', 'waiter', 'cashier'].includes(sRole)) {
+            if (['manager', 'chef', 'waiter', 'cashier', 'waiter_cashier'].includes(sRole)) {
               targetRole = sRole;
             }
 
@@ -802,9 +817,14 @@ const getBranches = async (req, res) => {
  * Add a new branch to the current cafe
  */
 const createBranch = async (req, res) => {
-  const cafeId = req.user.cafeId;
+  const isSuperAdmin = (req.user.role || '').toLowerCase() === 'super_admin';
+  const cafeId = (isSuperAdmin && req.body.cafeId) ? req.body.cafeId.trim().toUpperCase() : req.user.cafeId;
   const { branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
   
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'Cafe ID is required to create a branch' });
+  }
+
   if (!branchName || !address) {
     return res.status(400).json({ success: false, message: 'Branch Name and Address are required' });
   }
@@ -921,7 +941,7 @@ const getStaffSummary = async (req, res) => {
     const activeStaff = staffMembers.filter(s => s.isActive).length;
     const managers = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'manager' || (s.role || '').toLowerCase() === 'manager').length;
     const chefs = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'chef' || (s.role || '').toLowerCase() === 'chef').length;
-    const waiters = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'waiter' || (s.role || '').toLowerCase() === 'waiter').length;
+    const waiters = staffMembers.filter(s => ['waiter', 'waiter_cashier'].includes((s.staffRole || '').toLowerCase()) || ['waiter', 'waiter_cashier'].includes((s.role || '').toLowerCase())).length;
     const cashiers = staffMembers.filter(s => (s.staffRole || '').toLowerCase() === 'cashier' || (s.role || '').toLowerCase() === 'cashier').length;
     const standardStaff = totalStaff - managers - chefs - waiters - cashiers;
 
@@ -971,17 +991,18 @@ const uploadLogo = async (req, res) => {
  */
 const updateBranch = async (req, res) => {
   const { id } = req.params;
+  const isSuperAdmin = (req.user.role || '').toLowerCase() === 'super_admin';
   const cafeId = req.user.cafeId;
-  const { branchId, branchName, address, manager, isActive, latitude, longitude, allowedRadius, city, state, pincode, googleMapsUrl, openingTime, closingTime } = req.body;
 
-  if (!cafeId) {
-    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  if (!isSuperAdmin && !cafeId) {
+    return res.status(400).json({ success: false, message: 'Your profile does not have a cafe assignment' });
   }
 
   try {
-    const branch = await Branch.findOne({ _id: id, cafeId });
+    const query = isSuperAdmin ? { _id: id } : { _id: id, cafeId };
+    const branch = await Branch.findOne(query);
     if (!branch) {
-      return res.status(404).json({ success: false, message: 'Branch not found or does not belong to your cafe' });
+      return res.status(404).json({ success: false, message: 'Branch not found' });
     }
 
     if (branchId !== undefined && branchId !== branch.branchId) {
@@ -1057,16 +1078,28 @@ const updateBranch = async (req, res) => {
  */
 const deleteBranch = async (req, res) => {
   const { id } = req.params;
+  const isSuperAdmin = (req.user.role || '').toLowerCase() === 'super_admin';
   const cafeId = req.user.cafeId;
 
-  if (!cafeId) {
-    return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
+  if (!isSuperAdmin && !cafeId) {
+    return res.status(400).json({ success: false, message: 'Your profile does not have a cafe assignment' });
   }
 
   try {
-    const branch = await Branch.findOneAndDelete({ _id: id, cafeId });
+    const query = isSuperAdmin ? { _id: id } : { _id: id, cafeId };
+    const branch = await Branch.findOneAndDelete(query);
     if (!branch) {
-      return res.status(404).json({ success: false, message: 'Branch not found or does not belong to your cafe' });
+      return res.status(404).json({ success: false, message: 'Branch not found' });
+    }
+
+    // Clean up tables and operational config
+    try {
+      const Table = require('../models/Table');
+      const OperationalConfig = require('../models/OperationalConfig');
+      await Table.deleteMany({ branchId: branch.branchId, cafeId: branch.cafeId });
+      await OperationalConfig.deleteMany({ branchId: branch.branchId, cafeId: branch.cafeId });
+    } catch (cleanErr) {
+      console.error('Error cleaning up branch dependencies:', cleanErr);
     }
 
     return res.status(200).json({

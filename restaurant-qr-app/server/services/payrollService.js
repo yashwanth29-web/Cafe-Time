@@ -64,15 +64,21 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
       workingHours += attWorkingHours;
       overtimeHours += attOvertimeHours;
 
-      // Salary = Daily Wage * Actual Hours Worked / Required Daily Hours
-      const daySalary = (baseDailyRate * attWorkingHours) / requiredHours;
-      const dayOvertimePay = (baseDailyRate * attOvertimeHours) / requiredHours;
-
+      // When attendance is marked, credit full day salary
+      let daySalary = 0;
       if (att.status === 'Half Day') {
+        daySalary = baseDailyRate * 0.5;
         halfDaySalary += daySalary;
+      } else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) {
+        daySalary = baseDailyRate;
+        basicSalary += daySalary;
+      } else if (att.status === 'Absent') {
+        daySalary = 0;
       } else {
+        daySalary = (baseDailyRate * attWorkingHours) / requiredHours;
         basicSalary += daySalary;
       }
+      const dayOvertimePay = (baseDailyRate * attOvertimeHours) / requiredHours;
       overtimePay += dayOvertimePay;
     });
 
@@ -144,25 +150,37 @@ const recalculateStaffSalary = async (staffId) => {
     const weekStart = monday.toISOString().split('T')[0];
     const weekEnd = sunday.toISOString().split('T')[0];
 
+    // Current month range
+    const [currYear, currMonth] = todayStr.split('-').map(Number);
+    const monthStart = `${currYear}-${String(currMonth).padStart(2, '0')}-01`;
+    const lastDayOfMonth = new Date(currYear, currMonth, 0).getDate();
+    const monthEnd = `${currYear}-${String(currMonth).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+
     const cafeId = user.cafeId || '';
     const branchId = user.assignedBranch || 'default';
 
-    // 1. Fetch completed attendance records for today (only if checkOutTime exists)
+    // 1. Fetch attendance records for today (active or completed)
     const todayRecord = await Attendance.findOne({
       staffId: user._id,
       cafeId,
       branchId,
-      date: todayStr,
-      checkOutTime: { $exists: true, $ne: null }
+      date: todayStr
     });
 
-    // 2. Fetch completed attendance records for this week
+    // 2. Fetch attendance records for this week
     const weeklyRecords = await Attendance.find({
       staffId: user._id,
       cafeId,
       branchId,
-      date: { $gte: weekStart, $lte: weekEnd },
-      checkOutTime: { $exists: true, $ne: null }
+      date: { $gte: weekStart, $lte: weekEnd }
+    });
+
+    // 3. Fetch attendance records for this month
+    const monthlyRecords = await Attendance.find({
+      staffId: user._id,
+      cafeId,
+      branchId,
+      date: { $gte: monthStart, $lte: monthEnd }
     });
 
     const dailyRate = user.dailyRate || 0;
@@ -177,9 +195,17 @@ const recalculateStaffSalary = async (staffId) => {
       actualWorkedHoursToday = todayRecord.workingHours || 0;
       overtimeHoursToday = todayRecord.overtimeHours || 0;
 
-      const regularSalary = actualWorkedHoursToday >= requiredHours 
-        ? dailyRate 
-        : (dailyRate * actualWorkedHoursToday) / requiredHours;
+      let regularSalary = 0;
+      if (todayRecord.status === 'Half Day') {
+        regularSalary = dailyRate * 0.5;
+      } else if (todayRecord.status === 'Present' || todayRecord.status === 'Late' || todayRecord.checkInTime) {
+        // Attendance marked -> Full day salary!
+        regularSalary = dailyRate;
+      } else if (todayRecord.status === 'Absent') {
+        regularSalary = 0;
+      } else {
+        regularSalary = (dailyRate * actualWorkedHoursToday) / requiredHours;
+      }
       const overtimeSalary = (dailyRate * overtimeHoursToday) / requiredHours;
 
       salaryEarnedToday = Number((regularSalary + overtimeSalary).toFixed(2));
@@ -197,12 +223,44 @@ const recalculateStaffSalary = async (staffId) => {
       actualWorkedHoursThisWeek += recWorkHours;
       overtimeHoursThisWeek += recOtHours;
 
-      const regularSalary = recWorkHours >= requiredHours 
-        ? dailyRate 
-        : (dailyRate * recWorkHours) / requiredHours;
+      let regularSalary = 0;
+      if (record.status === 'Half Day') {
+        regularSalary = dailyRate * 0.5;
+      } else if (record.status === 'Present' || record.status === 'Late' || record.checkInTime) {
+        regularSalary = dailyRate;
+      } else if (record.status === 'Absent') {
+        regularSalary = 0;
+      } else {
+        regularSalary = (dailyRate * recWorkHours) / requiredHours;
+      }
       const overtimeSalary = (dailyRate * recOtHours) / requiredHours;
 
       salaryEarnedThisWeek += regularSalary + overtimeSalary;
+    }
+
+    // Calculate month's metrics
+    let actualWorkedHoursThisMonth = 0;
+    let salaryEarnedThisMonth = 0;
+
+    for (const record of monthlyRecords) {
+      const recWorkHours = record.workingHours || 0;
+      const recOtHours = record.overtimeHours || 0;
+
+      actualWorkedHoursThisMonth += (recWorkHours + recOtHours);
+
+      let regularSalary = 0;
+      if (record.status === 'Half Day') {
+        regularSalary = dailyRate * 0.5;
+      } else if (record.status === 'Present' || record.status === 'Late' || record.checkInTime) {
+        regularSalary = dailyRate;
+      } else if (record.status === 'Absent') {
+        regularSalary = 0;
+      } else {
+        regularSalary = (dailyRate * recWorkHours) / requiredHours;
+      }
+      const overtimeSalary = (dailyRate * recOtHours) / requiredHours;
+
+      salaryEarnedThisMonth += regularSalary + overtimeSalary;
     }
 
     // Update staff member fields in the database
@@ -215,7 +273,9 @@ const recalculateStaffSalary = async (staffId) => {
           salaryEarnedToday: Number(salaryEarnedToday.toFixed(2)),
           actualWorkedHoursThisWeek: Number(actualWorkedHoursThisWeek.toFixed(2)),
           overtimeHoursThisWeek: Number(overtimeHoursThisWeek.toFixed(2)),
-          salaryEarnedThisWeek: Number(salaryEarnedThisWeek.toFixed(2))
+          salaryEarnedThisWeek: Number(salaryEarnedThisWeek.toFixed(2)),
+          actualWorkedHoursThisMonth: Number(actualWorkedHoursThisMonth.toFixed(2)),
+          salaryEarnedThisMonth: Number(salaryEarnedThisMonth.toFixed(2))
         }
       }
     );

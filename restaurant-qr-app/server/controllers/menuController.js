@@ -12,7 +12,9 @@ const getMenuItems = async (req, res, next) => {
     if (!cafeId) {
       return res.status(400).json({ success: false, message: 'Missing cafeId' });
     }
-    const branchId = req.branchId || req.query.branchId || 'default';
+    let branchId = req.branchId || req.query.branchId || 'default';
+    if (branchId === 'all') branchId = 'default';
+
     console.log(`[DEBUG getMenuItems] Request for cafeId: ${cafeId}, branchId: ${branchId}`);
 
     const Cafe = require('../models/Cafe');
@@ -31,16 +33,19 @@ const getMenuItems = async (req, res, next) => {
 
     if (cafeId === 'CD001') {
       if (branchId === 'default') {
-        finalMenuItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).select('-__v -createdAt -updatedAt').sort({ category: 1, name: 1 }).lean();
+        finalMenuItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default', isHidden: { $ne: true } })
+          .select('-__v -createdAt -updatedAt')
+          .sort({ category: 1, name: 1 })
+          .lean();
         console.log(`[DEBUG getMenuItems] CD001/default Master Items fetched: ${finalMenuItems.length}`);
       } else {
         // 1. Fetch Global Master Items
-        const masterItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default' }).select('-__v -createdAt -updatedAt').lean();
-        console.log(`[DEBUG getMenuItems] Non-CD001 branch - Master Items fetched: ${masterItems.length}`);
+        const masterItems = await MenuItem.find({ cafeId: 'CD001', branchId: 'default', isHidden: { $ne: true } })
+          .select('-__v -createdAt -updatedAt')
+          .lean();
         
         // 2. Fetch Local Items for this specific cafe and branch
         const localItems = await MenuItem.find({ cafeId, branchId }).select('-__v -createdAt -updatedAt').lean();
-        console.log(`[DEBUG getMenuItems] Non-CD001 branch - Local Items fetched: ${localItems.length}`);
         
         // 3. Map Local Items by masterItemId for O(1) lookup
         const localOverridesMap = {};
@@ -60,12 +65,8 @@ const getMenuItems = async (req, res, next) => {
           if (override) {
             return override.isHidden ? null : override;
           }
-          // Force the master item to pretend to belong to this cafe/branch in the response
-          // so the frontend doesn't get confused
           return { ...master, cafeId, branchId };
         }).filter(item => item !== null);
-        
-        console.log(`[DEBUG getMenuItems] Non-CD001 branch - Merged Master Items: ${mergedMasterItems.length}`);
         
         // 5. Combine and sort
         finalMenuItems = [...mergedMasterItems, ...customLocalItems];
@@ -77,19 +78,23 @@ const getMenuItems = async (req, res, next) => {
         query.branchId = branchId;
       }
       finalMenuItems = await MenuItem.find(query).select('-__v -createdAt -updatedAt').lean();
-      console.log(`[DEBUG getMenuItems] Independent tenant ${cafeId} - Local Items fetched: ${finalMenuItems.length}`);
     }
 
     finalMenuItems.sort((a, b) => {
       if (a.category === b.category) {
         return a.name.localeCompare(b.name);
       }
-      return a.category.localeCompare(b.category);
+      return (a.category || '').localeCompare(b.category || '');
     });
 
-    console.log(`[DEBUG getMenuItems] Final returned items: ${finalMenuItems.length}`);
-    menuCache.setMenu(cafeId, branchId, finalMenuItems);
-    return res.status(200).json({ success: true, count: finalMenuItems.length, data: finalMenuItems });
+    // Ensure every item has both .id and ._id formatted
+    const mappedFinalItems = finalMenuItems.map(item => ({
+      ...item,
+      id: item._id ? item._id.toString() : item.id
+    }));
+
+    menuCache.setMenu(cafeId, branchId, mappedFinalItems);
+    return res.status(200).json({ success: true, count: mappedFinalItems.length, data: mappedFinalItems });
   } catch (error) {
     error.controllerName = 'menuController';
     error.serviceName = 'getMenuItems';
@@ -102,12 +107,13 @@ const getMenuItems = async (req, res, next) => {
 // @access  Public (Owner Dashboard)
 const createMenuItem = async (req, res, next) => {
   try {
-    const { name, price, originalPrice, category, description, available, isCombo, image, recipe, preparationTime } = req.body;
+    const { name, price, originalPrice, makingCost, category, description, available, isCombo, image, recipe, preparationTime } = req.body;
     const cafeId = req.cafeId || (req.user && req.user.cafeId);
     if (!cafeId) {
       return res.status(400).json({ success: false, message: 'Missing cafeId' });
     }
-    const branchId = req.branchId || 'default';
+    let branchId = req.branchId || (req.headers['x-branch-id'] || 'default');
+    if (branchId === 'all') branchId = 'default';
 
     // Simple validation
     if (!name || price === undefined || !category || !description) {
@@ -118,6 +124,7 @@ const createMenuItem = async (req, res, next) => {
       name,
       price: parseFloat(price),
       originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
+      makingCost: makingCost !== undefined ? parseFloat(makingCost) : 0,
       category,
       description,
       available: available !== undefined ? available : true,
@@ -130,39 +137,48 @@ const createMenuItem = async (req, res, next) => {
     });
 
     const savedItem = await newMenuItem.save();
+    const finalItem = {
+      ...savedItem.toObject(),
+      id: savedItem._id.toString()
+    };
 
-    // Auto-update availability based on inventory
-    await updateMenuItemAvailabilityFromInventory(cafeId, savedItem._id, branchId);
+    // Invalidate caches immediately
+    menuCache.clearAll();
 
-    // Fetch latest status
-    const latestItem = await MenuItem.findOne({ _id: savedItem._id, cafeId, branchId });
-    menuCache.clearMenu(cafeId, branchId);
+    // Run inventory availability check in background (non-blocking for ultra-fast instant UI)
+    setImmediate(async () => {
+      try {
+        await updateMenuItemAvailabilityFromInventory(cafeId, savedItem._id, branchId);
+      } catch (err) {
+        console.error('[INVENTORY] Background availability update error:', err.message);
+      }
+    });
+
+    // Broadcast socket updates
     try {
       const io = socket.getIO();
       if (io) {
-        io.to(`branch:${branchId}`).emit('menu_updated', latestItem || savedItem);
-        io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || savedItem);
+        io.to(`branch:${branchId}`).emit('menu_updated', finalItem);
+        io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', finalItem);
+        io.to(`cafe:${cafeId}`).emit('menu_updated', finalItem);
+        io.to(`cafe_${cafeId}`).emit('menu_updated', finalItem);
+        io.to(`cafe:${cafeId}`).emit('dashboard_realtime_sync', {
+          cafeId,
+          branchId,
+          model: 'MenuItem',
+          action: 'create',
+          data: finalItem
+        });
+        io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
+          _id: String(finalItem._id),
+          name: finalItem.name,
+          available: finalItem.available,
+          price: finalItem.price,
+          updatedAt: finalItem.updatedAt || new Date().toISOString()
+        });
       }
     } catch (err) {
-      console.warn('[SOCKET] Could not broadcast menu_updated: Socket.IO not initialized');
-    }
-
-    const finalItem = latestItem || savedItem;
-
-    // Emit socket update
-    try {
-      const { getIO } = require('../config/socket');
-      const io = getIO();
-      io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
-        _id: String(finalItem._id),
-        name: finalItem.name,
-        available: finalItem.available,
-        price: finalItem.price,
-        updatedAt: finalItem.updatedAt || new Date().toISOString()
-      });
-      console.log(`[SOCKET] Broadcasted menuAvailabilityUpdated for created item: ${finalItem.name}`);
-    } catch (err) {
-      console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', err.message);
+      console.warn('[SOCKET] Could not broadcast menu update:', err.message);
     }
 
     return res.status(201).json({ success: true, data: finalItem });
@@ -184,9 +200,10 @@ const updateMenuItem = async (req, res, next) => {
     if (!cafeId) {
       return res.status(400).json({ success: false, message: 'Missing cafeId' });
     }
-    const branchId = req.branchId || 'default';
+    let branchId = req.branchId || (req.headers['x-branch-id'] || 'default');
+    if (branchId === 'all') branchId = 'default';
 
-    // Strip immutable or restricted tenant fields to prevent Cast/MongoServerError on update
+    // Strip immutable or restricted tenant fields
     delete updateData._id;
     delete updateData.id;
     delete updateData.createdAt;
@@ -197,6 +214,10 @@ const updateMenuItem = async (req, res, next) => {
 
     if (updateData.price !== undefined) {
       updateData.price = parseFloat(updateData.price);
+    }
+
+    if (updateData.makingCost !== undefined) {
+      updateData.makingCost = parseFloat(updateData.makingCost) || 0;
     }
     
     if (updateData.originalPrice !== undefined) {
@@ -212,33 +233,32 @@ const updateMenuItem = async (req, res, next) => {
       delete updateData.image;
     }
 
-    // First find the item regardless of cafeId/branchId to see if it's a Global Master item
     const existingItem = await MenuItem.findOne({ _id: id }, null, { bypassBranchFilter: true });
-    console.log(`[DEBUG updateMenuItem] Attempting to update item ID: ${id}`);
-    console.log(`[DEBUG updateMenuItem] Found existing item:`, existingItem ? existingItem._id : null);
-    
     if (!existingItem) {
-      console.log(`[DEBUG updateMenuItem] Returning 404 because item was not found`);
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
 
     let updatedItem;
+    const isSuperAdmin = (req.user && (req.user.role || '').toLowerCase() === 'super_admin');
+    const isOwnerOrAdmin = (req.user && ['owner', 'admin'].includes((req.user.role || '').toLowerCase()));
 
-    // Check if this is a Global Master Item being edited by a local cafe
-    if (existingItem.cafeId === 'CD001' && existingItem.branchId === 'default' && (cafeId !== 'CD001' || branchId !== 'default')) {
-      // Local cafe/branch trying to update a Global Master item -> Create a Local Override
-      // Check if an override already exists for THIS specific cafe and branch
+    // If item belongs to this cafe (or edited by owner/admin/super_admin for this cafe), update directly!
+    if (existingItem.cafeId === cafeId || isSuperAdmin) {
+      updatedItem = await MenuItem.findOneAndUpdate(
+        { _id: id },
+        updateData,
+        { returnDocument: 'after', runValidators: true, bypassBranchFilter: true }
+      );
+    } else if (existingItem.cafeId === 'CD001' && existingItem.branchId === 'default' && cafeId !== 'CD001') {
+      // Local separate cafe trying to update a Global Master item -> Create/Update a Local Override
       const existingOverride = await MenuItem.findOne({ masterItemId: id, cafeId, branchId }, null, { bypassBranchFilter: true });
-      
       if (existingOverride) {
-        // Update the existing override
         updatedItem = await MenuItem.findOneAndUpdate(
           { _id: existingOverride._id, cafeId, branchId },
           updateData,
           { returnDocument: 'after', runValidators: true, bypassBranchFilter: true }
         );
       } else {
-        // Create a new override for this cafe and branch
         const overrideData = {
           ...existingItem.toObject(),
           ...updateData,
@@ -253,15 +273,7 @@ const updateMenuItem = async (req, res, next) => {
         const newLocalItem = new MenuItem(overrideData);
         updatedItem = await newLocalItem.save();
       }
-    } else if (existingItem.cafeId === cafeId) {
-      // It's a local item belonging to this cafe -> Update directly
-      updatedItem = await MenuItem.findOneAndUpdate(
-        { _id: id, cafeId },
-        updateData,
-        { returnDocument: 'after', runValidators: true, bypassBranchFilter: true }
-      );
     } else {
-      // Unauthorized cross-cafe edit
       return res.status(403).json({ success: false, message: 'Unauthorized to edit this item from this branch' });
     }
 
@@ -269,38 +281,48 @@ const updateMenuItem = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Menu item update target not found' });
     }
 
-    // Auto-update availability based on inventory
-    await updateMenuItemAvailabilityFromInventory(cafeId, updatedItem._id, branchId);
+    const finalItem = {
+      ...updatedItem.toObject(),
+      id: updatedItem._id.toString()
+    };
 
-    // Fetch the updated item again to return the latest availability status
-    const latestItem = await MenuItem.findOne({ _id: updatedItem._id, cafeId, branchId }, null, { bypassBranchFilter: true });
-    menuCache.clearMenu(cafeId, branchId);
+    // Invalidate caches immediately
+    menuCache.clearAll();
+
+    // Background inventory check
+    setImmediate(async () => {
+      try {
+        await updateMenuItemAvailabilityFromInventory(cafeId, updatedItem._id, branchId);
+      } catch (err) {
+        console.error('[INVENTORY] Background availability update error:', err.message);
+      }
+    });
+
+    // Broadcast socket updates
     try {
       const io = socket.getIO();
       if (io) {
-        io.to(`branch:${branchId}`).emit('menu_updated', latestItem || updatedItem);
-        io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', latestItem || updatedItem);
+        io.to(`branch:${branchId}`).emit('menu_updated', finalItem);
+        io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', finalItem);
+        io.to(`cafe:${cafeId}`).emit('menu_updated', finalItem);
+        io.to(`cafe_${cafeId}`).emit('menu_updated', finalItem);
+        io.to(`cafe:${cafeId}`).emit('dashboard_realtime_sync', {
+          cafeId,
+          branchId,
+          model: 'MenuItem',
+          action: 'update',
+          data: finalItem
+        });
+        io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
+          _id: String(finalItem._id),
+          name: finalItem.name,
+          available: finalItem.available,
+          price: finalItem.price,
+          updatedAt: finalItem.updatedAt || new Date().toISOString()
+        });
       }
     } catch (err) {
-      console.warn('[SOCKET] Could not broadcast menu_updated: Socket.IO not initialized');
-    }
-
-    const finalItem = latestItem || updatedItem;
-
-    // Emit socket update
-    try {
-      const { getIO } = require('../config/socket');
-      const io = getIO();
-      io.to(`cafe:${cafeId}`).emit('menuAvailabilityUpdated', {
-        _id: String(finalItem._id),
-        name: finalItem.name,
-        available: finalItem.available,
-        price: finalItem.price,
-        updatedAt: finalItem.updatedAt || new Date().toISOString()
-      });
-      console.log(`[SOCKET] Broadcasted menuAvailabilityUpdated for updated item: ${finalItem.name}`);
-    } catch (err) {
-      console.error('[SOCKET] Error emitting menuAvailabilityUpdated:', err.message);
+      console.warn('[SOCKET] Could not broadcast menu update:', err.message);
     }
 
     return res.status(200).json({ success: true, data: finalItem });
@@ -317,21 +339,41 @@ const updateMenuItem = async (req, res, next) => {
 const deleteMenuItem = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const cafeId = req.cafeId || (req.user && req.user.cafeId);
-    if (!cafeId) {
-      return res.status(400).json({ success: false, message: 'Missing cafeId' });
-    }
-    const branchId = req.branchId || 'default';
-
-    // Find regardless of cafeId/branchId to check if it's a global master item
+    const isSuperAdmin = (req.user && (req.user.role || '').toLowerCase() === 'super_admin');
     const existingItem = await MenuItem.findOne({ _id: id }, null, { bypassBranchFilter: true });
 
     if (!existingItem) {
       return res.status(404).json({ success: false, message: 'Menu item not found' });
     }
 
-    if (existingItem.cafeId === 'CD001' && existingItem.branchId === 'default' && (cafeId !== 'CD001' || branchId !== 'default')) {
-      // Local branch trying to delete a Global Master item -> Create a Local Override with isHidden: true
+    const cafeId = isSuperAdmin ? existingItem.cafeId : (req.cafeId || (req.user && req.user.cafeId));
+    let branchId = req.branchId || (req.headers['x-branch-id'] || 'default');
+    if (branchId === 'all') branchId = 'default';
+
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId context' });
+    }
+
+    if (isSuperAdmin) {
+      // Super admin can directly delete the item completely
+      await MenuItem.findOneAndDelete({ _id: id }, { bypassBranchFilter: true });
+      await MenuItem.deleteMany({ masterItemId: id });
+    } else if (existingItem.cafeId === cafeId) {
+      // Owner/Admin of this cafe deleting their own item:
+      // If it's a master item (CD001 default), soft-delete with isHidden: true so references don't break,
+      // and delete any local overrides
+      if (existingItem.cafeId === 'CD001' && existingItem.branchId === 'default') {
+        await MenuItem.findOneAndUpdate({ _id: id }, { isHidden: true }, { bypassBranchFilter: true });
+        await MenuItem.deleteMany({ masterItemId: id });
+      } else if (existingItem.masterItemId) {
+        // If it's an override, set isHidden: true so master doesn't reappear
+        await MenuItem.findOneAndUpdate({ _id: id, cafeId }, { isHidden: true }, { bypassBranchFilter: true });
+      } else {
+        // Pure custom local item
+        await MenuItem.findOneAndDelete({ _id: id, cafeId }, { bypassBranchFilter: true });
+      }
+    } else if (existingItem.cafeId === 'CD001' && existingItem.branchId === 'default' && cafeId !== 'CD001') {
+      // Separate tenant hiding a master item in their branch
       const existingOverride = await MenuItem.findOne({ masterItemId: id, cafeId, branchId }, null, { bypassBranchFilter: true });
       if (existingOverride) {
         await MenuItem.findOneAndUpdate({ _id: existingOverride._id, cafeId, branchId }, { isHidden: true }, { bypassBranchFilter: true });
@@ -348,20 +390,32 @@ const deleteMenuItem = async (req, res, next) => {
         };
         await new MenuItem(overrideData).save();
       }
-    } else if (existingItem.cafeId === cafeId) {
-      // If it's an override of a master item, we must just hide it so the master doesn't reappear
-      if (existingItem.masterItemId) {
-        await MenuItem.findOneAndUpdate({ _id: id, cafeId }, { isHidden: true }, { bypassBranchFilter: true });
-      } else {
-        // If it's a purely custom local item (or master deleting its own item), actually delete it
-        await MenuItem.findOneAndDelete({ _id: id, cafeId }, { bypassBranchFilter: true });
-      }
     } else {
       return res.status(403).json({ success: false, message: 'Unauthorized to delete this item from this branch' });
     }
 
-    // Clear menu cache since an item was deleted/hidden
-    menuCache.clearMenu(cafeId, branchId);
+    // Clear all menu caches thoroughly so deletions reflect across all instances immediately
+    menuCache.clearAll();
+
+    // Broadcast socket events so all connected clients and tabs remove the item immediately
+    try {
+      const io = socket.getIO();
+      if (io) {
+        io.to(`branch:${branchId}`).emit('menu_updated', { deletedId: id });
+        io.to(`branch_${cafeId}_${branchId}`).emit('menu_updated', { deletedId: id });
+        io.to(`cafe:${cafeId}`).emit('menu_updated', { deletedId: id });
+        io.to(`cafe_${cafeId}`).emit('menu_updated', { deletedId: id });
+        io.to(`cafe:${cafeId}`).emit('dashboard_realtime_sync', {
+          cafeId,
+          branchId,
+          model: 'MenuItem',
+          action: 'delete',
+          id
+        });
+      }
+    } catch (err) {
+      console.warn('[SOCKET] Could not broadcast menu delete:', err.message);
+    }
 
     return res.status(200).json({ success: true, message: 'Menu item deleted successfully' });
   } catch (error) {

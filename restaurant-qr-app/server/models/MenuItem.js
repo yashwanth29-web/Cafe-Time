@@ -59,6 +59,10 @@ const MenuItemSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  makingCost: {
+    type: Number,
+    default: 0
+  },
   originalPrice: {
     type: Number,
     required: false

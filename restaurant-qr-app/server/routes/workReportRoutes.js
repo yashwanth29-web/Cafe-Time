@@ -44,7 +44,7 @@ router.use(protect);
 // Staff submits a work report
 router.post(
   '/submit',
-  restrictTo('manager', 'chef', 'waiter', 'cashier', 'staff'),
+  restrictTo('manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'),
   upload.array('photos', 10), // Up to 10 photos, form-data name is 'photos'
   createReport
 );

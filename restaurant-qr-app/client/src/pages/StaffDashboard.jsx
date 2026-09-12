@@ -355,27 +355,44 @@ const StaffDashboard = () => {
 
   // Calculate dynamic estimated earnings for today
   const getTodayEarnings = () => {
-    if (!todayStatus?.checkedIn || !user) return 0;
+    if (!todayStatus?.checkedIn) return 0;
     
     const att = todayStatus.attendance;
-    
-    // Get total regular working duration so far
-    let durationMin = att?.totalDuration || 0;
-    if (todayStatus.checkedIn && !todayStatus.checkedOut) {
-      const checkInDate = new Date(att.checkInTime);
-      const diffMs = Date.now() - checkInDate.getTime();
-      durationMin = Math.max(0, Math.floor(diffMs / 60000));
-    }
-    
-    const overtimeHours = att?.overtimeHours || 0;
-    const baseDailyRate = user.dailyRate || 0;
-    const requiredHours = user.requiredHours || 8;
-    const workingHours = durationMin / 60;
+    // Look up daily rate from todayStatus.staff first (always freshest from DB), then user context
+    const baseDailyRate = Number(todayStatus?.staff?.dailyRate ?? user?.dailyRate ?? 0);
+    const salaryType = String(todayStatus?.staff?.salaryType || user?.salaryType || 'DAILY').toUpperCase();
+    const requiredHours = Number(todayStatus?.staff?.requiredHours || user?.requiredHours || 8);
+    const overtimeHours = Number(att?.overtimeHours || 0);
 
-    // Salary = Daily Wage * Actual Hours Worked / Required Daily Hours
-    const earnings = (baseDailyRate * (workingHours + overtimeHours)) / requiredHours;
-    
-    return Number(earnings.toFixed(2));
+    if (baseDailyRate <= 0) return 0;
+
+    let dayEarnings = 0;
+
+    if (salaryType === 'HOURLY') {
+      let durationMin = att?.totalDuration || 0;
+      if (todayStatus.checkedIn && !todayStatus.checkedOut && att?.checkInTime) {
+        const checkInDate = new Date(att.checkInTime);
+        const diffMs = Date.now() - checkInDate.getTime();
+        durationMin = Math.max(0, Math.floor(diffMs / 60000));
+      }
+      const workingHours = durationMin / 60;
+      const hourlyRate = Number(todayStatus?.staff?.hourlyRate || user?.hourlyRate || (baseDailyRate / requiredHours));
+      dayEarnings = hourlyRate * workingHours;
+    } else {
+      // For DAILY, WEEKLY, or MONTHLY: As soon as attendance is marked / checked in, full day salary is earned!
+      if (att?.status === 'Half Day') {
+        dayEarnings = baseDailyRate * 0.5;
+      } else {
+        dayEarnings = baseDailyRate;
+      }
+    }
+
+    // Add extra overtime pay if worked
+    if (overtimeHours > 0) {
+      dayEarnings += (baseDailyRate / requiredHours) * overtimeHours;
+    }
+
+    return Number(dayEarnings.toFixed(2));
   };
 
  // File Upload Handlers for Daily Work Report
@@ -946,15 +963,17 @@ const StaffDashboard = () => {
         <span style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           Estimated Earnings Today
         </span>
-        <strong style={{ fontSize: '2.4rem', color: 'var(--color-primary, #ff6b08)', display: 'block', margin: '8px 0' }}>
+        <strong style={{ fontSize: '2.4rem', color: '#10B981', display: 'block', margin: '8px 0' }}>
           ₹{getTodayEarnings()}
         </strong>
-        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-          Salary Type: <strong style={{ textTransform: 'capitalize' }}>{(user?.salaryType || 'DAILY').toLowerCase()}</strong>
-          {user?.salaryType === 'DAILY' && ` (₹${user.dailyRate}/day)`}
-          {user?.salaryType === 'HOURLY' && ` (₹${user.hourlyRate}/hour)`}
-          {user?.salaryType === 'WEEKLY' && ` (₹${user.weeklyRate}/week)`}
-          {user?.salaryType === 'MONTHLY' && ` (₹${user.monthlyRate}/month)`}
+        {todayStatus?.checkedIn && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid #10B981', color: '#10B981', padding: '4px 12px', borderRadius: '20px', fontSize: '11.5px', fontWeight: 700, margin: '2px 0 10px 0' }}>
+            ✓ Attendance Marked: Day Salary Credited
+          </div>
+        )}
+        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block' }}>
+          Salary Type: <strong style={{ textTransform: 'capitalize' }}>{((todayStatus?.staff?.salaryType || user?.salaryType) || 'DAILY').toLowerCase()}</strong>
+          {` (₹${todayStatus?.staff?.dailyRate ?? user?.dailyRate ?? 0}/day)`}
         </span>
       </div>
 

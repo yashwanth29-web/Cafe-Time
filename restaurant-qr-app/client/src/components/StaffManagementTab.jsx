@@ -244,11 +244,10 @@ const StaffManagementTab = () => {
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '8px', fontWeight: 'bold' }}>Role *</label>
                 <select value={form.staffRole} onChange={fld('staffRole')} style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}>
-                  <option value="staff">General Staff</option>
-                  <option value="waiter">Waiter</option>
+                  <option value="waiter">Waiter / Cashier (Floor &amp; Billing)</option>
                   <option value="chef">Chef / Kitchen</option>
-                  <option value="cashier">Cashier</option>
                   <option value="manager">Manager</option>
+                  <option value="staff">General Staff</option>
                 </select>
               </div>
 

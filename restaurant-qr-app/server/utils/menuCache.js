@@ -1,7 +1,10 @@
 const { getContext } = require('./context');
 
-let menuCache = {}; // Keyed by cafeId_branchId
-let categoryCache = {}; // Keyed by cafeId_branchId
+// Keyed by cafeId_branchId -> { data, expiresAt }
+let menuCache = {};
+let categoryCache = {};
+
+const CACHE_TTL_MS = 5000; // 5 seconds TTL ensures localhost and live stay in sync with MongoDB
 
 module.exports = {
   getMenu: (explicitCafeId, explicitBranchId) => {
@@ -9,10 +12,15 @@ module.exports = {
     const cafeId = explicitCafeId || (context && context.cafeId) || 'CD001';
     const branchId = explicitBranchId || (context && context.branchId) || 'default';
     const key = `${cafeId}_${branchId}`;
-    if (menuCache[key]) {
-      console.log(`[CACHE] Menu hit for ${key}: serving from memory cache`);
+    
+    const entry = menuCache[key];
+    if (entry && entry.expiresAt > Date.now()) {
+      return entry.data;
     }
-    return menuCache[key];
+    if (entry) {
+      delete menuCache[key];
+    }
+    return null;
   },
   
   setMenu: (explicitCafeId, explicitBranchId, data) => {
@@ -28,16 +36,17 @@ module.exports = {
       menuData = data;
     }
     const key = `${cafeId}_${branchId}`;
-    console.log(`[CACHE] Menu populated for ${key}`);
-    menuCache[key] = menuData;
+    menuCache[key] = {
+      data: menuData,
+      expiresAt: Date.now() + CACHE_TTL_MS
+    };
   },
   
   clearMenu: (explicitCafeId, explicitBranchId) => {
     const context = getContext();
     const cafeId = explicitCafeId || (context && context.cafeId) || 'CD001';
     const branchId = explicitBranchId || (context && context.branchId) || 'default';
-    if (cafeId && branchId === 'default') {
-      console.log(`[CACHE] Master branch updated. Invalidating ALL menu caches for ${cafeId}`);
+    if (cafeId && (branchId === 'default' || branchId === 'all')) {
       Object.keys(menuCache).forEach(k => {
         if (k.startsWith(`${cafeId}_`)) {
           delete menuCache[k];
@@ -45,10 +54,8 @@ module.exports = {
       });
     } else if (cafeId && branchId) {
       const key = `${cafeId}_${branchId}`;
-      console.log(`[CACHE] Menu cache invalidated for ${key}`);
       delete menuCache[key];
     } else {
-      console.log('[CACHE] All Menu caches invalidated');
       menuCache = {};
     }
   },
@@ -58,10 +65,15 @@ module.exports = {
     const cafeId = explicitCafeId || (context && context.cafeId) || 'CD001';
     const branchId = explicitBranchId || (context && context.branchId) || 'default';
     const key = `${cafeId}_${branchId}`;
-    if (categoryCache[key]) {
-      console.log(`[CACHE] Category hit for ${key}: serving from memory cache`);
+    
+    const entry = categoryCache[key];
+    if (entry && entry.expiresAt > Date.now()) {
+      return entry.data;
     }
-    return categoryCache[key];
+    if (entry) {
+      delete categoryCache[key];
+    }
+    return null;
   },
   
   setCategories: (explicitCafeId, explicitBranchId, data) => {
@@ -77,26 +89,31 @@ module.exports = {
       catData = data;
     }
     const key = `${cafeId}_${branchId}`;
-    console.log(`[CACHE] Category cache populated for ${key}`);
-    categoryCache[key] = catData;
+    categoryCache[key] = {
+      data: catData,
+      expiresAt: Date.now() + CACHE_TTL_MS
+    };
   },
   
   clearCategories: (explicitCafeId, explicitBranchId) => {
     const context = getContext();
     const cafeId = explicitCafeId || (context && context.cafeId) || 'CD001';
     const branchId = explicitBranchId || (context && context.branchId) || 'default';
-    if (cafeId && branchId) {
+    if (cafeId && (branchId === 'default' || branchId === 'all')) {
+      Object.keys(categoryCache).forEach(k => {
+        if (k.startsWith(`${cafeId}_`)) {
+          delete categoryCache[k];
+        }
+      });
+    } else if (cafeId && branchId) {
       const key = `${cafeId}_${branchId}`;
-      console.log(`[CACHE] Category cache invalidated for ${key}`);
       delete categoryCache[key];
     } else {
-      console.log('[CACHE] All Category caches invalidated');
       categoryCache = {};
     }
   },
   
   clearAll: () => {
-    console.log('[CACHE] All caches (menu and categories) cleared');
     menuCache = {};
     categoryCache = {};
   }

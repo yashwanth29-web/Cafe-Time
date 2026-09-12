@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { createOwner, getCafes, updateCafe, deleteCafe, restoreCafe, getTickets, updateTicketStatus } = require('../controllers/superAdminController');
+const { getBranches, createBranch, updateBranch, deleteBranch } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 // Protect all routes under /api/superadmin to only super_admin role
@@ -15,5 +16,11 @@ router.post('/cafe/:id/restore', restoreCafe);
 
 router.get('/tickets', getTickets);
 router.patch('/tickets/:id', updateTicketStatus);
+
+// Branches Management for Super Admin
+router.get('/branches', getBranches);
+router.post('/branches', createBranch);
+router.put('/branches/:id', updateBranch);
+router.delete('/branches/:id', deleteBranch);
 
 module.exports = router;

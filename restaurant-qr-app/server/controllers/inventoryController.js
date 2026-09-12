@@ -177,7 +177,7 @@ const createInventoryItem = async (req, res, next) => {
   try {
     const cafeId = req.user.cafeId || 'CD001';
     const branchId = req.branchId || 'default';
-    const { name, itemName, stock, quantity, minStock, reorderLevel, unit, cost, costPrice, sellingPrice, supplier, branch, category } = req.body;
+    const { name, itemName, stock, quantity, minStock, reorderLevel, unit, cost, costPrice, sellingPrice, supplier, supplierPhone, branch, category } = req.body;
 
     const finalName = (name || itemName || '').trim();
     const finalQuantity = Number(quantity !== undefined ? quantity : (stock !== undefined ? stock : 0));
@@ -198,6 +198,7 @@ const createInventoryItem = async (req, res, next) => {
       costPrice: finalCostPrice,
       sellingPrice: finalSellingPrice,
       supplier: (supplier || '').trim(),
+      supplierPhone: (supplierPhone || '').trim(),
       branch: (branch || 'Main').trim(),
       reorderLevel: finalReorderLevel,
       category: (category || 'Ingredients').trim()
@@ -242,7 +243,7 @@ const updateInventoryItem = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Inventory item not found or unauthorized' });
     }
 
-    const { name, itemName, quantity, stock, reorderLevel, minStock, unit, cost, costPrice, sellingPrice, supplier, branch, category, status } = req.body;
+    const { name, itemName, quantity, stock, reorderLevel, minStock, unit, cost, costPrice, sellingPrice, supplier, supplierPhone, branch, category, status } = req.body;
 
     const oldQuantity = item.quantity;
 
@@ -261,6 +262,7 @@ const updateInventoryItem = async (req, res, next) => {
 
     if (sellingPrice !== undefined) item.sellingPrice = Number(sellingPrice);
     if (supplier !== undefined) item.supplier = supplier.trim();
+    if (supplierPhone !== undefined) item.supplierPhone = supplierPhone.trim();
     if (branch !== undefined) item.branch = branch.trim();
     if (category !== undefined) item.category = category.trim();
     if (status !== undefined) item.status = status;

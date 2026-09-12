@@ -223,7 +223,15 @@ const checkIn = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: msg,
-      attendance
+      attendance,
+      staff: {
+        id: staff._id,
+        name: staff.name,
+        dailyRate: staff.dailyRate !== undefined ? staff.dailyRate : 0,
+        salaryType: staff.salaryType || 'DAILY',
+        hourlyRate: staff.hourlyRate !== undefined ? staff.hourlyRate : 0,
+        requiredHours: staff.requiredHours || 8
+      }
     });
   } catch (error) {
     console.error('checkIn error:', error);
@@ -365,7 +373,18 @@ const getTodayStatus = async (req, res) => {
       distance: distance !== null ? Math.round(distance) : null,
       insideRadius,
       latitude: branchLat,
-      longitude: branchLng
+      longitude: branchLng,
+      staff: {
+        id: staff._id,
+        name: staff.name,
+        role: staff.role,
+        dailyRate: staff.dailyRate !== undefined ? staff.dailyRate : 0,
+        salaryType: staff.salaryType || 'DAILY',
+        hourlyRate: staff.hourlyRate !== undefined ? staff.hourlyRate : 0,
+        weeklyRate: staff.weeklyRate !== undefined ? staff.weeklyRate : 0,
+        monthlyRate: staff.monthlyRate !== undefined ? staff.monthlyRate : 0,
+        requiredHours: staff.requiredHours || 8
+      }
     });
   } catch (error) {
     console.error('getTodayStatus error:', error);
