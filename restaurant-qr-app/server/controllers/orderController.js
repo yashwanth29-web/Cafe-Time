@@ -504,6 +504,11 @@ const getOrders = async (req, res, next) => {
 
     if (req.query.active === 'true') {
       filterQuery.status = { $ne: 'Completed' };
+      // Limit live active orders to last 24 hours if no explicit date is provided
+      if (!req.query.date && req.query.allTime !== 'true') {
+        const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        filterQuery.createdAt = { $gte: last24h };
+      }
     }
     if (req.query.status) {
       filterQuery.status = req.query.status;

@@ -117,7 +117,9 @@ const StaffOrderWorkspace = () => {
     if (!userCafeId || !activeBranchId) return;
     try {
       setErrorMsg('');
-      const response = await getOrders({ active: true, cafeId: userCafeId, branchId: activeBranchId });
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const response = await getOrders({ active: true, cafeId: userCafeId, branchId: activeBranchId, date: todayStr });
       if (response.success) {
         setOrders(response.data);
         
@@ -401,8 +403,10 @@ const StaffOrderWorkspace = () => {
   const fetchCompletedLogs = useCallback(async () => {
     setLogsLoading(true);
     try {
-      // Query todays completed orders by fetching server data
-      const res = await getOrders({ active: false, cafeId: user?.cafeId, branchId: activeBranchId });
+      // Query todays completed orders by fetching server data with today's date
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const res = await getOrders({ active: false, cafeId: user?.cafeId, branchId: activeBranchId, date: todayStr });
       if (res.success) {
         setCompletedLogs(res.data.filter(o => o.status === 'Completed' || o.paymentStatus === 'Paid'));
       }
@@ -875,19 +879,29 @@ const StaffOrderWorkspace = () => {
               </thead>
               <tbody>
                 {inventory.map((inv) => {
-                  const isLow = inv.stockLevel <= inv.minLevelAlert;
+                  const currentStock = inv.quantity !== undefined ? inv.quantity : (inv.stock ?? 0);
+                  const minAlert = inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock ?? 0);
+                  const isOutOfStock = currentStock <= 0;
+                  const isLow = !isOutOfStock && currentStock <= minAlert;
                   return (
                     <tr key={inv._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                       <td style={{ padding: '10px 8px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{inv.name}</td>
-                      <td style={{ padding: '10px 8px' }}>{inv.stockLevel} {inv.unit || 'units'}</td>
-                      <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{inv.minLevelAlert} {inv.unit}</td>
+                      <td style={{ padding: '10px 8px' }}>
+                        <span style={{ fontWeight: 700, color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : 'var(--color-text-primary)') }}>
+                          {currentStock}
+                        </span>{' '}
+                        {inv.unit || 'units'}
+                      </td>
+                      <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>
+                        {minAlert} {inv.unit || 'units'}
+                      </td>
                       <td style={{ padding: '10px 8px' }}>
                         <span style={{
-                          background: isLow ? 'var(--color-danger-bg)' : 'var(--color-success-bg)',
-                          color: isLow ? 'var(--color-danger)' : 'var(--color-success)',
-                          padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold'
+                          background: isOutOfStock ? 'rgba(231, 76, 60, 0.15)' : (isLow ? 'rgba(243, 156, 18, 0.15)' : 'rgba(46, 204, 113, 0.15)'),
+                          color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : '#27ae60'),
+                          padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold'
                         }}>
-                          {isLow ? 'Low Stock' : 'In Stock'}
+                          {isOutOfStock ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock')}
                         </span>
                       </td>
                     </tr>

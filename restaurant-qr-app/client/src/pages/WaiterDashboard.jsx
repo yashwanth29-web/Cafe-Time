@@ -81,8 +81,10 @@ const WaiterDashboard = () =>{
 
  const fetchOrders = async () =>{
  try {
- const response = await getOrders({ active: true, cafeId: user?.cafeId });
- if (response.success) {
+   const today = new Date();
+   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+   const response = await getOrders({ active: true, cafeId: user?.cafeId, date: todayStr });
+   if (response.success) {
  setOrders(response.data);
  
  // Track paid status transition
