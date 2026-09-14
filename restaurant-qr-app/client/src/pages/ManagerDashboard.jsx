@@ -56,9 +56,9 @@ const ManagerDashboard = () =>{
  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
  const [showWastageModal, setShowWastageModal] = useState(false);
  const [selectedItem, setSelectedItem] = useState(null);
- const [stockForm, setStockForm] = useState({ quantity: 0 });
- const [purchaseForm, setPurchaseForm] = useState({ quantityAdded: 0, costPrice: 0, supplier: '', notes: '' });
- const [wastageForm, setWastageForm] = useState({ quantityWasted: 0, type: 'Wastage', reason: '' });
+  const [stockForm, setStockForm] = useState({ quantity: '' });
+  const [purchaseForm, setPurchaseForm] = useState({ quantityAdded: '', costPrice: '', totalCost: '', supplier: '', notes: '' });
+  const [wastageForm, setWastageForm] = useState({ quantityWasted: '', type: 'Wastage', reason: '' });
 
  // Menu states
  const [menuItems, setMenuItems] = useState([]);
@@ -130,7 +130,7 @@ const ManagerDashboard = () =>{
  const handleUpdateStock = async (e) =>{
  e.preventDefault();
  try {
- const response = await updateInventoryItem(selectedItem._id, { quantity: stockForm.quantity });
+ const response = await updateInventoryItem(selectedItem._id, { quantity: Number(stockForm.quantity) });
  if (response && response.success) {
  alert('Stock quantity updated successfully.');
  setShowUpdateStockModal(false);
@@ -633,33 +633,33 @@ const ManagerDashboard = () =>{
   Stock Qty
 </button>
 <button
- onClick={() =>{
- setSelectedItem(item);
- setPurchaseForm({
- quantityAdded: 0,
- costPrice: costPriceVal,
- supplier: item.supplier || '',
- notes: ''
- });
- setShowPurchaseModal(true);
- }}
- style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
- 
- Purchase
+  onClick={() =>{
+  setSelectedItem(item);
+  const costPriceVal = item.costPrice !== undefined ? item.costPrice : (item.cost !== undefined ? item.cost : '');
+  setPurchaseForm({
+  quantityAdded: '',
+  costPrice: costPriceVal,
+  totalCost: '',
+  supplier: item.supplier || '',
+  notes: ''
+  });
+  setShowPurchaseModal(true);
+  }}
+  style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+  Purchase
 </button>
 <button
- onClick={() =>{
- setSelectedItem(item);
- setWastageForm({
- quantityWasted: 0,
- type: 'Wastage',
- reason: ''
- });
- setShowWastageModal(true);
- }}
- style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
- 
- Wastage
+  onClick={() =>{
+  setSelectedItem(item);
+  setWastageForm({
+  quantityWasted: '',
+  type: 'Wastage',
+  reason: ''
+  });
+  setShowWastageModal(true);
+  }}
+  style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+  Wastage
 </button>
 </div>
 </td>
@@ -718,33 +718,33 @@ const ManagerDashboard = () =>{
   Stock
 </button>
 <button
- onClick={() =>{
- setSelectedItem(item);
- setPurchaseForm({
- quantityAdded: 0,
- costPrice: costPriceVal,
- supplier: item.supplier || '',
- notes: ''
- });
- setShowPurchaseModal(true);
- }}
- style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
- 
- Purchase
+  onClick={() =>{
+  setSelectedItem(item);
+  const costPriceVal = item.costPrice !== undefined ? item.costPrice : (item.cost !== undefined ? item.cost : '');
+  setPurchaseForm({
+  quantityAdded: '',
+  costPrice: costPriceVal,
+  totalCost: '',
+  supplier: item.supplier || '',
+  notes: ''
+  });
+  setShowPurchaseModal(true);
+  }}
+  style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
+  Purchase
 </button>
 <button
- onClick={() =>{
- setSelectedItem(item);
- setWastageForm({
- quantityWasted: 0,
- type: 'Wastage',
- reason: ''
- });
- setShowWastageModal(true);
- }}
- style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
- 
- Wastage
+  onClick={() =>{
+  setSelectedItem(item);
+  setWastageForm({
+  quantityWasted: '',
+  type: 'Wastage',
+  reason: ''
+  });
+  setShowWastageModal(true);
+  }}
+  style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
+  Wastage
 </button>
 </div>
 </div>);
@@ -921,7 +921,7 @@ const ManagerDashboard = () =>{
 </div>
 <div className="form-group">
 <label htmlFor="stock-qty-input" className="form-label">Quantity ({selectedItem.unit}) *</label>
-<input type="number" id="stock-qty-input" name="stock-qty-input" required value={stockForm.quantity} onChange={(e) =>setStockForm({ quantity: Number(e.target.value) })} className="form-input" />
+<input type="number" id="stock-qty-input" name="stock-qty-input" required min="0" placeholder="e.g. 50" value={stockForm.quantity} onChange={(e) =>setStockForm({ quantity: e.target.value })} className="form-input" />
 </div>
 </div>
 <div className="modal-footer">
@@ -944,18 +944,124 @@ const ManagerDashboard = () =>{
 <form onSubmit={handleRecordPurchase}>
 <div className="modal-body">
 <div className="form-group">
-<span className="form-label">Ingredient:<strong>{selectedItem.name}</strong></span>
+<span className="form-label">Ingredient: <strong>{selectedItem.name}</strong> {selectedItem.unit ? `(${selectedItem.unit})` : ''}</span>
 </div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="purchase-qty-input" className="form-label">Quantity Purchased *</label>
-<input type="number" id="purchase-qty-input" name="purchase-qty-input" required min="1" value={purchaseForm.quantityAdded} onChange={(e) =>setPurchaseForm({ ...purchaseForm, quantityAdded: Number(e.target.value) })} className="form-input" />
+<label htmlFor="purchase-qty-input" className="form-label">Quantity Purchased {selectedItem.unit ? `(${selectedItem.unit})` : ''} *</label>
+<input 
+  type="number" 
+  step="any"
+  id="purchase-qty-input" 
+  name="purchase-qty-input" 
+  required 
+  min="0.001" 
+  placeholder="e.g. 10"
+  value={purchaseForm.quantityAdded} 
+  onChange={(e) => {
+    const val = e.target.value;
+    const qty = parseFloat(val);
+    const unitCost = parseFloat(purchaseForm.costPrice);
+    let newTotal = purchaseForm.totalCost;
+    if (!isNaN(qty) && qty > 0 && !isNaN(unitCost) && unitCost >= 0) {
+      newTotal = Number((qty * unitCost).toFixed(2));
+    } else if (val === '') {
+      newTotal = '';
+    }
+    setPurchaseForm(prev => ({ 
+      ...prev, 
+      quantityAdded: val,
+      totalCost: newTotal 
+    }));
+  }} 
+  className="form-input" 
+/>
 </div>
 <div className="form-group">
-<label htmlFor="purchase-cost-input" className="form-label">Cost Price per Unit (₹) *</label>
-<input type="number" step="0.001" id="purchase-cost-input" name="purchase-cost-input" required min="0.001" value={purchaseForm.costPrice} onChange={(e) =>setPurchaseForm({ ...purchaseForm, costPrice: Number(e.target.value) })} className="form-input" />
+<label htmlFor="purchase-total-input" className="form-label">Total Bill Amount (₹) <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(Optional)</span></label>
+<input 
+  type="number" 
+  step="any"
+  min="0"
+  id="purchase-total-input" 
+  name="purchase-total-input" 
+  placeholder="e.g. 150"
+  value={purchaseForm.totalCost} 
+  onChange={(e) => {
+    const val = e.target.value;
+    const total = parseFloat(val);
+    const qty = parseFloat(purchaseForm.quantityAdded);
+    let newUnitCost = purchaseForm.costPrice;
+    if (!isNaN(total) && !isNaN(qty) && qty > 0) {
+      newUnitCost = Number((total / qty).toFixed(4));
+    }
+    setPurchaseForm(prev => ({ 
+      ...prev, 
+      totalCost: val,
+      costPrice: newUnitCost 
+    }));
+  }} 
+  className="form-input" 
+/>
 </div>
 </div>
+<div className="form-group">
+<label htmlFor="purchase-cost-input" className="form-label">
+  Cost Price per {selectedItem.unit || 'Unit'} (₹) *
+  <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', fontWeight: 'normal', marginLeft: '6px' }}>
+    (Auto-calculated from ingredient / total bill)
+  </span>
+</label>
+<input 
+  type="number" 
+  step="any" 
+  id="purchase-cost-input" 
+  name="purchase-cost-input" 
+  required 
+  min="0" 
+  placeholder="e.g. 1.50"
+  value={purchaseForm.costPrice} 
+  onChange={(e) => {
+    const val = e.target.value;
+    const unitCost = parseFloat(val);
+    const qty = parseFloat(purchaseForm.quantityAdded);
+    let newTotal = purchaseForm.totalCost;
+    if (!isNaN(unitCost) && !isNaN(qty) && qty > 0) {
+      newTotal = Number((qty * unitCost).toFixed(2));
+    }
+    setPurchaseForm(prev => ({ 
+      ...prev, 
+      costPrice: val,
+      totalCost: newTotal 
+    }));
+  }} 
+  className="form-input" 
+/>
+</div>
+
+{/* Auto Calculation Preview Banner */}
+{Number(purchaseForm.quantityAdded) > 0 && Number(purchaseForm.costPrice) >= 0 && (
+  <div style={{ 
+    background: 'rgba(46, 204, 113, 0.12)', 
+    border: '1px solid rgba(46, 204, 113, 0.3)', 
+    borderRadius: '8px', 
+    padding: '10px 14px', 
+    marginBottom: '14px', 
+    fontSize: '13px', 
+    color: '#27ae60', 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '6px'
+  }}>
+    <span>✓ <strong>Total Bill:</strong> ₹{(Number(purchaseForm.quantityAdded) * Number(purchaseForm.costPrice)).toFixed(2)}</span>
+    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+      ₹{Number(purchaseForm.costPrice).toFixed(2)} per {selectedItem.unit || 'unit'}
+    </span>
+  </div>
+)}
+
 <div className="form-group">
 <label htmlFor="purchase-supplier-input" className="form-label">Supplier</label>
 <input type="text" id="purchase-supplier-input" name="purchase-supplier-input" value={purchaseForm.supplier} onChange={(e) =>setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
@@ -985,12 +1091,23 @@ const ManagerDashboard = () =>{
 <form onSubmit={handleRecordWastage}>
 <div className="modal-body">
 <div className="form-group">
-<span className="form-label">Ingredient:<strong>{selectedItem.name}</strong></span>
+<span className="form-label">Ingredient: <strong>{selectedItem.name}</strong> {selectedItem.unit ? `(${selectedItem.unit})` : ''}</span>
 </div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="wastage-qty-input" className="form-label">Quantity Wasted *</label>
-<input type="number" id="wastage-qty-input" name="wastage-qty-input" required min="1" value={wastageForm.quantityWasted} onChange={(e) =>setWastageForm({ ...wastageForm, quantityWasted: Number(e.target.value) })} className="form-input" />
+<label htmlFor="wastage-qty-input" className="form-label">Quantity Wasted {selectedItem.unit ? `(${selectedItem.unit})` : ''} *</label>
+<input 
+  type="number" 
+  step="any"
+  id="wastage-qty-input" 
+  name="wastage-qty-input" 
+  required 
+  min="0.001" 
+  placeholder="e.g. 5"
+  value={wastageForm.quantityWasted} 
+  onChange={(e) =>setWastageForm({ ...wastageForm, quantityWasted: e.target.value })} 
+  className="form-input" 
+/>
 </div>
 <div className="form-group">
 <label htmlFor="wastage-type-select" className="form-label">Wastage Type *</label>
@@ -1000,6 +1117,30 @@ const ManagerDashboard = () =>{
 </select>
 </div>
 </div>
+
+{/* Live Estimated Financial Loss Preview */}
+{Number(wastageForm.quantityWasted) > 0 && Number(selectedItem.costPrice || selectedItem.cost || 0) > 0 && (
+  <div style={{ 
+    background: 'rgba(231, 76, 60, 0.12)', 
+    border: '1px solid rgba(231, 76, 60, 0.3)', 
+    borderRadius: '8px', 
+    padding: '10px 14px', 
+    marginBottom: '14px', 
+    fontSize: '13px', 
+    color: '#e74c3c', 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '6px'
+  }}>
+    <span>⚠ <strong>Estimated Loss:</strong> ₹{(Number(wastageForm.quantityWasted) * Number(selectedItem.costPrice || selectedItem.cost || 0)).toFixed(2)}</span>
+    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+      (₹{Number(selectedItem.costPrice || selectedItem.cost || 0).toFixed(2)} per {selectedItem.unit || 'unit'})
+    </span>
+  </div>
+)}
+
 <div className="form-group">
 <label htmlFor="wastage-reason-input" className="form-label">Reason / Notes *</label>
 <input type="text" id="wastage-reason-input" name="wastage-reason-input" required value={wastageForm.reason} onChange={(e) =>setWastageForm({ ...wastageForm, reason: e.target.value })} className="form-input" placeholder="e.g. Expired, dropped tray" />

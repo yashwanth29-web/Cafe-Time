@@ -358,12 +358,14 @@ const OwnerDashboard = () =>{
   }, []);
 
   const handlePurchaseInventoryCallback = useCallback((item) => {
-    const costPriceVal = item.costPrice !== undefined ? item.costPrice : item.cost;
+    const costPriceVal = item.costPrice !== undefined ? item.costPrice : (item.cost !== undefined ? item.cost : '');
     setPurchaseForm({
       itemId: item._id,
       itemName: item.name,
-      quantityAdded: 0,
+      unit: item.unit || 'units',
+      quantityAdded: '',
       costPrice: costPriceVal,
+      totalCost: '',
       supplier: item.supplier || '',
       notes: ''
     });
@@ -371,10 +373,13 @@ const OwnerDashboard = () =>{
   }, []);
 
   const handleWastageInventoryCallback = useCallback((item) => {
+    const costPriceVal = item.costPrice !== undefined ? item.costPrice : (item.cost !== undefined ? item.cost : 0);
     setWastageForm({
       itemId: item._id,
       itemName: item.name,
-      quantityWasted: 0,
+      unit: item.unit || 'units',
+      costPrice: costPriceVal,
+      quantityWasted: '',
       type: 'Wastage',
       reason: ''
     });
@@ -825,15 +830,19 @@ const OwnerDashboard = () =>{
  const [purchaseForm, setPurchaseForm] = useState({
  itemId: '',
  itemName: '',
- quantityAdded: 0,
- costPrice: 0,
+ unit: '',
+ quantityAdded: '',
+ costPrice: '',
+ totalCost: '',
  supplier: '',
  notes: ''
  });
  const [wastageForm, setWastageForm] = useState({
  itemId: '',
  itemName: '',
- quantityWasted: 0,
+ unit: '',
+ costPrice: '',
+ quantityWasted: '',
  type: 'Wastage',
  reason: ''
  });
@@ -2162,46 +2171,61 @@ const exportStaffToCSV = () => {
     }
   };
 
- const handleRecordPurchase = async (e) =>{
- e.preventDefault();
- try {
- const response = await recordPurchase({
- itemId: purchaseForm.itemId,
- quantityAdded: Number(purchaseForm.quantityAdded),
- costPrice: Number(purchaseForm.costPrice),
- supplier: purchaseForm.supplier,
- notes: purchaseForm.notes
- });
- if (response.success) {
- alert('Purchase recorded successfully.');
- setShowPurchaseModal(false);
- fetchInventoryList(); // reload all stats & logs
- }
- } catch (error) {
- console.error('Error recording purchase:', error);
- alert(error.response?.data?.message || 'Error recording purchase');
- }
- };
+  const handleRecordPurchase = async (e) =>{
+    e.preventDefault();
+    const qty = Number(purchaseForm.quantityAdded);
+    if (!qty || qty <= 0) {
+      alert('Please enter a valid quantity purchased (greater than 0).');
+      return;
+    }
+    const cost = Number(purchaseForm.costPrice);
+    if (isNaN(cost) || cost < 0) {
+      alert('Please enter a valid cost price per unit.');
+      return;
+    }
+    try {
+      const response = await recordPurchase({
+        itemId: purchaseForm.itemId,
+        quantityAdded: qty,
+        costPrice: cost,
+        supplier: purchaseForm.supplier,
+        notes: purchaseForm.notes
+      });
+      if (response.success) {
+        alert('Purchase recorded successfully.');
+        setShowPurchaseModal(false);
+        fetchInventoryList(); // reload all stats & logs
+      }
+    } catch (error) {
+      console.error('Error recording purchase:', error);
+      alert(error.response?.data?.message || 'Error recording purchase');
+    }
+  };
 
- const handleRecordWastage = async (e) =>{
- e.preventDefault();
- try {
- const response = await recordWastage({
- itemId: wastageForm.itemId,
- quantityWasted: Number(wastageForm.quantityWasted),
- type: wastageForm.type,
- reason: wastageForm.reason
- });
- if (response.success) {
- alert('Wastage recorded successfully.');
- setShowWastageModal(false);
- fetchInventoryList(); // reload all stats & logs
- }
- } catch (error) {
- console.error('Error recording wastage:', error);
- alert(error.response?.data?.message || 'Error recording wastage');
- }
- };
+  const handleRecordWastage = async (e) =>{
+    e.preventDefault();
+    const qty = Number(wastageForm.quantityWasted);
+    if (!qty || qty <= 0) {
+      alert('Please enter a valid quantity wasted (greater than 0).');
+      return;
+    }
+    try {
+      const response = await recordWastage({
+        itemId: wastageForm.itemId,
+        quantityWasted: qty,
+        type: wastageForm.type,
+        reason: wastageForm.reason
+      });
+      if (response.success) {
+        alert('Wastage recorded successfully.');
+        setShowWastageModal(false);
+        fetchInventoryList(); // reload all stats & logs
+      }
+    } catch (error) {
+      console.error('Error recording wastage:', error);
+      alert(error.response?.data?.message || 'Error recording wastage');
+    }
+  };
 
  // Save Settings Config
  const handleSaveSettings = async (e) =>{
@@ -6462,18 +6486,118 @@ const exportStaffToCSV = () => {
 <form onSubmit={handleRecordPurchase}>
 <div className="modal-body">
 <div className="form-group">
-<label className="form-label">Ingredient:<strong>{purchaseForm.itemName}</strong></label>
+<label className="form-label">Ingredient: <strong>{purchaseForm.itemName}</strong> {purchaseForm.unit ? `(${purchaseForm.unit})` : ''}</label>
 </div>
 <div className="form-row">
 <div className="form-group">
-<label className="form-label">Quantity Purchased *</label>
-<input type="number" required min="1" value={purchaseForm.quantityAdded} onChange={(e) =>setPurchaseForm({ ...purchaseForm, quantityAdded: Number(e.target.value) })} className="form-input" />
+<label className="form-label">Quantity Purchased {purchaseForm.unit ? `(${purchaseForm.unit})` : ''} *</label>
+<input 
+  type="number" 
+  step="any"
+  required 
+  min="0.001" 
+  placeholder="e.g. 10"
+  value={purchaseForm.quantityAdded} 
+  onChange={(e) => {
+    const val = e.target.value;
+    const qty = parseFloat(val);
+    const unitCost = parseFloat(purchaseForm.costPrice);
+    let newTotal = purchaseForm.totalCost;
+    if (!isNaN(qty) && qty > 0 && !isNaN(unitCost) && unitCost >= 0) {
+      newTotal = Number((qty * unitCost).toFixed(2));
+    } else if (val === '') {
+      newTotal = '';
+    }
+    setPurchaseForm(prev => ({ 
+      ...prev, 
+      quantityAdded: val,
+      totalCost: newTotal 
+    }));
+  }} 
+  className="form-input" 
+/>
 </div>
 <div className="form-group">
-<label className="form-label">Cost Price per Unit (₹) *</label>
-<input type="number" step="0.001" required min="0.001" value={purchaseForm.costPrice} onChange={(e) =>setPurchaseForm({ ...purchaseForm, costPrice: Number(e.target.value) })} className="form-input" />
+<label className="form-label">Total Bill Amount (₹) <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(Optional)</span></label>
+<input 
+  type="number" 
+  step="any" 
+  min="0" 
+  placeholder="e.g. 150" 
+  value={purchaseForm.totalCost} 
+  onChange={(e) => {
+    const val = e.target.value;
+    const total = parseFloat(val);
+    const qty = parseFloat(purchaseForm.quantityAdded);
+    let newUnitCost = purchaseForm.costPrice;
+    if (!isNaN(total) && !isNaN(qty) && qty > 0) {
+      newUnitCost = Number((total / qty).toFixed(4));
+    }
+    setPurchaseForm(prev => ({ 
+      ...prev, 
+      totalCost: val,
+      costPrice: newUnitCost 
+    }));
+  }} 
+  className="form-input" 
+/>
 </div>
 </div>
+<div className="form-group">
+<label className="form-label">
+  Cost Price per {purchaseForm.unit || 'Unit'} (₹) * 
+  <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', fontWeight: 'normal', marginLeft: '6px' }}>
+    (Auto-calculated from ingredient / total bill)
+  </span>
+</label>
+<input 
+  type="number" 
+  step="any" 
+  required 
+  min="0" 
+  placeholder="e.g. 1.50" 
+  value={purchaseForm.costPrice} 
+  onChange={(e) => {
+    const val = e.target.value;
+    const unitCost = parseFloat(val);
+    const qty = parseFloat(purchaseForm.quantityAdded);
+    let newTotal = purchaseForm.totalCost;
+    if (!isNaN(unitCost) && !isNaN(qty) && qty > 0) {
+      newTotal = Number((qty * unitCost).toFixed(2));
+    }
+    setPurchaseForm(prev => ({ 
+      ...prev, 
+      costPrice: val,
+      totalCost: newTotal 
+    }));
+  }} 
+  className="form-input" 
+/>
+</div>
+
+{/* Auto Calculation Preview Banner */}
+{Number(purchaseForm.quantityAdded) > 0 && Number(purchaseForm.costPrice) >= 0 && (
+  <div style={{ 
+    background: 'rgba(46, 204, 113, 0.12)', 
+    border: '1px solid rgba(46, 204, 113, 0.3)', 
+    borderRadius: '8px', 
+    padding: '10px 14px', 
+    marginBottom: '14px', 
+    fontSize: '13px', 
+    color: '#27ae60', 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '6px'
+  }}>
+    <span>✓ <strong>Total Bill:</strong> ₹{(Number(purchaseForm.quantityAdded) * Number(purchaseForm.costPrice)).toFixed(2)}</span>
+    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+      ₹{Number(purchaseForm.costPrice).toFixed(2)} per {purchaseForm.unit || 'unit'}
+    </span>
+  </div>
+)}
+
 <div className="form-group">
 <label className="form-label">Supplier</label>
 <input type="text" value={purchaseForm.supplier} onChange={(e) =>setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
@@ -6503,12 +6627,21 @@ const exportStaffToCSV = () => {
 <form onSubmit={handleRecordWastage}>
 <div className="modal-body">
 <div className="form-group">
-<label className="form-label">Ingredient:<strong>{wastageForm.itemName}</strong></label>
+<label className="form-label">Ingredient: <strong>{wastageForm.itemName}</strong> {wastageForm.unit ? `(${wastageForm.unit})` : ''}</label>
 </div>
 <div className="form-row">
 <div className="form-group">
-<label className="form-label">Quantity Wasted *</label>
-<input type="number" required min="1" value={wastageForm.quantityWasted} onChange={(e) =>setWastageForm({ ...wastageForm, quantityWasted: Number(e.target.value) })} className="form-input" />
+<label className="form-label">Quantity Wasted {wastageForm.unit ? `(${wastageForm.unit})` : ''} *</label>
+<input 
+  type="number" 
+  step="any"
+  required 
+  min="0.001" 
+  placeholder="e.g. 5"
+  value={wastageForm.quantityWasted} 
+  onChange={(e) =>setWastageForm({ ...wastageForm, quantityWasted: e.target.value })} 
+  className="form-input" 
+/>
 </div>
 <div className="form-group">
 <label className="form-label">Wastage Type *</label>
@@ -6518,6 +6651,30 @@ const exportStaffToCSV = () => {
 </select>
 </div>
 </div>
+
+{/* Live Estimated Financial Loss Preview */}
+{Number(wastageForm.quantityWasted) > 0 && Number(wastageForm.costPrice || 0) > 0 && (
+  <div style={{ 
+    background: 'rgba(231, 76, 60, 0.12)', 
+    border: '1px solid rgba(231, 76, 60, 0.3)', 
+    borderRadius: '8px', 
+    padding: '10px 14px', 
+    marginBottom: '14px', 
+    fontSize: '13px', 
+    color: '#e74c3c', 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '6px'
+  }}>
+    <span>⚠ <strong>Estimated Loss:</strong> ₹{(Number(wastageForm.quantityWasted) * Number(wastageForm.costPrice)).toFixed(2)}</span>
+    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+      (₹{Number(wastageForm.costPrice).toFixed(2)} per {wastageForm.unit || 'unit'})
+    </span>
+  </div>
+)}
+
 <div className="form-group">
 <label className="form-label">Reason / Notes *</label>
 <input type="text" required value={wastageForm.reason} onChange={(e) =>setWastageForm({ ...wastageForm, reason: e.target.value })} className="form-input" placeholder="e.g. Power outage defrosted, dropped tray" />
