@@ -53,7 +53,7 @@ router.post('/upload-image', protect, restrictTo('super_admin', 'admin', 'owner'
   }
   
   const imageUrl = `/uploads/${req.file.filename}`;
-  await syncToGridFS(req.file.path, req.file.filename);
+  await syncToGridFS(req.file);
   
   return res.status(200).json({
     success: true,

@@ -1802,23 +1802,105 @@ textarea.form-input {
 }
 
 /* --- MODERN OWNER DASHBOARD UI --- */
+/* 4-column Analytics Grid for Dashboard Overview */
+.analytics-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 1024px) {
+  .analytics-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (max-width: 576px) {
+  .analytics-grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .modern-metric-card {
+    padding: 10px 10px;
+    border-radius: 10px;
+    min-height: 96px;
+  }
+
+  .modern-metric-title {
+    font-size: 0.65rem;
+    letter-spacing: 0.2px;
+  }
+
+  .modern-metric-icon-wrapper {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+  }
+
+  .modern-metric-icon-wrapper svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  .modern-metric-value {
+    font-size: 1.15rem;
+    margin: 0 0 4px 0;
+  }
+
+  .modern-metric-pill {
+    font-size: 0.60rem;
+    padding: 2px 6px;
+    gap: 3px;
+    white-space: nowrap;
+  }
+
+  .modern-metric-pill svg {
+    width: 9px !important;
+    height: 9px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .analytics-grid-4 {
+    gap: 6px;
+  }
+
+  .modern-metric-card {
+    padding: 8px 8px;
+    min-height: 90px;
+  }
+
+  .modern-metric-title {
+    font-size: 0.58rem;
+  }
+
+  .modern-metric-value {
+    font-size: 1.02rem;
+  }
+}
+
 .modern-metric-card {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 20px;
+  padding: 14px 16px;
   background: var(--bg-card);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-  transition: all 0.3s ease;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+  transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
+  min-height: 112px;
 }
 
 .modern-metric-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.06);
   border-color: var(--color-primary);
 }
 
@@ -1826,44 +1908,46 @@ textarea.form-input {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .modern-metric-title {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.73rem;
+  font-weight: 700;
   color: var(--color-text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   margin: 0;
+  line-height: 1.25;
 }
 
 .modern-metric-icon-wrapper {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   background: rgba(0,0,0,0.03);
+  flex-shrink: 0;
 }
 
 .modern-metric-value {
-  font-size: 1.8rem;
-  font-weight: 700;
+  font-size: 1.45rem;
+  font-weight: 800;
   color: var(--color-text-primary);
-  margin: 0 0 8px 0;
-  line-height: 1.2;
+  margin: 0 0 6px 0;
+  line-height: 1.15;
 }
 
 .modern-metric-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 20px;
+  padding: 3px 8px;
+  border-radius: 14px;
   width: fit-content;
 }
 
@@ -1880,6 +1964,11 @@ textarea.form-input {
 .modern-pill-neutral {
   background: rgba(149, 165, 166, 0.15);
   color: #7f8c8d;
+}
+
+.modern-pill-danger {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
 }
 
 .ranked-list-container {

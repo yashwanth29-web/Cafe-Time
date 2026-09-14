@@ -957,8 +957,8 @@ const ManagerDashboard = () =>{
 </div>
 </div>
 <div className="form-group">
-<label htmlFor="purchase-supplier-input" className="form-label">Supplier *</label>
-<input type="text" id="purchase-supplier-input" name="purchase-supplier-input" required value={purchaseForm.supplier} onChange={(e) =>setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" />
+<label htmlFor="purchase-supplier-input" className="form-label">Supplier</label>
+<input type="text" id="purchase-supplier-input" name="purchase-supplier-input" value={purchaseForm.supplier} onChange={(e) =>setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
 </div>
 <div className="form-group">
 <label htmlFor="purchase-notes-input" className="form-label">Notes</label>

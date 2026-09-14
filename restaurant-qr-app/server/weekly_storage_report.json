@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-09-12T07:04:16.488Z",
-  "totalGridFsFiles": 34,
-  "totalGridFsSizeMB": 1.4,
+  "timestamp": "2026-09-14T10:25:51.959Z",
+  "totalGridFsFiles": 88,
+  "totalGridFsSizeMB": 26.428,
   "orphanedFiles": [
     {
       "fileId": "6a335227d30565d9c9c73ea4",
@@ -188,9 +188,99 @@
       "filename": "CY_logo.jpg",
       "uploadDate": "2026-07-15T12:46:10.064Z",
       "length": 4423
+    },
+    {
+      "fileId": "6aa7ca64210721552f866f86",
+      "filename": "dish-1781668908940-132831490.jpg",
+      "uploadDate": "2026-09-14T10:20:20.439Z",
+      "length": 49871
+    },
+    {
+      "fileId": "6aa7ca64210721552f866f88",
+      "filename": "dish-1781711651277-750398919.jpg",
+      "uploadDate": "2026-09-14T10:20:20.819Z",
+      "length": 49871
+    },
+    {
+      "fileId": "6aa7ca65210721552f866f8c",
+      "filename": "dish-1783001374106-529932324.jpg",
+      "uploadDate": "2026-09-14T10:20:22.127Z",
+      "length": 202459
+    },
+    {
+      "fileId": "6aa7ca66210721552f866f8e",
+      "filename": "dish-1783001941038-301719349.jpg",
+      "uploadDate": "2026-09-14T10:20:22.643Z",
+      "length": 202459
+    },
+    {
+      "fileId": "6aa7ca66210721552f866f90",
+      "filename": "dish-1783002148343-283367456.jpg",
+      "uploadDate": "2026-09-14T10:20:23.111Z",
+      "length": 202459
+    },
+    {
+      "fileId": "6aa7ca67210721552f866f94",
+      "filename": "dish-1783407180723-57134842.jpg",
+      "uploadDate": "2026-09-14T10:20:24.081Z",
+      "length": 202459
+    },
+    {
+      "fileId": "6aa7ca68210721552f866f96",
+      "filename": "dish-1783416672090-30530247.jpg",
+      "uploadDate": "2026-09-14T10:20:24.372Z",
+      "length": 40275
+    },
+    {
+      "fileId": "6aa7ca6898d407bc4985a7a6",
+      "filename": "dish-1783407180723-57134842.jpg",
+      "uploadDate": "2026-09-14T10:20:24.511Z",
+      "length": 202459
+    },
+    {
+      "fileId": "6aa7ca68210721552f866f98",
+      "filename": "dish-1784199694238-665835906.jpeg",
+      "uploadDate": "2026-09-14T10:20:24.755Z",
+      "length": 117332
+    },
+    {
+      "fileId": "6aa7ca6898d407bc4985a7a8",
+      "filename": "dish-1784199694238-665835906.jpeg",
+      "uploadDate": "2026-09-14T10:20:24.998Z",
+      "length": 117332
+    },
+    {
+      "fileId": "6aa7ca7898d407bc4985a7c9",
+      "filename": "medium_fries.png",
+      "uploadDate": "2026-09-14T10:20:41.748Z",
+      "length": 707474
+    },
+    {
+      "fileId": "6aa7ca78210721552f866fc0",
+      "filename": "medium_fries.png",
+      "uploadDate": "2026-09-14T10:20:42.123Z",
+      "length": 707474
+    },
+    {
+      "fileId": "6aa7ca8098d407bc4985a7d9",
+      "filename": "report-1781803503141-398060450.jpg",
+      "uploadDate": "2026-09-14T10:20:48.151Z",
+      "length": 38044
+    },
+    {
+      "fileId": "6aa7ca8098d407bc4985a7db",
+      "filename": "report-1783267034126-264944002.png",
+      "uploadDate": "2026-09-14T10:20:48.589Z",
+      "length": 261054
+    },
+    {
+      "fileId": "6aa7ca80210721552f866fd0",
+      "filename": "report-1783267034126-264944002.png",
+      "uploadDate": "2026-09-14T10:20:48.844Z",
+      "length": 261054
     }
   ],
-  "reclaimableSpaceMB": 1.276,
+  "reclaimableSpaceMB": 4.482,
   "chunkIntegrity": {
     "totalOrphanedChunks": 0,
     "orphanedChunkFileIds": []

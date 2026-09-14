@@ -311,6 +311,9 @@ const deleteInventoryItem = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Inventory item not found or unauthorized' });
     }
 
+    // Clean up associated logs for the deleted item
+    await InventoryLog.deleteMany({ itemId: id, cafeId });
+
     return res.status(200).json({ success: true, message: 'Inventory item deleted successfully' });
   } catch (error) {
     error.controllerName = 'inventoryController';

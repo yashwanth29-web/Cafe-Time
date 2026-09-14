@@ -9,6 +9,7 @@ const Attendance = require('../models/Attendance');
 const Payroll = require('../models/Payroll');
 const Inventory = require('../models/Inventory');
 const InventoryLog = require('../models/InventoryLog');
+const MenuItem = require('../models/MenuItem');
 const emailService = require('../services/emailService');
 const { encrypt, decrypt } = require('../utils/encryption');
 const Razorpay = require('razorpay');
@@ -1853,22 +1854,6 @@ const getDashboardStats = async (req, res) => {
       Branch.find({ cafeId }).lean()
     ]);
     
-    let salesItems = allSalesItems;
-    if (salesItems.length === 0) {
-      salesItems = await Order.aggregate([
-        { $match: revenueMatch },
-        { $unwind: '$items' },
-        { 
-          $group: {
-            _id: '$items.name',
-            quantity: { $sum: '$items.quantity' },
-            revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } }
-          }
-        },
-        { $sort: { quantity: -1 } }
-      ]);
-    }
-
     const revenueData = revenueStats.length > 0 ? revenueStats[0] : { 
       totalRevenueAllTime: 0, 
       todayRevenue: 0, 
@@ -1885,15 +1870,41 @@ const getDashboardStats = async (req, res) => {
       else orderSourceData.Counter += stat.count;
     });
     
-    const formattedSalesItems = salesItems.map(item => ({
-      name: item._id,
-      quantity: item.quantity,
-      revenue: item.revenue
-    }));
-    const formattedTopSelling = formattedSalesItems.slice(0, 5);
-    const formattedSlowSelling = formattedSalesItems.length > 5
-      ? formattedSalesItems.slice(-5).reverse()
-      : formattedSalesItems.slice().reverse();
+    // Strictly use sales that occurred THIS month (no fallback to past months)
+    const salesMap = {};
+    (allSalesItems || []).forEach(item => {
+      salesMap[item._id] = {
+        name: item._id,
+        quantity: item.quantity,
+        revenue: item.revenue
+      };
+    });
+
+    // Top Selling: only items with sales > 0 this month, top 5
+    const formattedTopSelling = (allSalesItems || [])
+      .filter(item => item.quantity > 0)
+      .slice(0, 5)
+      .map(item => ({
+        name: item._id,
+        quantity: item.quantity,
+        revenue: item.revenue
+      }));
+
+    // Slow Selling: includes all cafe dishes (unsold / 0 sold items first, then least sold)
+    const allMenuItems = await MenuItem.find({ cafeId, isHidden: { $ne: true } }).select('name category price').lean();
+    const slowSellingList = allMenuItems.map(m => {
+      const sold = salesMap[m.name] || { quantity: 0, revenue: 0 };
+      return {
+        name: m.name,
+        quantity: sold.quantity,
+        revenue: sold.revenue,
+        category: m.category
+      };
+    });
+
+    // Sort ascending: 0 sold first, then 1, 2...
+    slowSellingList.sort((a, b) => a.quantity - b.quantity);
+    const formattedSlowSelling = slowSellingList.slice(0, 5);
     
     const inventoryValue = inventoryValueAgg.length > 0 ? inventoryValueAgg[0].totalValue : 0;
     
@@ -1948,12 +1959,58 @@ const getDashboardStats = async (req, res) => {
       formattedRecentOrders.push(await appendLegacyFallback(order, branchMap));
     }
     
+    // Compute Today's and Monthly Gross Profit
+    const menuItemsList = await MenuItem.find({ cafeId }).select('_id name makingCost price').lean();
+    const menuCostMapById = {};
+    const menuCostMapByName = {};
+    menuItemsList.forEach(m => {
+      const cost = Number(m.makingCost) || 0;
+      if (m._id) menuCostMapById[String(m._id)] = cost;
+      if (m.name) menuCostMapByName[m.name.toLowerCase().trim()] = cost;
+    });
+
+    const profitOrders = await Order.find({
+      ...revenueMatch,
+      createdAt: { $gte: startOfMonth }
+    }).select('totalAmount items createdAt').lean();
+
+    let todayGrossProfit = 0;
+    let monthlyGrossProfit = 0;
+
+    profitOrders.forEach(ord => {
+      let orderCost = 0;
+      if (Array.isArray(ord.items)) {
+        ord.items.forEach(it => {
+          const idKey = String(it.id || it._id || '');
+          const nameKey = (it.name || '').toLowerCase().trim();
+          const unitCost = menuCostMapById[idKey] ?? menuCostMapByName[nameKey] ?? 0;
+          orderCost += unitCost * (Number(it.quantity) || 1);
+        });
+      }
+      const orderProfit = (Number(ord.totalAmount) || 0) - orderCost;
+      monthlyGrossProfit += orderProfit;
+      if (new Date(ord.createdAt) >= startOfToday) {
+        todayGrossProfit += orderProfit;
+      }
+    });
+
+    const todayMargin = revenueData.todayRevenue > 0 
+      ? Number(((todayGrossProfit / revenueData.todayRevenue) * 100).toFixed(1)) 
+      : 0;
+    const monthlyMargin = revenueData.monthlyRevenue > 0 
+      ? Number(((monthlyGrossProfit / revenueData.monthlyRevenue) * 100).toFixed(1)) 
+      : 0;
+
     return res.status(200).json({
       success: true,
       data: {
         todayRevenue: revenueData.todayRevenue,
+        todayProfit: Number(todayGrossProfit.toFixed(2)),
+        todayMargin,
         weeklyRevenue: revenueData.weeklyRevenue,
         monthlyRevenue: revenueData.monthlyRevenue,
+        monthlyProfit: Number(monthlyGrossProfit.toFixed(2)),
+        monthlyMargin,
         yearlyRevenue: revenueData.yearlyRevenue,
         ordersToday,
         completedOrders,

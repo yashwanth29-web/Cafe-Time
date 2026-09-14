@@ -12,7 +12,7 @@ const getMenuItems = async (req, res, next) => {
     if (!cafeId) {
       return res.status(400).json({ success: false, message: 'Missing cafeId' });
     }
-    let branchId = req.branchId || req.query.branchId || 'default';
+    let branchId = req.branchId || req.headers['x-branch-id'] || req.query.branchId || 'default';
     if (branchId === 'all') branchId = 'default';
 
     console.log(`[DEBUG getMenuItems] Request for cafeId: ${cafeId}, branchId: ${branchId}`);
@@ -45,7 +45,7 @@ const getMenuItems = async (req, res, next) => {
           .lean();
         
         // 2. Fetch Local Items for this specific cafe and branch
-        const localItems = await MenuItem.find({ cafeId, branchId }).select('-__v -createdAt -updatedAt').lean();
+        const localItems = await MenuItem.find({ cafeId, branchId, isHidden: { $ne: true } }).select('-__v -createdAt -updatedAt').lean();
         
         // 3. Map Local Items by masterItemId for O(1) lookup
         const localOverridesMap = {};
@@ -112,7 +112,7 @@ const createMenuItem = async (req, res, next) => {
     if (!cafeId) {
       return res.status(400).json({ success: false, message: 'Missing cafeId' });
     }
-    let branchId = req.branchId || (req.headers['x-branch-id'] || 'default');
+    let branchId = req.body?.branchId || req.branchId || (req.headers['x-branch-id'] || 'default');
     if (branchId === 'all') branchId = 'default';
 
     // Simple validation
@@ -133,7 +133,9 @@ const createMenuItem = async (req, res, next) => {
       recipe: recipe || [],
       preparationTime: preparationTime ? parseInt(preparationTime) : 10,
       cafeId,
-      branchId
+      branchId,
+      isHidden: false,
+      status: 'ACTIVE'
     });
 
     const savedItem = await newMenuItem.save();

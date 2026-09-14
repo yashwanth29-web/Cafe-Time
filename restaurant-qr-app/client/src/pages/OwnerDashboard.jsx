@@ -49,9 +49,9 @@ import {
 '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
-import socket, { connectSocket } from '../socket';
+import socket from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
-import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3 } from 'lucide-react';
+import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const AdminMenuImage = React.memo(({ item }) =>{
@@ -325,6 +325,10 @@ const OwnerDashboard = () =>{
   const tabParam = searchParams.get('tab');
 
   const activeBranchIdRef = useRef(activeBranchId);
+
+  const activeBranch = useMemo(() => {
+    return (branches || []).find((b) => b.branchId === activeBranchId || String(b._id) === String(activeBranchId)) || null;
+  }, [branches, activeBranchId]);
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState(() => {
@@ -852,7 +856,18 @@ const OwnerDashboard = () =>{
  const [inventorySearch, setInventorySearch] = useState('');
 
   const filteredMenuItems = useMemo(() => {
-    return menuItems.filter((item) =>
+    const seenIds = new Set();
+    const uniqueItems = [];
+    for (const item of (menuItems || [])) {
+      const cleanId = String(item._id || item.id || '');
+      if (cleanId && !seenIds.has(cleanId)) {
+        seenIds.add(cleanId);
+        uniqueItems.push(item);
+      } else if (!cleanId) {
+        uniqueItems.push(item);
+      }
+    }
+    return uniqueItems.filter((item) =>
       item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
       (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
     );
@@ -1036,9 +1051,25 @@ const OwnerDashboard = () =>{
     if (!isSilent && !cache.hasLoaded.menuItems) setMenuLoading(true);
     try {
       const response = await getMenu();
-      if (targetBranchId !== activeBranchIdRef.current) return;
-      if (response.success) {
-        const mappedData = response.data.map(item => ({ ...item, id: item._id || item.id }));
+      const currentBranch = activeBranchIdRef.current;
+      const isMatchingBranch = !targetBranchId || !currentBranch || 
+        targetBranchId === currentBranch || 
+        (targetBranchId === 'default' && currentBranch === 'all') || 
+        (targetBranchId === 'all' && currentBranch === 'default');
+      if (!isMatchingBranch) return;
+
+      if (response && response.success) {
+        const seenIds = new Set();
+        const mappedData = [];
+        for (const rawItem of (response.data || [])) {
+          const cleanId = String(rawItem._id || rawItem.id || '');
+          if (cleanId && !seenIds.has(cleanId)) {
+            seenIds.add(cleanId);
+            mappedData.push({ ...rawItem, id: cleanId, _id: cleanId });
+          } else if (!cleanId) {
+            mappedData.push(rawItem);
+          }
+        }
         setMenuItems(mappedData);
         cache.menuItems = mappedData;
         cache.hasLoaded.menuItems = true;
@@ -1050,9 +1081,7 @@ const OwnerDashboard = () =>{
       console.error('Error fetching menu:', error);
       setMenuError('Cannot connect to local server menu database.');
     } finally {
-      if (targetBranchId === activeBranchIdRef.current) {
-        setMenuLoading(false);
-      }
+      setMenuLoading(false);
     }
   };
 
@@ -1889,17 +1918,34 @@ const exportStaffToCSV = () => {
     }
     setIsMenuSubmitting(true);
     try {
-      const response = await createMenuItem(newItem);
+      const branchIdToSave = activeBranchId === 'all' ? 'default' : (activeBranchId || 'default');
+      const response = await createMenuItem({
+        ...newItem,
+        branchId: branchIdToSave
+      });
       if (response.success && response.data) {
+        const cleanId = String(response.data._id || response.data.id);
         const itemWithId = {
           ...response.data,
-          id: response.data._id || response.data.id
+          id: cleanId,
+          _id: cleanId
         };
-        // Instant state & cache update
-        setMenuItems((prevItems) => [...prevItems, itemWithId]);
+        // Deduplicate in state: check if item was already added (e.g. from real-time socket event)
+        setMenuItems((prevItems) => {
+          const exists = prevItems.some((item) => String(item._id || item.id) === cleanId);
+          if (exists) {
+            return prevItems.map((item) => String(item._id || item.id) === cleanId ? itemWithId : item);
+          }
+          return [...prevItems, itemWithId];
+        });
         const cache = getBranchCache(activeBranchId);
-        if (cache.menuItems) {
-          cache.menuItems = [...cache.menuItems, itemWithId];
+        if (cache && cache.menuItems) {
+          const existsInCache = cache.menuItems.some((item) => String(item._id || item.id) === cleanId);
+          if (existsInCache) {
+            cache.menuItems = cache.menuItems.map((item) => String(item._id || item.id) === cleanId ? itemWithId : item);
+          } else {
+            cache.menuItems = [...cache.menuItems, itemWithId];
+          }
         }
         setShowAddModal(false);
         setNewItem({
@@ -2038,7 +2084,7 @@ const exportStaffToCSV = () => {
      cost: calculatedUnitCost,
      costPrice: calculatedUnitCost,
      sellingPrice: 0,
-     branch: activeBranch?.name || newInventoryItem.branch || 'Main',
+     branch: activeBranch?.branchName || activeBranch?.name || newInventoryItem.branch || 'Main',
      branchId: activeBranchId === 'all' ? 'default' : (activeBranchId || 'default')
    };
    const response = await createInventoryItem(payload);
@@ -2080,7 +2126,7 @@ const exportStaffToCSV = () => {
   const payload = {
     ...editingInventoryItem,
     sellingPrice: 0,
-    branch: editingInventoryItem.branch || activeBranch?.name || 'Main'
+    branch: editingInventoryItem.branch || activeBranch?.branchName || activeBranch?.name || 'Main'
   };
   const response = await updateInventoryItem(editingInventoryItem._id, payload);
   if (response.success) {
@@ -2105,6 +2151,8 @@ const exportStaffToCSV = () => {
       const response = await deleteInventoryItem(id);
       if (response.success) {
         setInventoryList((prev) =>prev.filter((item) =>item._id !== id));
+        setInventoryLogs((prev) =>prev.filter((log) =>String(log.itemId) !== String(id)));
+        fetchInventoryList(true);
       }
     } catch (error) {
       console.error('Error deleting inventory item:', error);
@@ -2232,6 +2280,62 @@ const exportStaffToCSV = () => {
       : monthlyOrders.reduce((acc, o) => acc + o.totalAmount, 0);
   }, [statsData, monthlyOrders]);
 
+  // Fast memoized lookup map for menu item makingCost
+  const menuCostMap = useMemo(() => {
+    const byId = {};
+    const byName = {};
+    (menuItems || []).forEach((m) => {
+      const cost = Number(m.makingCost) || 0;
+      const idKey = String(m._id || m.id || '');
+      if (idKey) byId[idKey] = cost;
+      if (m.name) byName[m.name.toLowerCase().trim()] = cost;
+    });
+    return { byId, byName };
+  }, [menuItems]);
+
+  const computeOrdersProfit = useCallback((ordersList) => {
+    return (ordersList || []).reduce((totalProfit, ord) => {
+      let orderCost = 0;
+      if (Array.isArray(ord.items)) {
+        ord.items.forEach((it) => {
+          const idKey = String(it.id || it._id || '');
+          const nameKey = (it.name || '').toLowerCase().trim();
+          const unitCost = menuCostMap.byId[idKey] ?? menuCostMap.byName[nameKey] ?? 0;
+          orderCost += unitCost * (Number(it.quantity) || 1);
+        });
+      }
+      return totalProfit + ((Number(ord.totalAmount) || 0) - orderCost);
+    }, 0);
+  }, [menuCostMap]);
+
+  const todayProfit = useMemo(() => {
+    if (statsData && statsData.todayProfit !== undefined) {
+      return statsData.todayProfit;
+    }
+    return computeOrdersProfit(todayOrders);
+  }, [statsData, todayOrders, computeOrdersProfit]);
+
+  const todayMargin = useMemo(() => {
+    if (statsData && statsData.todayMargin !== undefined) {
+      return statsData.todayMargin;
+    }
+    return todayRevenue > 0 ? Number(((todayProfit / todayRevenue) * 100).toFixed(1)) : 0;
+  }, [statsData, todayRevenue, todayProfit]);
+
+  const monthlyProfit = useMemo(() => {
+    if (statsData && statsData.monthlyProfit !== undefined) {
+      return statsData.monthlyProfit;
+    }
+    return computeOrdersProfit(monthlyOrders);
+  }, [statsData, monthlyOrders, computeOrdersProfit]);
+
+  const monthlyMargin = useMemo(() => {
+    if (statsData && statsData.monthlyMargin !== undefined) {
+      return statsData.monthlyMargin;
+    }
+    return monthlyRevenue > 0 ? Number(((monthlyProfit / monthlyRevenue) * 100).toFixed(1)) : 0;
+  }, [statsData, monthlyRevenue, monthlyProfit]);
+
   const totalInventoryValue = useMemo(() => {
     return inventoryList.reduce((acc, item) => 
       acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 
@@ -2268,19 +2372,19 @@ const exportStaffToCSV = () => {
   }, [deductionLogs, statsData]);
 
   const rankedItems = useMemo(() => {
-    if (statsData) {
+    if (statsData && statsData.topSellingItems !== undefined) {
       return {
         topSelling: statsData.topSellingItems || [],
         slowSelling: statsData.slowSellingItems || []
       };
     }
     const itemCounts = {};
-    completedOrders.forEach(order => {
+    (monthlyOrders || []).forEach(order => {
       if (order.items && order.items.length > 0) {
         order.items.forEach(item => {
           const name = item.name || 'Unknown Item';
-          const qty = item.quantity || 0;
-          const price = item.price || 0;
+          const qty = Number(item.quantity) || 0;
+          const price = Number(item.price) || 0;
           if (!itemCounts[name]) {
             itemCounts[name] = { name, quantity: 0, revenue: 0 };
           }
@@ -2289,15 +2393,110 @@ const exportStaffToCSV = () => {
         });
       }
     });
-    const sorted = Object.values(itemCounts).sort((a, b) => b.quantity - a.quantity);
-    const topSelling = sorted.slice(0, 5);
-    const slowSelling = sorted.length > 5 
-      ? sorted.slice(sorted.length - 5).reverse()
-      : sorted.slice(0).reverse();
+
+    const soldList = Object.values(itemCounts).filter(i => i.quantity > 0).sort((a, b) => b.quantity - a.quantity);
+    const topSelling = soldList.slice(0, 5);
+
+    const allMenuMap = {};
+    (menuItems || []).forEach(m => {
+      if (m.name) {
+        allMenuMap[m.name] = {
+          name: m.name,
+          quantity: itemCounts[m.name]?.quantity || 0,
+          revenue: itemCounts[m.name]?.revenue || 0,
+          category: m.category || 'Dishes'
+        };
+      }
+    });
+    const combinedList = Object.keys(allMenuMap).length > 0 
+      ? Object.values(allMenuMap) 
+      : Object.values(itemCounts);
+
+    const slowSelling = combinedList
+      .sort((a, b) => a.quantity - b.quantity)
+      .slice(0, 5);
+
     return { topSelling, slowSelling };
-  }, [completedOrders, statsData]);
+  }, [monthlyOrders, menuItems, statsData]);
 
   const { topSelling, slowSelling } = rankedItems;
+
+  const handleExportMonthlyReportExcel = useCallback(() => {
+    try {
+      const now = new Date();
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const currentMonth = monthNames[now.getMonth()];
+      const currentYear = now.getFullYear();
+      const branchLabel = activeBranch?.branchName ? `${activeBranch.branchName} (${activeBranch.branchId})` : (activeBranchId === 'all' ? 'All Branches' : 'Main Branch');
+
+      const wb = XLSX.utils.book_new();
+
+      // 1. Sheet 1: Executive Summary / 8 Cards
+      const summaryData = [
+        { "Metric / KPI": "Report Period", "Value": `${currentMonth} ${currentYear}` },
+        { "Metric / KPI": "Branch", "Value": branchLabel },
+        { "Metric / KPI": "Report Generated At", "Value": now.toLocaleString() },
+        { "Metric / KPI": "---", "Value": "---" },
+        { "Metric / KPI": "Today's Revenue (₹)", "Value": Number(todayRevenue.toFixed(2)) },
+        { "Metric / KPI": "Today's Gross Profit (₹)", "Value": Number(todayProfit.toFixed(2)) },
+        { "Metric / KPI": "Today's Profit Margin (%)", "Value": `${todayMargin}%` },
+        { "Metric / KPI": "Monthly Revenue (₹)", "Value": Number(monthlyRevenue.toFixed(2)) },
+        { "Metric / KPI": "Monthly Gross Profit (₹)", "Value": Number(monthlyProfit.toFixed(2)) },
+        { "Metric / KPI": "Monthly Profit Margin (%)", "Value": `${monthlyMargin}%` },
+        { "Metric / KPI": "Inventory Value (Real-Time Worth) (₹)", "Value": Number(totalInventoryValue.toFixed(2)) },
+        { "Metric / KPI": "Total Inventory Cost (Purchases This Month) (₹)", "Value": Number(totalInventoryCost.toFixed(2)) },
+        { "Metric / KPI": "Inventory Consumption (Consumed This Month) (₹)", "Value": Number(totalInventoryConsumption.toFixed(2)) },
+        { "Metric / KPI": "QR Menu Orders (Count)", "Value": statsData?.orderSourceData ? statsData.orderSourceData.QR : orders.filter(o => o.source !== 'STAFF').length },
+        { "Metric / KPI": "Staff POS Orders (Count)", "Value": statsData?.orderSourceData ? (statsData.orderSourceData.POS + statsData.orderSourceData.Counter) : orders.filter(o => o.source === 'STAFF').length }
+      ];
+      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Monthly Overview");
+
+      // 2. Sheet 2: Top Selling Items (This Month)
+      const topSellingData = topSelling.length > 0 ? topSelling.map((item, idx) => ({
+        "Rank": idx + 1,
+        "Item Name": item.name,
+        "Quantity Sold": item.quantity,
+        "Total Revenue (₹)": Number((item.revenue || 0).toFixed(2))
+      })) : [{ "Rank": "-", "Item Name": "No sales recorded this month", "Quantity Sold": 0, "Total Revenue (₹)": 0 }];
+      const wsTopSelling = XLSX.utils.json_to_sheet(topSellingData);
+      XLSX.utils.book_append_sheet(wb, wsTopSelling, "Top Selling Items");
+
+      // 3. Sheet 3: Slow & Unsold Items (This Month)
+      const slowSellingData = slowSelling.length > 0 ? slowSelling.map((item, idx) => ({
+        "Rank": idx + 1,
+        "Item Name": item.name,
+        "Quantity Sold": item.quantity,
+        "Total Revenue (₹)": Number((item.revenue || 0).toFixed(2)),
+        "Category": item.category || "General"
+      })) : [{ "Rank": "-", "Item Name": "No dishes found", "Quantity Sold": 0, "Total Revenue (₹)": 0, "Category": "-" }];
+      const wsSlowSelling = XLSX.utils.json_to_sheet(slowSellingData);
+      XLSX.utils.book_append_sheet(wb, wsSlowSelling, "Slow & Unsold Items");
+
+      // 4. Sheet 4: Staff Roster & Team Directory
+      const staffData = (staff || []).length > 0 ? staff.map((s, idx) => ({
+        "S.No": idx + 1,
+        "Staff Name": s.name || "N/A",
+        "Role": s.staffRole || s.role || "Staff",
+        "Assigned Branch": s.assignedBranch || s.branch || "Main",
+        "Phone": s.phone || "N/A",
+        "Email": s.email || "N/A",
+        "Daily Rate / Salary (₹)": s.dailyRate || s.salary || 0,
+        "Shift": s.shift || "Regular",
+        "Status": s.isActive === false ? "Inactive" : "Active"
+      })) : [{ "S.No": "-", "Staff Name": "No staff members registered", "Role": "-", "Assigned Branch": "-", "Phone": "-", "Email": "-", "Daily Rate / Salary (₹)": 0, "Shift": "-", "Status": "-" }];
+      const wsStaff = XLSX.utils.json_to_sheet(staffData);
+      XLSX.utils.book_append_sheet(wb, wsStaff, "Staff Roster");
+
+      // Write and download
+      const cleanBranchName = (activeBranch?.branchName || 'AllBranches').replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `Cafe_Monthly_Report_${cleanBranchName}_${currentMonth}_${currentYear}.xlsx`;
+      XLSX.writeFile(wb, filename);
+    } catch (err) {
+      console.error('Error generating Excel report:', err);
+      alert('Failed to generate Excel report. Please try again.');
+    }
+  }, [activeBranch, activeBranchId, todayRevenue, todayProfit, todayMargin, monthlyRevenue, monthlyProfit, monthlyMargin, totalInventoryValue, totalInventoryCost, totalInventoryConsumption, statsData, orders, topSelling, slowSelling, staff]);
 
  const getTopConsumedIngredients = () =>{
  const consumptionMap = {};
@@ -2431,8 +2630,6 @@ const exportStaffToCSV = () => {
     refreshData();
 
     if (user && user.cafeId) {
-      connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);
-
       const handleOrderCreated = (newOrder) => {
         setOrders(prev => {
           if (prev.some(o => o._id === newOrder._id)) return prev;
@@ -3018,86 +3215,145 @@ const exportStaffToCSV = () => {
  {/* Branch switching is now handled by   {/* TAB 1: BUSINESS ANALYTICS */}
   {activeTab === 'analytics' &&
 <div className="fade-in">
-   {/* Revenue Analytics Cards */}
-<div className="analytics-grid">
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Today's Revenue</h4>
-    <div className="modern-metric-icon-wrapper">
-      <IndianRupee size={18} color="#27ae60" />
-    </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#27ae60' }}>₹{todayRevenue.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-success"><TrendingUp size={12} /> Today's sales</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Monthly Revenue</h4>
-    <div className="modern-metric-icon-wrapper">
-      <IndianRupee size={18} color="var(--color-primary)" />
-    </div>
-  </div>
-  <p className="modern-metric-value">₹{monthlyRevenue.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-success"><TrendingUp size={12} /> This Month</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Inventory Value</h4>
-    <div className="modern-metric-icon-wrapper">
-      <Package size={18} color="#e67e22" />
-    </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#e67e22' }}>₹{totalInventoryValue.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-warning">Current Real-Time Value</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Order Source (This Month)</h4>
-    <div className="modern-metric-icon-wrapper">
-      <BarChart3 size={18} color="#3498db" />
-    </div>
-  </div>
-  <div style={{ display: 'flex', gap: '20px', marginTop: '4px' }}>
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <span className="modern-metric-value" style={{ fontSize: '1.4rem' }}>
-        {statsData?.orderSourceData ? statsData.orderSourceData.QR : orders.filter(o => o.source !== 'STAFF').length}
-      </span>
-      <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>QR Orders</span>
-    </div>
-    <div style={{ width: '1px', background: 'var(--color-border)' }}></div>
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <span className="modern-metric-value" style={{ fontSize: '1.4rem', color: '#3498db' }}>
-        {statsData?.orderSourceData ? (statsData.orderSourceData.POS + statsData.orderSourceData.Counter) : orders.filter(o => o.source === 'STAFF').length}
-      </span>
-      <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Staff POS</span>
-    </div>
-  </div>
-</div>
-</div>
+   {/* Header Action Bar with Monthly Excel Export */}
+   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+     <div>
+       <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Business Overview & Analytics</h3>
+       <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Real-time revenue, gross profit, inventory sync, and operational performance.</p>
+     </div>
+     <button 
+       onClick={handleExportMonthlyReportExcel} 
+       className="btn btn-primary" 
+       style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', width: 'auto', borderRadius: '10px', fontWeight: 700, fontSize: '13px' }}
+     >
+       <FileSpreadsheet size={16} /> Export Monthly Report (Excel)
+     </button>
+   </div>
 
- {/* Inventory Analytics Cards */}
-<div className="analytics-grid" style={{ marginTop: '16px' }}>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Total Inventory Cost (This Month)</h4>
-    <div className="modern-metric-icon-wrapper">
-      <IndianRupee size={18} color="#9b59b6" />
+   {/* Financial Performance Cards (Row 1) */}
+    {/* Financial Performance Cards (Row 1) */}
+    <div className="analytics-grid-4">
+      {/* Today's Revenue */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Today's Revenue</h4>
+          <div className="modern-metric-icon-wrapper">
+            <IndianRupee size={15} color="#27ae60" />
+          </div>
+        </div>
+        <p className="modern-metric-value" style={{ color: '#27ae60' }}>₹{todayRevenue.toFixed(2)}</p>
+        <span className="modern-metric-pill modern-pill-success"><TrendingUp size={11} /> Today's sales</span>
+      </div>
+
+      {/* Today's Gross Profit */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Today's Gross Profit</h4>
+          <div className="modern-metric-icon-wrapper" style={{ background: todayProfit >= 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(231, 76, 60, 0.12)' }}>
+            <TrendingUp size={15} color={todayProfit >= 0 ? '#10b981' : '#e74c3c'} />
+          </div>
+        </div>
+        <p className="modern-metric-value" style={{ color: todayProfit >= 0 ? '#10b981' : '#e74c3c' }}>
+          ₹{todayProfit.toFixed(2)}
+        </p>
+        <span className={`modern-metric-pill ${todayProfit >= 0 ? 'modern-pill-success' : 'modern-pill-danger'}`}>
+          {todayProfit >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />} {todayMargin}% Margin
+        </span>
+      </div>
+
+      {/* Monthly Revenue */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Monthly Revenue</h4>
+          <div className="modern-metric-icon-wrapper">
+            <IndianRupee size={15} color="var(--color-primary)" />
+          </div>
+        </div>
+        <p className="modern-metric-value">₹{monthlyRevenue.toFixed(2)}</p>
+        <span className="modern-metric-pill modern-pill-success"><TrendingUp size={11} /> This Month</span>
+      </div>
+
+      {/* Monthly Gross Profit */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Monthly Gross Profit</h4>
+          <div className="modern-metric-icon-wrapper" style={{ background: monthlyProfit >= 0 ? 'rgba(5, 150, 105, 0.12)' : 'rgba(231, 76, 60, 0.12)' }}>
+            <TrendingUp size={15} color={monthlyProfit >= 0 ? '#059669' : '#e74c3c'} />
+          </div>
+        </div>
+        <p className="modern-metric-value" style={{ color: monthlyProfit >= 0 ? '#059669' : '#e74c3c' }}>
+          ₹{monthlyProfit.toFixed(2)}
+        </p>
+        <span className={`modern-metric-pill ${monthlyProfit >= 0 ? 'modern-pill-success' : 'modern-pill-danger'}`}>
+          {monthlyProfit >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />} {monthlyMargin}% Margin
+        </span>
+      </div>
     </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-neutral">Purchases this month</span>
-</div>
-<div className="modern-metric-card">
-  <div className="modern-metric-header">
-    <h4 className="modern-metric-title">Inventory Consumption (This Month)</h4>
-    <div className="modern-metric-icon-wrapper">
-      <IndianRupee size={18} color="#16a085" />
+
+    {/* Operational & Inventory Analytics Cards (Row 2) */}
+    <div className="analytics-grid-4" style={{ marginTop: '14px' }}>
+      {/* Inventory Value */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Inventory Value</h4>
+          <div className="modern-metric-icon-wrapper">
+            <Package size={15} color="#e67e22" />
+          </div>
+        </div>
+        <p className="modern-metric-value" style={{ color: '#e67e22' }}>₹{totalInventoryValue.toFixed(2)}</p>
+        <span className="modern-metric-pill modern-pill-warning">Current Real-Time Value</span>
+      </div>
+
+      {/* Total Inventory Cost (This Month) */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Total Inventory Cost</h4>
+          <div className="modern-metric-icon-wrapper">
+            <IndianRupee size={15} color="#9b59b6" />
+          </div>
+        </div>
+        <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</p>
+        <span className="modern-metric-pill modern-pill-neutral">Purchases this month</span>
+      </div>
+
+      {/* Inventory Consumption (This Month) */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Inventory Consumption</h4>
+          <div className="modern-metric-icon-wrapper">
+            <IndianRupee size={15} color="#16a085" />
+          </div>
+        </div>
+        <p className="modern-metric-value" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
+        <span className="modern-metric-pill modern-pill-neutral">Consumed this month</span>
+      </div>
+
+      {/* Order Source (This Month) */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Order Source</h4>
+          <div className="modern-metric-icon-wrapper">
+            <BarChart3 size={15} color="#3498db" />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'baseline', marginTop: '2px', marginBottom: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span className="modern-metric-value" style={{ fontSize: '1.25rem', margin: 0 }}>
+              {statsData?.orderSourceData ? statsData.orderSourceData.QR : orders.filter(o => o.source !== 'STAFF').length}
+            </span>
+            <span style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>QR Orders</span>
+          </div>
+          <div style={{ width: '1px', height: '24px', background: 'var(--color-border)', alignSelf: 'center' }}></div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span className="modern-metric-value" style={{ fontSize: '1.25rem', color: '#3498db', margin: 0 }}>
+              {statsData?.orderSourceData ? (statsData.orderSourceData.POS + statsData.orderSourceData.Counter) : orders.filter(o => o.source === 'STAFF').length}
+            </span>
+            <span style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Staff POS</span>
+          </div>
+        </div>
+        <span className="modern-metric-pill modern-pill-neutral">This month</span>
+      </div>
     </div>
-  </div>
-  <p className="modern-metric-value" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
-  <span className="modern-metric-pill modern-pill-neutral">Consumed this month</span>
-</div>
-</div>
 
  {/* Best / Worst Selling items */}
 <div className="owner-double-deck" style={{ marginTop: '24px' }}>
@@ -3118,7 +3374,7 @@ const exportStaffToCSV = () => {
       </div>
     ))
   ) : (
-    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>No sales data available</div>
+    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>No sales recorded yet this month</div>
   )}
 </div>
 </div>
@@ -3139,7 +3395,7 @@ const exportStaffToCSV = () => {
       </div>
     ))
   ) : (
-    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>No sales data available</div>
+    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>All dishes are selling actively!</div>
   )}
 </div>
 </div>
@@ -6123,8 +6379,8 @@ const exportStaffToCSV = () => {
 
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="add-inv-supplier" className="form-label">Supplier Name *</label>
-<input type="text" id="add-inv-supplier" name="add-inv-supplier" required value={newInventoryItem.supplier} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry, Dairy Fresh" />
+<label htmlFor="add-inv-supplier" className="form-label">Supplier Name</label>
+<input type="text" id="add-inv-supplier" name="add-inv-supplier" value={newInventoryItem.supplier} onChange={(e) =>setNewInventoryItem({ ...newInventoryItem, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry, Dairy Fresh (Optional)" />
 </div>
 <div className="form-group">
 <label htmlFor="add-inv-supplier-phone" className="form-label">Supplier Phone Number</label>
@@ -6151,24 +6407,20 @@ const exportStaffToCSV = () => {
 </div>
 <form onSubmit={handleEditInventoryItem}>
 <div className="modal-body">
-<div className="form-group">
-<label htmlFor="edit-inv-name" className="form-label">Ingredient Name *</label>
-<input type="text" id="edit-inv-name" name="edit-inv-name" required value={editingInventoryItem.name} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, name: e.target.value })} className="form-input" />
-</div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="edit-inv-stock" className="form-label">Current Stock *</label>
-<input type="number" id="edit-inv-stock" name="edit-inv-stock" required value={editingInventoryItem.quantity ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, quantity: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
+<label htmlFor="edit-inv-name" className="form-label">Ingredient Name *</label>
+<input type="text" id="edit-inv-name" name="edit-inv-name" required value={editingInventoryItem.name || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, name: e.target.value })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-unit" className="form-label">Unit of Measurement *</label>
-<input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
+<input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
 </div>
 </div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="edit-inv-cost" className="form-label">Cost per Unit (₹) *</label>
-<input type="number" step="0.0001" min="0" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
+<label htmlFor="edit-inv-cost" className="form-label">Unit Cost Price (₹) *</label>
+<input type="number" step="any" min="0" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value), cost: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-minstock" className="form-label">Safety Minimum *</label>
@@ -6181,8 +6433,8 @@ const exportStaffToCSV = () => {
 </div>
 <div className="form-row">
 <div className="form-group">
-<label htmlFor="edit-inv-supplier" className="form-label">Supplier Name *</label>
-<input type="text" id="edit-inv-supplier" name="edit-inv-supplier" required value={editingInventoryItem.supplier || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry" />
+<label htmlFor="edit-inv-supplier" className="form-label">Supplier Name</label>
+<input type="text" id="edit-inv-supplier" name="edit-inv-supplier" value={editingInventoryItem.supplier || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
 </div>
 <div className="form-group">
 <label htmlFor="edit-inv-supplier-phone" className="form-label">Supplier Phone Number</label>
@@ -6223,8 +6475,8 @@ const exportStaffToCSV = () => {
 </div>
 </div>
 <div className="form-group">
-<label className="form-label">Supplier *</label>
-<input type="text" required value={purchaseForm.supplier} onChange={(e) =>setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" />
+<label className="form-label">Supplier</label>
+<input type="text" value={purchaseForm.supplier} onChange={(e) =>setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
 </div>
 <div className="form-group">
 <label className="form-label">Notes</label>

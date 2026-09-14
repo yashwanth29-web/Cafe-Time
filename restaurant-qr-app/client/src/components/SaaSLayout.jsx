@@ -67,7 +67,10 @@ const SaaSLayout = ({ children }) => {
         layoutCache.hasLoaded = true;
       }
     } catch (err) {
-      console.error('Failed to fetch notifications:', err);
+      const isNetworkError = err.code === 'ERR_NETWORK' || !err.response;
+      if (!isNetworkError) {
+        console.error('Failed to fetch notifications:', err);
+      }
       // Disable polling if the endpoint returns terminal errors like 404 (Not Found), 403 (Forbidden) or 401 (Unauthorized)
       if (err.response && [401, 403, 404].includes(err.response.status)) {
         console.warn(`[NOTIFICATION] Disabling notification polling due to terminal HTTP status: ${err.response.status}`);

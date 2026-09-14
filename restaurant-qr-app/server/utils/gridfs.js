@@ -3,11 +3,14 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Syncs a local multer file to GridFS
- * @param {Object} file - Multer file object
+/**
+ * Syncs a local multer file or file path to GridFS
+ * @param {Object|string} fileOrPath - Multer file object or absolute file path
+ * @param {string} [explicitFilename] - Optional filename override
+ * @param {string} [explicitMimeType] - Optional mime type override
  */
-const syncToGridFS = async (file) => {
-  if (!file) return null;
+const syncToGridFS = async (fileOrPath, explicitFilename = null, explicitMimeType = null) => {
+  if (!fileOrPath) return null;
   try {
     const conn = mongoose.connection;
     if (!conn || !conn.db) {
@@ -15,35 +18,94 @@ const syncToGridFS = async (file) => {
       return null;
     }
 
+    let filePath, filename, mimetype;
+    if (typeof fileOrPath === 'string') {
+      filePath = fileOrPath;
+      filename = explicitFilename || path.basename(fileOrPath);
+      const ext = path.extname(filename).toLowerCase();
+      mimetype = explicitMimeType || (ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg');
+    } else if (fileOrPath && typeof fileOrPath === 'object') {
+      filePath = fileOrPath.path;
+      filename = fileOrPath.filename || explicitFilename || path.basename(fileOrPath.path || '');
+      mimetype = fileOrPath.mimetype || explicitMimeType || 'image/jpeg';
+    }
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      console.warn(`[GridFS Sync] File does not exist on disk: ${filePath}`);
+      return null;
+    }
+
     const bucket = new mongoose.mongo.GridFSBucket(conn.db, { bucketName: 'uploads' });
     
     // Check if file already exists in GridFS to prevent duplicates
-    const existing = await bucket.find({ filename: file.filename }).toArray();
+    const existing = await bucket.find({ filename }).toArray();
     if (existing && existing.length > 0) {
-      console.log(`File ${file.filename} already exists in GridFS.`);
       return existing[0];
     }
 
-    const writeStream = bucket.openUploadStream(file.filename, {
-      contentType: file.mimetype || 'image/jpeg'
+    const writeStream = bucket.openUploadStream(filename, {
+      contentType: mimetype
     });
 
-    const readStream = fs.createReadStream(file.path);
+    const readStream = fs.createReadStream(filePath);
     
     return new Promise((resolve, reject) => {
       readStream.pipe(writeStream)
         .on('finish', (gfsFile) => {
-          console.log(`Successfully synced ${file.filename} to GridFS.`);
-          resolve(gfsFile || { _id: writeStream.id, filename: file.filename });
+          console.log(`Successfully synced ${filename} to GridFS.`);
+          resolve(gfsFile || { _id: writeStream.id, filename });
         })
         .on('error', (err) => {
-          console.error(`Error piping file ${file.filename} to GridFS:`, err);
+          console.error(`Error piping file ${filename} to GridFS:`, err);
           reject(err);
         });
     });
   } catch (error) {
-    console.error(`GridFS sync error for ${file.filename}:`, error);
+    console.error(`GridFS sync error for ${explicitFilename || fileOrPath}:`, error);
     return null;
+  }
+};
+
+/**
+ * Syncs all local files in public/uploads to GridFS if missing
+ */
+const syncAllUploadsToGridFS = async () => {
+  try {
+    const conn = mongoose.connection;
+    if (!conn || !conn.db) return;
+
+    const uploadsDir = path.join(__dirname, '../public/uploads');
+    if (!fs.existsSync(uploadsDir)) return;
+
+    const files = fs.readdirSync(uploadsDir);
+    if (!files || files.length === 0) return;
+
+    const bucket = new mongoose.mongo.GridFSBucket(conn.db, { bucketName: 'uploads' });
+    const existing = await bucket.find({}).toArray();
+    const existingSet = new Set(existing.map(f => f.filename));
+
+    let syncedCount = 0;
+    for (const filename of files) {
+      if (!existingSet.has(filename)) {
+        const fullPath = path.join(uploadsDir, filename);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.isFile()) {
+            const ext = path.extname(filename).toLowerCase();
+            const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+            await syncToGridFS(fullPath, filename, mime);
+            syncedCount++;
+          }
+        } catch (e) {
+          // ignore single file stat errors
+        }
+      }
+    }
+    if (syncedCount > 0) {
+      console.log(`[GridFS Auto-Sync] Successfully synced ${syncedCount} missing local uploads to MongoDB GridFS.`);
+    }
+  } catch (err) {
+    console.error('[GridFS Auto-Sync Error]', err.message);
   }
 };
 
@@ -123,5 +185,6 @@ const serveFromGridFS = async (filename, req, res) => {
 
 module.exports = {
   syncToGridFS,
+  syncAllUploadsToGridFS,
   serveFromGridFS
 };

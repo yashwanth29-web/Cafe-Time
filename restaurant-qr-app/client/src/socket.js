@@ -26,7 +26,8 @@ const socket = io(SOCKET_URL, {
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
   reconnectionAttempts: Infinity,
-  transports: ['websocket', 'polling'] // Support both transports to allow graceful fallback when WebSocket drops
+  timeout: 20000,
+  transports: ['polling', 'websocket'] // Reliable HTTP polling handshake with seamless WebSocket upgrade
 });
 
 // Cache for room tracking
@@ -43,45 +44,51 @@ socket.on('connect', () => {
 });
 
 socket.on('disconnect', (reason) => {
-  if (isDev) {
+  // Only log unexpected server-initiated drops, ignore expected transport closes during dev reload
+  if (isDev && reason !== 'transport close') {
     console.warn('[SOCKET] Disconnected:', reason);
   }
   if (reason === 'io server disconnect') {
-    // If the server disconnected us, connect again manually
     socket.connect();
   }
 });
 
 socket.on('connect_error', (error) => {
-  if (isDev) {
-    console.error('[SOCKET] Connection Error:', error.message);
+  // Suppress dev-mode console spam for transient reconnections
+  if (isDev && error.message !== 'xhr poll error' && error.message !== 'websocket error') {
+    console.warn('[SOCKET] Reconnecting real-time sync:', error.message);
   }
 });
 
 export const connectSocket = (cafeId, branchId = null) => {
+  if (!cafeId) return;
+
   const token = localStorage.getItem('token');
   socket.auth = { token };
 
+  const normBranch = (branchId === 'all' || !branchId) ? null : branchId;
   const previousBranch = currentRoomContext.branchId;
-  const isSameContext = currentRoomContext.cafeId === cafeId && currentRoomContext.branchId === branchId;
-  currentRoomContext = { cafeId, branchId };
+  const isSameContext = currentRoomContext.cafeId === cafeId && currentRoomContext.branchId === normBranch;
+  currentRoomContext = { cafeId, branchId: normBranch };
 
-  if (!socket.connected) {
-    socket.connect();
-  } else if (!isSameContext) {
-    // If already connected and the branch has switched, tell the server to leave the previous branch rooms
-    if (previousBranch && previousBranch !== branchId) {
-      if (isDev) {
-        console.log(`[SOCKET] Branch changed from ${previousBranch} to ${branchId}. Leaving old rooms...`);
+  if (socket.connected) {
+    if (!isSameContext) {
+      if (previousBranch && previousBranch !== normBranch) {
+        if (isDev) {
+          console.log(`[SOCKET] Branch changed from ${previousBranch} to ${normBranch}. Leaving old rooms...`);
+        }
+        socket.emit('leave_branch_rooms', { cafeId, branchId: previousBranch });
       }
-      socket.emit('leave_branch_rooms', { cafeId, branchId: previousBranch });
+      socket.emit('join_room', currentRoomContext);
     }
-    socket.emit('join_room', currentRoomContext);
+  } else if (!socket.active) {
+    // Only connect if not already connected or in an active reconnect loop
+    socket.connect();
   }
 };
 
 export const disconnectSocket = () => {
-  if (socket.connected) {
+  if (socket.connected || socket.active) {
     socket.disconnect();
   }
   currentRoomContext = { cafeId: null, branchId: null };

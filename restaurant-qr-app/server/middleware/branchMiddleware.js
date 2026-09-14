@@ -189,11 +189,8 @@ const attachCafeAndBranch = async (req, res, next) => {
       if (!cafeId) {
         return res.status(400).json({ success: false, message: 'Missing cafeId context' });
       }
-      const isOwnerOrAdmin = user && ['owner', 'admin'].includes((user.role || '').toLowerCase());
-      if (branchId === 'all' && isOwnerOrAdmin) {
-        // Owners/admins bypass branch existence/active check for 'all' branch selection
-      } else if (branchId === 'default') {
-        // Default fallback branch
+      if (branchId === 'all' || branchId === 'default') {
+        // 'all' and 'default' are valid global / fallback branch selections
       } else {
         const branchStatus = await verifyBranchActive(cafeId, branchId);
         if (!branchStatus.exists) {

@@ -239,22 +239,27 @@ const SuperAdminDashboard = () => {
     }
   }, [activeTab]);
 
-  const loadCafes = async () => {
+  const loadCafes = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await getCafes();
       if (data.success) {
         setCafes(data.cafes);
       }
     } catch (err) {
-      setErrorMsg('Failed to load cafe registrations.');
+      if (!silent) setErrorMsg('Failed to load cafe registrations.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadCafes();
+    // Auto-refresh cafes & branch heartbeats every 10 seconds silently
+    const interval = setInterval(() => {
+      loadCafes(true);
+    }, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleInputChange = (e) => {
@@ -1310,13 +1315,30 @@ const SuperAdminDashboard = () => {
                   Centralized monitoring dashboard scaling to hundreds of registered cafes and thousands of active branches.
                 </p>
               </div>
-              <button 
-                onClick={loadCafes} 
-                className="btn btn-primary" 
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', width: 'auto', padding: '8px 16px' }}
-              >
-                <RefreshCw size={15} /> Sync Heartbeats
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <span style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  fontSize: '0.75rem', 
+                  color: '#2ECC71', 
+                  background: 'rgba(46, 204, 113, 0.1)', 
+                  border: '1px solid rgba(46, 204, 113, 0.3)', 
+                  padding: '5px 12px', 
+                  borderRadius: '20px', 
+                  fontWeight: '600' 
+                }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2ECC71', display: 'inline-block' }}></span>
+                  Live (Auto-refresh 10s)
+                </span>
+                <button 
+                  onClick={() => loadCafes(false)} 
+                  className="btn btn-primary" 
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', width: 'auto', padding: '8px 16px' }}
+                >
+                  <RefreshCw size={15} /> Sync Heartbeats
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

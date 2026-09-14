@@ -181,6 +181,12 @@ connectDB().then(async () => {
   } catch (err) {
     console.error('[TABLE AUDIT STARTUP ERROR]', err);
   }
+  try {
+    const { syncAllUploadsToGridFS } = require('./utils/gridfs');
+    await syncAllUploadsToGridFS();
+  } catch (err) {
+    console.error('[GRIDFS SYNC STARTUP ERROR]', err);
+  }
 });
 
 // Initialize Storage Maintenance Scheduled Jobs

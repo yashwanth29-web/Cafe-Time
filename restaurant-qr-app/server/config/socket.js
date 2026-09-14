@@ -25,9 +25,9 @@ const initializeSocket = (server) => {
       },
       credentials: true
     },
-    transports: ['websocket', 'polling'], // Support standard websocket upgrades
-    pingInterval: 10000,                  // Heartbeat every 10s to keep cloud proxies (Railway/Render) alive
-    pingTimeout: 5000                     // Close connection if no reply within 5s
+    transports: ['polling', 'websocket'], // Support robust polling handshake with WebSocket upgrade
+    pingInterval: 25000,                  // Heartbeat every 25s for reliable long-lived connections
+    pingTimeout: 20000                    // 20s allowance before terminating connection
   });
 
   // Socket.IO Handshake Authentication Middleware

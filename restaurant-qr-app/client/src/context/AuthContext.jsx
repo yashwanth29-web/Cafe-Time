@@ -21,6 +21,9 @@ export const AuthProvider = ({ children }) => {
       const data = await getMe();
       if (data.success && data.user) {
         setUser(data.user);
+        if (data.user.cafeId) {
+          localStorage.setItem('activeCafeId', data.user.cafeId);
+        }
       } else {
         localStorage.removeItem('token');
         setUser(null);
@@ -89,6 +92,9 @@ export const AuthProvider = ({ children }) => {
         if (response.token) {
           localStorage.setItem('token', response.token);
         }
+        if (response.user.cafeId) {
+          localStorage.setItem('activeCafeId', response.user.cafeId);
+        }
         setUser(response.user);
       }
       return response;
@@ -109,6 +115,9 @@ export const AuthProvider = ({ children }) => {
       if (response.success && response.user) {
         if (response.token) {
           localStorage.setItem('token', response.token);
+        }
+        if (response.user.cafeId) {
+          localStorage.setItem('activeCafeId', response.user.cafeId);
         }
         setUser(response.user);
       }
@@ -162,12 +171,16 @@ export const AuthProvider = ({ children }) => {
           }
         });
       } catch (err) {
-        console.warn('Heartbeat reporting failed:', err.message);
+        // Silently skip transient network drops/restarts during dev or momentary offline states
+        const isNetworkError = err.code === 'ERR_NETWORK' || !err.response || err.message?.includes('Network Error');
+        if (!isNetworkError) {
+          console.warn('Heartbeat reporting warning:', err.message);
+        }
       }
     };
 
     sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 10000);
+    const interval = setInterval(sendHeartbeat, 15000);
     return () => clearInterval(interval);
   }, [user]);
 
