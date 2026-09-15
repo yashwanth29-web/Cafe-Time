@@ -835,11 +835,12 @@ const OrderHistory = ({ cafeId }) => {
                               setSubmittedReviews(updatedReviews);
                               localStorage.setItem('submittedReviews', JSON.stringify(updatedReviews));
                             } else {
-                              alert('Failed to submit review.');
+                              alert(res?.message || 'Failed to submit review.');
                             }
                           } catch (err) {
                             console.error('Review submit failed:', err);
-                            alert('Connection error submitting review.');
+                            const errMsg = err.response?.data?.message || err.response?.data?.error || 'Connection error submitting review.';
+                            alert(errMsg);
                           } finally {
                             setSubmittingReview((prev) => ({ ...prev, [order._id]: false }));
                           }

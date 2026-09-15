@@ -80,27 +80,20 @@ const EmployeePayrollPage = () => {
                 </div>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed rgba(255,255,255,0.05)', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
-                <div>Daily Rate: <strong style={{ color: 'var(--color-text-primary)' }}>₹{salaryData.dailyRate || 0}/day</strong></div>
-                <div>Req. Hours: <strong style={{ color: 'var(--color-text-primary)' }}>{salaryData.requiredHours || 8} hrs/day</strong></div>
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed rgba(255,255,255,0.05)', fontSize: '0.85rem', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+                Daily Rate: <strong style={{ color: 'var(--color-text-primary)' }}>₹{salaryData.dailyRate || 0}/day</strong>
               </div>
             </div>
 
-            {/* Attendance & Shift Hours Card */}
+            {/* Attendance Days Summary Card */}
             <div style={{ background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', minWidth: 0 }}>
               <h3 style={{ margin: '0 0 16px 0', color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 800, borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '8px' }}>
                 Weekly Breakdown Summary
               </h3>
               
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '20px' }}>
-                <div style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '10px', textAlign: 'center', border: '1px solid var(--color-border)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>Hours Worked</div>
-                  <strong style={{ color: 'var(--color-primary)', fontSize: '1.4rem' }}>{salaryData.actualHoursWorked || 0} hrs</strong>
-                </div>
-                <div style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '10px', textAlign: 'center', border: '1px solid var(--color-border)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>Working Days</div>
-                  <strong style={{ color: '#2ecc71', fontSize: '1.4rem' }}>{salaryData.workingDays || 0} days</strong>
-                </div>
+              <div style={{ background: 'var(--bg-primary)', padding: '16px', borderRadius: '12px', textAlign: 'center', border: '1px solid var(--color-border)', marginBottom: '20px' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attendance Days Marked (This Month)</div>
+                <strong style={{ color: '#2ecc71', fontSize: '2rem' }}>{salaryData.daysMarked ?? salaryData.workingDays ?? 0} days</strong>
               </div>
 
               {/* Day-by-Day breakdown grid */}
@@ -140,7 +133,7 @@ const EmployeePayrollPage = () => {
                       <th style={{ padding: '12px 10px' }}>Date</th>
                       <th style={{ padding: '12px 10px' }}>Check In</th>
                       <th style={{ padding: '12px 10px' }}>Check Out</th>
-                      <th style={{ padding: '12px 10px' }}>Worked Hours</th>
+                      <th style={{ padding: '12px 10px' }}>Status</th>
                       <th style={{ padding: '12px 10px' }}>Daily Salary</th>
                     </tr>
                   </thead>
@@ -154,7 +147,9 @@ const EmployeePayrollPage = () => {
                         <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)' }}>
                           {att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
                         </td>
-                        <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{att.workingHours || 0} hrs</td>
+                        <td style={{ padding: '12px 10px', fontWeight: 'bold', color: att.status === 'Late' ? '#f1c40f' : '#10B981' }}>
+                          {att.status || 'Present'}
+                        </td>
                         <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{att.dailySalary || 0}</td>
                       </tr>
                     ))}

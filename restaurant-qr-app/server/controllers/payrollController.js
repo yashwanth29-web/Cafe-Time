@@ -269,6 +269,7 @@ const getCurrentEmployeePayroll = async (req, res) => {
       requiredHours: user.requiredHours || 8,
       actualHoursWorked: Number((actualHoursWorked + overtimeHours).toFixed(2)),
       workingDays: presentDays + halfDays * 0.5,
+      daysMarked: presentDays + halfDays,
       weeklyBreakdown,
       attendances: formattedAttendances
     };

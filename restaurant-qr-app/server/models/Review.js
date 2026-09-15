@@ -1,5 +1,16 @@
 const mongoose = require('mongoose');
 
+const ReviewItemSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  quantity: {
+    type: Number,
+    required: true
+  }
+}, { _id: false, bypassBranchFilter: true });
+
 const ReviewSchema = new mongoose.Schema({
   cafeId: {
     type: String,
@@ -30,18 +41,10 @@ const ReviewSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  orderedItems: [
-    {
-      name: {
-        type: String,
-        required: true
-      },
-      quantity: {
-        type: Number,
-        required: true
-      }
-    }
-  ],
+  orderedItems: {
+    type: [ReviewItemSchema],
+    default: []
+  },
   createdAt: {
     type: Date,
     default: Date.now

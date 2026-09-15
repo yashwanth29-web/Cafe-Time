@@ -980,15 +980,9 @@ const StaffDashboard = () => {
       {todayStatus?.attendance && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem', marginTop: '16px', borderTop: '1px dashed rgba(255, 255, 255, 0.1)', paddingTop: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--color-text-secondary)' }}>Hours Worked:</span>
-            <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
-              {todayStatus.attendance.workingHours || (todayStatus.attendance.totalDuration ? (todayStatus.attendance.totalDuration / 60).toFixed(2) : '0.00')} hrs
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--color-text-secondary)' }}>Overtime Hours:</span>
-            <span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
-              {todayStatus.attendance.overtimeHours || 0} hrs
+            <span style={{ color: 'var(--color-text-secondary)' }}>Attendance Status:</span>
+            <span style={{ color: todayStatus.attendance.status === 'Late' ? '#f1c40f' : '#10B981', fontWeight: 'bold' }}>
+              {todayStatus.attendance.status || 'Present'}
             </span>
           </div>
           {todayStatus.attendance.isExtraWorkActive && (
@@ -1101,8 +1095,8 @@ const StaffDashboard = () => {
  {/* Analytics Breakdown Grid */}
  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '10px' }}>
  <div style={{ background: 'rgba(0, 0, 0,0.02)', padding: '12px 8px', borderRadius: '8px', border: '1px solid var(--color-border)', textAlign: 'center' }}>
- <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Hours</span>
- <strong style={{ fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>{summary.totalWorkingHours}h</strong>
+ <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Days Marked</span>
+ <strong style={{ fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>{(summary.presentDays || 0) + (summary.lateDays || 0)}d</strong>
  </div>
  
  <div style={{ background: 'rgba(0, 0, 0,0.02)', padding: '12px 8px', borderRadius: '8px', border: '1px solid var(--color-border)', textAlign: 'center' }}>
@@ -1138,17 +1132,12 @@ const StaffDashboard = () => {
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Branch</th>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Check In</th>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Check Out</th>
- <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Hours</th>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>GPS Distance</th>
  <th style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>Status</th>
  </tr>
  </thead>
  <tbody>
  {historyData.map((record) => {
- const hours = record.totalDuration ? Math.floor(record.totalDuration / 60) : 0;
- const mins = record.totalDuration ? record.totalDuration % 60 : 0;
- const durationStr = record.totalDuration ? `${hours}h ${mins}m` : '--';
-
  const statusColor = record.status === 'Late' ? '#f1c40f' : '#2ecc71';
 
  return (
@@ -1164,9 +1153,6 @@ const StaffDashboard = () => {
  </td>
  <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
  {record.checkOutTime ? formatTime(record.checkOutTime) : 'N/A'}
- </td>
- <td style={{ padding: '12px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
- {durationStr}
  </td>
  <td style={{ padding: '12px 8px', color: 'var(--color-text-secondary)' }}>
  {record.distanceFromCafe !== undefined ? `${record.distanceFromCafe}m` : 'N/A'}
