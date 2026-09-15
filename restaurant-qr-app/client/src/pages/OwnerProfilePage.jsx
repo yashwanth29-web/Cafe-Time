@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useBranch } from '../context/BranchContext';
 import OwnerLayout, { invalidateOwnerLayoutCache } from '../components/OwnerLayout';
-import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getStaff, getAssetUrl } from '../services/api';
+import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getAssetUrl } from '../services/api';
 
-// Simple global cache for profile page data
+// Global in-memory cache for profile page data
 const profileCache = {
+  cafeId: null,
   cafeData: null,
   paymentConfig: null,
   operationalConfig: null,
@@ -16,24 +17,61 @@ const profileCache = {
   hasLoaded: false
 };
 
+const getProfileCacheKey = (cafeId) => `owner_profile_data_${cafeId || 'default'}`;
+
+const loadCachedProfileFromStorage = (cafeId) => {
+  if (!cafeId) return null;
+  try {
+    const raw = localStorage.getItem(getProfileCacheKey(cafeId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.cafeData) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
 const OwnerProfilePage = () => {
   const { user, checkSession, logout } = useAuth();
   const { themeMode, setThemeMode, primaryColor, updatePrimaryColor } = useTheme();
   const { activeBranchId, loadBranches } = useBranch();
   const navigate = useNavigate();
 
-  const [cafeData, setCafeData] = useState(() => profileCache.cafeData);
-  const [paymentConfig, setPaymentConfig] = useState(() => profileCache.paymentConfig);
-  const [operationalConfig, setOpsConfig] = useState(() => profileCache.operationalConfig);
-  const [branches, setBranches] = useState(() => profileCache.branches);
-  const [staffCount, setStaffCount] = useState(() => profileCache.staffCount);
-  const [loading, setLoading] = useState(() => !profileCache.hasLoaded);
+  // Try memory cache first, then localStorage for instant 0ms rendering
+  const initialCache = (() => {
+    if (profileCache.hasLoaded && profileCache.cafeId === user?.cafeId && profileCache.cafeData) {
+      return profileCache;
+    }
+    const local = loadCachedProfileFromStorage(user?.cafeId);
+    if (local) {
+      profileCache.cafeId = user?.cafeId;
+      profileCache.cafeData = local.cafeData;
+      profileCache.paymentConfig = local.paymentConfig;
+      profileCache.operationalConfig = local.operationalConfig;
+      profileCache.branches = local.branches || [];
+      profileCache.staffCount = local.staffCount || 0;
+      profileCache.hasLoaded = true;
+      return local;
+    }
+    return null;
+  })();
+
+  const [cafeData, setCafeData] = useState(() => initialCache?.cafeData || null);
+  const [paymentConfig, setPaymentConfig] = useState(() => initialCache?.paymentConfig || null);
+  const [operationalConfig, setOpsConfig] = useState(() => initialCache?.operationalConfig || null);
+  const [branches, setBranches] = useState(() => initialCache?.branches || []);
+  const [staffCount, setStaffCount] = useState(() => initialCache?.staffCount ?? 0);
+  const [loading, setLoading] = useState(() => !initialCache);
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
   const [form, setForm] = useState({});
   const [editingBranchId, setEditingBranchId] = useState(null);
+
+  const prevUserIdRef = useRef(user?._id);
 
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedQrTable, setSelectedQrTable] = useState(null);
@@ -81,19 +119,27 @@ const OwnerProfilePage = () => {
   };
 
   const load = async () => {
-    if (!profileCache.hasLoaded) {
+    // Only show blocking spinner if no profile data has ever loaded
+    if (!profileCache.hasLoaded && !cafeData) {
       setLoading(true);
     }
     try {
-      const [r, br, st] = await Promise.all([getSetupData(), getBranches(), getStaff()]);
+      // getSetupData returns cafe, paymentConfig, operationalConfig, and staffCount directly
+      const [r, br] = await Promise.all([getSetupData(), getBranches()]);
       if (r.success) {
         setCafeData(r.cafe);
         setPaymentConfig(r.paymentConfig);
         setOpsConfig(r.operationalConfig);
         
+        profileCache.cafeId = user?.cafeId;
         profileCache.cafeData = r.cafe;
         profileCache.paymentConfig = r.paymentConfig;
         profileCache.operationalConfig = r.operationalConfig;
+
+        if (r.staffCount !== undefined) {
+          setStaffCount(r.staffCount);
+          profileCache.staffCount = r.staffCount;
+        }
 
         if (r.cafe.gstRate !== undefined) {
           setTaxRateState(r.cafe.gstRate);
@@ -109,31 +155,46 @@ const OwnerProfilePage = () => {
         setBranches(brList);
         profileCache.branches = brList;
       }
-      if (st.success) {
-        const count = st.staff?.length || 0;
-        setStaffCount(count);
-        profileCache.staffCount = count;
-      }
       profileCache.hasLoaded = true;
-    } catch {showToast('Failed to load.', false);} finally
-    {setLoading(false);}
+
+      // Save to localStorage for instant 0ms restoration next time profile is opened
+      if (user?.cafeId && profileCache.cafeData) {
+        try {
+          localStorage.setItem(getProfileCacheKey(user?.cafeId), JSON.stringify({
+            cafeData: profileCache.cafeData,
+            paymentConfig: profileCache.paymentConfig,
+            operationalConfig: profileCache.operationalConfig,
+            branches: profileCache.branches,
+            staffCount: profileCache.staffCount
+          }));
+        } catch (e) {}
+      }
+    } catch {
+      if (!cafeData) showToast('Failed to load.', false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    // Reset cache and local states when user changes to prevent cross-tenant data leakage
-    profileCache.cafeData = null;
-    profileCache.paymentConfig = null;
-    profileCache.operationalConfig = null;
-    profileCache.branches = [];
-    profileCache.staffCount = 0;
-    profileCache.hasLoaded = false;
+    // Only reset cache if the actual logged-in user changed
+    if (prevUserIdRef.current && prevUserIdRef.current !== user?._id) {
+      profileCache.cafeId = null;
+      profileCache.cafeData = null;
+      profileCache.paymentConfig = null;
+      profileCache.operationalConfig = null;
+      profileCache.branches = [];
+      profileCache.staffCount = 0;
+      profileCache.hasLoaded = false;
 
-    setCafeData(null);
-    setPaymentConfig(null);
-    setOpsConfig(null);
-    setBranches([]);
-    setStaffCount(0);
-    setLoading(true);
+      setCafeData(null);
+      setPaymentConfig(null);
+      setOpsConfig(null);
+      setBranches([]);
+      setStaffCount(0);
+      setLoading(true);
+      prevUserIdRef.current = user?._id;
+    }
 
     if (user) {
       load();

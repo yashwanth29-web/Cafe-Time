@@ -106,7 +106,8 @@ const syncAllUploadsToGridFS = async () => {
     }
   } catch (err) {
     console.error('[GridFS Auto-Sync Error]', err.message);
-  }}
+  }
+};
 // In-memory cache for ultra-fast serving (< 1ms) without disk or DB overhead
 const imageMemoryCache = new Map(); // filename -> { buffer, contentType, etag, size }
 const MAX_MEMORY_CACHE_BYTES = 50 * 1024 * 1024; // 50MB limit

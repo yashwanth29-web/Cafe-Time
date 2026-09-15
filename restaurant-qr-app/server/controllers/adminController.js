@@ -505,6 +505,21 @@ const verifyRazorpay = async (req, res) => {
   });
 };
 
+// In-memory cache for admin setup data and branches (60s TTL) for instant sub-millisecond serving
+const adminSetupCache = new Map(); // key: `${cafeId}:${branchId}` -> { data, timestamp }
+const adminBranchCache = new Map(); // key: `${cafeId}:${role}:${branchId}` -> { data, timestamp }
+const ADMIN_CACHE_TTL = 60 * 1000;
+
+const invalidateAdminCache = (cafeId) => {
+  if (!cafeId) return;
+  for (const k of adminSetupCache.keys()) {
+    if (k.startsWith(`${cafeId}:`)) adminSetupCache.delete(k);
+  }
+  for (const k of adminBranchCache.keys()) {
+    if (k.startsWith(`${cafeId}:`)) adminBranchCache.delete(k);
+  }
+};
+
 /**
  * Retrieve Owner setup configuration data
  */
@@ -515,17 +530,31 @@ const getSetupData = async (req, res) => {
     return res.status(400).json({ success: false, message: 'Your admin profile does not have a cafe assignment' });
   }
 
+  const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
+  const cacheKey = `${cafeId}:${activeBranch}`;
+
+  const cached = adminSetupCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < ADMIN_CACHE_TTL)) {
+    return res.status(200).json(cached.data);
+  }
+
   try {
-    const cafe = await Cafe.findOne({ cafeId });
+    const cafe = await Cafe.findOne({ cafeId }).lean();
     if (!cafe) {
       return res.status(404).json({ success: false, message: 'Cafe not found' });
     }
 
-    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
-    const paymentConfig = await PaymentConfig.findOne({ cafeId, branchId: activeBranch });
-    const operationalConfig = await OperationalConfig.findOne({ cafeId, branchId: activeBranch });
+    // Parallel DB reads with lean queries to eliminate Mongoose document wrapping overhead
+    const [paymentConfig, operationalConfig, staffCount] = await Promise.all([
+      PaymentConfig.findOne({ cafeId, branchId: activeBranch }).lean(),
+      OperationalConfig.findOne({ cafeId, branchId: activeBranch }).lean(),
+      User.countDocuments({
+        cafeId,
+        role: { $in: ['staff', 'chef', 'manager', 'waiter', 'cashier', 'STAFF', 'CHEF', 'MANAGER', 'WAITER', 'CASHIER'] }
+      })
+    ]);
 
-    return res.status(200).json({
+    const result = {
       success: true,
       cafe,
       paymentConfig: paymentConfig ? {
@@ -539,8 +568,13 @@ const getSetupData = async (req, res) => {
         platformCharge: paymentConfig.platformCharge,
         paymentInstructions: paymentConfig.paymentInstructions
       } : null,
-      operationalConfig
-    });
+      operationalConfig,
+      staffCount
+    };
+
+    adminSetupCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+    return res.status(200).json(result);
   } catch (error) {
     console.error('getSetupData error:', error);
     return res.status(500).json({ success: false, message: 'Server error retrieving setup details' });
@@ -752,6 +786,7 @@ const saveSetupData = async (req, res) => {
       }
     }
 
+    invalidateAdminCache(cafeId);
     return res.status(200).json({
       success: true,
       message: 'Onboarding setup completed successfully!'
@@ -775,6 +810,7 @@ const updateOwnerProfile = async (req, res) => {
     if (name) user.name = name.trim();
     if (phone) user.phone = phone.trim();
     await user.save();
+    invalidateAdminCache(req.user.cafeId);
     return res.status(200).json({ success: true, user });
   } catch (error) {
     console.error('updateOwnerProfile error:', error);
@@ -806,8 +842,17 @@ const getBranches = async (req, res) => {
       }
     }
 
-    const branches = await Branch.find(query).sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, branches });
+    const cacheKey = `${req.user.cafeId || 'all'}:${role}:${req.user.assignedBranch || 'all'}`;
+    const cached = adminBranchCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < ADMIN_CACHE_TTL)) {
+      return res.status(200).json(cached.data);
+    }
+
+    const branches = await Branch.find(query).sort({ createdAt: -1 }).lean();
+    const result = { success: true, branches };
+    adminBranchCache.set(cacheKey, { data: result, timestamp: Date.now() });
+
+    return res.status(200).json(result);
   } catch (error) {
     console.error('getBranches error:', error);
     return res.status(500).json({ success: false, message: 'Server error retrieving branches' });
@@ -915,6 +960,7 @@ const createBranch = async (req, res) => {
       console.error(`[BRANCH CREATION ERROR] Failed to generate default tables/config for branch ${cleanBranchId}:`, tblErr);
     }
 
+    invalidateAdminCache(cafeId);
     return res.status(201).json({ success: true, branch: newBranch });
   } catch (error) {
     console.error('createBranch error:', error);
@@ -1062,6 +1108,7 @@ const updateBranch = async (req, res) => {
     if (req.body.unifiedStaffMode !== undefined) branch.unifiedStaffMode = !!req.body.unifiedStaffMode;
 
     await branch.save();
+    invalidateAdminCache(branch.cafeId || cafeId);
 
     return res.status(200).json({
       success: true,
@@ -1103,6 +1150,7 @@ const deleteBranch = async (req, res) => {
       console.error('Error cleaning up branch dependencies:', cleanErr);
     }
 
+    invalidateAdminCache(branch.cafeId || cafeId);
     return res.status(200).json({
       success: true,
       message: `Branch "${branch.branchName}" deleted successfully.`
@@ -1135,6 +1183,7 @@ const updateCafeTheme = async (req, res) => {
     if (!cafe) return res.status(404).json({ success: false, message: 'Cafe not found' });
     if (uiPrimaryColor) cafe.uiPrimaryColor = uiPrimaryColor;
     await cafe.save();
+    invalidateAdminCache(cafeId);
     return res.status(200).json({ success: true, message: 'Theme color updated successfully', cafe });
   } catch (error) {
     console.error('updateCafeTheme error:', error);
