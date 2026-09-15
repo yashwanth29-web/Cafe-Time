@@ -63,6 +63,9 @@ const attachCafeAndBranch = async (req, res, next) => {
       path.startsWith('/auth') ||
       path.startsWith('/superadmin') ||
       path.startsWith('/health') ||
+      path.startsWith('/cafe') ||
+      path.startsWith('/admin/setup') ||
+      path.startsWith('/notifications') ||
       path.includes('/branches');
 
     // For public order creation (POST /orders from QR scans), the request body's
@@ -194,12 +197,15 @@ const attachCafeAndBranch = async (req, res, next) => {
       } else {
         const branchStatus = await verifyBranchActive(cafeId, branchId);
         if (!branchStatus.exists) {
-          return res.status(404).json({
-            success: false,
-            message: `Branch ID: ${branchId} does not exist.`
-          });
-        }
-        if (!branchStatus.isActive) {
+          console.warn(`[BRANCH MIDDLEWARE] Branch ID "${branchId}" does not exist for cafe "${cafeId}". Auto self-healing.`);
+          const firstBranch = await Branch.findOne({ cafeId, isActive: true }).lean();
+          if (firstBranch) {
+            branchId = firstBranch.branchId;
+            res.setHeader('x-self-healed-branch-id', branchId);
+          } else {
+            branchId = 'all';
+          }
+        } else if (!branchStatus.isActive) {
           return res.status(403).json({
             success: false,
             message: `Access denied. Branch ID: ${branchId} is inactive.`

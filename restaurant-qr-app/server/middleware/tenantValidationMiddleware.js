@@ -17,6 +17,9 @@ const validateTenant = async (req, res, next) => {
       path.startsWith('/auth') ||
       path.startsWith('/superadmin') ||
       path.startsWith('/health') ||
+      path.startsWith('/cafe') ||
+      path.startsWith('/admin/setup') ||
+      path.startsWith('/notifications') ||
       path.includes('/branches');
 
     if (isExempt) {
@@ -82,9 +85,9 @@ const validateTenant = async (req, res, next) => {
       }
 
       if (!branchInfo.exists) {
-        return res.status(404).json({ success: false, message: `Branch ID: ${branchId} does not belong to Cafe ID: ${cafeId}.` });
-      }
-      if (!branchInfo.isActive) {
+        console.warn(`[TENANT VALIDATION] Branch ID "${branchId}" does not belong to Cafe ID "${cafeId}". Auto-resolving to 'all'.`);
+        req.branchId = 'all';
+      } else if (!branchInfo.isActive) {
         return res.status(403).json({ success: false, message: `Access denied. Branch is currently inactive.` });
       }
     }

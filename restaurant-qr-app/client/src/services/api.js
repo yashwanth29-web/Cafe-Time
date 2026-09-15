@@ -102,10 +102,10 @@ API.interceptors.request.use(
       activeCafeId = localStorage.getItem('activeCafeId') || searchParams.get('cafeId') || sessionStorage.getItem('cafeId');
     }
     
-    if (activeBranchId) {
+    if (activeBranchId && activeBranchId !== 'default' && activeBranchId !== 'null' && activeBranchId !== 'undefined') {
       config.headers['x-branch-id'] = activeBranchId;
     }
-    if (activeCafeId) {
+    if (activeCafeId && activeCafeId !== 'null' && activeCafeId !== 'undefined') {
       config.headers['x-cafe-id'] = activeCafeId;
     }
     return config;

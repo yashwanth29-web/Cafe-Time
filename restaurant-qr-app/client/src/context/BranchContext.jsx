@@ -72,13 +72,21 @@ export const BranchProvider = ({ children }) => {
     if (loading) return;
     if (user) {
       // Determine initial active branch ID from database assignment before API call finishes
+      const currentCafeId = user.cafeId;
+      const storedCafeId = localStorage.getItem('activeCafeId');
+      if (currentCafeId && storedCafeId && storedCafeId !== currentCafeId) {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+      if (currentCafeId) {
+        localStorage.setItem('activeCafeId', currentCafeId);
+      }
+
       const role = (user.role || '').toLowerCase();
       if (['super_admin', 'admin', 'owner'].includes(role)) {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
           setActiveBranchId(stored);
         } else {
-          localStorage.setItem(STORAGE_KEY, 'default');
           setActiveBranchId('default');
         }
       } else {
