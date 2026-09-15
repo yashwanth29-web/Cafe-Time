@@ -143,10 +143,13 @@ const getInventory = async (req, res, next) => {
     
     const isStaff = ['manager', 'chef', 'waiter', 'cashier', 'staff'].includes((req.user.role || '').toLowerCase());
     if (isStaff && req.user.assignedBranch) {
-      query.$or = [{ branch: req.user.assignedBranch }, { branchId: req.user.assignedBranch }];
-    } else if (reqBranchId) {
-      query.$or = [{ branch: reqBranchId }, { branchId: reqBranchId }];
+      // Staff see only their assigned branch
+      query.branchId = req.user.assignedBranch;
+    } else if (reqBranchId && reqBranchId !== 'all') {
+      // Owner/manager filtered to a specific branch — use branchId only (canonical field)
+      query.branchId = reqBranchId;
     }
+    // No branch filter when reqBranchId is 'all' or missing — return all cafe inventory
     
     // Auto-seeding ONLY applies to the original CD001 demo cafe.
     // Real cafes (CP007, etc.) must start with an empty inventory — never auto-populate.
@@ -159,13 +162,20 @@ const getInventory = async (req, res, next) => {
 
       if (totalItemsCount === 0 || hasOldDemoItems) {
         console.log(`[SEED] Clearing old demo inventory and seeding Dr. Chai defaults for branch: ${seedBranch}...`);
-        await Inventory.deleteMany({ cafeId, $or: [{ branch: seedBranch }, { branchId: seedBranch }] });
+        await Inventory.deleteMany({ cafeId, branchId: seedBranch });
         await seedDefaultInventory(cafeId, seedBranch);
       }
     }
 
-    // Return items for the current cafe/branch
-    const items = await Inventory.find(query).sort({ name: 1 });
+    // Return items sorted alphabetically, deduplicated by _id as a safety net
+    const rawItems = await Inventory.find(query).sort({ name: 1 }).lean();
+    const seen = new Set();
+    const items = rawItems.filter(item => {
+      const key = String(item._id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     return res.status(200).json({ success: true, count: items.length, data: items });
   } catch (error) {
