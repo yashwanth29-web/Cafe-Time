@@ -152,7 +152,10 @@ const SaaSLayout = ({ children }) => {
   const unreadCount = lowStockAlerts.length + notifications.filter(n => !n.isRead).length;
 
   const handleLogoClick = (e) => {
-    if (e) e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     let dashboardPath = '/login';
     switch (userRole) {
       case 'super_admin':
@@ -173,9 +176,19 @@ const SaaSLayout = ({ children }) => {
         dashboardPath = '/staff/workspace';
         break;
     }
-    if (location.pathname === dashboardPath) {
+
+    // Smoothly scroll content container to top
+    const contentEl = document.querySelector('.saas-content-inner');
+    if (contentEl) {
+      contentEl.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // If already on dashboard without query params, we're done (scrolled to top)
+    if (location.pathname === dashboardPath && !location.search) {
       return;
     }
+
+    // Navigate to dashboard root (e.g. /owner/dashboard), clearing any active ?tab= query
     navigate(dashboardPath);
   };
 
@@ -275,7 +288,8 @@ const SaaSLayout = ({ children }) => {
         { label: 'Staff Management', icon: '👥', path: '/owner/dashboard?tab=staff' },
         { label: 'Inventory', icon: '📦', path: '/owner/dashboard?tab=inventory' },
         { label: 'Monitor Orders', icon: '👁️', path: '/owner/dashboard?tab=orders' },
-        { label: 'Financial Reports', icon: '📊', path: '/owner/dashboard?tab=financial_reports' }];
+        { label: 'Financial Reports', icon: '📊', path: '/owner/dashboard?tab=financial_reports' },
+        { label: 'Settings & Profile', icon: '⚙️', path: '/owner/profile' }];
 
       case 'manager':
         return [
@@ -408,8 +422,8 @@ const SaaSLayout = ({ children }) => {
   const renderSvgIcon = (label, isActive) => {
     const strokeColor = isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)';
     const defaultStyle = {
-      width: '22px',
-      height: '22px',
+      width: '24px',
+      height: '24px',
       stroke: 'currentColor',
       strokeWidth: 2.2,
       strokeLinecap: 'round',
@@ -570,7 +584,7 @@ const SaaSLayout = ({ children }) => {
           </div>
           <button className="drawer-close-btn" onClick={() => setMobileDrawerOpen(false)}>×</button>
         </div>
-        <nav style={{ padding: '20px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <nav style={{ padding: '24px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {navItems.map((item, index) => {
             const isActive = isPathActive(item.path);
             return (
@@ -583,20 +597,22 @@ const SaaSLayout = ({ children }) => {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 14px',
-                  borderRadius: '10px',
+                  gap: '14px',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
                   border: 'none',
-                  background: isActive ? 'rgba(143, 168, 155, 0.12)' : 'transparent',
+                  borderLeft: isActive ? '4px solid var(--color-primary)' : '4px solid transparent',
+                  background: isActive ? 'rgba(143, 168, 155, 0.16)' : 'transparent',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                  fontSize: '14.5px',
-                  fontWeight: isActive ? 800 : 500,
+                  fontSize: '16px',
+                  fontWeight: isActive ? 800 : 600,
+                  letterSpacing: '-0.2px',
                   cursor: 'pointer',
                   width: '100%',
                   textAlign: 'left'
                 }}>
                 
-                <span style={{ fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {renderSvgIcon(item.label, isActive) || item.icon}
                 </span>
                 <span>{item.label}</span>
@@ -760,7 +776,7 @@ const SaaSLayout = ({ children }) => {
 
       {/* Desktop Sidebar (Hidden on Mobile/Tablet via CSS) */}
       <aside className="desktop-sidebar" style={{
-        width: sidebarCollapsed ? '70px' : '260px',
+        width: sidebarCollapsed ? '72px' : '265px',
         backgroundColor: 'var(--bg-secondary)',
         borderRight: '1px solid #2d2d2d',
         display: 'flex',
@@ -792,9 +808,19 @@ const SaaSLayout = ({ children }) => {
               alignItems: 'center',
               gap: '12px',
               justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              userSelect: 'none',
+              padding: '6px 8px',
+              borderRadius: '8px',
+              transition: 'background-color 0.2s ease'
             }}
-            title="Go to Home"
+            title="Go to Dashboard"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
           >
             {cafeInfo?.logoUrl ? (
               <img src={getAssetUrl(cafeInfo.logoUrl)} alt={`${cafeInfo.name} Logo`} style={{ height: '32px', width: '32px', borderRadius: '50%', objectFit: 'contain', border: '1px solid #6F4E37', flexShrink: 0 }} />
@@ -862,11 +888,11 @@ const SaaSLayout = ({ children }) => {
 
         {/* Navigation Items (Scrollable) */}
         <nav style={{
-          padding: '20px 10px',
+          padding: sidebarCollapsed ? '20px 8px' : '24px 14px',
           flexGrow: 1,
           display: 'flex',
           flexDirection: 'column',
-          gap: '6px',
+          gap: sidebarCollapsed ? '10px' : '14px',
           overflowY: 'auto'
         }}>
           {navItems.map((item, index) => {
@@ -880,30 +906,102 @@ const SaaSLayout = ({ children }) => {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: sidebarCollapsed ? '0' : '12px',
+                  gap: sidebarCollapsed ? '0' : '14px',
                   justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
-                  padding: '12px 14px',
-                  borderRadius: sidebarCollapsed ? '8px' : '10px',
+                  padding: sidebarCollapsed ? '12px 0' : '15px 16px',
+                  borderRadius: sidebarCollapsed ? '10px' : '12px',
                   border: 'none',
                   borderLeft: isActive ? '4px solid var(--color-primary)' : '4px solid transparent',
-                  background: isActive ? 'rgba(143, 168, 155, 0.12)' : 'transparent',
+                  background: isActive ? 'rgba(143, 168, 155, 0.16)' : 'transparent',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                  fontSize: '14.5px',
-                  fontWeight: isActive ? 800 : 500,
+                  fontSize: '16px',
+                  fontWeight: isActive ? 800 : 600,
+                  letterSpacing: '-0.2px',
                   cursor: 'pointer',
                   width: '100%',
                   transition: 'all 0.2s ease',
                   textAlign: 'left'
-                }}>
-                
-                <span style={{ fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
+                    e.currentTarget.style.color = 'var(--color-text-primary)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'var(--color-text-secondary)';
+                  }
+                }}
+              >
+                <span style={{ fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {renderSvgIcon(item.label, isActive) || item.icon}
                 </span>
-                {!sidebarCollapsed && <span>{item.label}</span>}
-              </button>);
-
+                {!sidebarCollapsed && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>}
+              </button>
+            );
           })}
         </nav>
+
+        {/* Sidebar Bottom Footer Widget */}
+        {!sidebarCollapsed ? (
+          <div style={{
+            marginTop: 'auto',
+            padding: '16px 14px',
+            borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+            backgroundColor: 'rgba(0, 0, 0, 0.02)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            flexShrink: 0
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              background: 'rgba(46, 204, 113, 0.08)',
+              border: '1px solid rgba(46, 204, 113, 0.2)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#2ecc71',
+                  boxShadow: '0 0 8px #2ecc71',
+                  display: 'inline-block'
+                }}></span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                  Store Online
+                </span>
+              </div>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#27ae60' }}>
+                LIVE POS
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            marginTop: 'auto',
+            padding: '16px 8px',
+            display: 'flex',
+            justifyContent: 'center',
+            borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+            flexShrink: 0
+          }} title="Store Online - Live POS">
+            <span style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              backgroundColor: '#2ecc71',
+              boxShadow: '0 0 8px #2ecc71',
+              display: 'inline-block'
+            }}></span>
+          </div>
+        )}
       </aside>
 
       {/* Main Content Pane */}

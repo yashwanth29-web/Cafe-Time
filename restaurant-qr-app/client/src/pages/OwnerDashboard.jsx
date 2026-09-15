@@ -2578,6 +2578,10 @@ const exportStaffToCSV = () => {
     } else {
       setActiveTab('analytics');
     }
+    const contentEl = document.querySelector('.saas-content-inner');
+    if (contentEl) {
+      contentEl.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, [tabParam, searchParams, navigate]);
 
   useEffect(() => {
