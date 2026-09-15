@@ -848,7 +848,30 @@ const getBranches = async (req, res) => {
       return res.status(200).json(cached.data);
     }
 
-    const branches = await Branch.find(query).sort({ createdAt: -1 }).lean();
+    let branches = await Branch.find(query).sort({ createdAt: -1 }).lean();
+
+    // If an owner's cafe does not have any branches yet, auto-provision the default primary branch
+    if (branches.length === 0 && req.user.cafeId && ['admin', 'owner'].includes(role)) {
+      try {
+        const Cafe = require('../models/Cafe');
+        const cafe = await Cafe.findOne({ cafeId: req.user.cafeId }).lean();
+        if (cafe) {
+          const defaultBranchId = `${req.user.cafeId}-B1`;
+          const created = await Branch.create({
+            branchId: defaultBranchId,
+            branchName: `${cafe.name || 'Main'} - Main Branch`,
+            cafeId: req.user.cafeId,
+            address: cafe.address || `${cafe.city || ''} ${cafe.state || ''}`.trim() || 'Main Street',
+            manager: req.user.name || 'Store Manager',
+            isActive: true
+          });
+          branches = [created.toObject ? created.toObject() : created];
+        }
+      } catch (autoErr) {
+        console.warn('Auto-provision primary branch notice:', autoErr.message);
+      }
+    }
+
     const result = { success: true, branches };
     adminBranchCache.set(cacheKey, { data: result, timestamp: Date.now() });
 
