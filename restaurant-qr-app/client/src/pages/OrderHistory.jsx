@@ -647,6 +647,8 @@ const OrderHistory = ({ cafeId }) => {
                               <img
                                 src={displayImage}
                                 alt={it.name}
+                                loading="lazy"
+                                decoding="async"
                                 style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
                                 onError={(e) => { e.target.src = '/images/default-food.png'; }}
                               />

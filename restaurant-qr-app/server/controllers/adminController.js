@@ -1645,12 +1645,21 @@ const appendLegacyFallback = async (order, branchMap = null) => {
   return orderObj;
 };
 
+// In-memory cache for dashboard stats (20s TTL)
+const dashboardStatsCache = new Map();
+
 const getDashboardStats = async (req, res) => {
   try {
     const cafeId = req.user.cafeId;
     if (!cafeId) return res.status(400).json({ success: false, message: 'No cafe assignment found.' });
     
     const branchId = req.query.branchId || null;
+    const cacheKey = `${cafeId}_${branchId || 'all'}`;
+    const nowMs = Date.now();
+    const cachedStats = dashboardStatsCache.get(cacheKey);
+    if (cachedStats && cachedStats.expiresAt > nowMs) {
+      return res.status(200).json({ success: true, data: cachedStats.data });
+    }
     
     const orderMatchQuery = { cafeId };
     
@@ -1890,9 +1899,12 @@ const getDashboardStats = async (req, res) => {
         revenue: item.revenue
       }));
 
+    // Fetch menu items once for both slow selling calculation and profit margins
+    const allMenuItems = await MenuItem.find({ cafeId }).select('_id name category price makingCost isHidden').lean();
+    
     // Slow Selling: includes all cafe dishes (unsold / 0 sold items first, then least sold)
-    const allMenuItems = await MenuItem.find({ cafeId, isHidden: { $ne: true } }).select('name category price').lean();
-    const slowSellingList = allMenuItems.map(m => {
+    const activeMenuItems = allMenuItems.filter(m => m.isHidden !== true);
+    const slowSellingList = activeMenuItems.map(m => {
       const sold = salesMap[m.name] || { quantity: 0, revenue: 0 };
       return {
         name: m.name,
@@ -1959,11 +1971,10 @@ const getDashboardStats = async (req, res) => {
       formattedRecentOrders.push(await appendLegacyFallback(order, branchMap));
     }
     
-    // Compute Today's and Monthly Gross Profit
-    const menuItemsList = await MenuItem.find({ cafeId }).select('_id name makingCost price').lean();
+    // Compute Today's and Monthly Gross Profit using cached allMenuItems
     const menuCostMapById = {};
     const menuCostMapByName = {};
-    menuItemsList.forEach(m => {
+    allMenuItems.forEach(m => {
       const cost = Number(m.makingCost) || 0;
       if (m._id) menuCostMapById[String(m._id)] = cost;
       if (m.name) menuCostMapByName[m.name.toLowerCase().trim()] = cost;
@@ -2001,33 +2012,41 @@ const getDashboardStats = async (req, res) => {
       ? Number(((monthlyGrossProfit / revenueData.monthlyRevenue) * 100).toFixed(1)) 
       : 0;
 
+    const statsPayload = {
+      todayRevenue: revenueData.todayRevenue,
+      todayProfit: Number(todayGrossProfit.toFixed(2)),
+      todayMargin,
+      weeklyRevenue: revenueData.weeklyRevenue,
+      monthlyRevenue: revenueData.monthlyRevenue,
+      monthlyProfit: Number(monthlyGrossProfit.toFixed(2)),
+      monthlyMargin,
+      yearlyRevenue: revenueData.yearlyRevenue,
+      ordersToday,
+      completedOrders,
+      pendingOrders,
+      averageOrderValue,
+      paymentSummary,
+      orderSourceData,
+      topSellingItems: formattedTopSelling,
+      slowSellingItems: formattedSlowSelling,
+      weeklySalesData,
+      recentOrders: formattedRecentOrders,
+      inventory: {
+        value: inventoryValue,
+        cost: totalInventoryCost,
+        consumption: totalInventoryConsumption
+      }
+    };
+
+    // Cache computed stats for 20 seconds
+    dashboardStatsCache.set(cacheKey, {
+      data: statsPayload,
+      expiresAt: Date.now() + 20000
+    });
+
     return res.status(200).json({
       success: true,
-      data: {
-        todayRevenue: revenueData.todayRevenue,
-        todayProfit: Number(todayGrossProfit.toFixed(2)),
-        todayMargin,
-        weeklyRevenue: revenueData.weeklyRevenue,
-        monthlyRevenue: revenueData.monthlyRevenue,
-        monthlyProfit: Number(monthlyGrossProfit.toFixed(2)),
-        monthlyMargin,
-        yearlyRevenue: revenueData.yearlyRevenue,
-        ordersToday,
-        completedOrders,
-        pendingOrders,
-        averageOrderValue,
-        paymentSummary,
-        orderSourceData,
-        topSellingItems: formattedTopSelling,
-        slowSellingItems: formattedSlowSelling,
-        weeklySalesData,
-        recentOrders: formattedRecentOrders,
-        inventory: {
-          value: inventoryValue,
-          cost: totalInventoryCost,
-          consumption: totalInventoryConsumption
-        }
-      }
+      data: statsPayload
     });
     
   } catch (error) {

@@ -24,29 +24,65 @@ const cache = {
 export const frontendCache = {
   getMenu: () => {
     const key = getFrontendPartitionKey();
-    return cache.menu[key] || null;
+    if (cache.menu[key]) return cache.menu[key];
+    try {
+      const stored = localStorage.getItem(`fe_cache_menu_${key}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        cache.menu[key] = parsed;
+        return parsed;
+      }
+    } catch (_) {}
+    return null;
   },
   setMenu: (menuData) => {
     const key = getFrontendPartitionKey();
     cache.menu[key] = menuData;
+    try {
+      localStorage.setItem(`fe_cache_menu_${key}`, JSON.stringify(menuData));
+    } catch (_) {}
   },
   
   getCategories: () => {
     const key = getFrontendPartitionKey();
-    return cache.categories[key] || null;
+    if (cache.categories[key]) return cache.categories[key];
+    try {
+      const stored = localStorage.getItem(`fe_cache_cats_${key}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        cache.categories[key] = parsed;
+        return parsed;
+      }
+    } catch (_) {}
+    return null;
   },
   setCategories: (catData) => {
     const key = getFrontendPartitionKey();
     cache.categories[key] = catData;
+    try {
+      localStorage.setItem(`fe_cache_cats_${key}`, JSON.stringify(catData));
+    } catch (_) {}
   },
   
   getInventory: () => {
     const key = getFrontendPartitionKey();
-    return cache.inventory[key] || null;
+    if (cache.inventory[key]) return cache.inventory[key];
+    try {
+      const stored = localStorage.getItem(`fe_cache_inv_${key}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        cache.inventory[key] = parsed;
+        return parsed;
+      }
+    } catch (_) {}
+    return null;
   },
   setInventory: (invData) => {
     const key = getFrontendPartitionKey();
     cache.inventory[key] = invData;
+    try {
+      localStorage.setItem(`fe_cache_inv_${key}`, JSON.stringify(invData));
+    } catch (_) {}
   },
   
   getStaff: () => {
@@ -63,6 +99,11 @@ export const frontendCache = {
     cache.categories = {};
     cache.inventory = {};
     cache.staff = {};
+    try {
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('fe_cache_')) localStorage.removeItem(k);
+      });
+    } catch (_) {}
   }
 };
 

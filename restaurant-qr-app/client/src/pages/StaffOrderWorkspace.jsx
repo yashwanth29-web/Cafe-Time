@@ -819,6 +819,8 @@ const StaffOrderWorkspace = () => {
                   <img
                     src={item.image ? getAssetUrl(item.image) : '/images/default-food.png'}
                     alt={item.name}
+                    loading="lazy"
+                    decoding="async"
                     style={{ width: '100%', height: '140px', objectFit: 'cover' }}
                     onError={(e) => { e.target.src = '/images/default-food.png'; }}
                   />

@@ -58,6 +58,8 @@ const CartItem = ({ item, increaseQuantity, decreaseQuantity, removeFromCart }) 
           src={displayImage} 
           alt={name} 
           className="cart-item-img" 
+          loading="lazy"
+          decoding="async"
           onError={() => setImgFailed(true)} 
         />
       )}

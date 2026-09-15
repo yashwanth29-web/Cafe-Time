@@ -28,10 +28,14 @@ export const getAssetUrl = (url) => {
     const envUrl = import.meta.env.VITE_API_URL;
     let origin = '';
     
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    // In production or cloud deployments where VITE_API_URL is configured (e.g. backend on Render/Railway),
+    // always use the backend origin because uploads reside on the backend server!
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+      origin = envUrl.replace(/\/api\/?$/, '');
+    } else if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
       origin = window.location.origin;
     } else if (envUrl) {
-      origin = envUrl.replace(/\/api$/, '');
+      origin = envUrl.replace(/\/api\/?$/, '');
     } else {
       origin = 'http://localhost:5000';
     }
@@ -558,9 +562,42 @@ export const getWorkReports = async (params) => {
   return response.data;
 };
 
-// Cafe Public API
+// Cafe Public API with in-memory + sessionStorage caching for instant UI rendering (0ms)
+const clientCafeCache = new Map();
+
 export const getCafeInfo = async (cafeId) => {
+  if (!cafeId) return { success: false, data: null };
+  
+  const mem = clientCafeCache.get(cafeId);
+  if (mem) {
+    return mem;
+  }
+
+  // Check sessionStorage for instant first-load render
+  const sessionKey = `cafe_info_${cafeId}`;
+  try {
+    const stored = sessionStorage.getItem(sessionKey);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      clientCafeCache.set(cafeId, parsed);
+      // Background revalidation
+      API.get(`/cafe/${cafeId}`).then(res => {
+        if (res.data && res.data.success) {
+          clientCafeCache.set(cafeId, res.data);
+          sessionStorage.setItem(sessionKey, JSON.stringify(res.data));
+        }
+      }).catch(() => {});
+      return parsed;
+    }
+  } catch (e) {}
+
   const response = await API.get(`/cafe/${cafeId}`);
+  if (response.data && response.data.success) {
+    clientCafeCache.set(cafeId, response.data);
+    try {
+      sessionStorage.setItem(sessionKey, JSON.stringify(response.data));
+    } catch (e) {}
+  }
   return response.data;
 };
 

@@ -27,11 +27,13 @@ const MenuCard = React.memo(({ item, cartItem, addToCart, increaseQuantity, decr
   };
 
   const [imgFailed, setImgFailed] = useState(!isValidUrl(image));
+  const [imgLoaded, setImgLoaded] = useState(false);
   const [prevImage, setPrevImage] = useState(image);
 
   if (image !== prevImage) {
     setPrevImage(image);
     setImgFailed(!isValidUrl(image));
+    setImgLoaded(false);
   }
 
   const displayImage = getAssetUrl(image);
@@ -49,13 +51,26 @@ const MenuCard = React.memo(({ item, cartItem, addToCart, increaseQuantity, decr
           {getCategoryIcon(category)}
         </div>
       ) : (
-        <img 
-          src={displayImage} 
-          alt={name} 
-          className="compact-menu-card-img" 
-          loading="lazy"
-          onError={() => setImgFailed(true)} 
-        />
+        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+          {!imgLoaded && (
+            <div className="compact-menu-card-img" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.6 }}>
+              {getCategoryIcon(category)}
+            </div>
+          )}
+          <img 
+            src={displayImage} 
+            alt={name} 
+            className="compact-menu-card-img" 
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setImgLoaded(true)}
+            onError={() => setImgFailed(true)}
+            style={{
+              transition: 'opacity 0.2s ease-in-out',
+              opacity: imgLoaded ? 1 : 0
+            }}
+          />
+        </div>
       )}
       
       <div className="compact-menu-card-content">
@@ -83,5 +98,3 @@ const MenuCard = React.memo(({ item, cartItem, addToCart, increaseQuantity, decr
 });
 
 export default MenuCard;
-
-

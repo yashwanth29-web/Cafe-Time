@@ -4,7 +4,7 @@ const { getContext } = require('./context');
 let menuCache = {};
 let categoryCache = {};
 
-const CACHE_TTL_MS = 5000; // 5 seconds TTL ensures localhost and live stay in sync with MongoDB
+const CACHE_TTL_MS = 600000; // 10 minutes TTL with explicit invalidation on mutations for ultra-fast response (<1ms)
 
 module.exports = {
   getMenu: (explicitCafeId, explicitBranchId) => {

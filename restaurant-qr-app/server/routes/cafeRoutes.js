@@ -46,15 +46,25 @@ router.get('/payment-info/config', async (req, res) => {
   }
 });
 
+// In-memory cache for cafe details (60s TTL)
+const cafeDetailsCache = new Map();
+
 router.get('/:id', async (req, res) => {
   try {
+    const cafeId = req.params.id;
+    const now = Date.now();
+    const cached = cafeDetailsCache.get(cafeId);
+    if (cached && cached.expiresAt > now) {
+      return res.status(200).json({ success: true, data: cached.data });
+    }
+
     const hasOwnerIdField = Cafe.schema.paths.ownerId !== undefined;
     let cafe;
     
     if (hasOwnerIdField) {
-      cafe = await Cafe.findOne({ cafeId: req.params.id }).populate('ownerId', 'name email');
+      cafe = await Cafe.findOne({ cafeId }).populate('ownerId', 'name email').lean();
     } else {
-      cafe = await Cafe.findOne({ cafeId: req.params.id });
+      cafe = await Cafe.findOne({ cafeId }).lean();
     }
 
     if (cafe && cafe.isDeleted) {
@@ -88,9 +98,14 @@ router.get('/:id', async (req, res) => {
     }
 
     const cafeData = {
-      ...cafe.toObject(),
+      ...(typeof cafe.toObject === 'function' ? cafe.toObject() : cafe),
       ownerName
     };
+
+    cafeDetailsCache.set(cafeId, {
+      data: cafeData,
+      expiresAt: Date.now() + 60000 // 60s TTL
+    });
 
     return res.status(200).json({ success: true, data: cafeData });
   } catch (error) {

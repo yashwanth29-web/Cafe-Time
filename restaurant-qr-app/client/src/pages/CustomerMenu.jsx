@@ -53,13 +53,15 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
 
     let isMounted = true;
     const fetchMenuAndCategories = async (isFirst = false) => {
-      if (frontendCache.getMenu() && frontendCache.getCategories()) {
-        setMenuItems(frontendCache.getMenu());
-        setCategories(frontendCache.getCategories());
+      const cachedMenu = frontendCache.getMenu();
+      const cachedCats = frontendCache.getCategories();
+      if (cachedMenu && cachedCats) {
+        setMenuItems(cachedMenu);
+        setCategories(cachedCats);
         setLoading(false);
-        return;
+      } else if (isFirst) {
+        setLoading(true);
       }
-      if (isFirst) setLoading(true);
       try {
         const [menuRes, catsRes] = await Promise.all([
         getMenu(),
@@ -238,7 +240,14 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
                   </div>
                 )}
                 <div style={{ position: 'relative' }}>
-                  <img src={getAssetUrl(combo.image)} alt={combo.name} className="combo-card-img" style={{ height: '110px', width: '100%', objectFit: 'cover' }} />
+                  <img 
+                    src={getAssetUrl(combo.image)} 
+                    alt={combo.name} 
+                    className="combo-card-img" 
+                    loading="lazy"
+                    decoding="async"
+                    style={{ height: '110px', width: '100%', objectFit: 'cover' }} 
+                  />
                 </div>
                 <div className="combo-card-content" style={{ padding: '10px' }}>
                   <div className="combo-card-title" style={{ fontSize: '12px', fontWeight: 800, lineHeight: 1.2, color: '#3d2516', marginBottom: '10px' }}>{combo.name}</div>

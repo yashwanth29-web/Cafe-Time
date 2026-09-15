@@ -12,5 +12,20 @@ export default defineConfig({
       protocol: 'ws',
       port: 5173
     }
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/xlsx')) {
+            return 'vendor-xlsx';
+          }
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons';
+          }
+        }
+      }
+    }
   }
 })

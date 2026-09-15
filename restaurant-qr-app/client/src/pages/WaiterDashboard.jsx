@@ -354,6 +354,8 @@ const WaiterDashboard = () =>{
         <img
           src={displayImage}
           alt={it.name}
+          loading="lazy"
+          decoding="async"
           style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
           onError={(e) => { e.target.src = '/images/default-food.png'; }}
         />
@@ -459,6 +461,8 @@ const WaiterDashboard = () =>{
         <img
           src={displayImage}
           alt={it.name}
+          loading="lazy"
+          decoding="async"
           style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
           onError={(e) => { e.target.src = '/images/default-food.png'; }}
         />
@@ -581,6 +585,8 @@ const WaiterDashboard = () =>{
         <img
           src={displayImage}
           alt={it.name}
+          loading="lazy"
+          decoding="async"
           style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
           onError={(e) => { e.target.src = '/images/default-food.png'; }}
         />

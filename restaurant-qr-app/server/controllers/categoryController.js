@@ -49,13 +49,13 @@ const getCategories = async (req, res, next) => {
         { $sort: { displayOrder: 1, name: 1 } }
       ]);
     } else {
-      categories = await Category.find({ cafeId, branchId }).sort({ displayOrder: 1, name: 1 });
+      categories = await Category.find({ cafeId, branchId }).sort({ displayOrder: 1, name: 1 }).lean();
     }
 
     if (categories.length === 0) {
       try {
         const seedBranchId = branchId === 'all' ? 'default' : branchId;
-        const existingInSeedBranch = await Category.find({ cafeId, branchId: seedBranchId });
+        const existingInSeedBranch = await Category.find({ cafeId, branchId: seedBranchId }).lean();
         if (existingInSeedBranch.length === 0) {
           categories = await seedDefaultCategories(cafeId, seedBranchId);
         } else {
@@ -63,7 +63,7 @@ const getCategories = async (req, res, next) => {
         }
       } catch (seedError) {
         console.warn('[SEED WARNING] Failed to seed default categories:', seedError.message);
-        categories = await Category.find({ cafeId, branchId }).sort({ displayOrder: 1, name: 1 });
+        categories = await Category.find({ cafeId, branchId }).sort({ displayOrder: 1, name: 1 }).lean();
       }
     }
 

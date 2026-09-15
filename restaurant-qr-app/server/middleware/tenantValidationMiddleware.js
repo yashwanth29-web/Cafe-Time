@@ -4,6 +4,10 @@ const OperationalConfig = require('../models/OperationalConfig');
 const Order = require('../models/Order');
 const mongoose = require('mongoose');
 
+// In-memory 60s validation caches to avoid redundant DB roundtrips on every API call
+const cafeValidationCache = new Map();
+const branchValidationCache = new Map();
+
 const validateTenant = async (req, res, next) => {
   try {
     const path = req.path;
@@ -29,34 +33,58 @@ const validateTenant = async (req, res, next) => {
     const cafeId = req.cafeId;
     const branchId = req.branchId;
 
-    // 1. Validate cafeId exists and is active (not deleted)
+    const now = Date.now();
+
+    // 1. Validate cafeId exists and is active (not deleted) with 60s memory cache
     if (cafeId) {
-      const cafe = await Cafe.findOne({ cafeId });
-      if (!cafe) {
+      let cafeInfo = cafeValidationCache.get(cafeId);
+      if (!cafeInfo || cafeInfo.expiresAt <= now) {
+        const cafe = await Cafe.findOne({ cafeId }).lean();
+        cafeInfo = {
+          exists: !!cafe,
+          isDeleted: !!(cafe && cafe.isDeleted),
+          isActive: !!(cafe && cafe.isActive),
+          expiresAt: now + 60000 // 60s TTL
+        };
+        cafeValidationCache.set(cafeId, cafeInfo);
+      }
+
+      if (!cafeInfo.exists) {
         return res.status(404).json({ success: false, message: `Cafe ID: ${cafeId} does not exist.` });
       }
-      if (cafe.isDeleted) {
+      if (cafeInfo.isDeleted) {
         return res.status(403).json({ success: false, message: `Access denied. Cafe has been deleted.` });
       }
-      if (!cafe.isActive) {
+      if (!cafeInfo.isActive) {
         return res.status(403).json({ success: false, message: `Access denied. Cafe is currently inactive.` });
       }
     }
 
-    // 2. Validate branch belongs to cafe
+    // 2. Validate branch belongs to cafe with 60s memory cache
     if (branchId && branchId !== 'all') {
-      const branch = await Branch.findOne({
-        $or: [
-          { branchId: branchId },
-          { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
-        ],
-        cafeId
-      });
+      const branchKey = `${cafeId}_${branchId}`;
+      let branchInfo = branchValidationCache.get(branchKey);
+      if (!branchInfo || branchInfo.expiresAt <= now) {
+        const branch = await Branch.findOne({
+          $or: [
+            { branchId: branchId },
+            { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
+          ],
+          cafeId
+        }).lean();
 
-      if (!branch) {
+        branchInfo = {
+          exists: !!branch,
+          isActive: !!(branch && branch.isActive),
+          expiresAt: now + 60000 // 60s TTL
+        };
+        branchValidationCache.set(branchKey, branchInfo);
+      }
+
+      if (!branchInfo.exists) {
         return res.status(404).json({ success: false, message: `Branch ID: ${branchId} does not belong to Cafe ID: ${cafeId}.` });
       }
-      if (!branch.isActive) {
+      if (!branchInfo.isActive) {
         return res.status(403).json({ success: false, message: `Access denied. Branch is currently inactive.` });
       }
     }

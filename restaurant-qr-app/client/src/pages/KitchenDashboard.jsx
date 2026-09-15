@@ -381,6 +381,8 @@ const KitchenDashboard = () =>{
           <img
             src={displayImage}
             alt={item.name}
+            loading="lazy"
+            decoding="async"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             onError={(e) => { e.target.src = '/images/default-food.png'; }}
           />
