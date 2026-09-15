@@ -148,19 +148,23 @@ const getInventory = async (req, res, next) => {
       query.$or = [{ branch: reqBranchId }, { branchId: reqBranchId }];
     }
     
-    const totalItemsCount = await Inventory.countDocuments(query);
-    const hasDemo = await Inventory.exists({ cafeId, name: { $in: ['Burger Buns', 'Chicken Patties', 'Coffee Beans'] } });
+    // Auto-seeding ONLY applies to the original CD001 demo cafe.
+    // Real cafes (CP007, etc.) must start with an empty inventory — never auto-populate.
+    // This prevents deleted items from re-appearing after the owner removes them.
+    const isDemoCafe = cafeId === 'CD001';
+    if (isDemoCafe) {
+      const totalItemsCount = await Inventory.countDocuments(query);
+      const hasOldDemoItems = await Inventory.exists({ cafeId, name: { $in: ['Burger Buns', 'Chicken Patties', 'Coffee Beans'] } });
+      const seedBranch = reqBranchId || (isStaff ? req.user.assignedBranch : 'default');
 
-    const seedBranch = reqBranchId || (isStaff ? req.user.assignedBranch : 'default');
-
-    // Auto-seed if database contains no inventory for this branch or contains old demo data
-    if (totalItemsCount === 0 || hasDemo) {
-      console.log(`Clearing old demo inventory items and seeding actual Dr. Chai Cafe inventory for branch: ${seedBranch}...`);
-      await Inventory.deleteMany({ cafeId, $or: [{ branch: seedBranch }, { branchId: seedBranch }] });
-      await seedDefaultInventory(cafeId, seedBranch);
+      if (totalItemsCount === 0 || hasOldDemoItems) {
+        console.log(`[SEED] Clearing old demo inventory and seeding Dr. Chai defaults for branch: ${seedBranch}...`);
+        await Inventory.deleteMany({ cafeId, $or: [{ branch: seedBranch }, { branchId: seedBranch }] });
+        await seedDefaultInventory(cafeId, seedBranch);
+      }
     }
 
-    // Reuse the exact same branch-aware query to find items, sorting them alphabetically
+    // Return items for the current cafe/branch
     const items = await Inventory.find(query).sort({ name: 1 });
 
     return res.status(200).json({ success: true, count: items.length, data: items });
@@ -170,6 +174,7 @@ const getInventory = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // @desc    Create inventory item
 // @route   POST /api/inventory
