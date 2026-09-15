@@ -540,11 +540,12 @@ const SaaSLayout = ({ children }) => {
   };
 
   return (
-    <div style={{
+    <div className="saas-layout-root" style={{
       display: 'flex',
-      minHeight: '100vh',
+      height: '100vh',
+      maxHeight: '100vh',
       maxWidth: '100vw',
-      overflowX: 'hidden',
+      overflow: 'hidden',
       backgroundColor: 'var(--bg-primary)',
       color: 'var(--color-text-primary)',
       fontFamily: "'Outfit', sans-serif"
@@ -765,8 +766,9 @@ const SaaSLayout = ({ children }) => {
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        position: 'sticky',
-        top: 0,
+        maxHeight: '100vh',
+        flexShrink: 0,
+        position: 'relative',
         transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         zIndex: 100
       }}>
@@ -905,7 +907,16 @@ const SaaSLayout = ({ children }) => {
       </aside>
 
       {/* Main Content Pane */}
-      <div className="saas-main-pane" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%', overflowX: 'hidden' }}>
+      <div className="saas-main-pane" style={{
+        flexGrow: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 0,
+        maxWidth: '100%',
+        height: '100vh',
+        maxHeight: '100vh',
+        overflow: 'hidden'
+      }}>
         {/* Desktop Top Header (Hidden on Mobile/Tablet via CSS) */}
         <header className="desktop-top-header" style={{
           height: '70px',
@@ -916,8 +927,6 @@ const SaaSLayout = ({ children }) => {
           alignItems: 'center',
           justifyContent: 'space-between',
           zIndex: 90,
-          position: 'sticky',
-          top: 0,
           flexShrink: 0
         }}>
           {/* Left: Branch Switcher + Live Indicator */}
@@ -1120,7 +1129,7 @@ const SaaSLayout = ({ children }) => {
         </header>
 
         {/* Content Area Container */}
-        <main className="saas-content-inner" style={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, maxWidth: '100%' }}>
+        <main className="saas-content-inner" style={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
           {children}
         </main>
       </div>
