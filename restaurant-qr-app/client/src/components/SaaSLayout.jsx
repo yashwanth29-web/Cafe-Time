@@ -20,7 +20,7 @@ const SaaSLayout = ({ children }) => {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    return window.innerWidth >= 768 && window.innerWidth < 1024;
+    return window.innerWidth >= 768 && window.innerWidth <= 1024;
   });
   const [lowStockAlerts, setLowStockAlerts] = useState(() => layoutCache.lowStockAlerts);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -28,6 +28,17 @@ const SaaSLayout = ({ children }) => {
   const [notifications, setNotifications] = useState(() => layoutCache.notifications);
   const [notificationsDisabled, setNotificationsDisabled] = useState(false);
   const [cafeInfo, setCafeInfo] = useState(null);
+
+  // Auto-collapse sidebar on tablet view (768px-1024px) on resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768 && window.innerWidth <= 1024) {
+        setSidebarCollapsed(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     // Reset layoutCache when user changes to prevent cross-tenant data leakage
@@ -532,6 +543,8 @@ const SaaSLayout = ({ children }) => {
     <div style={{
       display: 'flex',
       minHeight: '100vh',
+      maxWidth: '100vw',
+      overflowX: 'hidden',
       backgroundColor: 'var(--bg-primary)',
       color: 'var(--color-text-primary)',
       fontFamily: "'Outfit', sans-serif"
@@ -892,7 +905,7 @@ const SaaSLayout = ({ children }) => {
       </aside>
 
       {/* Main Content Pane */}
-      <div className="saas-main-pane" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div className="saas-main-pane" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: '100%', overflowX: 'hidden' }}>
         {/* Desktop Top Header (Hidden on Mobile/Tablet via CSS) */}
         <header className="desktop-top-header" style={{
           height: '70px',
@@ -948,70 +961,82 @@ const SaaSLayout = ({ children }) => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  fontSize: '16px',
-                  color: 'var(--color-text-secondary)',
-                  transition: 'all 0.2s',
-                  position: 'relative'
-                }}>
-                
-                🔔
-                {unreadCount > 0 &&
-                <span style={{
-                  position: 'absolute',
-                  top: '-2px',
-                  right: '-2px',
-                  width: '18px',
-                  height: '18px',
-                  borderRadius: '50%',
-                  backgroundColor: '#e74c3c',
+                  fontSize: '18px',
+                  position: 'relative',
                   color: 'var(--color-text-primary)',
-                  fontSize: '10px',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
+                  transition: 'background-color 0.2s'
+                }}
+                title="Notifications"
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-2px',
+                    right: '-2px',
+                    background: '#EF4444',
+                    color: '#fff',
+                    borderRadius: '50%',
+                    width: '18px',
+                    height: '18px',
+                    fontSize: '10px',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid var(--bg-secondary)'
+                  }}>
                     {unreadCount}
                   </span>
-                }
+                )}
               </button>
 
-              {notificationsOpen &&
-              <div style={{
-                position: 'absolute',
-                top: '50px',
-                right: 0,
-                width: '300px',
-                backgroundColor: '#1E1E1E',
-                border: '1px solid #333',
-                borderRadius: '12px',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                padding: '16px',
-                zIndex: 200
-              }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: '#FFFFFF' }}>
-                    Notifications & Alerts
+              {notificationsOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '50px',
+                  right: 0,
+                  width: '340px',
+                  backgroundColor: '#1E1E1E',
+                  border: '1px solid #333',
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                  padding: '16px',
+                  zIndex: 200
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #2d2d2d', paddingBottom: '8px' }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#FFFFFF' }}>Notifications & Alerts</span>
+                    <button 
+                      onClick={() => setNotificationsOpen(false)}
+                      style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px' }}
+                    >
+                      ✕
+                    </button>
                   </div>
                   {renderNotificationList()}
                 </div>
-              }
+              )}
             </div>
 
-            {/* Profile Dropdown Toggle */}
+            {/* Profile Avatar Trigger */}
             <div style={{ position: 'relative' }}>
               <button
                 onClick={handleProfileClick}
                 style={{
-                  background: 'transparent',
-                  border: 'none',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '10px',
+                  background: 'none',
+                  border: 'none',
                   cursor: 'pointer',
-                  padding: '4px',
-                  borderRadius: '8px'
-                }}>
-                
+                  padding: '4px 8px',
+                  borderRadius: '24px',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.03)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                title={['admin', 'owner'].includes(userRole) ? "View Cafe Profile" : "Profile Menu"}
+              >
                 <div style={{
                   width: '36px',
                   height: '36px',
@@ -1034,26 +1059,26 @@ const SaaSLayout = ({ children }) => {
                 {!['admin', 'owner'].includes(userRole) && <span style={{ fontSize: '10px', color: '#A0826C' }}>▼</span>}
               </button>
 
-              {profileDropdownOpen && !['admin', 'owner'].includes(userRole) &&
-              <div style={{
-                position: 'absolute',
-                top: '50px',
-                right: 0,
-                width: '180px',
-                backgroundColor: '#1E1E1E',
-                border: '1px solid #333',
-                borderRadius: '10px',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                padding: '8px 0',
-                zIndex: 200
-              }}>
-                  <div style={{
-                  padding: '8px 16px',
-                  fontSize: '12px',
-                  color: '#888',
-                  borderBottom: '1px solid #2d2d2d',
-                  marginBottom: '4px'
+              {profileDropdownOpen && !['admin', 'owner'].includes(userRole) && (
+                <div style={{
+                  position: 'absolute',
+                  top: '50px',
+                  right: 0,
+                  width: '180px',
+                  backgroundColor: '#1E1E1E',
+                  border: '1px solid #333',
+                  borderRadius: '10px',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                  padding: '8px 0',
+                  zIndex: 200
                 }}>
+                  <div style={{
+                    padding: '8px 16px',
+                    fontSize: '12px',
+                    color: '#888',
+                    borderBottom: '1px solid #2d2d2d',
+                    marginBottom: '4px'
+                  }}>
                     {user.email}
                   </div>
                   <button
@@ -1089,13 +1114,13 @@ const SaaSLayout = ({ children }) => {
                     <span>Log Out</span>
                   </button>
                 </div>
-              }
+              )}
             </div>
           </div>
         </header>
 
         {/* Content Area Container */}
-        <main className="saas-content-inner" style={{ flexGrow: 1, overflowY: 'auto' }}>
+        <main className="saas-content-inner" style={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, maxWidth: '100%' }}>
           {children}
         </main>
       </div>

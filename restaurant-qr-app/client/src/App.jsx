@@ -155,6 +155,9 @@ function AppContent() {
     location.pathname.startsWith('/kitchen') ||
     location.pathname.startsWith('/waiter') ||
     location.pathname.startsWith('/cashier') ||
+    location.pathname.startsWith('/employee') ||
+    location.pathname === '/owner-setup' ||
+    location.pathname === '/unauthorized' ||
     location.pathname === '/login';
 
   return (

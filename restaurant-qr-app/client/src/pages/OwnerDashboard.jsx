@@ -3920,7 +3920,6 @@ const exportStaffToCSV = () => {
  className="btn btn-primary"
  style={{ flex: 2, padding: '12px', borderRadius: '10px', fontSize: '14px' }}
  disabled={staffLoading}>
- 
  {staffLoading ? ' Adding...' : ' Add Staff Member'}
 </button>
 </div>
@@ -3929,11 +3928,11 @@ const exportStaffToCSV = () => {
 </div>
  }
 
- {/* Staff Roster List Card */}
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+  {/* Staff Roster List Card */}
+<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
 <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff Roster List</h4>
-<div style={{ display: 'flex', gap: '10px' }}>
+<div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
 <button
  onClick={exportStaffToCSV}
  style={{
@@ -3976,10 +3975,10 @@ const exportStaffToCSV = () => {
 </div>:
 
 <>
-<div className="desktop-tablet-staff" style={{ display: 'none', width: '100%', overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+<div className="desktop-tablet-staff custom-scrollbar" style={{ display: 'none', width: '100%', maxWidth: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '8px' }}>
+<table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
 <thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700, whiteSpace: 'nowrap' }}>
 <th style={{ padding: '10px' }}>Emp ID</th>
 <th style={{ padding: '10px' }}>Name</th>
 <th style={{ padding: '10px' }}>Contact</th>
@@ -4946,7 +4945,7 @@ const exportStaffToCSV = () => {
 
  {activeTab === 'inventory' &&
 <div className="fade-in">
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
+<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
 <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Smart Multi-Branch Ingredient Hub</h3>
 <button
@@ -4959,7 +4958,7 @@ const exportStaffToCSV = () => {
 </div>
 
  {/* Sub-tab bar */}
-<div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px', overflowX: 'auto' }}>
+<div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px', overflowX: 'auto' }} className="custom-scrollbar">
 <button onClick={() =>setInventorySubTab('levels')} style={{ background: inventorySubTab === 'levels' ? '#6F4E37' : 'transparent', color: 'var(--color-text-primary)', border: inventorySubTab === 'levels' ? 'none' : '1px solid #432E22', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Stock Directory</button>
 <button onClick={() =>setInventorySubTab('movements')} style={{ background: inventorySubTab === 'movements' ? '#6F4E37' : 'transparent', color: 'var(--color-text-primary)', border: inventorySubTab === 'movements' ? 'none' : '1px solid #432E22', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Movement Ledger</button>
 <button onClick={() =>setInventorySubTab('wastage')} style={{ background: inventorySubTab === 'wastage' ? '#6F4E37' : 'transparent', color: 'var(--color-text-primary)', border: inventorySubTab === 'wastage' ? 'none' : '1px solid #432E22', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Wastage Reports</button>
@@ -5016,11 +5015,11 @@ const exportStaffToCSV = () => {
   }
 </div>
 
- {/* Desktop: scrollable table */}
-<div className="inv-desktop-table">
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+ {/* Desktop/Tablet: scrollable table with scroll containment */}
+<div className="inv-desktop-table custom-scrollbar" style={{ width: '100%', maxWidth: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '8px' }}>
+<table style={{ width: '100%', minWidth: '980px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
 <thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', whiteSpace: 'nowrap' }}>
 <th style={{ padding: '8px' }}>Ingredient Name</th>
 <th style={{ padding: '8px' }}>Category</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
@@ -5052,10 +5051,10 @@ const exportStaffToCSV = () => {
 
  {/* SUBTAB 2: Movement Logs */}
  {inventorySubTab === 'movements' &&
-<div style={{ overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+<div style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }} className="custom-scrollbar">
+<table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
 <thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
+<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', whiteSpace: 'nowrap' }}>
 <th style={{ padding: '8px' }}>Timestamp</th>
 <th style={{ padding: '8px' }}>Ingredient</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Type</th>
