@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Inventory = require('../models/Inventory');
 const InventoryLog = require('../models/InventoryLog');
 const OperationalConfig = require('../models/OperationalConfig');
@@ -304,15 +305,40 @@ const deleteInventoryItem = async (req, res, next) => {
   try {
     const { id } = req.params;
     const cafeId = req.user.cafeId || 'CD001';
-    const branchId = req.branchId || 'default';
+    const userRole = (req.user.role || '').toLowerCase();
 
-    const deletedItem = await Inventory.findOneAndDelete({ _id: id, cafeId }, { bypassBranchFilter: true });
-    if (!deletedItem) {
-      return res.status(404).json({ success: false, message: 'Inventory item not found or unauthorized' });
+    // Validate the id is a valid ObjectId to avoid CastError
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid inventory item ID' });
     }
 
+    // Step 1: Find item by _id alone, bypassing ALL branch/cafe filters
+    // This prevents false 404s when cafeId or branchId in the DB doesn't exactly
+    // match what the middleware resolved (e.g. seeded items, template items, etc.)
+    const existingItem = await Inventory.findById(id).setOptions({ bypassBranchFilter: true }).lean();
+
+    if (!existingItem) {
+      return res.status(404).json({ success: false, message: 'Inventory item not found' });
+    }
+
+    // Step 2: Authorization check - allow if:
+    //   - super_admin (can delete anything)
+    //   - item belongs to this cafe (exact match)
+    //   - item was seeded from the default CD001 template
+    const itemCafeId = existingItem.cafeId || 'CD001';
+    if (
+      userRole !== 'super_admin' &&
+      itemCafeId !== cafeId &&
+      itemCafeId !== 'CD001'
+    ) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to delete this inventory item' });
+    }
+
+    // Step 3: Delete strictly by _id (bypass all plugin filters)
+    await Inventory.deleteOne({ _id: id }).setOptions({ bypassBranchFilter: true });
+
     // Clean up associated logs for the deleted item
-    await InventoryLog.deleteMany({ itemId: id, cafeId });
+    await InventoryLog.deleteMany({ itemId: id }).setOptions({ bypassBranchFilter: true });
 
     return res.status(200).json({ success: true, message: 'Inventory item deleted successfully' });
   } catch (error) {
