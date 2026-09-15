@@ -51,7 +51,7 @@ const MenuCard = React.memo(({ item, cartItem, addToCart, increaseQuantity, decr
           {getCategoryIcon(category)}
         </div>
       ) : (
-        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <div style={{ position: 'relative', width: '100%', height: '100px', overflow: 'hidden' }}>
           {!imgLoaded && (
             <div className="compact-menu-card-img" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.6 }}>
               {getCategoryIcon(category)}
