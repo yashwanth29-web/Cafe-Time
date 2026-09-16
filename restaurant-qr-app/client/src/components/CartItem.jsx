@@ -69,20 +69,69 @@ const CartItem = ({ item, increaseQuantity, decreaseQuantity, removeFromCart }) 
         <div className="cart-item-price">₹{price.toFixed(2)} each</div>
       </div>
       
-      <div className="cart-item-right">
-        <div className="qty-control">
+      <div className="cart-item-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div className="qty-control" style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'var(--bg-secondary)',
+          border: '1.5px solid var(--color-primary)',
+          borderRadius: '10px',
+          padding: '2px',
+          minWidth: '92px',
+          height: '34px',
+          boxSizing: 'border-box'
+        }}>
           <button 
             onClick={() => decreaseQuantity(id)} 
             className="qty-btn"
             aria-label="Decrease quantity"
+            style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '6px',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--color-primary)',
+              fontSize: '16px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1
+            }}
           >
-            -
+            −
           </button>
-          <span className="qty-val">{quantity}</span>
+          <span className="qty-val" style={{
+            fontSize: '13.5px',
+            fontWeight: 800,
+            color: 'var(--color-text-primary)',
+            padding: '0 4px',
+            userSelect: 'none'
+          }}>
+            {quantity}
+          </span>
           <button 
             onClick={() => increaseQuantity(id)} 
             className="qty-btn"
             aria-label="Increase quantity"
+            style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '6px',
+              border: 'none',
+              background: 'var(--color-primary)',
+              color: '#ffffff',
+              fontSize: '16px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1
+            }}
           >
             +
           </button>
@@ -93,6 +142,21 @@ const CartItem = ({ item, increaseQuantity, decreaseQuantity, removeFromCart }) 
           className="btn-remove"
           title="Remove item"
           aria-label="Remove item"
+          style={{
+            background: 'rgba(231, 76, 60, 0.08)',
+            border: '1px solid rgba(231, 76, 60, 0.2)',
+            color: '#e74c3c',
+            borderRadius: '8px',
+            width: '32px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '13px',
+            transition: 'all 0.2s ease',
+            flexShrink: 0
+          }}
         >
           🗑️
         </button>
