@@ -15,12 +15,7 @@ const OrderHistory = ({ cafeId }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [activeOrders, setActiveOrders] = useState(() => {
     if (newOrderFromNav) return [newOrderFromNav];
-    try {
-      const cached = JSON.parse(localStorage.getItem('cachedActiveOrders') || '[]');
-      return Array.isArray(cached) ? cached : [];
-    } catch (e) {
-      return [];
-    }
+    return [];
   });
   const [completedOrders, setCompletedOrders] = useState([]);
 
@@ -38,23 +33,20 @@ const OrderHistory = ({ cafeId }) => {
   const [reviewTexts, setReviewTexts] = useState({});
   const [submittingReview, setSubmittingReview] = useState({});
 
-  // Customer Details Form States
-  const [customerName, setCustomerName] = useState(() => localStorage.getItem('customerName') || '');
-  const [customerEmail, setCustomerEmail] = useState(() => localStorage.getItem('customerEmail') || '');
-  const [customerPhone, setCustomerPhone] = useState(() => localStorage.getItem('customerPhone') || '');
-
-
-
-  // Keep contact details in localStorage for convenience on future visits
+  // Auto-clean legacy localStorage customer & order caching on mount
   useEffect(() => {
-    if (customerName) localStorage.setItem('customerName', customerName);
-  }, [customerName]);
-  useEffect(() => {
-    if (customerEmail) localStorage.setItem('customerEmail', customerEmail);
-  }, [customerEmail]);
-  useEffect(() => {
-    if (customerPhone) localStorage.setItem('customerPhone', customerPhone);
-  }, [customerPhone]);
+    try {
+      localStorage.removeItem('customerName');
+      localStorage.removeItem('customerEmail');
+      localStorage.removeItem('customerPhone');
+      localStorage.removeItem('cachedActiveOrders');
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('activeOrderIds_') || k.startsWith('completedOrderIds_') || k === 'activeOrderIds' || k === 'completedOrderIds') {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch (e) {}
+  }, []);
 
   // Fetch Cafe Details on mount
   useEffect(() => {
@@ -99,101 +91,50 @@ const OrderHistory = ({ cafeId }) => {
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(783.99, ctx.currentTime);
+        osc2.frequency.setValueAtTime(659.25, ctx.currentTime);
         gain2.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
         osc2.connect(gain2);
         gain2.connect(ctx.destination);
         osc2.start();
-        osc2.stop(ctx.currentTime + 0.6);
+        osc2.stop(ctx.currentTime + 0.4);
       }, 150);
     } catch (e) {
-      console.error('Web Audio API chime failed:', e);
+      console.log('Audio alert fallback/silent mode active');
     }
   };
 
-  // Helper to read voice greeting using Web Speech API
-  const speakThankYou = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const cafeNameStr = cafeInfo?.name || 'Our Cafe';
-      const text = `Payment successful. Thank you for visiting ${cafeNameStr}! Have a wonderful day.`;
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1.05;
-      window.speechSynthesis.speak(utterance);
+  const triggerReadyFeedback = (orderId, orderNum) => {
+    if (voicedOrderIds.includes(orderId)) return;
+    setVoicedOrderIds((prev) => [...prev, orderId]);
+    playChime();
+    if ('vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200]);
     }
-  };
-
-  // Helper to read voice announcement when order is Ready or Completed
-  const speakOrderReady = (orderNumber) => {
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const numStr = orderNumber ? ` order number ${orderNumber}` : '';
-      const text = `Your order is ready! Please pick up your food${numStr}.`;
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
+      const utterance = new SpeechSynthesisUtterance(
+        `Order ${orderNum || orderId.slice(-4)} is ready to serve! Please collect from counter.`
+      );
+      utterance.rate = 1.0;
       utterance.pitch = 1.1;
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  const triggerReadyFeedback = (orderId, orderNumber) => {
-    setVoicedOrderIds((prev) => {
-      if (prev.includes(`ready_${orderId}`)) return prev;
-      playChime();
-      speakOrderReady(orderNumber);
-      return [...prev, `ready_${orderId}`];
-    });
-  };
-
   const triggerPaidFeedback = (orderId) => {
-    setVoicedOrderIds((prev) => {
-      if (prev.includes(`paid_${orderId}`)) return prev;
-      playChime();
-      speakThankYou();
-      return [...prev, `paid_${orderId}`];
-    });
+    playChime();
+    if ('vibrate' in navigator) {
+      navigator.vibrate(300);
+    }
   };
 
   // Fetch active orders on mount
   useEffect(() => {
     const fetchActiveOrders = async () => {
-      // Sync session with localStorage to restore tracking on tab reload/re-scan
-      const syncSessionWithLocalStorage = () => {
-        const searchParams = new URLSearchParams(window.location.search);
-        const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
-        const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
-        const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || 'default';
-        const activeKey = `activeOrderIds_${c}_${b}_${t}`;
-        const completedKey = `completedOrderIds_${c}_${b}_${t}`;
-        
-        let activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-        if (activeIds.length === 0) {
-          activeIds = JSON.parse(localStorage.getItem(activeKey) || '[]');
-          if (activeIds.length > 0) {
-            sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
-          }
-        } else {
-          localStorage.setItem(activeKey, JSON.stringify(activeIds));
-        }
-
-        let completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
-        if (completedIds.length === 0) {
-          completedIds = JSON.parse(localStorage.getItem(completedKey) || '[]');
-          if (completedIds.length > 0) {
-            sessionStorage.setItem('completedOrderIds', JSON.stringify(completedIds));
-          }
-        } else {
-          localStorage.setItem(completedKey, JSON.stringify(completedIds));
-        }
-      };
-
-      syncSessionWithLocalStorage();
-
       const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
       const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
-      if (activeIds.length === 0 && completedIds.length === 0) {
+      
+      if (activeIds.length === 0 && completedIds.length === 0 && !newOrderFromNav) {
         setSuccess(false);
         return;
       }
@@ -212,16 +153,11 @@ const OrderHistory = ({ cafeId }) => {
               fetchedActive.push(res.data);
             } else {
               fetchedCompleted.push(res.data);
-              // Remove paid orders from active list in session storage so we don't keep polling them
               updatedIds = updatedIds.filter((x) => x !== id);
               if (!updatedCompIds.includes(id)) updatedCompIds.push(id);
               if (!voicedOrderIds.includes(id)) {
                 triggerPaidFeedback(id);
               }
-              // Clear customer details on completion
-              localStorage.removeItem('customerName');
-              localStorage.removeItem('customerEmail');
-              localStorage.removeItem('customerPhone');
             }
           }
         } catch (error) {
@@ -229,7 +165,6 @@ const OrderHistory = ({ cafeId }) => {
         }
       }
 
-      // Also fetch completed
       for (const cid of completedIds) {
         try {
           const res = await getOrderById(cid);
@@ -239,19 +174,12 @@ const OrderHistory = ({ cafeId }) => {
 
       sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
       sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
-      
-      const searchParams = new URLSearchParams(window.location.search);
-      const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
-      const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
-      const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || 'default';
-      localStorage.setItem(`activeOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedIds));
-      localStorage.setItem(`completedOrderIds_${c}_${b}_${t}`, JSON.stringify(updatedCompIds));
 
       if (fetchedActive.length > 0 || fetchedCompleted.length > 0) {
         if (fetchedActive.length > 0) setActiveOrders(fetchedActive);
         if (fetchedCompleted.length > 0) setCompletedOrders(fetchedCompleted);
         setSuccess(true);
-      } else {
+      } else if (!newOrderFromNav) {
         setSuccess(false);
       }
       setLoadingOrders(false);

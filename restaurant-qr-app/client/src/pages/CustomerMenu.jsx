@@ -15,41 +15,23 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    // Sync session with localStorage to restore tracking on tab reload/re-scan
-    const syncSessionWithLocalStorage = () => {
-      const searchParams = new URLSearchParams(window.location.search);
-      const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
-      const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || 'default';
-      const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || 'default';
-      const activeKey = `activeOrderIds_${c}_${b}_${t}`;
-      const completedKey = `completedOrderIds_${c}_${b}_${t}`;
-      
-      let activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-      if (activeIds.length === 0) {
-        activeIds = JSON.parse(localStorage.getItem(activeKey) || '[]');
-        if (activeIds.length > 0) {
-          sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
+    // Auto-clean legacy localStorage customer & order caching
+    try {
+      localStorage.removeItem('cachedActiveOrders');
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('activeOrderIds_') || k.startsWith('completedOrderIds_') || k === 'activeOrderIds' || k === 'completedOrderIds') {
+          localStorage.removeItem(k);
         }
-      } else {
-        localStorage.setItem(activeKey, JSON.stringify(activeIds));
-      }
+      });
+    } catch (e) {}
 
-      let completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
-      if (completedIds.length === 0) {
-        completedIds = JSON.parse(localStorage.getItem(completedKey) || '[]');
-        if (completedIds.length > 0) {
-          sessionStorage.setItem('completedOrderIds', JSON.stringify(completedIds));
-        }
-      } else {
-        localStorage.setItem(completedKey, JSON.stringify(completedIds));
-      }
-    };
-
-    syncSessionWithLocalStorage();
-
+    // Only show tracker banner if there are active, uncompleted orders in the CURRENT session
     const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-    const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
-    if (activeIds.length > 0 || completedIds.length > 0) setHasHistory(true);
+    if (activeIds.length > 0) {
+      setHasHistory(true);
+    } else {
+      setHasHistory(false);
+    }
 
     let isMounted = true;
     const fetchMenuAndCategories = async (isFirst = false) => {

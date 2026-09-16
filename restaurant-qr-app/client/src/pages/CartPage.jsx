@@ -290,39 +290,16 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
       setLoading(false);
     }
   };
-
   // Totals calculations
-  const subtotal = cart.reduce((acc, curr) => acc + curr.item.price * curr.quantity, 0);
-  const gstRate = paymentConfig?.taxRate !== undefined && paymentConfig?.taxRate !== null && paymentConfig.taxRate > 0 
-    ? paymentConfig.taxRate 
-    : (cafeInfo?.gstRate || 0);
-  const platformCharge = paymentConfig?.platformCharge !== undefined && paymentConfig?.platformCharge !== null && paymentConfig.platformCharge > 0 
-    ? paymentConfig.platformCharge 
-    : (cafeInfo?.serviceChargeRate || 0);
-  const gstAmount = subtotal * (gstRate / 100);
-  const grandTotal = subtotal + gstAmount + platformCharge;
-
-  const isPhoneValid = (phone) => {
-    const trimmed = (phone || '').trim();
-    return /^[0-9]{10}$/.test(trimmed);
-  };
-
-  const handlePhoneChange = (e) => {
-    let val = e.target.value;
-    val = val.replace(/[^0-9]/g, '');
-    if (val.length > 10) {
-      val = val.slice(0, 10);
-    }
-    setCustomerPhone(val);
-  };
+  const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
+  const subtotal = cart.reduce((acc, item) => acc + item.item.price * item.quantity, 0);
+  const gstRate = paymentConfig?.gstPercentage ?? (cafeInfo?.gstPercentage ?? (paymentConfig?.taxRate ?? (cafeInfo?.gstRate ?? 0)));
+  const gstAmount = Number(((subtotal * gstRate) / 100).toFixed(2));
+  const platformCharge = paymentConfig?.platformFee ?? (cafeInfo?.platformFee ?? (paymentConfig?.platformCharge ?? (cafeInfo?.serviceChargeRate ?? 0)));
+  const grandTotal = Number((subtotal + gstAmount + platformCharge).toFixed(2));
 
   const handlePlaceOrder = async () => {
     if (cart.length === 0) return;
-    
-    if (!isStaff && (!customerName || !customerPhone || !isPhoneValid(customerPhone))) {
-      alert('Please enter a valid 10-digit mobile number before placing your order.');
-      return;
-    }
 
     setLoading(true);
     setErrorMsg('');
@@ -336,21 +313,25 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         image: cartItem.item.image || '/images/default-food.png'
       }));
 
+      const resolvedCafeId = cafeId || user?.cafeId || sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId') || 'CD001';
+      const resolvedBranchId = branchId || user?.assignedBranch || user?.branchId || sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId') || 'default';
+      const resolvedTableNumber = tableNumber || sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber') || 'Takeaway';
+
       const orderPayload = {
-        cafeId: user?.cafeId || cafeId || sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId') || '',
-        branchId: user?.assignedBranch || branchId || sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId') || 'default',
-        tableId: tableNumber ? `T${String(tableNumber).replace(/^(table[- ]?|t)/i, '')}` : 'Takeaway',
-        tableNumber: tableNumber || sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber') || 'Takeaway',
+        cafeId: resolvedCafeId,
+        branchId: resolvedBranchId,
+        tableId: resolvedTableNumber ? `T${String(resolvedTableNumber).replace(/^(table[- ]?|t)/i, '')}` : 'Takeaway',
+        tableNumber: resolvedTableNumber,
         customer: {
-          name: customerName || (isStaff ? 'Walk-in Customer' : ''),
-          email: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
-          phone: customerPhone || (isStaff ? '0000000000' : '')
+          name: isStaff ? (user?.name || 'Staff') : 'Guest Customer',
+          email: isStaff ? (user?.email || 'staff@cafesystem.local') : '',
+          phone: isStaff ? (user?.phone || '0000000000') : ''
         },
         items: itemsPayload,
         totalAmount: grandTotal,
-        customerName: customerName || (isStaff ? 'Walk-in Customer' : ''),
-        customerEmail: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
-        customerPhone: customerPhone || (isStaff ? '0000000000' : ''),
+        customerName: isStaff ? (user?.name || 'Staff') : 'Guest Customer',
+        customerEmail: isStaff ? (user?.email || 'staff@cafesystem.local') : '',
+        customerPhone: isStaff ? (user?.phone || '0000000000') : '',
         specialInstructions,
         source: isStaff ? 'STAFF' : 'QR',
         staffId: isStaff && user ? user._id : undefined
@@ -362,7 +343,6 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         clearCart();
         sessionStorage.removeItem('orderSource');
 
-        // Only trigger Kitchen Order Ticket (KOT) auto-print on STAFF devices, NEVER on customer phones!
         if (isStaff && response.data) {
           try {
             printKOT(response.data, user, cafeInfo, null);
@@ -374,31 +354,18 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         if (isStaff) {
           setTimeout(() => {
             window.location.href = '/staff/workspace';
-          }, 800);
+          }, 600);
           return;
         }
 
         const newOrder = response.data;
 
-        // Add to activeOrderIds in sessionStorage and localStorage
+        // Add to activeOrderIds ONLY in sessionStorage (no cross-day localStorage pollution)
         const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
         if (!activeIds.includes(newOrder._id)) {
           activeIds.unshift(newOrder._id);
           sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
-          localStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
-          
-          const c = sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId') || '';
-          const b = sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId') || 'default';
-          const t = sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber') || 'default';
-          localStorage.setItem(`activeOrderIds_${c}_${b}_${t}`, JSON.stringify(activeIds));
         }
-
-        // Cache the newly placed order object immediately in localStorage for instant reload support
-        try {
-          const cachedOrders = JSON.parse(localStorage.getItem('cachedActiveOrders') || '[]');
-          const updatedCached = [newOrder, ...cachedOrders.filter(o => o._id !== newOrder._id)];
-          localStorage.setItem('cachedActiveOrders', JSON.stringify(updatedCached));
-        } catch (e) {}
 
         // Navigate directly to history with newOrder in state for INSTANT, zero-flicker rendering
         navigate('/history', { state: { newOrder } });
@@ -413,207 +380,123 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
     }
   };
 
+  if (cart.length === 0) {
+    return (
+      <div className="cart-page">
+        <div className="cart-empty">
+          <div className="cart-empty-icon">🛒</div>
+          <p className="cart-empty-text">Your cart is currently empty.</p>
+          <Link to="/menu" className="btn btn-secondary">
+            Browse Delicious Menu
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="cart-page">
       <div className="cart-header">
         <h2 className="cart-title">Your Order Cart</h2>
       </div>
 
-      {cart.length === 0 ?
-      <div className="cart-empty">
-          <div className="cart-empty-icon">🛒</div>
-          <p className="cart-empty-text">Your cart is currently empty.</p>
-          <Link to="/menu" className="btn btn-secondary">
-            Browse Delicious Menu
-          </Link>
-        </div> :
+      {errorMsg && (
+        <div className="alert alert-danger" style={{ margin: '0 0 16px 0', backgroundColor: 'var(--color-danger-bg)', borderColor: 'var(--color-danger)', color: 'var(--color-text-primary)', fontSize: '13px', padding: '10px' }}>
+          ⚠️ {errorMsg}
+        </div>
+      )}
 
       <div className="cart-layout">
-          {/* Cart Items List */}
-          <div className="cart-items-section">
-            {cart.map((cartItem) =>
-          <CartItem
-            key={cartItem.item.id}
-            item={cartItem}
-            increaseQuantity={increaseQuantity}
-            decreaseQuantity={decreaseQuantity}
-            removeFromCart={removeFromCart} />
+        {/* Cart Items List */}
+        <div className="cart-items-section">
+          {cart.map((cartItem) => (
+            <CartItem
+              key={cartItem.item.id || cartItem.item._id}
+              item={cartItem}
+              increaseQuantity={increaseQuantity}
+              decreaseQuantity={decreaseQuantity}
+              removeFromCart={removeFromCart}
+            />
+          ))}
+        </div>
 
-          )}
+        {/* Cart Summary Panel */}
+        <div className="cart-summary-card">
+          <h3 className="summary-title">Order Summary</h3>
+          
+          <div className="table-selector-section">
+            <span className="table-selector-label">Ordering For</span>
+            <div className="table-selector-val">
+              {tableNumber ? `Table Number: ${tableNumber}` : 'Takeaway / Walk-in'}
+            </div>
           </div>
 
-          {/* Cart Summary Panel */}
-          <div className="cart-summary-card">
-            <h3 className="summary-title">Order Summary</h3>
-            
-            <div className="table-selector-section">
-              <span className="table-selector-label">Ordering For</span>
-              <div className="table-selector-val">
-                {tableNumber ? `Table Number: ${tableNumber}` : 'Takeaway / Walk-in'}
-              </div>
-            </div>
+          {/* Special Instructions Note */}
+          <div style={{
+            background: 'rgba(0, 0, 0, 0.02)',
+            border: '1px solid var(--color-border)',
+            padding: '12px 14px',
+            borderRadius: '12px',
+            margin: '14px 0',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+            <label htmlFor="special-instructions" style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>📝</span> Special Instructions (Optional)
+            </label>
+            <textarea
+              id="special-instructions"
+              name="specialInstructions"
+              autoComplete="off"
+              placeholder="e.g. Less sugar, make it spicy..."
+              value={specialInstructions}
+              onChange={(e) => setSpecialInstructions(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border)',
+                background: 'rgba(0,0,0,0.15)',
+                color: 'var(--color-text-primary)',
+                outline: 'none',
+                fontSize: '13px',
+                minHeight: '55px',
+                resize: 'vertical',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
 
-            {/* Customer Details Section */}
-            {!isStaff && (
-              <div className="customer-details-card" style={{
-              background: 'rgba(0, 0, 0, 0.02)',
-              border: '1px solid var(--color-border)',
-              padding: '16px',
-              borderRadius: '12px',
-              margin: '16px 0',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h4 style={{ fontSize: '13px', fontWeight: '800', margin: '0', color: 'var(--color-text-primary)', letterSpacing: '0.5px' }}>
-                    👤 CONTACT INFORMATION
-                  </h4>
-                  {(customerName || customerPhone) &&
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomerName('');
-                    setCustomerPhone('');
-                    localStorage.removeItem('customerName');
-                    localStorage.removeItem('customerPhone');
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--color-danger)',
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    padding: '0'
-                  }}>
-                  
-                      Reset Details
-                    </button>
-                }
-                </div>
-                
-                <div>
-                  <label htmlFor="customer-fullname" style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: '0' }}>Full Name</label>
-                  <input
-                  id="customer-fullname"
-                  name="name"
-                  autoComplete="name"
-                  type="text"
-                  placeholder="Full Name"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
-                    background: 'rgba(0,0,0,0.15)',
-                    color: 'var(--color-text-primary)',
-                    outline: 'none',
-                    fontSize: '13px'
-                  }} />
-                </div>
-
-                <div>
-                  <label htmlFor="customer-phone" style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: '0' }}>Contact Mobile Number</label>
-                  <input
-                  id="customer-phone"
-                  name="tel"
-                  autoComplete="tel"
-                  type="tel"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="Contact Mobile Number"
-                  value={customerPhone}
-                  onChange={handlePhoneChange}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    let pastedText = (e.clipboardData || window.clipboardData).getData('text');
-                    pastedText = pastedText.trim().replace(/[^0-9]/g, '');
-                    if (pastedText.length > 10) {
-                      pastedText = pastedText.slice(0, 10);
-                    }
-                    setCustomerPhone(pastedText);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: customerPhone && !isPhoneValid(customerPhone) ? '1px solid #E74C3C' : '1px solid var(--color-border)',
-                    background: 'rgba(0,0,0,0.15)',
-                    color: 'var(--color-text-primary)',
-                    outline: 'none',
-                    fontSize: '13px'
-                  }} />
-                  {customerPhone && !isPhoneValid(customerPhone) && (
-                    <span style={{ color: '#E74C3C', fontSize: '11px', marginTop: '4px', display: 'block' }}>
-                      Please enter a valid 10-digit mobile number.
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="special-instructions" style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: '0' }}>Special Instructions</label>
-                  <textarea
-                  id="special-instructions"
-                  name="specialInstructions"
-                  autoComplete="off"
-                  placeholder="Special Instructions (e.g. Less sugar, make it spicy...)"
-                  value={specialInstructions}
-                  onChange={(e) => setSpecialInstructions(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
-                    background: 'rgba(0,0,0,0.15)',
-                    color: 'var(--color-text-primary)',
-                    outline: 'none',
-                    fontSize: '13px',
-                    minHeight: '60px',
-                    resize: 'vertical'
-                  }} />
-                
-                </div>
-              </div>
-            )}
-
+          <div className="summary-row">
+            <span>Items Total ({totalItems})</span>
+            <span>₹{subtotal.toFixed(2)}</span>
+          </div>
+          
+          {gstRate > 0 && (
             <div className="summary-row">
-              <span>Items Total</span>
-              <span>₹{subtotal.toFixed(2)}</span>
+              <span>GST ({gstRate}%)</span>
+              <span>₹{gstAmount.toFixed(2)}</span>
             </div>
-            
-            {gstRate > 0 && (
-              <div className="summary-row">
-                <span>GST ({gstRate}%)</span>
-                <span>₹{gstAmount.toFixed(2)}</span>
-              </div>
-            )}
+          )}
 
-            {platformCharge > 0 && (
-              <div className="summary-row">
-                <span>Platform Charge</span>
-                <span>₹{platformCharge.toFixed(2)}</span>
-              </div>
-            )}
-
-            <div className="summary-row total">
-              <span>Grand Total</span>
-              <span className="summary-total-val">₹{grandTotal.toFixed(2)}</span>
+          {platformCharge > 0 && (
+            <div className="summary-row">
+              <span>Platform Charge</span>
+              <span>₹{platformCharge.toFixed(2)}</span>
             </div>
+          )}
 
-            {errorMsg &&
-          <div className="success-details" style={{ backgroundColor: 'var(--color-danger-bg)', borderColor: 'var(--color-danger)', color: 'var(--color-text-primary)', fontSize: '13px', padding: '10px', marginTop: '15px' }}>
-                ⚠️ {errorMsg}
-              </div>
-          }
+          <div className="summary-row total">
+            <span>Grand Total</span>
+            <span className="summary-total-val">₹{grandTotal.toFixed(2)}</span>
+          </div>
 
-            <div style={{ marginTop: '24px' }}>
-              <button
+          <div style={{ marginTop: '24px' }}>
+            <button
               onClick={handlePlaceOrder}
-              className={`btn btn-primary ${loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone || !isPhoneValid(customerPhone))) ? 'btn-disabled' : ''}`}
-              disabled={loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone || !isPhoneValid(customerPhone)))}
+              className={`btn btn-primary ${loading || cart.length === 0 ? 'btn-disabled' : ''}`}
+              disabled={loading || cart.length === 0}
               style={{
                 width: '100%',
                 padding: '14px 20px',
@@ -623,33 +506,32 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 border: 'none',
                 background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
                 color: 'var(--color-text-primary)',
-                cursor: loading || cart.length === 0 || (!isStaff && (!customerName || !customerPhone || !isPhoneValid(customerPhone))) ? 'not-allowed' : 'pointer'
-              }}>
-              
-                {loading ?
-              <>
-                    <span className="spinner-rzp" style={{
-                  width: '20px',
-                  height: '20px',
-                  border: '3px solid rgba(0, 0, 0,0.3)',
-                  borderTop: '3px solid #ffffff',
-                  borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite',
-                  display: 'inline-block',
-                  marginRight: '8px'
-                }}></span>
-                    Placing order...
-                  </> :
-
-              'Place Order'
-              }
-              </button>
-            </div>
+                cursor: loading || cart.length === 0 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner-rzp" style={{
+                    width: '20px',
+                    height: '20px',
+                    border: '3px solid rgba(0, 0, 0, 0.3)',
+                    borderTop: '3px solid #ffffff',
+                    borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite',
+                    display: 'inline-block',
+                    marginRight: '8px'
+                  }}></span>
+                  Placing order...
+                </>
+              ) : (
+                'Place Order'
+              )}
+            </button>
           </div>
         </div>
-      }
-    </div>);
-
+      </div>
+    </div>
+  );
 };
 
 export default CartPage;
