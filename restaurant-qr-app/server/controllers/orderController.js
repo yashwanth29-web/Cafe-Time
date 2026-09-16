@@ -817,9 +817,9 @@ const deleteOrder = async (req, res, next) => {
     }
 
     // If inventory was already deducted for this order, restore it!
-    if (order.inventoryDeducted) {
+    if (order.inventoryDeducted || ['Ready', 'Delivered', 'Completed'].includes(order.status) || order.paymentStatus === 'Paid') {
       try {
-        await restoreInventoryForOrder(order._id, order.cafeId, order.items);
+        await restoreInventoryForOrder(order._id, order.cafeId, order.items, order.branchId);
       } catch (restErr) {
         console.warn('Inventory restore warning during order deletion:', restErr.message);
       }
