@@ -60,6 +60,7 @@ const StaffOrderWorkspace = () => {
     unit: 'kg',
     quantity: '',
     reorderLevel: '5',
+    totalCost: '',
     costPrice: '',
     category: 'General',
     supplier: '',
@@ -445,7 +446,7 @@ const StaffOrderWorkspace = () => {
       if (res && res.success) {
         alert('Ingredient added successfully.');
         setShowAddInventoryModal(false);
-        setAddInventoryForm({ name: '', unit: 'kg', quantity: '', reorderLevel: '5', costPrice: '', category: 'General', supplier: '', supplierPhone: '' });
+        setAddInventoryForm({ name: '', unit: 'kg', quantity: '', reorderLevel: '5', totalCost: '', costPrice: '', category: 'General', supplier: '', supplierPhone: '' });
         fetchInventory();
       }
     } catch (err) {
@@ -1179,13 +1180,17 @@ const StaffOrderWorkspace = () => {
                             </button>
                             <button
                               onClick={() => {
+                                const qty = inv.quantity !== undefined ? inv.quantity : (inv.stock || 0);
+                                const unitCost = inv.costPrice || 0;
+                                const totalCost = (qty > 0 && unitCost > 0) ? Number((Number(qty) * Number(unitCost)).toFixed(2)) : '';
                                 setEditingInventoryItem({
                                   _id: inv._id,
                                   name: inv.name,
                                   unit: inv.unit || 'kg',
-                                  quantity: inv.quantity !== undefined ? inv.quantity : (inv.stock || 0),
+                                  quantity: qty,
                                   reorderLevel: inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock || 5),
-                                  costPrice: inv.costPrice || 0,
+                                  costPrice: unitCost,
+                                  totalCost: totalCost,
                                   category: inv.category || 'General',
                                   supplier: inv.supplier || '',
                                   supplierPhone: inv.supplierPhone || ''
@@ -1450,7 +1455,22 @@ const StaffOrderWorkspace = () => {
                     step="any"
                     placeholder="0"
                     value={addInventoryForm.quantity}
-                    onChange={(e) => setAddInventoryForm({ ...addInventoryForm, quantity: e.target.value })}
+                    onChange={(e) => {
+                      const qty = e.target.value === '' ? '' : Number(e.target.value);
+                      let newUnitCost = addInventoryForm.costPrice;
+                      let newTotal = addInventoryForm.totalCost;
+                      if (addInventoryForm.totalCost && qty > 0) {
+                        newUnitCost = Number((Number(addInventoryForm.totalCost) / qty).toFixed(4));
+                      } else if (addInventoryForm.costPrice && qty > 0) {
+                        newTotal = Number((Number(addInventoryForm.costPrice) * qty).toFixed(2));
+                      }
+                      setAddInventoryForm({
+                        ...addInventoryForm,
+                        quantity: e.target.value,
+                        costPrice: newUnitCost,
+                        totalCost: newTotal
+                      });
+                    }}
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
                   />
                 </div>
@@ -1469,19 +1489,67 @@ const StaffOrderWorkspace = () => {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Unit Cost Price (₹)
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="0.00"
-                  value={addInventoryForm.costPrice}
-                  onChange={(e) => setAddInventoryForm({ ...addInventoryForm, costPrice: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
-                />
+              {/* Total Amount Paid & Unit Cost Price */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-primary)', marginBottom: '4px' }}>
+                    Total Amount Paid (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="e.g. 100"
+                    value={addInventoryForm.totalCost ?? ''}
+                    onChange={(e) => {
+                      const tot = e.target.value === '' ? '' : Number(e.target.value);
+                      const qty = Number(addInventoryForm.quantity || 0);
+                      const computedUnitCost = (tot !== '' && qty > 0) ? Number((tot / qty).toFixed(4)) : (addInventoryForm.costPrice || '');
+                      setAddInventoryForm({
+                        ...addInventoryForm,
+                        totalCost: e.target.value,
+                        costPrice: computedUnitCost
+                      });
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '3px', display: 'block' }}>
+                    Total bill for stock (e.g. ₹100 for 5000g)
+                  </span>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Unit Cost Price (₹ / {addInventoryForm.unit || 'unit'})
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="0.00"
+                    value={addInventoryForm.costPrice ?? ''}
+                    onChange={(e) => {
+                      const unitP = e.target.value === '' ? '' : Number(e.target.value);
+                      const qty = Number(addInventoryForm.quantity || 0);
+                      const computedTotal = (unitP !== '' && qty > 0) ? Number((unitP * qty).toFixed(2)) : (addInventoryForm.totalCost || '');
+                      setAddInventoryForm({
+                        ...addInventoryForm,
+                        costPrice: e.target.value,
+                        totalCost: computedTotal
+                      });
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '3px', display: 'block' }}>
+                    Auto-calculated per {addInventoryForm.unit || 'unit'}
+                  </span>
+                </div>
               </div>
+
+              {Number(addInventoryForm.quantity || 0) > 0 && Number(addInventoryForm.costPrice || 0) > 0 && (
+                <div style={{ background: 'rgba(46, 204, 113, 0.12)', border: '1px solid #2ECC71', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#27ae60', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                  <span>✓ <strong>Calculated Cost:</strong> ₹{addInventoryForm.costPrice} per {addInventoryForm.unit || 'unit'}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>(₹{Number((Number(addInventoryForm.costPrice) * Number(addInventoryForm.quantity)).toFixed(2))} total for {addInventoryForm.quantity} {addInventoryForm.unit || 'units'})</span>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                 <button
@@ -1580,7 +1648,22 @@ const StaffOrderWorkspace = () => {
                     type="number"
                     step="any"
                     value={editingInventoryItem.quantity}
-                    onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, quantity: e.target.value })}
+                    onChange={(e) => {
+                      const qty = e.target.value === '' ? '' : Number(e.target.value);
+                      let newUnitCost = editingInventoryItem.costPrice;
+                      let newTotal = editingInventoryItem.totalCost;
+                      if (editingInventoryItem.totalCost && qty > 0) {
+                        newUnitCost = Number((Number(editingInventoryItem.totalCost) / qty).toFixed(4));
+                      } else if (editingInventoryItem.costPrice && qty > 0) {
+                        newTotal = Number((Number(editingInventoryItem.costPrice) * qty).toFixed(2));
+                      }
+                      setEditingInventoryItem({
+                        ...editingInventoryItem,
+                        quantity: e.target.value,
+                        costPrice: newUnitCost,
+                        totalCost: newTotal
+                      });
+                    }}
                     style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
                   />
                 </div>
@@ -1598,18 +1681,66 @@ const StaffOrderWorkspace = () => {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Unit Cost Price (₹)
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={editingInventoryItem.costPrice}
-                  onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
-                />
+              {/* Total Amount Paid & Unit Cost Price */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-primary)', marginBottom: '4px' }}>
+                    Total Amount Paid (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="e.g. 100"
+                    value={editingInventoryItem.totalCost ?? ''}
+                    onChange={(e) => {
+                      const tot = e.target.value === '' ? '' : Number(e.target.value);
+                      const qty = Number(editingInventoryItem.quantity || 0);
+                      const computedUnitCost = (tot !== '' && qty > 0) ? Number((tot / qty).toFixed(4)) : (editingInventoryItem.costPrice || '');
+                      setEditingInventoryItem({
+                        ...editingInventoryItem,
+                        totalCost: e.target.value,
+                        costPrice: computedUnitCost
+                      });
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '3px', display: 'block' }}>
+                    Total bill for stock (e.g. ₹100 for 5000g)
+                  </span>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Unit Cost Price (₹ / {editingInventoryItem.unit || 'unit'})
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editingInventoryItem.costPrice ?? ''}
+                    onChange={(e) => {
+                      const unitP = e.target.value === '' ? '' : Number(e.target.value);
+                      const qty = Number(editingInventoryItem.quantity || 0);
+                      const computedTotal = (unitP !== '' && qty > 0) ? Number((unitP * qty).toFixed(2)) : (editingInventoryItem.totalCost || '');
+                      setEditingInventoryItem({
+                        ...editingInventoryItem,
+                        costPrice: e.target.value,
+                        totalCost: computedTotal
+                      });
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '3px', display: 'block' }}>
+                    Auto-calculated per {editingInventoryItem.unit || 'unit'}
+                  </span>
+                </div>
               </div>
+
+              {Number(editingInventoryItem.quantity || 0) > 0 && Number(editingInventoryItem.costPrice || 0) > 0 && (
+                <div style={{ background: 'rgba(46, 204, 113, 0.12)', border: '1px solid #2ECC71', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#27ae60', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                  <span>✓ <strong>Calculated Cost:</strong> ₹{editingInventoryItem.costPrice} per {editingInventoryItem.unit || 'unit'}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>(₹{Number((Number(editingInventoryItem.costPrice) * Number(editingInventoryItem.quantity)).toFixed(2))} total for {editingInventoryItem.quantity} {editingInventoryItem.unit || 'units'})</span>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
                 <button

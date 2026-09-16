@@ -387,7 +387,17 @@ const OwnerDashboard = () =>{
   }, []);
 
   const handleEditInventoryCallback = useCallback((item) => {
-    setEditingInventoryItem({ ...item });
+    const qty = item.quantity !== undefined ? item.quantity : (item.stock || 0);
+    const unitCost = item.costPrice !== undefined ? item.costPrice : (item.cost || 0);
+    const totalCost = (qty > 0 && unitCost > 0) ? Number((Number(qty) * Number(unitCost)).toFixed(2)) : '';
+    setEditingInventoryItem({
+      ...item,
+      quantity: qty,
+      stock: qty,
+      costPrice: unitCost,
+      cost: unitCost,
+      totalCost: totalCost
+    });
     setShowEditInventoryModal(true);
   }, []);
 
@@ -6486,9 +6496,26 @@ const exportStaffToCSV = () => {
         name="edit-inv-quantity"
         required
         value={editingInventoryItem.quantity ?? ''}
-        onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, quantity: e.target.value === '' ? '' : Number(e.target.value), stock: e.target.value === '' ? '' : Number(e.target.value) })}
+        onChange={(e) => {
+          const qty = e.target.value === '' ? '' : Number(e.target.value);
+          let newUnitCost = editingInventoryItem.costPrice;
+          let newTotal = editingInventoryItem.totalCost;
+          if (editingInventoryItem.totalCost && qty > 0) {
+            newUnitCost = Number((Number(editingInventoryItem.totalCost) / qty).toFixed(4));
+          } else if (editingInventoryItem.costPrice && qty > 0) {
+            newTotal = Number((Number(editingInventoryItem.costPrice) * qty).toFixed(2));
+          }
+          setEditingInventoryItem({
+            ...editingInventoryItem,
+            quantity: qty,
+            stock: qty,
+            costPrice: newUnitCost,
+            cost: newUnitCost,
+            totalCost: newTotal
+          });
+        }}
         className="form-input"
-        placeholder="e.g. 100"
+        placeholder="e.g. 5000"
       />
     </div>
     <div className="form-group">
@@ -6497,19 +6524,87 @@ const exportStaffToCSV = () => {
     </div>
   </div>
 
-  {/* Row 3: Unit Cost Price + Category */}
+  {/* Row 3: Total Cost (₹) + Unit Cost Price (₹) */}
   <div className="form-row">
     <div className="form-group">
-      <label htmlFor="edit-inv-cost" className="form-label">Unit Cost Price (₹) *</label>
-      <input type="number" step="any" min="0" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value), cost: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" placeholder="e.g. 1.50" />
+      <label htmlFor="edit-inv-totalcost" className="form-label" style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+        Total Amount Paid (₹)
+      </label>
+      <input
+        type="number"
+        step="any"
+        min="0"
+        id="edit-inv-totalcost"
+        name="edit-inv-totalcost"
+        value={editingInventoryItem.totalCost ?? ''}
+        onChange={(e) => {
+          const tot = e.target.value === '' ? '' : Number(e.target.value);
+          const qty = Number(editingInventoryItem.quantity || editingInventoryItem.stock || 0);
+          const computedUnitCost = (tot !== '' && qty > 0) ? Number((tot / qty).toFixed(4)) : (editingInventoryItem.costPrice || '');
+          setEditingInventoryItem({
+            ...editingInventoryItem,
+            totalCost: tot,
+            costPrice: computedUnitCost,
+            cost: computedUnitCost
+          });
+        }}
+        className="form-input"
+        placeholder="e.g. 100 (Total bill for entire quantity)"
+      />
+      <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '3px', display: 'block' }}>
+        Total bill for entire stock (e.g. ₹100 for 5000g)
+      </span>
     </div>
+
     <div className="form-group">
+      <label htmlFor="edit-inv-cost" className="form-label">
+        Unit Cost Price (₹ / {editingInventoryItem.unit || 'unit'}) *
+      </label>
+      <input
+        type="number"
+        step="any"
+        min="0"
+        id="edit-inv-cost"
+        name="edit-inv-cost"
+        required
+        value={editingInventoryItem.costPrice ?? ''}
+        onChange={(e) => {
+          const unitP = e.target.value === '' ? '' : Number(e.target.value);
+          const qty = Number(editingInventoryItem.quantity || editingInventoryItem.stock || 0);
+          const computedTotal = (unitP !== '' && qty > 0) ? Number((unitP * qty).toFixed(2)) : (editingInventoryItem.totalCost || '');
+          setEditingInventoryItem({
+            ...editingInventoryItem,
+            costPrice: unitP,
+            cost: unitP,
+            totalCost: computedTotal
+          });
+        }}
+        className="form-input"
+        placeholder="e.g. 0.02"
+      />
+      <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '3px', display: 'block' }}>
+        Auto-calculated per {editingInventoryItem.unit || 'unit'}
+      </span>
+    </div>
+  </div>
+
+  {/* Live calculation banner */}
+  {Number(editingInventoryItem.quantity || 0) > 0 && Number(editingInventoryItem.costPrice || 0) > 0 && (
+    <div style={{ background: 'rgba(46, 204, 113, 0.12)', border: '1px solid #2ECC71', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '12.5px', color: '#27ae60', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+      <span>✓ <strong>Calculated Cost:</strong> ₹{editingInventoryItem.costPrice} per {editingInventoryItem.unit || 'unit'}</span>
+      <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>(₹{Number((Number(editingInventoryItem.costPrice) * Number(editingInventoryItem.quantity)).toFixed(2))} total for {editingInventoryItem.quantity} {editingInventoryItem.unit || 'units'})</span>
+    </div>
+  )}
+
+  {/* Row 4: Category */}
+  <div className="form-row">
+    <div className="form-group" style={{ width: '100%' }}>
       <label htmlFor="edit-inv-category" className="form-label">Category *</label>
       <input type="text" id="edit-inv-category" name="edit-inv-category" required value={editingInventoryItem.category || 'Ingredients'} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, category: e.target.value })} className="form-input" placeholder="e.g. Tea Ingredients" />
     </div>
   </div>
 
-  {/* Row 4: Supplier Name + Phone */}
+  {/* Row 5: Supplier Name + Phone */}
   <div className="form-row">
     <div className="form-group">
       <label htmlFor="edit-inv-supplier" className="form-label">Supplier Name</label>
