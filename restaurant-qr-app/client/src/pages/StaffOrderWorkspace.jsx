@@ -747,6 +747,7 @@ const StaffOrderWorkspace = () => {
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   });
   const [historySearch, setHistorySearch] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('all'); // all, ready, paid, in_progress
   const [historyPaymentFilter, setHistoryPaymentFilter] = useState('all');
   const [historyPage, setHistoryPage] = useState(1);
   const historyPerPage = 20;
@@ -766,9 +767,9 @@ const StaffOrderWorkspace = () => {
     setLogsLoading(true);
     try {
       const targetDate = dateToQuery || historyDate;
-      const res = await getOrders({ active: false, cafeId: user.cafeId, branchId: activeBranchId, date: targetDate });
+      const res = await getOrders({ cafeId: user.cafeId, branchId: activeBranchId, date: targetDate });
       if (res.success) {
-        setCompletedLogs(res.data.filter(o => o.status === 'Completed' || o.paymentStatus === 'Paid'));
+        setCompletedLogs(res.data || []);
       }
     } catch (e) {
       console.error('Error fetching completed orders:', e);
@@ -783,12 +784,12 @@ const StaffOrderWorkspace = () => {
     }
   }, [tabParam, historyDate, fetchCompletedLogs]);
 
-  // Reset to page 1 on search or date change
+  // Reset to page 1 on search, status, or date change
   useEffect(() => {
     setHistoryPage(1);
-  }, [historyDate, historySearch, historyPaymentFilter]);
+  }, [historyDate, historySearch, historyStatusFilter, historyPaymentFilter]);
 
-  // Filter completed logs by search query and payment method
+  // Filter completed logs by search query, status, and payment method
   const filteredCompletedLogs = useMemo(() => {
     return completedLogs.filter((log) => {
       const q = historySearch.toLowerCase().trim();
@@ -800,29 +801,50 @@ const StaffOrderWorkspace = () => {
         String(log.customerMobile || '').toLowerCase().includes(q) ||
         (log.items || []).some(it => (it.name || '').toLowerCase().includes(q));
 
+      const matchesStatus = historyStatusFilter === 'all' ||
+        (historyStatusFilter === 'ready' && log.status === 'Ready') ||
+        (historyStatusFilter === 'paid' && (log.paymentStatus === 'Paid' || log.status === 'Completed')) ||
+        (historyStatusFilter === 'in_progress' && (log.status === 'Placed' || log.status === 'Preparing'));
+
       const matchesPayment = historyPaymentFilter === 'all' ||
         String(log.paymentMethod || 'cash').toLowerCase() === historyPaymentFilter.toLowerCase();
 
-      return matchesSearch && matchesPayment;
+      return matchesSearch && matchesStatus && matchesPayment;
     });
-  }, [completedLogs, historySearch, historyPaymentFilter]);
+  }, [completedLogs, historySearch, historyStatusFilter, historyPaymentFilter]);
 
   // Summary analytics for the selected date
   const historySummary = useMemo(() => {
     let totalRev = 0;
+    let paidRev = 0;
+    let pendingRev = 0;
     let cashRev = 0;
     let upiRev = 0;
     let itemsCount = 0;
+    let readyCount = 0;
+    let paidCount = 0;
+    let inProgressCount = 0;
 
     completedLogs.forEach((log) => {
       const amt = Number(log.totalAmount) || 0;
       totalRev += amt;
-      const method = (log.paymentMethod || 'cash').toLowerCase();
-      if (method.includes('upi') || method.includes('online') || method.includes('qr')) {
-        upiRev += amt;
+      const isPaid = log.paymentStatus === 'Paid' || log.status === 'Completed';
+      if (isPaid) {
+        paidRev += amt;
+        paidCount++;
+        const method = (log.paymentMethod || 'cash').toLowerCase();
+        if (method.includes('upi') || method.includes('online') || method.includes('qr')) {
+          upiRev += amt;
+        } else {
+          cashRev += amt;
+        }
       } else {
-        cashRev += amt;
+        pendingRev += amt;
       }
+
+      if (log.status === 'Ready') readyCount++;
+      if (log.status === 'Placed' || log.status === 'Preparing') inProgressCount++;
+
       (log.items || []).forEach((it) => {
         itemsCount += (Number(it.quantity) || 1);
       });
@@ -831,9 +853,14 @@ const StaffOrderWorkspace = () => {
     return {
       totalOrders: completedLogs.length,
       totalRevenue: totalRev,
+      paidRevenue: paidRev,
+      pendingRevenue: pendingRev,
       cashRevenue: cashRev,
       upiRevenue: upiRev,
-      totalItems: itemsCount
+      totalItems: itemsCount,
+      readyCount,
+      paidCount,
+      inProgressCount
     };
   }, [completedLogs]);
 
@@ -1314,113 +1341,119 @@ const StaffOrderWorkspace = () => {
             border: '1px solid var(--color-border)'
           }}>
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Bills</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Orders</div>
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>
                 {historySummary.totalOrders}
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Revenue</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#27ae60', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Value</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>
                 ₹{historySummary.totalRevenue.toFixed(2)}
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Cash Collected</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e67e22', marginTop: '2px' }}>
-                ₹{historySummary.cashRevenue.toFixed(2)}
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Paid Amount</div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#27ae60', marginTop: '2px' }}>
+                ₹{historySummary.paidRevenue.toFixed(2)}
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>UPI / Online</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#2980b9', marginTop: '2px' }}>
-                ₹{historySummary.upiRevenue.toFixed(2)}
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Pending / Ready</div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#e67e22', marginTop: '2px' }}>
+                ₹{historySummary.pendingRevenue.toFixed(2)}
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Dishes Sold</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Dishes Ordered</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)', marginTop: '2px' }}>
                 {historySummary.totalItems} items
               </div>
             </div>
           </div>
 
-          {/* Search & Filter Row */}
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ position: 'relative', flex: '1 1 260px' }}>
-              <input
-                type="text"
-                placeholder="🔍 Search by Table, Token #, Bill ID, Customer..."
-                value={historySearch}
-                onChange={(e) => setHistorySearch(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  paddingRight: historySearch ? '36px' : '14px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--bg-secondary)',
-                  color: 'var(--color-text-primary)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-              {historySearch && (
-                <button
-                  onClick={() => setHistorySearch('')}
+          {/* Search & Status/Payment Filters Row */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+              {/* Search input */}
+              <div style={{ position: 'relative', flex: '1 1 260px' }}>
+                <input
+                  type="text"
+                  placeholder="🔍 Search by Table, Token #, Bill ID, Customer..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
                   style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--color-text-secondary)',
-                    cursor: 'pointer',
-                    fontSize: '13px'
+                    width: '100%',
+                    padding: '10px 14px',
+                    paddingRight: historySearch ? '36px' : '14px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '13px',
+                    outline: 'none'
                   }}
-                >
-                  ✕
-                </button>
-              )}
+                />
+                {historySearch && (
+                  <button
+                    onClick={() => setHistorySearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-text-secondary)',
+                      cursor: 'pointer',
+                      fontSize: '13px'
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter Pills */}
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {[
+                  { id: 'all', label: `All (${historySummary.totalOrders})` },
+                  { id: 'ready', label: `Ready (${historySummary.readyCount})` },
+                  { id: 'paid', label: `Paid (${historySummary.paidCount})` },
+                  { id: 'in_progress', label: `Placed (${historySummary.inProgressCount})` }
+                ].map((pill) => (
+                  <button
+                    key={pill.id}
+                    onClick={() => setHistoryStatusFilter(pill.id)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      border: historyStatusFilter === pill.id ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      background: historyStatusFilter === pill.id ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                      color: historyStatusFilter === pill.id ? '#fff' : 'var(--color-text-secondary)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Payment Filter Pills */}
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              {[
-                { id: 'all', label: 'All Modes' },
-                { id: 'cash', label: '💵 Cash' },
-                { id: 'upi', label: '📱 UPI' }
-              ].map((pill) => (
-                <button
-                  key={pill.id}
-                  onClick={() => setHistoryPaymentFilter(pill.id)}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    border: historyPaymentFilter === pill.id ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                    background: historyPaymentFilter === pill.id ? 'var(--color-primary)' : 'var(--bg-secondary)',
-                    color: historyPaymentFilter === pill.id ? '#fff' : 'var(--color-text-secondary)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  {pill.label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Orders Content */}
           {logsLoading ? (
             <div style={{ textAlign: 'center', padding: '50px 0' }}>
               <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>Fetching bills for {historyDate}...</p>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>Fetching orders for {historyDate}...</p>
             </div>
           ) : filteredCompletedLogs.length === 0 ? (
             <div style={{
@@ -1433,16 +1466,16 @@ const StaffOrderWorkspace = () => {
             }}>
               <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🧾</div>
               <div style={{ fontWeight: 700, color: 'var(--color-text-primary)', fontSize: '15px' }}>
-                No completed orders found
+                No orders found
               </div>
               <p style={{ fontSize: '12.5px', marginTop: '4px' }}>
-                {historySearch || historyPaymentFilter !== 'all'
-                  ? 'No bills match your current search or payment filter.'
+                {historySearch || historyStatusFilter !== 'all' || historyPaymentFilter !== 'all'
+                  ? 'No bills match your current search or status filter.'
                   : `No orders were recorded on ${historyDate}.`}
               </p>
-              {(historySearch || historyPaymentFilter !== 'all') && (
+              {(historySearch || historyStatusFilter !== 'all' || historyPaymentFilter !== 'all') && (
                 <button
-                  onClick={() => { setHistorySearch(''); setHistoryPaymentFilter('all'); }}
+                  onClick={() => { setHistorySearch(''); setHistoryStatusFilter('all'); setHistoryPaymentFilter('all'); }}
                   className="btn btn-secondary"
                   style={{ width: 'auto', marginTop: '10px', fontSize: '12px', padding: '6px 14px' }}
                 >
@@ -1458,6 +1491,7 @@ const StaffOrderWorkspace = () => {
                   ? new Date(log.paidAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                   : new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const tokenStr = log.tokenNumber ? `#${log.tokenNumber}` : `#${String(log._id).slice(-4).toUpperCase()}`;
+                const isPaid = log.paymentStatus === 'Paid' || log.status === 'Completed';
 
                 return (
                   <div
@@ -1492,15 +1526,29 @@ const StaffOrderWorkspace = () => {
                         <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
                           🕒 {timeStr}
                         </span>
+                        
+                        {/* Status Badge */}
+                        <span style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          fontWeight: 700,
+                          background: log.status === 'Ready' ? 'rgba(46, 204, 113, 0.15)' : isPaid ? 'rgba(39, 174, 96, 0.2)' : 'rgba(52, 152, 219, 0.15)',
+                          color: log.status === 'Ready' ? '#27ae60' : isPaid ? '#2ecc71' : '#2980b9'
+                        }}>
+                          {log.status === 'Ready' ? '✅ Ready to Serve' : isPaid ? '💰 Paid & Completed' : `⏳ ${log.status}`}
+                        </span>
+
+                        {/* Payment Method Badge */}
                         <span style={{
                           fontSize: '11px',
                           padding: '2px 8px',
                           borderRadius: '10px',
                           fontWeight: 600,
-                          background: (log.paymentMethod || '').toLowerCase().includes('upi') ? 'rgba(41, 128, 185, 0.15)' : 'rgba(230, 126, 34, 0.15)',
-                          color: (log.paymentMethod || '').toLowerCase().includes('upi') ? '#2980b9' : '#e67e22'
+                          background: isPaid ? 'rgba(39, 174, 96, 0.12)' : 'rgba(230, 126, 34, 0.15)',
+                          color: isPaid ? '#27ae60' : '#e67e22'
                         }}>
-                          Paid via {log.paymentMethod || 'Cash'}
+                          {isPaid ? `Paid via ${log.paymentMethod || 'Cash'}` : 'Payment Pending'}
                         </span>
                       </div>
 
@@ -1517,7 +1565,7 @@ const StaffOrderWorkspace = () => {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ color: '#27ae60', fontSize: '1.15rem', fontWeight: 800 }}>
+                        <div style={{ color: isPaid ? '#27ae60' : '#e67e22', fontSize: '1.15rem', fontWeight: 800 }}>
                           ₹{Number(log.totalAmount).toFixed(2)}
                         </div>
                         <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)' }}>

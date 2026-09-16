@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-09-16T07:48:12.187Z",
-  "totalGridFsFiles": 99,
-  "totalGridFsSizeMB": 32.708,
+  "timestamp": "2026-09-16T17:51:10.969Z",
+  "totalGridFsFiles": 173,
+  "totalGridFsSizeMB": 46.499,
   "orphanedFiles": [
     {
       "fileId": "6a335227d30565d9c9c73ea4",
@@ -292,13 +292,73 @@
       "length": 330448
     },
     {
-      "fileId": "6aaa4976e1153e017c3c34e5",
-      "filename": "dish-1789544822274-710724642.png",
-      "uploadDate": "2026-09-16T07:47:02.975Z",
-      "length": 772719
+      "fileId": "6aaa6c3216c7f8cdbcf9ba9d",
+      "filename": "dish-1789553714240-672486162.png",
+      "uploadDate": "2026-09-16T10:15:16.634Z",
+      "length": 842294
+    },
+    {
+      "fileId": "6aaa7a36839574f12a891ccb",
+      "filename": "dish-1789557302571-764106861.jpg",
+      "uploadDate": "2026-09-16T11:15:03.282Z",
+      "length": 9404
+    },
+    {
+      "fileId": "6aaa7a47839574f12a891ccd",
+      "filename": "dish-1789557318794-956996162.jpg",
+      "uploadDate": "2026-09-16T11:15:19.727Z",
+      "length": 15163
+    },
+    {
+      "fileId": "6aaa7a56839574f12a891ccf",
+      "filename": "dish-1789557333911-487770641.jpg",
+      "uploadDate": "2026-09-16T11:15:34.844Z",
+      "length": 27394
+    },
+    {
+      "fileId": "6aaa7abc839574f12a891cd5",
+      "filename": "dish-1789557436169-569028669.jpg",
+      "uploadDate": "2026-09-16T11:17:16.876Z",
+      "length": 11534
+    },
+    {
+      "fileId": "6aaa7ac8839574f12a891cd7",
+      "filename": "dish-1789557448619-568986039.jpg",
+      "uploadDate": "2026-09-16T11:17:29.553Z",
+      "length": 41511
+    },
+    {
+      "fileId": "6aaa7af8839574f12a891cd9",
+      "filename": "dish-1789557496004-457019623.jpg",
+      "uploadDate": "2026-09-16T11:18:16.936Z",
+      "length": 31415
+    },
+    {
+      "fileId": "6aaa7ba4839574f12a891cdb",
+      "filename": "dish-1789557668229-718266143.jpg",
+      "uploadDate": "2026-09-16T11:21:08.930Z",
+      "length": 11679
+    },
+    {
+      "fileId": "6aaa7bc6839574f12a891ce1",
+      "filename": "dish-1789557702109-689909413.jpg",
+      "uploadDate": "2026-09-16T11:21:42.823Z",
+      "length": 9908
+    },
+    {
+      "fileId": "6aaa7db3839574f12a891cf1",
+      "filename": "dish-1789558195126-112245878.jpg",
+      "uploadDate": "2026-09-16T11:29:56.291Z",
+      "length": 53303
+    },
+    {
+      "fileId": "6aaa8a27839574f12a891d01",
+      "filename": "dish-1789561383327-78203873.jpg",
+      "uploadDate": "2026-09-16T12:23:04.038Z",
+      "length": 5274
     }
   ],
-  "reclaimableSpaceMB": 6.159,
+  "reclaimableSpaceMB": 6.432,
   "chunkIntegrity": {
     "totalOrphanedChunks": 0,
     "orphanedChunkFileIds": []
