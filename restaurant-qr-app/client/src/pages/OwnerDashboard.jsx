@@ -136,7 +136,7 @@ const AdminMenuCard = React.memo(({ item, onEdit, onDelete, onToggle }) => {
             {item.available ? '✓ In Stock' : '✕ Out'}
           </button>
         </div>
-        <div className="admin-menu-desc">{item.description}</div>
+        {item.description ? <div className="admin-menu-desc">{item.description}</div> : null}
         <div className="admin-menu-meta">
           <span className="admin-menu-price">₹{parseFloat(item.price).toFixed(2)}</span>
           <div className="menu-card-actions">
@@ -1953,8 +1953,8 @@ const exportStaffToCSV = () => {
   const handleAddMenuItem = async (e) =>{
     e.preventDefault();
     if (isMenuSubmitting) return;
-    if (!newItem.name || !newItem.price || !newItem.category || !newItem.description) {
-      alert('Please fill out all required fields.');
+    if (!newItem.name || newItem.price === undefined || newItem.price === '' || !newItem.category) {
+      alert('Please fill out all required fields (Name, Price, Category).');
       return;
     }
     setIsMenuSubmitting(true);
@@ -1962,6 +1962,7 @@ const exportStaffToCSV = () => {
       const branchIdToSave = activeBranchId === 'all' ? 'default' : (activeBranchId || 'default');
       const response = await createMenuItem({
         ...newItem,
+        description: newItem.description || '',
         branchId: branchIdToSave
       });
       if (response.success && response.data) {
@@ -2013,8 +2014,8 @@ const exportStaffToCSV = () => {
   const handleEditMenuItem = async (e) =>{
     e.preventDefault();
     if (isMenuSubmitting) return;
-    if (!editingItem.name || !editingItem.price || !editingItem.category || !editingItem.description) {
-      alert('Please fill out all required fields.');
+    if (!editingItem.name || editingItem.price === undefined || editingItem.price === '' || !editingItem.category) {
+      alert('Please fill out all required fields (Name, Price, Category).');
       return;
     }
     setIsMenuSubmitting(true);
@@ -5859,10 +5860,6 @@ const exportStaffToCSV = () => {
   </div>
 </div>
 <div className="form-group">
-<label htmlFor="add-item-description" className="form-label">Description *</label>
-<textarea id="add-item-description" name="add-item-description" required rows="3" value={newItem.description} onChange={(e) =>setNewItem({ ...newItem, description: e.target.value })} className="form-input"></textarea>
-</div>
-<div className="form-group">
 <label htmlFor="add-item-prep-time" className="form-label">Preparation Time (minutes) *</label>
 <input type="number" id="add-item-prep-time" name="add-item-prep-time" required min="1" value={newItem.preparationTime || 10} onChange={(e) =>setNewItem({ ...newItem, preparationTime: parseInt(e.target.value) })} className="form-input" />
 </div>
@@ -6049,8 +6046,8 @@ const exportStaffToCSV = () => {
   </div>
 </div>
 <div className="form-group">
-<label htmlFor="edit-item-description" className="form-label">Description *</label>
-<textarea id="edit-item-description" name="edit-item-description" required rows="3" value={editingItem.description} onChange={(e) =>setEditingItem({ ...editingItem, description: e.target.value })} className="form-input"></textarea>
+<label htmlFor="edit-item-description" className="form-label">Description (Optional)</label>
+<textarea id="edit-item-description" name="edit-item-description" rows="3" value={editingItem.description || ''} onChange={(e) =>setEditingItem({ ...editingItem, description: e.target.value })} className="form-input"></textarea>
 </div>
 <div className="form-group">
 <label htmlFor="edit-item-prep-time" className="form-label">Preparation Time (minutes) *</label>

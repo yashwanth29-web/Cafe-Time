@@ -114,8 +114,8 @@ const createMenuItem = async (req, res, next) => {
     if (branchId === 'all') branchId = 'default';
 
     // Simple validation
-    if (!name || price === undefined || !category || !description) {
-      return res.status(400).json({ success: false, message: 'Please provide name, price, category, and description' });
+    if (!name || price === undefined || !category) {
+      return res.status(400).json({ success: false, message: 'Please provide name, price, and category' });
     }
 
     const newMenuItem = new MenuItem({
@@ -124,7 +124,7 @@ const createMenuItem = async (req, res, next) => {
       originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
       makingCost: makingCost !== undefined ? parseFloat(makingCost) : 0,
       category,
-      description,
+      description: description || '',
       available: available !== undefined ? available : true,
       isCombo: isCombo !== undefined ? isCombo : false,
       image: image || '/images/default-food.png',
