@@ -6434,40 +6434,68 @@ const exportStaffToCSV = () => {
 </div>
 <form onSubmit={handleEditInventoryItem}>
 <div className="modal-body">
-<div className="form-row">
-<div className="form-group">
-<label htmlFor="edit-inv-name" className="form-label">Ingredient Name *</label>
-<input type="text" id="edit-inv-name" name="edit-inv-name" required value={editingInventoryItem.name || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, name: e.target.value })} className="form-input" />
-</div>
-<div className="form-group">
-<label htmlFor="edit-inv-unit" className="form-label">Unit of Measurement *</label>
-<input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" />
-</div>
-</div>
-<div className="form-row">
-<div className="form-group">
-<label htmlFor="edit-inv-cost" className="form-label">Unit Cost Price (₹) *</label>
-<input type="number" step="any" min="0" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value), cost: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
-</div>
-<div className="form-group">
-<label htmlFor="edit-inv-minstock" className="form-label">Safety Minimum *</label>
-<input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.reorderLevel ?? ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" />
-</div>
-</div>
-<div className="form-group">
-<label htmlFor="edit-inv-category" className="form-label">Category *</label>
-<input type="text" id="edit-inv-category" name="edit-inv-category" required value={editingInventoryItem.category || 'Ingredients'} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, category: e.target.value })} className="form-input" />
-</div>
-<div className="form-row">
-<div className="form-group">
-<label htmlFor="edit-inv-supplier" className="form-label">Supplier Name</label>
-<input type="text" id="edit-inv-supplier" name="edit-inv-supplier" value={editingInventoryItem.supplier || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
-</div>
-<div className="form-group">
-<label htmlFor="edit-inv-supplier-phone" className="form-label">Supplier Phone Number</label>
-<input type="tel" id="edit-inv-supplier-phone" name="edit-inv-supplier-phone" value={editingInventoryItem.supplierPhone || ''} onChange={(e) =>setEditingInventoryItem({ ...editingInventoryItem, supplierPhone: e.target.value })} className="form-input" placeholder="e.g. 9876543210" />
-</div>
-</div>
+
+  {/* Row 1: Name + Unit */}
+  <div className="form-row">
+    <div className="form-group">
+      <label htmlFor="edit-inv-name" className="form-label">Ingredient Name *</label>
+      <input type="text" id="edit-inv-name" name="edit-inv-name" required value={editingInventoryItem.name || ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, name: e.target.value })} className="form-input" />
+    </div>
+    <div className="form-group">
+      <label htmlFor="edit-inv-unit" className="form-label">Unit of Measurement *</label>
+      <input type="text" id="edit-inv-unit" name="edit-inv-unit" required value={editingInventoryItem.unit || ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })} className="form-input" placeholder="e.g. kg, litre, pc" />
+    </div>
+  </div>
+
+  {/* Row 2: Current Stock + Safety Minimum */}
+  <div className="form-row">
+    <div className="form-group">
+      <label htmlFor="edit-inv-quantity" className="form-label">
+        Current Stock ({editingInventoryItem.unit || 'units'}) *
+      </label>
+      <input
+        type="number"
+        step="any"
+        min="0"
+        id="edit-inv-quantity"
+        name="edit-inv-quantity"
+        required
+        value={editingInventoryItem.quantity ?? ''}
+        onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, quantity: e.target.value === '' ? '' : Number(e.target.value), stock: e.target.value === '' ? '' : Number(e.target.value) })}
+        className="form-input"
+        placeholder="e.g. 100"
+      />
+    </div>
+    <div className="form-group">
+      <label htmlFor="edit-inv-minstock" className="form-label">Safety Minimum ({editingInventoryItem.unit || 'units'}) *</label>
+      <input type="number" id="edit-inv-minstock" name="edit-inv-minstock" required value={editingInventoryItem.reorderLevel ?? ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, reorderLevel: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" placeholder="e.g. 20" />
+    </div>
+  </div>
+
+  {/* Row 3: Unit Cost Price + Category */}
+  <div className="form-row">
+    <div className="form-group">
+      <label htmlFor="edit-inv-cost" className="form-label">Unit Cost Price (₹) *</label>
+      <input type="number" step="any" min="0" id="edit-inv-cost" name="edit-inv-cost" required value={editingInventoryItem.costPrice ?? ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value === '' ? '' : Number(e.target.value), cost: e.target.value === '' ? '' : Number(e.target.value) })} className="form-input" placeholder="e.g. 1.50" />
+    </div>
+    <div className="form-group">
+      <label htmlFor="edit-inv-category" className="form-label">Category *</label>
+      <input type="text" id="edit-inv-category" name="edit-inv-category" required value={editingInventoryItem.category || 'Ingredients'} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, category: e.target.value })} className="form-input" placeholder="e.g. Tea Ingredients" />
+    </div>
+  </div>
+
+  {/* Row 4: Supplier Name + Phone */}
+  <div className="form-row">
+    <div className="form-group">
+      <label htmlFor="edit-inv-supplier" className="form-label">Supplier Name</label>
+      <input type="text" id="edit-inv-supplier" name="edit-inv-supplier" value={editingInventoryItem.supplier || ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
+    </div>
+    <div className="form-group">
+      <label htmlFor="edit-inv-supplier-phone" className="form-label">Supplier Phone Number</label>
+      <input type="tel" id="edit-inv-supplier-phone" name="edit-inv-supplier-phone" value={editingInventoryItem.supplierPhone || ''} onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, supplierPhone: e.target.value })} className="form-input" placeholder="e.g. 9876543210" />
+    </div>
+  </div>
+
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>{setShowEditInventoryModal(false);setEditingInventoryItem(null);}} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
