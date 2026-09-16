@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
-import { getOrders, updateOrderStatus, getInventory, createInventoryItem, updateInventoryItem, recordPurchase, recordWastage, reportShortage, getInventoryCategories, getMenu, getAssetUrl, getCafeInfo, getPaymentInfo } from '../services/api';
+import { getOrders, updateOrderStatus, updateOrder, deleteOrder, getInventory, createInventoryItem, updateInventoryItem, recordPurchase, recordWastage, reportShortage, getInventoryCategories, getMenu, getAssetUrl, getCafeInfo, getPaymentInfo } from '../services/api';
 import socket, { connectSocket } from '../socket';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { QRCodeSVG } from 'qrcode.react';
@@ -44,13 +44,25 @@ const StaffOrderWorkspace = () => {
   const [showUpiModal, setShowUpiModal] = useState(false);
   const [upiOrder, setUpiOrder] = useState(null);
 
-  // Auto-print KOT toggle
-  const [autoPrintKOT, setAutoPrintKOT] = useState(() => localStorage.getItem('autoPrintKOT') === 'true');
+  // Auto-print KOT toggle - default to TRUE (ON)
+  const [autoPrintKOT, setAutoPrintKOT] = useState(() => {
+    const saved = localStorage.getItem('autoPrintKOT');
+    return saved === null ? true : saved === 'true';
+  });
   const autoPrintKOTRef = useRef(autoPrintKOT);
   useEffect(() => {
     autoPrintKOTRef.current = autoPrintKOT;
     localStorage.setItem('autoPrintKOT', String(autoPrintKOT));
   }, [autoPrintKOT]);
+
+  // Order Management: Add Items, Edit Order, Delete Order
+  const [showAddItemsModal, setShowAddItemsModal] = useState(false);
+  const [selectedOrderForAddItems, setSelectedOrderForAddItems] = useState(null);
+  const [itemsToAdd, setItemsToAdd] = useState([]);
+  const [addItemSearchQuery, setAddItemSearchQuery] = useState('');
+  const [showEditOrderModal, setShowEditOrderModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [orderActionLoading, setOrderActionLoading] = useState(false);
 
   // Inventory Management states for Staff
   const [categories, setCategories] = useState([]);
@@ -300,8 +312,14 @@ const StaffOrderWorkspace = () => {
         });
       };
 
+      const handleOrderDeleted = (data) => {
+        const delId = typeof data === 'object' ? data.orderId || data._id : data;
+        setOrders((prev) => prev.filter((o) => o._id !== delId));
+      };
+
       socket.on('order_created', handleOrderCreated);
       socket.on('order_updated', handleOrderUpdated);
+      socket.on('order_deleted', handleOrderDeleted);
 
       // Graceful poll if socket goes down
       const pollTimer = setInterval(() => {
@@ -313,10 +331,125 @@ const StaffOrderWorkspace = () => {
       return () => {
         socket.off('order_created', handleOrderCreated);
         socket.off('order_updated', handleOrderUpdated);
+        socket.off('order_deleted', handleOrderDeleted);
         clearInterval(pollTimer);
       };
     }
   }, [userCafeId, activeBranchId, fetchWorkspaceOrders, playNotificationSound, speakText]);
+
+  // Delete order handler (calls deleteOrder which deletes order and restores deducted inventory)
+  const handleDeleteOrder = async (orderId) => {
+    if (!window.confirm('Are you sure you want to delete this order? Deducted inventory ingredients for this order will be automatically restored.')) {
+      return;
+    }
+    try {
+      const res = await deleteOrder(orderId);
+      if (res && res.success) {
+        setOrders((prev) => prev.filter((o) => o._id !== orderId));
+        alert('Order deleted successfully and inventory restored.');
+      } else {
+        alert(res?.message || 'Failed to delete order.');
+      }
+    } catch (err) {
+      console.error('Delete order error:', err);
+      alert(err.response?.data?.message || 'Failed to delete order.');
+    }
+  };
+
+  // Open Add Items Modal for an existing order
+  const handleOpenAddItems = (order) => {
+    setSelectedOrderForAddItems(order);
+    setItemsToAdd([]);
+    setAddItemSearchQuery('');
+    if (menuItems.length === 0) {
+      fetchMenu();
+    }
+    setShowAddItemsModal(true);
+  };
+
+  // Save additional items to order
+  const handleSaveAddItems = async () => {
+    if (!selectedOrderForAddItems || itemsToAdd.length === 0) return;
+    setOrderActionLoading(true);
+    try {
+      const mergedItems = [...selectedOrderForAddItems.items];
+      for (const add of itemsToAdd) {
+        const existingIdx = mergedItems.findIndex(
+          (it) => (it.menuItemId && String(it.menuItemId) === String(add._id)) || it.name.toLowerCase() === add.name.toLowerCase()
+        );
+        if (existingIdx !== -1) {
+          mergedItems[existingIdx] = {
+            ...mergedItems[existingIdx],
+            quantity: mergedItems[existingIdx].quantity + add.quantity
+          };
+        } else {
+          mergedItems.push({
+            menuItemId: add._id,
+            name: add.name,
+            price: add.price,
+            quantity: add.quantity,
+            image: add.image
+          });
+        }
+      }
+      const res = await updateOrder(selectedOrderForAddItems._id, { items: mergedItems });
+      if (res && res.success) {
+        setOrders((prev) => prev.map((o) => (o._id === res.data._id ? res.data : o)));
+        setShowAddItemsModal(false);
+        setSelectedOrderForAddItems(null);
+        setItemsToAdd([]);
+        alert('Items added to order successfully!');
+      } else {
+        alert(res?.message || 'Failed to add items.');
+      }
+    } catch (err) {
+      console.error('Add items error:', err);
+      alert(err.response?.data?.message || 'Failed to add items to order.');
+    } finally {
+      setOrderActionLoading(false);
+    }
+  };
+
+  // Open Edit Order Modal
+  const handleOpenEditOrder = (order) => {
+    setEditingOrder({
+      _id: order._id,
+      tableNumber: order.tableNumber,
+      specialInstructions: order.specialInstructions || '',
+      items: order.items.map((it) => ({ ...it }))
+    });
+    setShowEditOrderModal(true);
+  };
+
+  // Save edited order
+  const handleSaveEditOrder = async () => {
+    if (!editingOrder) return;
+    if (!editingOrder.items || editingOrder.items.length === 0) {
+      alert('Order must contain at least 1 item.');
+      return;
+    }
+    setOrderActionLoading(true);
+    try {
+      const res = await updateOrder(editingOrder._id, {
+        tableNumber: editingOrder.tableNumber,
+        specialInstructions: editingOrder.specialInstructions,
+        items: editingOrder.items
+      });
+      if (res && res.success) {
+        setOrders((prev) => prev.map((o) => (o._id === res.data._id ? res.data : o)));
+        setShowEditOrderModal(false);
+        setEditingOrder(null);
+        alert('Order updated successfully!');
+      } else {
+        alert(res?.message || 'Failed to update order.');
+      }
+    } catch (err) {
+      console.error('Update order error:', err);
+      alert(err.response?.data?.message || 'Failed to update order.');
+    } finally {
+      setOrderActionLoading(false);
+    }
+  };
 
   // Status updates
   const handleStatusTransition = async (orderId, targetStatus, payload = {}) => {
@@ -824,6 +957,54 @@ const StaffOrderWorkspace = () => {
                       </span>
                     </div>
 
+                    {/* Quick Order Actions: Add Items, Edit Order, Delete Order, New Order for this Table */}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', background: 'var(--bg-secondary)', padding: '6px 8px', borderRadius: '8px' }}>
+                      <button
+                        onClick={() => handleOpenAddItems(order)}
+                        style={{
+                          background: 'rgba(52, 152, 219, 0.12)', color: '#2980b9', border: '1px solid rgba(52, 152, 219, 0.3)',
+                          padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                        title="Add items to this existing order"
+                      >
+                        ➕ Add Items
+                      </button>
+                      <button
+                        onClick={() => handleOpenEditOrder(order)}
+                        style={{
+                          background: 'rgba(243, 156, 18, 0.12)', color: '#d35400', border: '1px solid rgba(243, 156, 18, 0.3)',
+                          padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                        title="Edit order quantities and instructions"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteOrder(order._id)}
+                        style={{
+                          background: 'rgba(231, 76, 60, 0.12)', color: '#c0392b', border: '1px solid rgba(231, 76, 60, 0.3)',
+                          padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                        title="Delete order and restore inventory"
+                      >
+                        🗑️ Delete
+                      </button>
+                      <button
+                        onClick={() => window.location.href = `/?table=${order.tableNumber || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`}
+                        style={{
+                          background: 'rgba(46, 204, 113, 0.12)', color: '#27ae60', border: '1px solid rgba(46, 204, 113, 0.3)',
+                          padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto'
+                        }}
+                        title="Take a new order for this table"
+                      >
+                        📋 +New Order
+                      </button>
+                    </div>
+
                     {/* Special Instructions */}
                     {order.specialInstructions && (
                       <div style={{ background: 'var(--color-warning-bg)', borderLeft: '3px solid var(--color-warning)', padding: '6px 10px', borderRadius: '4px', fontSize: '12px', color: 'var(--color-text-primary)' }}>
@@ -859,56 +1040,46 @@ const StaffOrderWorkspace = () => {
 
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }}>
                         
-                        {/* Print KOT helper */}
+                        {/* Print KOT button */}
                         <button
                           onClick={() => printKOT(order, user, cafeInfo, currentBranch)}
                           style={{
-                            background: '#7f8c8d', color: 'white', border: 'none', padding: '6px 10px',
-                            borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold'
+                            background: '#7f8c8d', color: 'white', border: 'none', padding: '8px 12px',
+                            borderRadius: '8px', cursor: 'pointer', fontSize: '12.5px', fontWeight: 'bold',
+                            display: 'flex', alignItems: 'center', gap: '4px'
                           }}
+                          title="Print Kitchen Order Ticket"
                         >
                           🖨️ KOT
                         </button>
 
-                        {/* Placed status actions */}
-                        {order.status === 'Placed' && (
-                          <button
-                            disabled={!canPrepare}
-                            onClick={() => handleStatusTransition(order._id, 'Preparing')}
-                            style={{
-                              background: canPrepare ? '#ff9800' : '#bdc3c7',
-                              color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px',
-                              cursor: canPrepare ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
-                            }}
-                          >
-                            🍳 Start Cooking
-                          </button>
-                        )}
-
-                        {/* Preparing status actions */}
-                        {order.status === 'Preparing' && (
+                        {/* ONE single button for order ready for Placed and Preparing orders */}
+                        {(order.status === 'Placed' || order.status === 'Preparing') && (
                           <button
                             disabled={!canPrepare}
                             onClick={() => handleStatusTransition(order._id, 'Ready')}
                             style={{
-                              background: canPrepare ? '#2ecc71' : '#bdc3c7',
-                              color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px',
-                              cursor: canPrepare ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
+                              background: canPrepare ? '#27ae60' : '#bdc3c7',
+                              color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px',
+                              cursor: canPrepare ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 'bold',
+                              display: 'flex', alignItems: 'center', gap: '5px',
+                              boxShadow: canPrepare ? '0 2px 8px rgba(39, 174, 96, 0.35)' : 'none'
                             }}
+                            title="Mark Order Ready and detect/deduct inventory"
                           >
-                            ✔️ Mark Ready
+                            ✅ Order Ready
                           </button>
                         )}
 
-                        {/* Ready status actions */}
+                        {/* Ready status action: Serve Order */}
                         {order.status === 'Ready' && (
                           <button
                             disabled={!canServe}
                             onClick={() => handleStatusTransition(order._id, 'Delivered')}
                             style={{
                               background: canServe ? '#9b59b6' : '#bdc3c7',
-                              color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px',
-                              cursor: canServe ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
+                              color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px',
+                              cursor: canServe ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 'bold'
                             }}
                           >
                             🚀 Serve Order
@@ -1214,6 +1385,390 @@ const StaffOrderWorkspace = () => {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ======================= MODAL: ADD ITEMS TO ORDER ======================= */}
+      {showAddItemsModal && selectedOrderForAddItems && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1100,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', borderRadius: '16px',
+            width: '100%', maxWidth: '540px', maxHeight: '90vh',
+            display: 'flex', flexDirection: 'column',
+            boxShadow: 'var(--shadow-lg)', overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 800 }}>
+                  ➕ Add Items to Order
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '3px' }}>
+                  Table {selectedOrderForAddItems.tableNumber} · Order #{selectedOrderForAddItems._id.slice(-6).toUpperCase()}
+                </span>
+              </div>
+              <button
+                onClick={() => { setShowAddItemsModal(false); setSelectedOrderForAddItems(null); setItemsToAdd([]); }}
+                style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Search */}
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border)' }}>
+              <input
+                type="text"
+                placeholder="Search menu items..."
+                value={addItemSearchQuery}
+                onChange={(e) => setAddItemSearchQuery(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: '8px',
+                  border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                  color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* Menu Items List */}
+            <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {menuLoading ? (
+                <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--color-text-secondary)' }}>
+                  Loading menu items...
+                </div>
+              ) : menuItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--color-text-secondary)' }}>
+                  No menu items found.
+                </div>
+              ) : (
+                menuItems
+                  .filter((m) => !addItemSearchQuery || m.name.toLowerCase().includes(addItemSearchQuery.toLowerCase()))
+                  .map((m) => {
+                    const existingInCart = itemsToAdd.find((it) => it._id === m._id);
+                    const qty = existingInCart ? existingInCart.quantity : 0;
+
+                    return (
+                      <div
+                        key={m._id}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '10px 12px', borderRadius: '10px',
+                          background: qty > 0 ? 'rgba(39, 174, 96, 0.08)' : 'var(--bg-secondary)',
+                          border: `1px solid ${qty > 0 ? '#27ae60' : 'var(--color-border)'}`
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <img
+                            src={m.image ? getAssetUrl(m.image) : '/images/default-food.png'}
+                            alt={m.name}
+                            style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }}
+                            onError={(e) => { e.target.src = '/images/default-food.png'; }}
+                          />
+                          <div>
+                            <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)', display: 'block' }}>
+                              {m.name}
+                            </strong>
+                            <span style={{ fontSize: '12px', color: '#27ae60', fontWeight: 700 }}>
+                              ₹{m.price}
+                            </span>
+                          </div>
+                        </div>
+
+                        {qty === 0 ? (
+                          <button
+                            onClick={() => {
+                              setItemsToAdd([...itemsToAdd, { ...m, quantity: 1 }]);
+                            }}
+                            style={{
+                              background: 'var(--color-primary)', color: 'white', border: 'none',
+                              padding: '6px 14px', borderRadius: '6px', cursor: 'pointer',
+                              fontWeight: 700, fontSize: '12px'
+                            }}
+                          >
+                            + Add
+                          </button>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              onClick={() => {
+                                if (qty <= 1) {
+                                  setItemsToAdd(itemsToAdd.filter((it) => it._id !== m._id));
+                                } else {
+                                  setItemsToAdd(itemsToAdd.map((it) => it._id === m._id ? { ...it, quantity: it.quantity - 1 } : it));
+                                }
+                              }}
+                              style={{
+                                width: '28px', height: '28px', borderRadius: '6px',
+                                border: '1px solid var(--color-border)', background: 'var(--bg-card)',
+                                color: 'var(--color-text-primary)', fontWeight: 800, cursor: 'pointer'
+                              }}
+                            >
+                              -
+                            </button>
+                            <span style={{ minWidth: '22px', textAlign: 'center', fontWeight: 800, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                              {qty}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setItemsToAdd(itemsToAdd.map((it) => it._id === m._id ? { ...it, quantity: it.quantity + 1 } : it));
+                              }}
+                              style={{
+                                width: '28px', height: '28px', borderRadius: '6px',
+                                border: 'none', background: 'var(--color-primary)',
+                                color: 'white', fontWeight: 800, cursor: 'pointer'
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'block' }}>
+                  {itemsToAdd.length} item(s) selected
+                </span>
+                <strong style={{ fontSize: '14px', color: '#27ae60' }}>
+                  + ₹{itemsToAdd.reduce((sum, it) => sum + it.price * it.quantity, 0)}
+                </strong>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddItemsModal(false); setSelectedOrderForAddItems(null); setItemsToAdd([]); }}
+                  style={{
+                    padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-border)',
+                    background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '12.5px',
+                    color: 'var(--color-text-secondary)'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={itemsToAdd.length === 0 || orderActionLoading}
+                  onClick={handleSaveAddItems}
+                  style={{
+                    padding: '8px 18px', borderRadius: '8px', border: 'none',
+                    background: itemsToAdd.length === 0 || orderActionLoading ? '#bdc3c7' : 'var(--color-primary)',
+                    color: 'white', cursor: itemsToAdd.length === 0 || orderActionLoading ? 'not-allowed' : 'pointer',
+                    fontWeight: 700, fontSize: '12.5px'
+                  }}
+                >
+                  {orderActionLoading ? 'Adding...' : 'Add to Order'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: EDIT ORDER ======================= */}
+      {showEditOrderModal && editingOrder && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1100,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', borderRadius: '16px',
+            width: '100%', maxWidth: '480px', maxHeight: '90vh',
+            display: 'flex', flexDirection: 'column',
+            boxShadow: 'var(--shadow-lg)', overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 800 }}>
+                  ✏️ Edit Order
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '3px' }}>
+                  #{editingOrder._id.slice(-6).toUpperCase()}
+                </span>
+              </div>
+              <button
+                onClick={() => { setShowEditOrderModal(false); setEditingOrder(null); }}
+                style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Form Content */}
+            <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Table Number */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Table Number / Location
+                </label>
+                <input
+                  type="text"
+                  value={editingOrder.tableNumber}
+                  onChange={(e) => setEditingOrder({ ...editingOrder, tableNumber: e.target.value })}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: '8px',
+                    border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                    color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Special Instructions */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Special Instructions / Notes
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Less sugar, extra spicy"
+                  value={editingOrder.specialInstructions}
+                  onChange={(e) => setEditingOrder({ ...editingOrder, specialInstructions: e.target.value })}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: '8px',
+                    border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                    color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Items List with Quantity Controls */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
+                  Order Items
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {editingOrder.items.map((it, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 12px', borderRadius: '8px',
+                        background: 'var(--bg-secondary)', border: '1px solid var(--color-border)'
+                      }}
+                    >
+                      <div>
+                        <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)', display: 'block' }}>
+                          {it.name}
+                        </strong>
+                        <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
+                          ₹{it.price} each = ₹{(it.price * it.quantity).toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (it.quantity <= 1) {
+                              setEditingOrder({
+                                ...editingOrder,
+                                items: editingOrder.items.filter((_, i) => i !== idx)
+                              });
+                            } else {
+                              setEditingOrder({
+                                ...editingOrder,
+                                items: editingOrder.items.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item)
+                              });
+                            }
+                          }}
+                          style={{
+                            width: '26px', height: '26px', borderRadius: '6px',
+                            border: '1px solid var(--color-border)', background: 'var(--bg-card)',
+                            color: 'var(--color-text-primary)', fontWeight: 800, cursor: 'pointer'
+                          }}
+                        >
+                          -
+                        </button>
+                        <span style={{ minWidth: '20px', textAlign: 'center', fontWeight: 800, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                          {it.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingOrder({
+                              ...editingOrder,
+                              items: editingOrder.items.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item)
+                            });
+                          }}
+                          style={{
+                            width: '26px', height: '26px', borderRadius: '6px',
+                            border: 'none', background: 'var(--color-primary)',
+                            color: 'white', fontWeight: 800, cursor: 'pointer'
+                          }}
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingOrder({
+                              ...editingOrder,
+                              items: editingOrder.items.filter((_, i) => i !== idx)
+                            });
+                          }}
+                          style={{
+                            marginLeft: '6px', background: 'transparent', border: 'none',
+                            color: '#e74c3c', cursor: 'pointer', fontSize: '14px'
+                          }}
+                          title="Remove item"
+                        >
+                          ❌
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'block' }}>
+                  Updated Total:
+                </span>
+                <strong style={{ fontSize: '15px', color: '#27ae60' }}>
+                  ₹{editingOrder.items.reduce((s, it) => s + it.price * it.quantity, 0).toFixed(2)}
+                </strong>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowEditOrderModal(false); setEditingOrder(null); }}
+                  style={{
+                    padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-border)',
+                    background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '12.5px',
+                    color: 'var(--color-text-secondary)'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={editingOrder.items.length === 0 || orderActionLoading}
+                  onClick={handleSaveEditOrder}
+                  style={{
+                    padding: '8px 18px', borderRadius: '8px', border: 'none',
+                    background: editingOrder.items.length === 0 || orderActionLoading ? '#bdc3c7' : 'var(--color-primary)',
+                    color: 'white', cursor: editingOrder.items.length === 0 || orderActionLoading ? 'not-allowed' : 'pointer',
+                    fontWeight: 700, fontSize: '12.5px'
+                  }}
+                >
+                  {orderActionLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

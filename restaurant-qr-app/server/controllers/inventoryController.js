@@ -716,12 +716,15 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     session.startTransaction();
 
     // 1. Atomically mark the order as deducted to prevent concurrent race conditions
-    // and verify paymentStatus is Paid and not cancelled/failed/expired
+    // and verify paymentStatus is Paid or order is Ready/Delivered/Completed and not cancelled/failed/expired
     const order = await Order.findOneAndUpdate(
       { 
         _id: orderId, 
         inventoryDeducted: { $ne: true },
-        paymentStatus: 'Paid',
+        $or: [
+          { paymentStatus: 'Paid' },
+          { status: { $in: ['Ready', 'Delivered', 'Completed'] } }
+        ],
         status: { $nin: ['Cancelled', 'Failed', 'Expired'] }
       },
       { $set: { inventoryDeducted: true } },
@@ -729,7 +732,7 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
     );
 
     if (!order) {
-      console.log(`[INVENTORY] Order ${orderId} already processed, unpaid, or cancelled. Skipping deduction.`);
+      console.log(`[INVENTORY] Order ${orderId} already processed or not ready/paid. Skipping deduction.`);
       await session.abortTransaction();
       session.endSession();
       return;
@@ -939,6 +942,148 @@ const deductInventoryForOrder = async (orderId, cafeId, items) => {
   }
 };
 
+/**
+ * Restore inventory when an order is deleted or cancelled
+ */
+const restoreInventoryForOrder = async (orderId, cafeId, items) => {
+  const Order = require('../models/Order');
+  const MenuItem = require('../models/MenuItem');
+  const mongoose = require('mongoose');
+
+  let session = null;
+  try {
+    session = await mongoose.startSession();
+    session.startTransaction();
+
+    const order = await Order.findOne({ _id: orderId, cafeId }).session(session);
+    if (!order || !order.inventoryDeducted) {
+      console.log(`[INVENTORY] Order ${orderId} inventory was not deducted. Nothing to restore.`);
+      await session.abortTransaction();
+      session.endSession();
+      return;
+    }
+
+    const branchId = order.branchId || 'default';
+    const itemsToRestore = (items && items.length > 0) ? items : (order.items || []);
+
+    const itemIds = itemsToRestore.map(item => item.id).filter(id => mongoose.isValidObjectId(id));
+    const itemNames = itemsToRestore.map(item => item.name);
+
+    const menuItems = await MenuItem.find({
+      $or: [
+        { _id: { $in: itemIds } },
+        { name: { $in: itemNames } }
+      ],
+      cafeId,
+      branchId
+    }).session(session).lean();
+
+    const menuItemMap = new Map();
+    menuItems.forEach(mi => {
+      menuItemMap.set(String(mi._id), mi);
+      menuItemMap.set(mi.name, mi);
+    });
+
+    const ingredientRestoreList = [];
+    const ingredientNamesSet = new Set();
+
+    for (const item of itemsToRestore) {
+      const orderQty = item.quantity || 0;
+      if (orderQty <= 0) continue;
+
+      const menuItem = menuItemMap.get(String(item.id)) || menuItemMap.get(item.name);
+      if (!menuItem || !menuItem.recipe || menuItem.recipe.length === 0) continue;
+
+      for (const ing of menuItem.recipe) {
+        const qtyToRestore = ing.quantity * orderQty;
+        ingredientNamesSet.add(ing.name);
+        ingredientRestoreList.push({
+          name: ing.name,
+          restoreQty: qtyToRestore,
+          itemName: item.name,
+          recipeUnit: ing.unit || ''
+        });
+      }
+    }
+
+    if (ingredientRestoreList.length > 0) {
+      const inventoryItems = await Inventory.find({
+        cafeId,
+        branchId,
+        name: { $in: Array.from(ingredientNamesSet) }
+      }).session(session);
+
+      const inventoryMap = new Map();
+      inventoryItems.forEach(inv => inventoryMap.set(inv.name, inv));
+
+      const convertUnits = (quantity, fromUnit, toUnit) => {
+        if (!fromUnit || !toUnit) return quantity;
+        const f = fromUnit.toLowerCase().trim();
+        const t = toUnit.toLowerCase().trim();
+        if (f === t) return quantity;
+        if ((f === 'kg' || f === 'kilogram') && (t === 'g' || t === 'gram')) return quantity * 1000;
+        if ((f === 'g' || f === 'gram') && (t === 'kg' || t === 'kilogram')) return quantity / 1000;
+        if ((f === 'l' || f === 'litre' || f === 'liter') && (t === 'ml' || t === 'milliliter')) return quantity * 1000;
+        if ((f === 'ml' || f === 'milliliter') && (t === 'l' || t === 'litre' || t === 'liter')) return quantity / 1000;
+        return quantity;
+      };
+
+      const updatedInventoryDocs = [];
+
+      for (const res of ingredientRestoreList) {
+        const invItem = inventoryMap.get(res.name);
+        if (!invItem) continue;
+
+        let convertedQty = res.restoreQty;
+        if (res.recipeUnit && invItem.unit) {
+          convertedQty = convertUnits(res.restoreQty, res.recipeUnit, invItem.unit);
+        }
+
+        const oldQty = invItem.quantity;
+        const newQty = oldQty + convertedQty;
+        invItem.quantity = newQty;
+        if (invItem.status === 'OUT_OF_STOCK' && newQty > 0) {
+          invItem.status = 'IN_STOCK';
+        }
+        await invItem.save({ session });
+        updatedInventoryDocs.push(invItem);
+
+        await InventoryLog.create([{
+          inventoryId: invItem._id,
+          itemName: invItem.name,
+          type: 'Adjustment',
+          change: convertedQty,
+          reason: `Restored from deleted/cancelled order #${String(orderId).slice(-6)} (${res.itemName})`,
+          performedBy: 'System',
+          cafeId,
+          branchId
+        }], { session });
+      }
+
+      if (updatedInventoryDocs.length > 0) {
+        emitInventoryUpdated(cafeId, branchId, updatedInventoryDocs);
+      }
+    }
+
+    order.inventoryDeducted = false;
+    await order.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
+    console.log(`[INVENTORY] Successfully restored inventory for order ${orderId}`);
+  } catch (err) {
+    console.error(`[INVENTORY] Error restoring inventory for order ${orderId}:`, err);
+    if (session) {
+      try {
+        await session.abortTransaction();
+      } catch (e) {}
+      session.endSession();
+    }
+  }
+};
+
 module.exports = {
   getInventory,
   createInventoryItem,
@@ -951,6 +1096,7 @@ module.exports = {
   getWastageReport,
   getConsumptionReport,
   deductInventoryForOrder,
+  restoreInventoryForOrder,
   updateMenuItemAvailabilityFromInventory,
   seedDefaultInventory
 };

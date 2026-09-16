@@ -1174,24 +1174,41 @@ const OwnerDashboard = () =>{
     }
   };
 
-  const handleUpdateCategory = async (e) =>{
-    e.preventDefault();
-    if (!editingCategory || !categoryNameInput.trim()) return;
+  const handleUpdateCategory = async (e, directCat = null, directName = null) =>{
+    if (e && e.preventDefault) e.preventDefault();
+    const targetCat = directCat || editingCategory;
+    const targetName = (directName !== null ? directName : categoryNameInput).trim();
+    if (!targetCat || !targetName) return;
     try {
-      const response = await updateCategory(editingCategory._id, { name: categoryNameInput });
-      if (response.success) {
-        const updatedCats = categories.map((c) => c._id === editingCategory._id ? response.data : c);
-        setCategories(updatedCats);
-        const updatedMenuItems = menuItems.map((item) => item.category === editingCategory.name ? { ...item, category: response.data.name } : item);
-        setMenuItems(updatedMenuItems);
-        const cache = getBranchCache(activeBranchId);
-        if (cache.categories) cache.categories = updatedCats;
-        if (cache.menuItems) cache.menuItems = updatedMenuItems;
-        setEditingCategory(null);
-        setCategoryNameInput('');
-        alert('Category updated successfully!');
+      if (targetCat._id && typeof targetCat._id === 'string') {
+        const response = await updateCategory(targetCat._id, { name: targetName });
+        if (response.success) {
+          const updatedCats = categories.map((c) => c._id === targetCat._id ? response.data : c);
+          setCategories(updatedCats);
+          const updatedMenuItems = menuItems.map((item) => item.category === targetCat.name ? { ...item, category: response.data.name } : item);
+          setMenuItems(updatedMenuItems);
+          const cache = getBranchCache(activeBranchId);
+          if (cache.categories) cache.categories = updatedCats;
+          if (cache.menuItems) cache.menuItems = updatedMenuItems;
+          setEditingCategory(null);
+          setCategoryNameInput('');
+        } else {
+          alert(response.message || 'Failed to update category.');
+        }
       } else {
-        alert(response.message || 'Failed to update category.');
+        // Preset category not yet in DB - create it
+        const response = await createCategory({ name: targetName });
+        if (response.success) {
+          const updatedCats = categories.length > 0
+            ? categories.map((c) => c.name === targetCat.name ? response.data : c)
+            : presetCategories.map((name) => name === targetCat.name ? response.data : { name });
+          setCategories(updatedCats);
+          setEditingCategory(null);
+          setCategoryNameInput('');
+          fetchCategories(true);
+        } else {
+          alert(response.message || 'Failed to update category.');
+        }
       }
     } catch (err) {
       console.error(err);
@@ -1199,25 +1216,31 @@ const OwnerDashboard = () =>{
     }
   };
 
-  const handleDeleteCategory = async (catId) =>{
-    if (!window.confirm('Are you sure you want to delete this category? All menu items in this category will be moved to Uncategorized.')) return;
+  const handleDeleteCategory = async (catId, catName) =>{
+    const targetName = catName || categories.find((c) => c._id === catId)?.name || 'this category';
+    if (!window.confirm(`Are you sure you want to delete "${targetName}"? All menu items in this category will be moved to Uncategorized.`)) return;
     try {
-      const categoryToDelete = categories.find((c) => c._id === catId);
-      const response = await deleteCategory(catId);
-      if (response.success) {
-        const updatedCats = categories.filter((c) => c._id !== catId);
-        setCategories(updatedCats);
-        let updatedMenuItems = menuItems;
-        if (categoryToDelete) {
-          updatedMenuItems = menuItems.map((item) => item.category === categoryToDelete.name ? { ...item, category: 'Uncategorized' } : item);
-          setMenuItems(updatedMenuItems);
+      if (catId && typeof catId === 'string') {
+        const categoryToDelete = categories.find((c) => c._id === catId);
+        const response = await deleteCategory(catId);
+        if (response.success) {
+          const updatedCats = categories.filter((c) => c._id !== catId);
+          setCategories(updatedCats);
+          let updatedMenuItems = menuItems;
+          if (categoryToDelete) {
+            updatedMenuItems = menuItems.map((item) => item.category === categoryToDelete.name ? { ...item, category: 'Uncategorized' } : item);
+            setMenuItems(updatedMenuItems);
+          }
+          const cache = getBranchCache(activeBranchId);
+          if (cache.categories) cache.categories = updatedCats;
+          if (cache.menuItems) cache.menuItems = updatedMenuItems;
+        } else {
+          alert(response.message || 'Failed to delete category.');
         }
-        const cache = getBranchCache(activeBranchId);
-        if (cache.categories) cache.categories = updatedCats;
-        if (cache.menuItems) cache.menuItems = updatedMenuItems;
-        alert('Category deleted successfully.');
       } else {
-        alert(response.message || 'Failed to delete category.');
+        const updatedCats = (categories.length > 0 ? categories : presetCategories.map((name, idx) => ({ _id: idx, name })))
+          .filter((c) => c._id !== catId && c.name !== targetName);
+        setCategories(updatedCats);
       }
     } catch (err) {
       console.error(err);
@@ -1225,62 +1248,66 @@ const OwnerDashboard = () =>{
     }
   };
 
- const handleCategoryDragStart = (e, index) =>{
- e.dataTransfer.setData('text/plain', index);
- };
+  const handleCategoryDragStart = (e, index) =>{
+    e.dataTransfer.setData('text/plain', index);
+  };
 
- const handleCategoryDragOver = (e) =>{
- e.preventDefault();
- };
+  const handleCategoryDragOver = (e) =>{
+    e.preventDefault();
+  };
 
- const handleCategoryDrop = async (e, targetIndex) =>{
- e.preventDefault();
- const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
- if (sourceIndex === targetIndex) return;
+  const handleCategoryDrop = async (e, targetIndex) =>{
+    e.preventDefault();
+    const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+    if (sourceIndex === targetIndex || isNaN(sourceIndex)) return;
 
- const updated = [...categories];
- const [dragged] = updated.splice(sourceIndex, 1);
- updated.splice(targetIndex, 0, dragged);
+    const list = categories.length > 0 ? categories : presetCategories.map((name, idx) => ({ _id: idx, name }));
+    const updated = [...list];
+    const [dragged] = updated.splice(sourceIndex, 1);
+    updated.splice(targetIndex, 0, dragged);
 
- // Optimistic UI update
- setCategories(updated);
+    // Optimistic UI update
+    setCategories(updated);
 
- try {
- const orderedIds = updated.map((c) =>c._id);
- await reorderCategories(orderedIds);
- } catch (err) {
- console.error('Error reordering categories:', err);
- alert('Failed to save category order.');
- fetchCategories();
- }
- };
+    try {
+      const stringIds = updated.map((c) => c._id).filter((id) => typeof id === 'string');
+      if (stringIds.length === updated.length) {
+        await reorderCategories(stringIds);
+      }
+    } catch (err) {
+      console.error('Error reordering categories:', err);
+      fetchCategories();
+    }
+  };
 
- const moveCategory = async (index, direction) =>{
- const updated = [...categories];
- if (direction === 'up' && index >0) {
- const temp = updated[index];
- updated[index] = updated[index - 1];
- updated[index - 1] = temp;
- } else if (direction === 'down' && index< updated.length - 1) {
- const temp = updated[index];
- updated[index] = updated[index + 1];
- updated[index + 1] = temp;
- } else {
- return;
- }
+  const moveCategory = async (index, direction) =>{
+    const list = categories.length > 0 ? categories : presetCategories.map((name, idx) => ({ _id: idx, name }));
+    const updated = [...list];
+    if (direction === 'up' && index > 0) {
+      const temp = updated[index];
+      updated[index] = updated[index - 1];
+      updated[index - 1] = temp;
+    } else if (direction === 'down' && index < updated.length - 1) {
+      const temp = updated[index];
+      updated[index] = updated[index + 1];
+      updated[index + 1] = temp;
+    } else {
+      return;
+    }
 
- // Optimistic UI update
- setCategories(updated);
+    // Optimistic UI update
+    setCategories(updated);
 
- try {
- const orderedIds = updated.map((c) =>c._id);
- await reorderCategories(orderedIds);
- } catch (err) {
- console.error('Error reordering categories:', err);
- alert('Failed to save category order.');
- fetchCategories();
- }
- };
+    try {
+      const stringIds = updated.map((c) => c._id).filter((id) => typeof id === 'string');
+      if (stringIds.length === updated.length) {
+        await reorderCategories(stringIds);
+      }
+    } catch (err) {
+      console.error('Error reordering categories:', err);
+      fetchCategories();
+    }
+  };
 
   // Fetch Inventory Categories
   const fetchInventoryCategories = async (isSilent = false, targetBranchId = activeBranchId) =>{
@@ -3524,7 +3551,7 @@ const exportStaffToCSV = () => {
 <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '3px' }}>Manage your customer ordering menu</p>
 </div>
 <div className="menu-header-actions">
-<button onClick={() =>setShowCategoryModal(true)} className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', fontSize: '13px' }}>
+<button onClick={() =>{setShowCategoryModal(true);fetchCategories(true);}} className="btn btn-secondary" style={{ width: 'auto', padding: '8px 14px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', fontSize: '13px' }}>
 📂 <span className="btn-label">Categories</span>
 </button>
 <button onClick={() =>setShowAddModal(true)} className="btn btn-primary" style={{ width: 'auto', padding: '8px 14px', fontSize: '13px' }}>
@@ -6193,133 +6220,214 @@ const exportStaffToCSV = () => {
 </button>
 </form>
 
- {/* Edit existing Category */}
- {editingCategory &&
-<form onSubmit={handleUpdateCategory} style={{ display: 'flex', gap: '10px', marginBottom: '20px', background: 'rgba(255, 107, 8, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid var(--color-primary)' }}>
-<input
- type="text"
- id="rename-category-name"
- name="rename-category-name"
- aria-label="Rename Category Name"
- required
- placeholder="Rename category..."
- value={categoryNameInput}
- onChange={(e) =>setCategoryNameInput(e.target.value)}
- className="form-input"
- style={{ marginBottom: 0, flexGrow: 1 }} />
- 
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '0 15px', height: '42px', fontSize: '13px' }}>
- Save
-</button>
-<button type="button" onClick={() =>{setEditingCategory(null);setCategoryNameInput('');}} className="btn btn-secondary" style={{ width: 'auto', padding: '0 15px', height: '42px', fontSize: '13px' }}>
- Cancel
-</button>
-</form>
- }
 
- {/* List Categories */}
-<div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-<h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', margin: '0 0 5px 0' }}>Existing Categories (Drag or use arrows to reorder):</h4>
- {categoryLoading && categories.length === 0 ?
-<div className="spinner" style={{ margin: '10px auto', borderColor: 'var(--color-primary)', width: '20px', height: '20px', borderWidth: '2px' }} />:
+          {/* List Categories */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', margin: '0 0 5px 0' }}>Existing Categories (Drag or use arrows to reorder):</h4>
+            {categoryLoading && categories.length === 0 ? (
+              <div className="spinner" style={{ margin: '10px auto', borderColor: 'var(--color-primary)', width: '20px', height: '20px', borderWidth: '2px' }} />
+            ) : (
+              (categories.length > 0 ? categories : presetCategories.map((name, idx) => ({ _id: idx, name }))).map((cat, idx) => {
+                const isEditingThis = editingCategory && (editingCategory._id === cat._id || (editingCategory.name && editingCategory.name === cat.name));
+                return (
+                  <div
+                    key={cat._id || idx}
+                    draggable={!isEditingThis}
+                    onDragStart={(e) => handleCategoryDragStart(e, idx)}
+                    onDragOver={handleCategoryDragOver}
+                    onDrop={(e) => handleCategoryDrop(e, idx)}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: isEditingThis ? 'rgba(255, 107, 8, 0.04)' : 'rgba(0, 0, 0, 0.02)',
+                      border: isEditingThis ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      cursor: isEditingThis ? 'default' : 'grab',
+                      transition: 'all 0.2s ease',
+                      userSelect: 'none'
+                    }}
+                    onDragEnd={(e) => { e.currentTarget.style.opacity = '1'; }}
+                    onDragLeave={(e) => { if (!isEditingThis) e.currentTarget.style.background = 'rgba(0, 0, 0, 0.02)'; }}
+                    onDragEnter={(e) => { if (!isEditingThis) e.currentTarget.style.background = 'rgba(255, 107, 8, 0.08)'; }}
+                  >
+                    {isEditingThis ? (
+                      <form
+                        onSubmit={(e) => handleUpdateCategory(e, cat, categoryNameInput)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}
+                      >
+                        <input
+                          type="text"
+                          autoFocus
+                          value={categoryNameInput}
+                          onChange={(e) => setCategoryNameInput(e.target.value)}
+                          className="form-input"
+                          style={{
+                            marginBottom: 0,
+                            flex: 1,
+                            height: '38px',
+                            padding: '0 12px',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            borderColor: 'var(--color-primary)'
+                          }}
+                          placeholder="Category name..."
+                          required
+                        />
+                        <button
+                          type="submit"
+                          className="btn btn-primary"
+                          style={{
+                            width: 'auto',
+                            padding: '0 14px',
+                            height: '38px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          ✓ Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCategory(null);
+                            setCategoryNameInput('');
+                          }}
+                          className="btn btn-secondary"
+                          style={{
+                            width: 'auto',
+                            padding: '0 12px',
+                            height: '38px',
+                            fontSize: '12px',
+                            fontWeight: 600
+                          }}
+                        >
+                          ✕ Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                          <span
+                            title="Drag to reorder"
+                            style={{
+                              color: 'var(--color-text-secondary, #888)',
+                              cursor: 'grab',
+                              fontSize: '15px',
+                              letterSpacing: '1px',
+                              userSelect: 'none'
+                            }}
+                          >
+                            ⋮⋮
+                          </span>
+                          <span style={{ color: 'var(--color-text-primary)', fontSize: '14.5px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {cat.name}
+                          </span>
+                        </div>
 
- (categories.length >0 ? categories : presetCategories.map((name, idx) =>({ _id: idx, name }))).map((cat, idx) =>
-<div
- key={cat._id}
- draggable={cat._id && typeof cat._id === 'string'}
- onDragStart={(e) =>handleCategoryDragStart(e, idx)}
- onDragOver={handleCategoryDragOver}
- onDrop={(e) =>handleCategoryDrop(e, idx)}
- style={{
- display: 'flex',
- justifyContent: 'space-between',
- alignItems: 'center',
- background: 'rgba(0, 0, 0,0.02)',
- border: '1px solid var(--color-border)',
- padding: '10px 14px',
- borderRadius: '10px',
- cursor: cat._id && typeof cat._id === 'string' ? 'grab' : 'default',
- transition: 'all 0.2s ease',
- userSelect: 'none'
- }}
- onDragEnd={(e) =>{e.currentTarget.style.opacity = '1';}}
- onDragLeave={(e) =>{e.currentTarget.style.background = 'rgba(255,255,255,0.02)';}}
- onDragEnter={(e) =>{e.currentTarget.style.background = 'rgba(255, 107, 8, 0.08)';}}>
- 
-<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
- {cat._id && typeof cat._id === 'string' &&
-<span style={{ color: 'var(--color-text-secondary)', cursor: 'grab', fontSize: '14px' }}></span>
- }
-<span style={{ color: 'var(--color-text-primary)', fontSize: '14.5px', fontWeight: 700 }}>{cat.name}</span>
-</div>
- 
-<div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
- {/* Reordering arrows */}
- {cat._id && typeof cat._id === 'string' &&
-<div style={{ display: 'flex', gap: '4px' }}>
-<button
- type="button"
- disabled={idx === 0}
- onClick={() =>moveCategory(idx, 'up')}
- style={{
- background: 'rgba(0, 0, 0,0.04)',
- border: 'none',
- color: idx === 0 ? 'rgba(255,255,255,0.1)' : '#fff',
- borderRadius: '4px',
- padding: '4px 8px',
- cursor: idx === 0 ? 'not-allowed' : 'pointer',
- fontSize: '11px'
- }}>
- 
- ▲
-</button>
-<button
- type="button"
- disabled={idx === categories.length - 1}
- onClick={() =>moveCategory(idx, 'down')}
- style={{
- background: 'rgba(0, 0, 0,0.04)',
- border: 'none',
- color: idx === categories.length - 1 ? 'rgba(255,255,255,0.1)' : '#fff',
- borderRadius: '4px',
- padding: '4px 8px',
- cursor: idx === categories.length - 1 ? 'not-allowed' : 'pointer',
- fontSize: '11px'
- }}>
- 
- ▼
-</button>
-</div>
- }
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                          {/* Reordering arrows */}
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              type="button"
+                              title="Move up"
+                              disabled={idx === 0}
+                              onClick={() => moveCategory(idx, 'up')}
+                              style={{
+                                background: 'rgba(0, 0, 0, 0.05)',
+                                border: '1px solid var(--color-border)',
+                                color: idx === 0 ? 'var(--color-text-muted, #ccc)' : 'var(--color-text-primary, #333)',
+                                borderRadius: '5px',
+                                padding: '4px 7px',
+                                cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                fontSize: '10px',
+                                lineHeight: 1
+                              }}
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              title="Move down"
+                              disabled={idx === (categories.length > 0 ? categories.length : presetCategories.length) - 1}
+                              onClick={() => moveCategory(idx, 'down')}
+                              style={{
+                                background: 'rgba(0, 0, 0, 0.05)',
+                                border: '1px solid var(--color-border)',
+                                color: idx === (categories.length > 0 ? categories.length : presetCategories.length) - 1 ? 'var(--color-text-muted, #ccc)' : 'var(--color-text-primary, #333)',
+                                borderRadius: '5px',
+                                padding: '4px 7px',
+                                cursor: idx === (categories.length > 0 ? categories.length : presetCategories.length) - 1 ? 'not-allowed' : 'pointer',
+                                fontSize: '10px',
+                                lineHeight: 1
+                              }}
+                            >
+                              ▼
+                            </button>
+                          </div>
 
- {/* Edit/Delete */}
- {cat._id && typeof cat._id === 'string' ?
-<div style={{ display: 'flex', gap: '10px', borderLeft: '1px solid var(--color-border)', paddingLeft: '12px' }}>
-<button
- type="button"
- onClick={() =>{setEditingCategory(cat);setCategoryNameInput(cat.name);}}
- style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '13px' }}>
- 
- 
-</button>
-<button
- type="button"
- onClick={() =>handleDeleteCategory(cat._id)}
- style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '13px' }}>
- 
- 
-</button>
-</div>:
-
-<span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>Preset</span>
- }
-</div>
-</div>
-)
- }
-</div>
-</div>
-<div className="modal-footer">
+                          {/* Edit & Delete Action Buttons */}
+                          <div style={{ display: 'flex', gap: '6px', borderLeft: '1px solid var(--color-border)', paddingLeft: '8px' }}>
+                            <button
+                              type="button"
+                              title="Edit Category"
+                              onClick={() => {
+                                setEditingCategory(cat);
+                                setCategoryNameInput(cat.name);
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: 'rgba(255, 107, 8, 0.08)',
+                                border: '1px solid rgba(255, 107, 8, 0.3)',
+                                color: 'var(--color-primary, #e65c00)',
+                                borderRadius: '6px',
+                                padding: '4px 8px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete Category"
+                              onClick={() => handleDeleteCategory(cat._id, cat.name)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: 'rgba(231, 76, 60, 0.08)',
+                                border: '1px solid rgba(231, 76, 60, 0.3)',
+                                color: 'var(--color-danger, #e74c3c)',
+                                borderRadius: '6px',
+                                padding: '4px 8px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              🗑️ Delete
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <div className="modal-footer">
 <button type="button" onClick={() =>{setShowCategoryModal(false);setEditingCategory(null);}} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Close</button>
 </div>
 </div>

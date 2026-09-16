@@ -1,16 +1,27 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 import socket, { connectSocket } from '../socket';
 
 const OrderHistory = ({ cafeId }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const newOrderFromNav = location.state?.newOrder;
+
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState(() => !!newOrderFromNav);
   const [errorMsg, setErrorMsg] = useState('');
-  const [activeOrders, setActiveOrders] = useState([]);
+  const [activeOrders, setActiveOrders] = useState(() => {
+    if (newOrderFromNav) return [newOrderFromNav];
+    try {
+      const cached = JSON.parse(localStorage.getItem('cachedActiveOrders') || '[]');
+      return Array.isArray(cached) ? cached : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [completedOrders, setCompletedOrders] = useState([]);
 
   // Special Instructions State
@@ -505,105 +516,105 @@ const OrderHistory = ({ cafeId }) => {
                   </div>
 
                   {/* Visual Status Header */}
-                  {!isServed ? (
+                  {orderStatus === 'Placed' && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '10px' }}>
                       <div className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2.5px', borderTopColor: 'var(--color-primary)' }}></div>
                       <p style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', margin: 0, fontWeight: 600 }}>
-                        {orderStatus === 'Placed' ?
-                          'Waiting for kitchen acceptance...' :
-                          'Chefs are crafting your order!'}
+                        Waiting for kitchen acceptance...
                       </p>
                     </div>
-                  ) : (
+                  )}
+                  {orderStatus === 'Preparing' && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '10px' }}>
+                      <div className="spinner" style={{ width: '18px', height: '18px', borderWidth: '2.5px', borderTopColor: 'var(--color-primary)' }}></div>
+                      <p style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', margin: 0, fontWeight: 600 }}>
+                        Chefs are crafting your order!
+                      </p>
+                    </div>
+                  )}
+                  {orderStatus === 'Ready' && (
+                    <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                      <p style={{ fontSize: '12.5px', color: 'var(--color-success)', margin: 0, fontWeight: 800 }}>
+                        🎉 Your order is READY!
+                      </p>
+                    </div>
+                  )}
+                  {(orderStatus === 'Delivered' || orderStatus === 'Completed') && (
                     <div style={{ textAlign: 'center', marginBottom: '10px' }}>
                       <p style={{ fontSize: '11.5px', color: 'var(--color-success)', margin: 0, fontWeight: 700 }}>
-                        🍽️ Served & Enjoy!
+                        🍽️ Delivered & Enjoy your meal!
                       </p>
                     </div>
                   )}
 
-                  {/* Interactive Progress Track */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: '16px', padding: '0 8px' }}>
-                    {/* Step 1: Placed */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                      <div style={{ 
-                        width: '18px', 
-                        height: '18px', 
-                        borderRadius: '50%', 
-                        background: 'var(--color-primary)', 
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontSize: '9px',
-                        fontWeight: 'bold',
-                        boxShadow: '0 0 6px var(--color-primary)'
-                      }}>✓</div>
-                      <span style={{ fontSize: '9px', fontWeight: 800, color: 'var(--color-primary)' }}>Placed</span>
-                    </div>
-                    
-                    {/* Line 1 */}
-                    <div style={{ 
-                      flex: 1, 
-                      height: '3px', 
-                      background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)', 
-                      borderRadius: '1.5px',
-                      margin: '0 4px',
-                      marginTop: '-12px'
-                    }}></div>
-                    
-                    {/* Step 2: Preparing */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                      <div style={{ 
-                        width: '18px', 
-                        height: '18px', 
-                        borderRadius: '50%', 
-                        background: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--bg-secondary)', 
-                        border: `2px solid ${orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: orderStatus !== 'Placed' ? 'white' : 'var(--color-text-secondary)',
-                        fontSize: '9px',
-                        fontWeight: 'bold',
-                        boxShadow: orderStatus !== 'Placed' ? '0 0 6px var(--color-primary)' : 'none'
-                      }}>
-                        {orderStatus !== 'Placed' ? '✓' : '2'}
+                  {/* Interactive 4-Step Progress Track: ORDER PLACED -> PREPARING -> READY -> DELIVERED */}
+                  {(() => {
+                    const stepRank = {
+                      'Placed': 1,
+                      'Preparing': 2,
+                      'Ready': 3,
+                      'Delivered': 4,
+                      'Completed': 4
+                    };
+                    const currentRank = stepRank[orderStatus] || 1;
+
+                    const steps = [
+                      { label: 'Placed', rank: 1 },
+                      { label: 'Preparing', rank: 2 },
+                      { label: 'Ready', rank: 3 },
+                      { label: 'Delivered', rank: 4 }
+                    ];
+
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: '16px', padding: '0 4px' }}>
+                        {steps.map((st, i) => {
+                          const isDone = currentRank >= st.rank;
+                          const isCurrent = currentRank === st.rank;
+                          const activeColor = st.rank === 4 ? 'var(--color-success)' : st.rank === 3 ? '#27ae60' : 'var(--color-primary)';
+                          return (
+                            <React.Fragment key={st.rank}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                                <div style={{
+                                  width: '20px',
+                                  height: '20px',
+                                  borderRadius: '50%',
+                                  background: isDone ? activeColor : 'var(--bg-secondary)',
+                                  border: `2px solid ${isDone ? activeColor : 'var(--color-border)'}`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: isDone ? '#fff' : 'var(--color-text-secondary)',
+                                  fontSize: '10px',
+                                  fontWeight: 'bold',
+                                  boxShadow: isCurrent ? `0 0 8px ${activeColor}` : 'none'
+                                }}>
+                                  {isDone ? '✓' : st.rank}
+                                </div>
+                                <span style={{
+                                  fontSize: '9px',
+                                  fontWeight: isDone ? 800 : 500,
+                                  color: isDone ? (st.rank >= 3 ? 'var(--color-success)' : 'var(--color-primary)') : 'var(--color-text-secondary)',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {st.label}
+                                </span>
+                              </div>
+                              {i < steps.length - 1 && (
+                                <div style={{
+                                  flex: 1,
+                                  height: '3px',
+                                  background: currentRank > st.rank ? activeColor : 'var(--color-border)',
+                                  borderRadius: '1.5px',
+                                  margin: '0 3px',
+                                  marginTop: '-14px'
+                                }} />
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
                       </div>
-                      <span style={{ fontSize: '9px', fontWeight: 800, color: orderStatus !== 'Placed' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Preparing</span>
-                    </div>
-                    
-                    {/* Line 2 */}
-                    <div style={{ 
-                      flex: 1, 
-                      height: '3px', 
-                      background: isServed ? 'var(--color-success)' : 'var(--color-border)', 
-                      borderRadius: '1.5px',
-                      margin: '0 4px',
-                      marginTop: '-12px'
-                    }}></div>
-                    
-                    {/* Step 3: Ready */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                      <div style={{ 
-                        width: '18px', 
-                        height: '18px', 
-                        borderRadius: '50%', 
-                        background: isServed ? 'var(--color-success)' : 'var(--bg-secondary)', 
-                        border: `2px solid ${isServed ? 'var(--color-success)' : 'var(--color-border)'}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: isServed ? 'white' : 'var(--color-text-secondary)',
-                        fontSize: '9px',
-                        fontWeight: 'bold',
-                        boxShadow: isServed ? '0 0 6px var(--color-success)' : 'none'
-                      }}>
-                        {isServed ? '✓' : '3'}
-                      </div>
-                      <span style={{ fontSize: '9px', fontWeight: 800, color: isServed ? 'var(--color-success)' : 'var(--color-text-secondary)' }}>Ready</span>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Order Details Card */}
                   <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--color-border)', padding: '12px', borderRadius: '10px', marginBottom: '8px', fontSize: '11.5px' }}>

@@ -36,24 +36,33 @@ function AppContent() {
   const sourceParam = searchParams.get('source');
   const branchIdParam = searchParams.get('branchId');
 
-  // Synchronously initialize table number state from query param or session storage
+  // Synchronously initialize table number state from query param or session/local storage
   const [tableNumber, setTableNumber] = useState(() => {
-    const val = tableParam || sessionStorage.getItem('tableNumber') || '';
-    if (tableParam) sessionStorage.setItem('tableNumber', tableParam);
+    const val = tableParam || sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber') || '';
+    if (tableParam) {
+      sessionStorage.setItem('tableNumber', tableParam);
+      localStorage.setItem('customerTableNumber', tableParam);
+    }
     return val;
   });
 
-  // Synchronously initialize cafe ID state from query param or session storage
+  // Synchronously initialize cafe ID state from query param or session/local storage
   const [cafeId, setCafeId] = useState(() => {
-    const val = cafeIdParam || sessionStorage.getItem('cafeId') || '';
-    if (cafeIdParam) sessionStorage.setItem('cafeId', cafeIdParam);
+    const val = cafeIdParam || sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId') || '';
+    if (cafeIdParam) {
+      sessionStorage.setItem('cafeId', cafeIdParam);
+      localStorage.setItem('customerCafeId', cafeIdParam);
+    }
     return val;
   });
 
-  // Synchronously initialize branch ID state from query param or session storage
+  // Synchronously initialize branch ID state from query param or session/local storage
   const [branchId, setBranchId] = useState(() => {
-    const val = branchIdParam || sessionStorage.getItem('branchId') || '';
-    if (branchIdParam) sessionStorage.setItem('branchId', branchIdParam);
+    const val = branchIdParam || sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId') || '';
+    if (branchIdParam) {
+      sessionStorage.setItem('branchId', branchIdParam);
+      localStorage.setItem('customerBranchId', branchIdParam);
+    }
     return val;
   });
 
@@ -173,16 +182,23 @@ function AppContent() {
           <Route 
             path="/" 
             element={
-              tableNumber ? (
-                <CustomerMenu 
-                  cart={cart}
-                  addToCart={addToCart}
-                  increaseQuantity={increaseQuantity}
-                  decreaseQuantity={decreaseQuantity}
-                />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              <CustomerMenu 
+                cart={cart}
+                addToCart={addToCart}
+                increaseQuantity={increaseQuantity}
+                decreaseQuantity={decreaseQuantity}
+              />
+            } 
+          />
+          <Route 
+            path="/menu" 
+            element={
+              <CustomerMenu 
+                cart={cart}
+                addToCart={addToCart}
+                increaseQuantity={increaseQuantity}
+                decreaseQuantity={decreaseQuantity}
+              />
             } 
           />
           <Route 
@@ -196,11 +212,13 @@ function AppContent() {
                 clearCart={clearCart}
                 tableNumber={tableNumber}
                 cafeId={cafeId}
+                branchId={branchId}
               />
             } 
           />
 
           <Route path="/history" element={<OrderHistory cafeId={cafeId || sessionStorage.getItem('cafeId') || ''} />} />
+          <Route path="/order-history" element={<OrderHistory cafeId={cafeId || sessionStorage.getItem('cafeId') || ''} />} />
 
           <Route path="/login" element={<Login />} />
 

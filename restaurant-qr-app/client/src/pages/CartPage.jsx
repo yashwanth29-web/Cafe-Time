@@ -6,7 +6,7 @@ import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { useAuth } from '../context/AuthContext';
 import socket, { connectSocket } from '../socket';
 
-const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId }) => {
+const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId, branchId }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isStaff = sessionStorage.getItem('orderSource') === 'staff';
@@ -337,10 +337,10 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
       }));
 
       const orderPayload = {
-        cafeId: user?.cafeId || cafeId || sessionStorage.getItem('cafeId') || '',
-        branchId: user?.assignedBranch || sessionStorage.getItem('branchId') || 'default',
+        cafeId: user?.cafeId || cafeId || sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId') || '',
+        branchId: user?.assignedBranch || branchId || sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId') || 'default',
         tableId: tableNumber ? `T${String(tableNumber).replace(/^(table[- ]?|t)/i, '')}` : 'Takeaway',
-        tableNumber: tableNumber || 'Takeaway',
+        tableNumber: tableNumber || sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber') || 'Takeaway',
         customer: {
           name: customerName || (isStaff ? 'Walk-in Customer' : ''),
           email: customerEmail || (isStaff ? 'walkin@cafesystem.local' : ''),
@@ -362,8 +362,8 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         clearCart();
         sessionStorage.removeItem('orderSource');
 
-        // Automatically trigger Kitchen Order Ticket (KOT) print
-        if (response.data) {
+        // Only trigger Kitchen Order Ticket (KOT) auto-print on STAFF devices, NEVER on customer phones!
+        if (isStaff && response.data) {
           try {
             printKOT(response.data, user, cafeInfo, null);
           } catch (printErr) {
@@ -378,20 +378,30 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
           return;
         }
 
+        const newOrder = response.data;
+
         // Add to activeOrderIds in sessionStorage and localStorage
         const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-        if (!activeIds.includes(response.data._id)) {
-          activeIds.push(response.data._id);
+        if (!activeIds.includes(newOrder._id)) {
+          activeIds.unshift(newOrder._id);
           sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
+          localStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
           
-          const c = sessionStorage.getItem('cafeId') || '';
-          const b = sessionStorage.getItem('branchId') || 'default';
-          const t = sessionStorage.getItem('tableNumber') || 'default';
-          const activeKey = `activeOrderIds_${c}_${b}_${t}`;
-          localStorage.setItem(activeKey, JSON.stringify(activeIds));
+          const c = sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId') || '';
+          const b = sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId') || 'default';
+          const t = sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber') || 'default';
+          localStorage.setItem(`activeOrderIds_${c}_${b}_${t}`, JSON.stringify(activeIds));
         }
 
-        navigate('/history');
+        // Cache the newly placed order object immediately in localStorage for instant reload support
+        try {
+          const cachedOrders = JSON.parse(localStorage.getItem('cachedActiveOrders') || '[]');
+          const updatedCached = [newOrder, ...cachedOrders.filter(o => o._id !== newOrder._id)];
+          localStorage.setItem('cachedActiveOrders', JSON.stringify(updatedCached));
+        } catch (e) {}
+
+        // Navigate directly to history with newOrder in state for INSTANT, zero-flicker rendering
+        navigate('/history', { state: { newOrder } });
       } else {
         setErrorMsg(response.message || 'Failed to place order. Please try again.');
       }

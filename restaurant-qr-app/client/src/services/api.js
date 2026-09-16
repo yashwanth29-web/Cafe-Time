@@ -142,6 +142,16 @@ export const updateOrderPaymentMethod = async (id, paymentMethod) => {
   return response.data;
 };
 
+export const updateOrder = async (id, data) => {
+  const response = await API.put(`/orders/${id}`, data);
+  return response.data;
+};
+
+export const deleteOrder = async (id) => {
+  const response = await API.delete(`/orders/${id}`);
+  return response.data;
+};
+
 // Menu API helpers
 export const getMenu = async () => {
   const response = await API.get('/menu');

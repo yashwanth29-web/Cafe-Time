@@ -47,13 +47,23 @@ export const AuthProvider = ({ children }) => {
       (response) => response,
       (error) => {
         if (error.response && error.response.status === 401) {
-          const isPublicPath = ['/', '/login', '/payment-demo'].includes(window.location.pathname);
+          const protectedDashboardPrefixes = [
+            '/admin', '/owner', '/super-admin', '/staff',
+            '/manager', '/kitchen', '/waiter', '/cashier',
+            '/employee', '/owner-setup'
+          ];
+          const isDashboardRoute = protectedDashboardPrefixes.some(prefix => 
+            window.location.pathname.startsWith(prefix)
+          );
           const isMeEndpoint = error.config?.url?.includes('/auth/me');
 
-          if (!isPublicPath && !isMeEndpoint) {
-            console.warn('Session expired or unauthorized. Logging out.');
-            localStorage.removeItem('token');
-            setUser(null);
+          localStorage.removeItem('token');
+          setUser(null);
+
+          // ONLY redirect to /login if the user is attempting to access a protected staff/admin dashboard!
+          // QR customers on /, /cart, /history, /menu must NEVER be redirected to /login!
+          if (isDashboardRoute && !isMeEndpoint) {
+            console.warn('Staff/Admin session expired. Redirecting to login.');
             window.location.href = '/login';
           }
         }

@@ -6,7 +6,7 @@ const PaymentConfig = require('../models/PaymentConfig');
 const MenuItem = require('../models/MenuItem');
 const User = require('../models/User');
 const mongoose = require('mongoose');
-const { deductInventoryForOrder, updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
+const { deductInventoryForOrder, restoreInventoryForOrder, updateMenuItemAvailabilityFromInventory } = require('./inventoryController');
 const { printReceipt } = require('../services/printerService');
 
 // Active branches in-memory cache with 60s TTL
@@ -238,17 +238,36 @@ const createOrder = async (req, res, next) => {
     }
 
     // 3. Branch Validation
-    const resolvedBranch = await Branch.findOne({
-      $or: [
-        { branchId: branchId },
-        { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
-      ],
-      cafeId: activeCafeId
-    }).lean();
-
-    if (!resolvedBranch) {
-      return res.status(400).json({ success: false, message: 'Branch not found' });
+    let resolvedBranch = null;
+    if (branchId && branchId !== 'default') {
+      resolvedBranch = await Branch.findOne({
+        $or: [
+          { branchId: branchId },
+          { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
+        ],
+        cafeId: activeCafeId
+      }).lean();
     }
+
+    // Fallback: search for any active branch of this cafe
+    if (!resolvedBranch) {
+      resolvedBranch = await Branch.findOne({ cafeId: activeCafeId, isActive: { $ne: false } }).sort({ isMain: -1, createdAt: 1 }).lean()
+                    || await Branch.findOne({ cafeId: activeCafeId }).lean();
+    }
+
+    // If still no branch exists for this cafe, auto-create a default one
+    if (!resolvedBranch) {
+      const newBranch = new Branch({
+        name: 'Main Branch',
+        branchId: 'default',
+        cafeId: activeCafeId,
+        isActive: true,
+        isMain: true
+      });
+      const savedB = await newBranch.save();
+      resolvedBranch = savedB.toObject();
+    }
+
     if (resolvedBranch.isActive === false) {
       return res.status(403).json({ success: false, message: 'This branch is currently inactive' });
     }
@@ -786,11 +805,124 @@ const printOrderReceipt = async (req, res, next) => {
   }
 };
 
+// @desc    Delete an order and restore inventory if deducted
+// @route   DELETE /api/orders/:id
+// @access  Protected (Owner/Admin/Manager/Staff)
+const deleteOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // If inventory was already deducted for this order, restore it!
+    if (order.inventoryDeducted) {
+      try {
+        await restoreInventoryForOrder(order._id, order.cafeId, order.items);
+      } catch (restErr) {
+        console.warn('Inventory restore warning during order deletion:', restErr.message);
+      }
+    }
+
+    await Order.findByIdAndDelete(id);
+
+    // Broadcast delete event over sockets
+    try {
+      const { getIO } = require('../config/socket');
+      const io = getIO();
+      io.to(`cafe_${order.cafeId}`).emit('order_deleted', { orderId: id, tableNumber: order.tableNumber });
+    } catch (sockErr) {
+      console.warn('Socket broadcast error on order deletion:', sockErr.message);
+    }
+
+    return res.status(200).json({ success: true, message: 'Order deleted successfully and inventory restored' });
+  } catch (error) {
+    error.controllerName = 'orderController';
+    error.serviceName = 'deleteOrder';
+    next(error);
+  }
+};
+
+// @desc    Update order items, special instructions, or table
+// @route   PUT /api/orders/:id
+// @access  Protected (Owner/Admin/Manager/Staff)
+const updateOrderDetails = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { items, specialInstructions, tableNumber } = req.body;
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (tableNumber) {
+      order.tableNumber = String(tableNumber).trim();
+      order.tableId = `T${String(tableNumber).replace(/^(table[- ]?|t)/i, '')}`;
+    }
+
+    if (specialInstructions !== undefined) {
+      order.specialInstructions = specialInstructions;
+    }
+
+    if (items && Array.isArray(items) && items.length > 0) {
+      const prevItems = order.items || [];
+      const wasDeducted = order.inventoryDeducted;
+
+      // Recalculate totals
+      const subtotal = items.reduce((sum, it) => sum + (Number(it.price) * Number(it.quantity)), 0);
+      const taxRate = order.tax && order.subtotal ? (order.tax / order.subtotal) : 0.05;
+      const tax = Number((subtotal * taxRate).toFixed(2));
+      const grandTotal = Number((subtotal + tax).toFixed(2));
+
+      order.items = items;
+      order.subtotal = subtotal;
+      order.tax = tax;
+      order.totalAmount = grandTotal;
+      order.grandTotal = grandTotal;
+
+      // If order was already Ready/Deducted, deduct for newly added items
+      if (wasDeducted && ['Ready', 'Delivered', 'Completed'].includes(order.status)) {
+        const newItemsToAdd = [];
+        for (const newItem of items) {
+          const oldItem = prevItems.find(oi => (String(oi.id || oi._id) === String(newItem.id || newItem._id) || oi.name === newItem.name));
+          const oldQty = oldItem ? oldItem.quantity : 0;
+          if (newItem.quantity > oldQty) {
+            newItemsToAdd.push({
+              ...newItem,
+              quantity: newItem.quantity - oldQty
+            });
+          }
+        }
+        if (newItemsToAdd.length > 0) {
+          deductInventoryForOrder(order._id, order.cafeId, newItemsToAdd)
+            .catch(err => console.warn('Inventory deduction warning on adding items:', err.message));
+        }
+      }
+    }
+
+    const savedOrder = await order.save();
+
+    const branchMap = new Map();
+    const formattedOrder = await appendLegacyFallback(savedOrder.toObject(), branchMap);
+    await emitOrderUpdated(formattedOrder, branchMap);
+
+    return res.status(200).json({ success: true, data: formattedOrder, message: 'Order updated successfully' });
+  } catch (error) {
+    error.controllerName = 'orderController';
+    error.serviceName = 'updateOrderDetails';
+    next(error);
+  }
+};
+
 module.exports = {
   createOrder,
   getOrders,
   getOrderById,
   updateOrderStatus,
   updateOrderPaymentMethod,
-  printOrderReceipt
+  printOrderReceipt,
+  deleteOrder,
+  updateOrderDetails
 };

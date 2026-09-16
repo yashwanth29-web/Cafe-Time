@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-09-15T03:16:43.056Z",
-  "totalGridFsFiles": 88,
-  "totalGridFsSizeMB": 26.428,
+  "timestamp": "2026-09-16T07:48:12.187Z",
+  "totalGridFsFiles": 99,
+  "totalGridFsSizeMB": 32.708,
   "orphanedFiles": [
     {
       "fileId": "6a335227d30565d9c9c73ea4",
@@ -278,9 +278,27 @@
       "filename": "report-1783267034126-264944002.png",
       "uploadDate": "2026-09-14T10:20:48.844Z",
       "length": 261054
+    },
+    {
+      "fileId": "6aa95b53849e2a99a096c14d",
+      "filename": "CP007_logo.png",
+      "uploadDate": "2026-09-15T14:50:59.814Z",
+      "length": 654549
+    },
+    {
+      "fileId": "6aa9fbd914d50a61f9ee013a",
+      "filename": "dish-1789524952910-275125034.jpeg",
+      "uploadDate": "2026-09-16T02:15:53.403Z",
+      "length": 330448
+    },
+    {
+      "fileId": "6aaa4976e1153e017c3c34e5",
+      "filename": "dish-1789544822274-710724642.png",
+      "uploadDate": "2026-09-16T07:47:02.975Z",
+      "length": 772719
     }
   ],
-  "reclaimableSpaceMB": 4.482,
+  "reclaimableSpaceMB": 6.159,
   "chunkIntegrity": {
     "totalOrphanedChunks": 0,
     "orphanedChunkFileIds": []
