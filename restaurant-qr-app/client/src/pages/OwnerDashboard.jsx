@@ -54,6 +54,17 @@ import OwnerLayout from '../components/OwnerLayout';
 import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const PRESET_CATEGORIES = [
+  'Signature Chai',
+  'Coffee Selection',
+  'Fresh Juices & Coolers',
+  'Thick Milkshakes',
+  'Starters & Bites',
+  'French Fries'
+];
+
+const presetCategories = PRESET_CATEGORIES;
+
 const AdminMenuImage = React.memo(({ item }) =>{
  const isValidUrl = (url) =>{
  if (!url || typeof url !== 'string' || url.trim() === '') return false;
@@ -898,7 +909,7 @@ const OwnerDashboard = () =>{
   const menuCategoriesWithCounts = useMemo(() => {
     const rawCategories = categories.length > 0
       ? categories.map((c) => (typeof c === 'string' ? c : c.name))
-      : (typeof presetCategories !== 'undefined' ? presetCategories : []);
+      : PRESET_CATEGORIES;
 
     const allCatSet = new Set(rawCategories);
     (menuItems || []).forEach((item) => {
@@ -984,14 +995,6 @@ const OwnerDashboard = () =>{
  setImageUploading(false);
  }
  };
-
- const presetCategories = [
- 'Signature Chai',
- 'Coffee Selection',
- 'Fresh Juices & Coolers',
- 'Thick Milkshakes',
- 'Starters & Bites',
- 'French Fries'];
 
   const applySetupConfig = (res) => {
     if (res.operationalConfig?.tables) {
