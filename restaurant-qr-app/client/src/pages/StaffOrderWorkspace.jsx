@@ -2,7 +2,32 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
-import { getOrders, updateOrderStatus, updateOrder, deleteOrder, getInventory, createInventoryItem, updateInventoryItem, recordPurchase, recordWastage, reportShortage, getInventoryCategories, getMenu, getAssetUrl, getCafeInfo, getPaymentInfo } from '../services/api';
+import {
+  getOrders,
+  updateOrderStatus,
+  updateOrder,
+  deleteOrder,
+  getInventory,
+  createInventoryItem,
+  updateInventoryItem,
+  deleteInventoryItem,
+  recordPurchase,
+  recordWastage,
+  reportShortage,
+  getInventoryCategories,
+  getMenu,
+  createMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+  uploadMenuItemImage,
+  getCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  getAssetUrl,
+  getCafeInfo,
+  getPaymentInfo
+} from '../services/api';
 import socket, { connectSocket } from '../socket';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { QRCodeSVG } from 'qrcode.react';
@@ -11,6 +36,7 @@ import '../styles/App.css';
 const StaffOrderWorkspace = () => {
   const { user } = useAuth();
   const { activeBranchId, branches } = useBranch();
+  const userRole = user?.role?.toLowerCase() || '';
   
   const [cafeInfo, setCafeInfo] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -36,6 +62,37 @@ const StaffOrderWorkspace = () => {
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [menuItems, setMenuItems] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
+  const [menuCategories, setMenuCategories] = useState([]);
+  const [menuSearch, setMenuSearch] = useState('');
+  const [selectedMenuCategory, setSelectedMenuCategory] = useState('all');
+  const [isMenuSubmitting, setIsMenuSubmitting] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+
+  // Menu Modals
+  const [showAddMenuModal, setShowAddMenuModal] = useState(false);
+  const [showEditMenuModal, setShowEditMenuModal] = useState(false);
+  const [editingMenuItem, setEditingMenuItem] = useState(null);
+  const [newMenuItem, setNewMenuItem] = useState({
+    name: '',
+    price: '',
+    makingCost: '',
+    category: 'Signature Chai',
+    description: '',
+    available: true,
+    image: '',
+    preparationTime: 10
+  });
+
+  // Category Management Modal
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+
+  // Inventory Filtering & Search
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [selectedInventoryCategory, setSelectedInventoryCategory] = useState('all');
+  const [selectedInventoryStatus, setSelectedInventoryStatus] = useState('all');
+
   const [showShortageModal, setShowShortageModal] = useState(false);
   const [selectedItemForShortage, setSelectedItemForShortage] = useState(null);
   const [shortageReason, setShortageReason] = useState('');
@@ -214,13 +271,31 @@ const StaffOrderWorkspace = () => {
     }
   }, []);
 
-  // Load menu items
+  // Load menu categories
+  const fetchMenuCategories = useCallback(async () => {
+    try {
+      const res = await getCategories();
+      if (res && res.success) {
+        setMenuCategories(res.data);
+      }
+    } catch (err) {
+      console.warn('Could not fetch menu categories:', err);
+    }
+  }, []);
+
+  // Load menu items & categories
   const fetchMenu = useCallback(async () => {
     setMenuLoading(true);
     try {
-      const response = await getMenu();
-      if (response && response.success) {
-        setMenuItems(response.data);
+      const [menuRes, catRes] = await Promise.all([
+        getMenu(),
+        getCategories().catch(() => ({ success: false }))
+      ]);
+      if (menuRes && menuRes.success) {
+        setMenuItems(menuRes.data);
+      }
+      if (catRes && catRes.success) {
+        setMenuCategories(catRes.data);
       }
     } catch (err) {
       console.error('Error fetching menu:', err);
@@ -228,6 +303,270 @@ const StaffOrderWorkspace = () => {
       setMenuLoading(false);
     }
   }, []);
+
+  // Memoized Category Stats & Filter for Menu
+  const menuCategoryStats = useMemo(() => {
+    const counts = {};
+    (menuItems || []).forEach((item) => {
+      const cat = item.category || 'General';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    const allCount = (menuItems || []).length;
+    const catNames = Array.from(new Set([
+      ...menuCategories.map((c) => (typeof c === 'string' ? c : c.name)),
+      ...Object.keys(counts)
+    ])).filter(Boolean);
+
+    return {
+      allCount,
+      list: catNames.map((name) => ({ name, count: counts[name] || 0 }))
+    };
+  }, [menuCategories, menuItems]);
+
+  // Zero-latency instant search & category filter for Menu (Mobile optimized)
+  const filteredMenuItems = useMemo(() => {
+    const search = menuSearch.trim().toLowerCase();
+    return (menuItems || []).filter((item) => {
+      const matchesSearch = !search ||
+        item.name.toLowerCase().includes(search) ||
+        (item.category || '').toLowerCase().includes(search) ||
+        (item.description || '').toLowerCase().includes(search);
+
+      const matchesCategory = selectedMenuCategory === 'all' ||
+        (item.category || '').toLowerCase().trim() === selectedMenuCategory.toLowerCase().trim();
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [menuItems, menuSearch, selectedMenuCategory]);
+
+  // Zero-latency instant search & category/status filter for Inventory (Mobile optimized)
+  const filteredInventory = useMemo(() => {
+    const search = inventorySearch.trim().toLowerCase();
+    return (inventory || []).filter((inv) => {
+      const currentStock = inv.quantity !== undefined ? inv.quantity : (inv.stock ?? 0);
+      const minAlert = inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock ?? 0);
+      const isOutOfStock = currentStock <= 0;
+      const isLow = !isOutOfStock && currentStock <= minAlert;
+
+      const matchesSearch = !search ||
+        inv.name.toLowerCase().includes(search) ||
+        (inv.category || '').toLowerCase().includes(search) ||
+        (inv.supplier || '').toLowerCase().includes(search);
+
+      const matchesCategory = selectedInventoryCategory === 'all' ||
+        (inv.category || '').toLowerCase().trim() === selectedInventoryCategory.toLowerCase().trim();
+
+      let matchesStatus = true;
+      if (selectedInventoryStatus === 'out') matchesStatus = isOutOfStock;
+      else if (selectedInventoryStatus === 'low') matchesStatus = isLow;
+      else if (selectedInventoryStatus === 'in') matchesStatus = !isOutOfStock && !isLow;
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [inventory, inventorySearch, selectedInventoryCategory, selectedInventoryStatus]);
+
+  // Menu Management Handlers
+  const handleAddMenuItem = async (e) => {
+    e.preventDefault();
+    if (isMenuSubmitting) return;
+    if (!newMenuItem.name || newMenuItem.price === undefined || newMenuItem.price === '') {
+      alert('Please fill out required fields (Dish Name, Price).');
+      return;
+    }
+    setIsMenuSubmitting(true);
+    try {
+      const branchIdToSave = activeBranchId === 'all' ? 'default' : (activeBranchId || 'default');
+      const response = await createMenuItem({
+        ...newMenuItem,
+        price: parseFloat(newMenuItem.price) || 0,
+        makingCost: parseFloat(newMenuItem.makingCost) || 0,
+        preparationTime: parseInt(newMenuItem.preparationTime, 10) || 10,
+        branchId: branchIdToSave
+      });
+      if (response.success && response.data) {
+        const cleanId = String(response.data._id || response.data.id);
+        const itemWithId = { ...response.data, id: cleanId, _id: cleanId };
+        setMenuItems((prev) => {
+          const exists = prev.some((it) => String(it._id || it.id) === cleanId);
+          return exists ? prev.map((it) => String(it._id || it.id) === cleanId ? itemWithId : it) : [...prev, itemWithId];
+        });
+        setShowAddMenuModal(false);
+        setNewMenuItem({
+          name: '',
+          price: '',
+          makingCost: '',
+          category: menuCategories[0]?.name || 'Signature Chai',
+          description: '',
+          available: true,
+          image: '',
+          preparationTime: 10
+        });
+        alert('Dish added to menu successfully!');
+      } else {
+        alert(response?.message || 'Failed to create menu item.');
+      }
+    } catch (err) {
+      console.error('Error creating menu item:', err);
+      alert(err.response?.data?.message || 'Error creating menu item.');
+    } finally {
+      setIsMenuSubmitting(false);
+    }
+  };
+
+  const handleEditMenuItem = async (e) => {
+    e.preventDefault();
+    if (isMenuSubmitting || !editingMenuItem) return;
+    if (!editingMenuItem.name || editingMenuItem.price === undefined || editingMenuItem.price === '') {
+      alert('Please fill out required fields (Dish Name, Price).');
+      return;
+    }
+    setIsMenuSubmitting(true);
+    try {
+      const editId = editingMenuItem._id || editingMenuItem.id;
+      const response = await updateMenuItem(editId, {
+        ...editingMenuItem,
+        price: parseFloat(editingMenuItem.price) || 0,
+        makingCost: parseFloat(editingMenuItem.makingCost) || 0,
+        preparationTime: parseInt(editingMenuItem.preparationTime, 10) || 10
+      });
+      if (response.success && response.data) {
+        const updatedItem = { ...response.data, id: response.data._id || response.data.id };
+        setMenuItems((prev) => prev.map((m) => String(m._id || m.id) === String(editId) ? updatedItem : m));
+        setShowEditMenuModal(false);
+        setEditingMenuItem(null);
+        alert('Dish updated successfully!');
+      } else {
+        alert(response?.message || 'Failed to update menu item.');
+      }
+    } catch (err) {
+      console.error('Error updating menu item:', err);
+      alert(err.response?.data?.message || 'Error updating menu item.');
+    } finally {
+      setIsMenuSubmitting(false);
+    }
+  };
+
+  const handleDeleteMenuItem = async (id, name) => {
+    if (isMenuSubmitting) return;
+    if (!window.confirm(`Are you sure you want to remove "${name}" from the cafe menu?`)) return;
+    setIsMenuSubmitting(true);
+    const cleanId = String(id);
+    // Instant optimistic update
+    setMenuItems((prev) => prev.filter((item) => String(item._id || item.id) !== cleanId));
+    try {
+      const response = await deleteMenuItem(id);
+      if (!response.success) {
+        alert(response.message || 'Failed to remove menu item.');
+        fetchMenu();
+      }
+    } catch (err) {
+      console.error('Error deleting item:', err);
+      alert(err.response?.data?.message || 'Error deleting menu item.');
+      fetchMenu();
+    } finally {
+      setIsMenuSubmitting(false);
+    }
+  };
+
+  const handleToggleAvailability = async (item) => {
+    const targetId = item._id || item.id;
+    const newStatus = !item.available;
+    // Instant optimistic UI update
+    setMenuItems((prev) =>
+      prev.map((m) => (String(m._id || m.id) === String(targetId) ? { ...m, available: newStatus } : m))
+    );
+    try {
+      const response = await updateMenuItem(targetId, { available: newStatus });
+      if (!response.success) {
+        setMenuItems((prev) =>
+          prev.map((m) => (String(m._id || m.id) === String(targetId) ? { ...m, available: item.available } : m))
+        );
+        alert('Failed to update availability.');
+      }
+    } catch (err) {
+      console.error('Error toggling availability:', err);
+      setMenuItems((prev) =>
+        prev.map((m) => (String(m._id || m.id) === String(targetId) ? { ...m, available: item.available } : m))
+      );
+      alert('Server error toggling availability.');
+    }
+  };
+
+  const handleImageUpload = async (file, isEditing = false) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('image', file);
+    setImageUploading(true);
+    try {
+      const res = await uploadMenuItemImage(formData);
+      if (res.success && res.imageUrl) {
+        if (isEditing) {
+          setEditingMenuItem((prev) => ({ ...prev, image: res.imageUrl }));
+        } else {
+          setNewMenuItem((prev) => ({ ...prev, image: res.imageUrl }));
+        }
+      } else {
+        alert(res.message || 'Image upload failed.');
+      }
+    } catch (err) {
+      console.error('Error uploading image:', err);
+      alert(err.response?.data?.message || 'Error uploading image file.');
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  // Category Management Handlers
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    try {
+      const res = await createCategory({ name: newCategoryName.trim() });
+      if (res.success && res.data) {
+        setMenuCategories((prev) => [...prev, res.data]);
+        setNewCategoryName('');
+        alert('Category created successfully!');
+      } else {
+        alert(res?.message || 'Failed to create category.');
+      }
+    } catch (err) {
+      console.error('Error creating category:', err);
+      alert(err.response?.data?.message || 'Error creating category.');
+    }
+  };
+
+  const handleUpdateCategory = async (catId, newName) => {
+    if (!newName.trim()) return;
+    try {
+      const res = await updateCategory(catId, { name: newName.trim() });
+      if (res.success && res.data) {
+        setMenuCategories((prev) => prev.map((c) => (c._id === catId ? res.data : c)));
+        setEditingCategory(null);
+        fetchMenu();
+      } else {
+        alert(res?.message || 'Failed to update category.');
+      }
+    } catch (err) {
+      console.error('Error updating category:', err);
+      alert(err.response?.data?.message || 'Failed to update category.');
+    }
+  };
+
+  const handleDeleteCategory = async (catId, catName) => {
+    if (!window.confirm(`Are you sure you want to delete category "${catName}"?`)) return;
+    try {
+      const res = await deleteCategory(catId);
+      if (res.success) {
+        setMenuCategories((prev) => prev.filter((c) => c._id !== catId));
+        fetchMenu();
+      } else {
+        alert(res?.message || 'Failed to delete category.');
+      }
+    } catch (err) {
+      console.error('Error deleting category:', err);
+      alert(err.response?.data?.message || 'Failed to delete category.');
+    }
+  };
 
   // Sync tab data fetches
   useEffect(() => {
@@ -709,7 +1048,6 @@ const StaffOrderWorkspace = () => {
   }, [branches, activeBranchId]);
 
   const isUnifiedMode = currentBranch ? !!currentBranch.unifiedStaffMode : false;
-  const userRole = (user?.role || '').toLowerCase();
 
   // Permission helpers (Waiter and Cashier unified: Floor Service + Payment Collection)
   const canPrepare = isUnifiedMode || ['admin', 'owner', 'manager', 'chef'].includes(userRole);
@@ -1783,52 +2121,351 @@ const StaffOrderWorkspace = () => {
 
       {/* ======================= TAB 3: CAFE MENU ======================= */}
       {tabParam === 'menu' && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' }}>
-          <h3 style={{ marginBottom: '16px', color: 'var(--color-text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>
-            📖 Cafe Menu & Recipes
-          </h3>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* Menu Header & Quick Actions */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                📖 Cafe Menu & Dishes
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
+                Staff access: add new dishes, modify prices, toggle stock availability & manage menu categories.
+              </p>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setShowCategoryModal(true)}
+                style={{
+                  background: 'var(--bg-secondary)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)',
+                  padding: '9px 14px', borderRadius: '10px', cursor: 'pointer',
+                  fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px'
+                }}
+              >
+                📁 Categories ({menuCategoryStats.list.length})
+              </button>
+              <button
+                onClick={() => {
+                  setNewMenuItem({
+                    name: '',
+                    price: '',
+                    makingCost: '',
+                    category: menuCategories[0]?.name || (menuCategoryStats.list[0]?.name || 'Signature Chai'),
+                    description: '',
+                    available: true,
+                    image: '',
+                    preparationTime: 10
+                  });
+                  setShowAddMenuModal(true);
+                }}
+                style={{
+                  background: 'var(--color-primary)', color: 'white', border: 'none',
+                  padding: '9px 16px', borderRadius: '10px', cursor: 'pointer',
+                  fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px',
+                  boxShadow: '0 2px 8px rgba(192, 57, 43, 0.25)'
+                }}
+              >
+                ➕ Add Dish
+              </button>
+            </div>
+          </div>
 
+          {/* Real-time Search Input */}
+          <div style={{ position: 'relative', width: '100%' }}>
+            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '15px', color: 'var(--color-text-secondary)', pointerEvents: 'none' }}>
+              🔍
+            </span>
+            <input
+              type="text"
+              placeholder="Search dishes by name, category, or recipe..."
+              value={menuSearch}
+              onChange={(e) => setMenuSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 38px 12px 40px',
+                borderRadius: '12px',
+                border: '1.5px solid var(--color-border)',
+                background: 'var(--bg-secondary)',
+                color: 'var(--color-text-primary)',
+                fontSize: '14px',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+            {menuSearch && (
+              <button
+                onClick={() => setMenuSearch('')}
+                style={{
+                  position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                  background: 'transparent', border: 'none', color: 'var(--color-text-secondary)',
+                  fontSize: '16px', cursor: 'pointer', padding: '4px'
+                }}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter Pills (Touch friendly, horizontal scroll) */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            overflowX: 'auto',
+            paddingBottom: '4px',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none'
+          }}>
+            <button
+              onClick={() => setSelectedMenuCategory('all')}
+              style={{
+                padding: '7px 14px',
+                borderRadius: '20px',
+                border: selectedMenuCategory === 'all' ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                background: selectedMenuCategory === 'all' ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                color: selectedMenuCategory === 'all' ? 'white' : 'var(--color-text-primary)',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              All Dishes
+              <span style={{
+                background: selectedMenuCategory === 'all' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.08)',
+                padding: '2px 7px',
+                borderRadius: '10px',
+                fontSize: '11px',
+                fontWeight: 800
+              }}>
+                {menuCategoryStats.allCount}
+              </span>
+            </button>
+
+            {menuCategoryStats.list.map((cat) => {
+              const isSelected = selectedMenuCategory.toLowerCase() === cat.name.toLowerCase();
+              return (
+                <button
+                  key={cat.name}
+                  onClick={() => setSelectedMenuCategory(cat.name)}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: '20px',
+                    border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    background: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                    color: isSelected ? 'white' : 'var(--color-text-primary)',
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {cat.name}
+                  <span style={{
+                    background: isSelected ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.08)',
+                    padding: '2px 7px',
+                    borderRadius: '10px',
+                    fontSize: '11px',
+                    fontWeight: 800
+                  }}>
+                    {cat.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Dishes Grid */}
           {menuLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <div style={{ textAlign: 'center', padding: '50px 0' }}>
               <div className="spinner" style={{ margin: '0 auto 10px auto' }} />
-              <p>Loading menu...</p>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px' }}>Loading menu dishes...</p>
+            </div>
+          ) : filteredMenuItems.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '50px 20px', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px dashed var(--color-border)' }}>
+              <span style={{ fontSize: '36px', display: 'block', marginBottom: '10px' }}>🍽️</span>
+              <h4 style={{ margin: '0 0 6px 0', color: 'var(--color-text-primary)' }}>No dishes found</h4>
+              <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+                {menuSearch ? `No matches found for "${menuSearch}".` : 'No menu items in this category.'}
+              </p>
+              {(menuSearch || selectedMenuCategory !== 'all') && (
+                <button
+                  onClick={() => { setMenuSearch(''); setSelectedMenuCategory('all'); }}
+                  style={{
+                    marginTop: '14px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--bg-card)',
+                    color: 'var(--color-text-primary)',
+                    fontWeight: 700,
+                    fontSize: '12.5px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Reset Filters
+                </button>
+              )}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
-              {menuItems.map((item) => (
-                <div key={item._id} style={{ background: 'var(--bg-secondary)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-                  <img
-                    src={item.image ? getAssetUrl(item.image) : '/images/default-food.png'}
-                    alt={item.name}
-                    loading="lazy"
-                    decoding="async"
-                    style={{ width: '100%', height: '140px', objectFit: 'cover' }}
-                    onError={(e) => { e.target.src = '/images/default-food.png'; }}
-                  />
-                  <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '13.5px', color: 'var(--color-text-primary)' }}>{item.name}</strong>
-                      <span style={{ color: '#27ae60', fontSize: '13px', fontWeight: 'bold' }}>₹{item.price}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '16px' }}>
+              {filteredMenuItems.map((item) => {
+                const isAvailable = item.available !== false;
+                return (
+                  <div
+                    key={item._id || item.id}
+                    style={{
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '14px',
+                      overflow: 'hidden',
+                      border: `1.5px solid ${isAvailable ? 'var(--color-border)' : 'rgba(231, 76, 60, 0.4)'}`,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      boxShadow: 'var(--shadow-sm)',
+                      transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                      opacity: isAvailable ? 1 : 0.85
+                    }}
+                  >
+                    {/* Item Image with Availability Badge */}
+                    <div style={{ position: 'relative', width: '100%', height: '145px', background: '#000' }}>
+                      <img
+                        src={item.image ? getAssetUrl(item.image) : '/images/default-food.png'}
+                        alt={item.name}
+                        loading="lazy"
+                        decoding="async"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => { e.target.src = '/images/default-food.png'; }}
+                      />
+                      <div style={{ position: 'absolute', top: '8px', left: '8px', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', color: 'white', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+                        {item.category || 'General'}
+                      </div>
+                      <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', color: '#f1c40f', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+                        ⏱️ {item.preparationTime || 10}m
+                      </div>
+                      {!isAvailable && (
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          background: 'rgba(0,0,0,0.5)',
+                          display: 'flex', justifyContent: 'center', alignItems: 'center'
+                        }}>
+                          <span style={{ background: '#e74c3c', color: 'white', padding: '4px 10px', borderRadius: '6px', fontWeight: 800, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Out of Stock
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', minHeight: '34px', display: 'block' }}>
-                      {item.description || 'No recipe details uploaded.'}
-                    </span>
-                    
-                    {/* Chef stock outage reporter */}
-                    {['chef', 'admin', 'owner', 'manager'].includes(userRole) && (
+
+                    {/* Item Body */}
+                    <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                        <strong style={{ fontSize: '14px', color: 'var(--color-text-primary)', lineHeight: '1.3' }}>
+                          {item.name}
+                        </strong>
+                        <span style={{ color: '#27ae60', fontSize: '15px', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                          ₹{Number(item.price || 0).toFixed(2)}
+                        </span>
+                      </div>
+
+                      {item.makingCost > 0 && (
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                          Making Cost: <strong>₹{item.makingCost}</strong> · Margin: <strong style={{ color: '#27ae60' }}>₹{(item.price - item.makingCost).toFixed(2)}</strong>
+                        </div>
+                      )}
+
+                      <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', minHeight: '32px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.4' }}>
+                        {item.description || 'No recipe details uploaded.'}
+                      </span>
+
+                      {/* Stock Toggle Button */}
                       <button
-                        onClick={() => { setSelectedItemForShortage(item); setShowShortageModal(true); }}
+                        onClick={() => handleToggleAvailability(item)}
                         style={{
-                          background: 'transparent', border: '1px dashed var(--color-danger)', color: 'var(--color-danger)',
-                          padding: '6px', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', marginTop: '6px'
+                          width: '100%',
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border: `1.5px solid ${isAvailable ? '#27ae60' : '#e74c3c'}`,
+                          background: isAvailable ? 'rgba(39, 174, 96, 0.12)' : 'rgba(231, 76, 60, 0.12)',
+                          color: isAvailable ? '#27ae60' : '#e74c3c',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          marginTop: '4px'
                         }}
+                        title={isAvailable ? 'Click to mark as Out of Stock' : 'Click to mark as In Stock'}
                       >
-                        ⚠️ Report Out of Stock
+                        {isAvailable ? '🟢 In Stock (Tap to Out of Stock)' : '🔴 Out of Stock (Tap to In Stock)'}
                       </button>
-                    )}
+
+                      {/* Edit & Delete Action Buttons */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+                        <button
+                          onClick={() => {
+                            setEditingMenuItem({
+                              _id: item._id || item.id,
+                              name: item.name,
+                              price: item.price,
+                              makingCost: item.makingCost || '',
+                              category: item.category || 'Signature Chai',
+                              description: item.description || '',
+                              available: item.available !== false,
+                              image: item.image || '',
+                              preparationTime: item.preparationTime || 10
+                            });
+                            setShowEditMenuModal(true);
+                          }}
+                          style={{
+                            background: 'var(--bg-card)',
+                            color: 'var(--color-text-primary)',
+                            border: '1px solid var(--color-border)',
+                            padding: '7px 10px',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMenuItem(item._id || item.id, item.name)}
+                          style={{
+                            background: 'rgba(231, 76, 60, 0.1)',
+                            color: '#e74c3c',
+                            border: '1px solid rgba(231, 76, 60, 0.3)',
+                            padding: '7px 10px',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
+
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1836,10 +2473,10 @@ const StaffOrderWorkspace = () => {
 
       {/* ======================= TAB 4: INGREDIENT STOCK ======================= */}
       {tabParam === 'inventory' && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
                 📦 Ingredient Stock Levels
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
@@ -1853,25 +2490,123 @@ const StaffOrderWorkspace = () => {
               }}
               style={{
                 background: 'var(--color-primary)', color: 'white', border: 'none',
-                padding: '9px 16px', borderRadius: '8px', cursor: 'pointer',
-                fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px'
+                padding: '9px 16px', borderRadius: '10px', cursor: 'pointer',
+                fontWeight: 800, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px',
+                boxShadow: '0 2px 8px rgba(192, 57, 43, 0.25)'
               }}
             >
               ➕ Add Ingredient
             </button>
           </div>
 
+          {/* Real-time Inventory Search Bar */}
+          <div style={{ position: 'relative', width: '100%' }}>
+            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '15px', color: 'var(--color-text-secondary)', pointerEvents: 'none' }}>
+              🔍
+            </span>
+            <input
+              type="text"
+              placeholder="Search ingredients by name, category, or supplier..."
+              value={inventorySearch}
+              onChange={(e) => setInventorySearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 38px 12px 40px',
+                borderRadius: '12px',
+                border: '1.5px solid var(--color-border)',
+                background: 'var(--bg-secondary)',
+                color: 'var(--color-text-primary)',
+                fontSize: '14px',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+            {inventorySearch && (
+              <button
+                onClick={() => setInventorySearch('')}
+                style={{
+                  position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                  background: 'transparent', border: 'none', color: 'var(--color-text-secondary)',
+                  fontSize: '16px', cursor: 'pointer', padding: '4px'
+                }}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Status Quick Filter Pills */}
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+            <button
+              onClick={() => setSelectedInventoryStatus('all')}
+              style={{
+                padding: '6px 14px', borderRadius: '20px',
+                border: selectedInventoryStatus === 'all' ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                background: selectedInventoryStatus === 'all' ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                color: selectedInventoryStatus === 'all' ? 'white' : 'var(--color-text-primary)',
+                fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap'
+              }}
+            >
+              All Items ({inventory.length})
+            </button>
+            <button
+              onClick={() => setSelectedInventoryStatus('low')}
+              style={{
+                padding: '6px 14px', borderRadius: '20px',
+                border: selectedInventoryStatus === 'low' ? '1.5px solid #f39c12' : '1px solid var(--color-border)',
+                background: selectedInventoryStatus === 'low' ? '#f39c12' : 'var(--bg-secondary)',
+                color: selectedInventoryStatus === 'low' ? 'white' : '#f39c12',
+                fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap'
+              }}
+            >
+              ⚠️ Low Stock ({inventory.filter(i => {
+                const q = i.quantity !== undefined ? i.quantity : (i.stock ?? 0);
+                const min = i.reorderLevel !== undefined ? i.reorderLevel : (i.minStock ?? 0);
+                return q > 0 && q <= min;
+              }).length})
+            </button>
+            <button
+              onClick={() => setSelectedInventoryStatus('out')}
+              style={{
+                padding: '6px 14px', borderRadius: '20px',
+                border: selectedInventoryStatus === 'out' ? '1.5px solid #e74c3c' : '1px solid var(--color-border)',
+                background: selectedInventoryStatus === 'out' ? '#e74c3c' : 'var(--bg-secondary)',
+                color: selectedInventoryStatus === 'out' ? 'white' : '#e74c3c',
+                fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap'
+              }}
+            >
+              ❌ Out of Stock ({inventory.filter(i => (i.quantity !== undefined ? i.quantity : (i.stock ?? 0)) <= 0).length})
+            </button>
+            <button
+              onClick={() => setSelectedInventoryStatus('in')}
+              style={{
+                padding: '6px 14px', borderRadius: '20px',
+                border: selectedInventoryStatus === 'in' ? '1.5px solid #27ae60' : '1px solid var(--color-border)',
+                background: selectedInventoryStatus === 'in' ? '#27ae60' : 'var(--bg-secondary)',
+                color: selectedInventoryStatus === 'in' ? 'white' : '#27ae60',
+                fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap'
+              }}
+            >
+              ✅ In Stock ({inventory.filter(i => {
+                const q = i.quantity !== undefined ? i.quantity : (i.stock ?? 0);
+                const min = i.reorderLevel !== undefined ? i.reorderLevel : (i.minStock ?? 0);
+                return q > min;
+              }).length})
+            </button>
+          </div>
+
           {inventoryLoading ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <div className="spinner" style={{ margin: '0 auto 10px auto' }} />
-              <p>Loading inventory...</p>
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>Loading inventory...</p>
             </div>
-          ) : inventory.length === 0 ? (
-            <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              No inventory ingredients configured. Click <strong>+ Add Ingredient</strong> to add your first stock item.
+          ) : filteredInventory.length === 0 ? (
+            <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '13px', background: 'var(--bg-secondary)', borderRadius: '12px' }}>
+              No inventory ingredients match your search or filter.
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left', minWidth: '640px' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
@@ -1884,7 +2619,7 @@ const StaffOrderWorkspace = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {inventory.map((inv) => {
+                  {filteredInventory.map((inv) => {
                     const currentStock = inv.quantity !== undefined ? inv.quantity : (inv.stock ?? 0);
                     const minAlert = inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock ?? 0);
                     const isOutOfStock = currentStock <= 0;
@@ -3167,9 +3902,586 @@ const StaffOrderWorkspace = () => {
         </div>
       )}
 
+      {/* ======================= MODAL: ADD MENU DISH ======================= */}
+      {showAddMenuModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1100,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', borderRadius: '16px',
+            width: '100%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: 'var(--shadow-lg)', padding: '24px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                ➕ Add New Dish to Menu
+              </h3>
+              <button
+                onClick={() => setShowAddMenuModal(false)}
+                style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddMenuItem} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Dish Name */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Dish Name *
+                </label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. Masala Chai, Peri Peri Fries..."
+                  value={newMenuItem.name}
+                  onChange={(e) => setNewMenuItem({ ...newMenuItem, name: e.target.value })}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: '8px',
+                    border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                    color: 'var(--color-text-primary)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Category & Prep Time */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Category *
+                  </label>
+                  <select
+                    value={newMenuItem.category}
+                    onChange={(e) => setNewMenuItem({ ...newMenuItem, category: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  >
+                    {menuCategoryStats.list.length > 0 ? (
+                      menuCategoryStats.list.map((c) => (
+                        <option key={c.name} value={c.name}>{c.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Signature Chai">Signature Chai</option>
+                        <option value="Hot Beverages">Hot Beverages</option>
+                        <option value="Cold Beverages">Cold Beverages</option>
+                        <option value="Snacks & Bites">Snacks & Bites</option>
+                        <option value="Desserts">Desserts</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Prep Time (min)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newMenuItem.preparationTime}
+                    onChange={(e) => setNewMenuItem({ ...newMenuItem, preparationTime: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 14px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Selling Price & Making Cost */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#27ae60', marginBottom: '5px' }}>
+                    Selling Price (₹) *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="e.g. 50"
+                    value={newMenuItem.price}
+                    onChange={(e) => setNewMenuItem({ ...newMenuItem, price: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 14px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Making Cost (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="e.g. 15"
+                    value={newMenuItem.makingCost}
+                    onChange={(e) => setNewMenuItem({ ...newMenuItem, makingCost: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 14px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Description & Recipe
+                </label>
+                <textarea
+                  rows="2"
+                  placeholder="Ingredients or special preparation notes..."
+                  value={newMenuItem.description}
+                  onChange={(e) => setNewMenuItem({ ...newMenuItem, description: e.target.value })}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: '8px',
+                    border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                    color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box', resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Dish Photo Upload */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Dish Photo
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {newMenuItem.image && (
+                    <img
+                      src={getAssetUrl(newMenuItem.image)}
+                      alt="Preview"
+                      style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--color-border)' }}
+                    />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e.target.files[0], false)}
+                    disabled={imageUploading}
+                    style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}
+                  />
+                </div>
+                {imageUploading && <span style={{ fontSize: '11px', color: 'var(--color-primary)' }}>Uploading photo...</span>}
+              </div>
+
+              {/* In Stock Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="newMenuItemAvailable"
+                  checked={newMenuItem.available}
+                  onChange={(e) => setNewMenuItem({ ...newMenuItem, available: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="newMenuItemAvailable" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', cursor: 'pointer' }}>
+                  Item is Available & In-Stock
+                </label>
+              </div>
+
+              {/* Submit Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddMenuModal(false)}
+                  style={{
+                    padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)',
+                    background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '13px',
+                    color: 'var(--color-text-secondary)'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isMenuSubmitting || imageUploading}
+                  style={{
+                    padding: '10px 22px', borderRadius: '8px', border: 'none',
+                    background: 'var(--color-primary)', color: 'white',
+                    cursor: isMenuSubmitting || imageUploading ? 'not-allowed' : 'pointer',
+                    fontWeight: 800, fontSize: '13px'
+                  }}
+                >
+                  {isMenuSubmitting ? 'Adding...' : 'Add Dish'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: EDIT MENU DISH ======================= */}
+      {showEditMenuModal && editingMenuItem && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1100,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', borderRadius: '16px',
+            width: '100%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: 'var(--shadow-lg)', padding: '24px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                ✏️ Edit Menu Dish
+              </h3>
+              <button
+                onClick={() => { setShowEditMenuModal(false); setEditingMenuItem(null); }}
+                style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleEditMenuItem} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Dish Name */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Dish Name *
+                </label>
+                <input
+                  required
+                  type="text"
+                  value={editingMenuItem.name}
+                  onChange={(e) => setEditingMenuItem({ ...editingMenuItem, name: e.target.value })}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: '8px',
+                    border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                    color: 'var(--color-text-primary)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Category & Prep Time */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Category *
+                  </label>
+                  <select
+                    value={editingMenuItem.category}
+                    onChange={(e) => setEditingMenuItem({ ...editingMenuItem, category: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  >
+                    {menuCategoryStats.list.length > 0 ? (
+                      menuCategoryStats.list.map((c) => (
+                        <option key={c.name} value={c.name}>{c.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Signature Chai">Signature Chai</option>
+                        <option value="Hot Beverages">Hot Beverages</option>
+                        <option value="Cold Beverages">Cold Beverages</option>
+                        <option value="Snacks & Bites">Snacks & Bites</option>
+                        <option value="Desserts">Desserts</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Prep Time (min)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingMenuItem.preparationTime}
+                    onChange={(e) => setEditingMenuItem({ ...editingMenuItem, preparationTime: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 14px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Selling Price & Making Cost */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: '#27ae60', marginBottom: '5px' }}>
+                    Selling Price (₹) *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editingMenuItem.price}
+                    onChange={(e) => setEditingMenuItem({ ...editingMenuItem, price: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 14px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Making Cost (₹)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editingMenuItem.makingCost}
+                    onChange={(e) => setEditingMenuItem({ ...editingMenuItem, makingCost: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 14px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13.5px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Description & Recipe
+                </label>
+                <textarea
+                  rows="2"
+                  value={editingMenuItem.description}
+                  onChange={(e) => setEditingMenuItem({ ...editingMenuItem, description: e.target.value })}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: '8px',
+                    border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                    color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box', resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Dish Photo Upload */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Update Dish Photo
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {editingMenuItem.image && (
+                    <img
+                      src={getAssetUrl(editingMenuItem.image)}
+                      alt="Current"
+                      style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--color-border)' }}
+                    />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e.target.files[0], true)}
+                    disabled={imageUploading}
+                    style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}
+                  />
+                </div>
+                {imageUploading && <span style={{ fontSize: '11px', color: 'var(--color-primary)' }}>Uploading photo...</span>}
+              </div>
+
+              {/* In Stock Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="editMenuItemAvailable"
+                  checked={editingMenuItem.available}
+                  onChange={(e) => setEditingMenuItem({ ...editingMenuItem, available: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="editMenuItemAvailable" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', cursor: 'pointer' }}>
+                  Item is Available & In-Stock
+                </label>
+              </div>
+
+              {/* Submit Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowEditMenuModal(false); setEditingMenuItem(null); }}
+                  style={{
+                    padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)',
+                    background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '13px',
+                    color: 'var(--color-text-secondary)'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isMenuSubmitting || imageUploading}
+                  style={{
+                    padding: '10px 22px', borderRadius: '8px', border: 'none',
+                    background: 'var(--color-primary)', color: 'white',
+                    cursor: isMenuSubmitting || imageUploading ? 'not-allowed' : 'pointer',
+                    fontWeight: 800, fontSize: '13px'
+                  }}
+                >
+                  {isMenuSubmitting ? 'Saving...' : 'Update Dish'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: MANAGE CATEGORIES ======================= */}
+      {showCategoryModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1100,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', borderRadius: '16px',
+            width: '100%', maxWidth: '460px', maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: 'var(--shadow-lg)', padding: '24px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                📁 Menu Categories
+              </h3>
+              <button
+                onClick={() => { setShowCategoryModal(false); setEditingCategory(null); }}
+                style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Add Category Form */}
+            <form onSubmit={handleCreateCategory} style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
+              <input
+                type="text"
+                placeholder="New Category Name (e.g. Specials)"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: '8px',
+                  border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                  color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none'
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!newCategoryName.trim()}
+                style={{
+                  background: 'var(--color-primary)', color: 'white', border: 'none',
+                  padding: '10px 16px', borderRadius: '8px', fontWeight: 800, fontSize: '13px',
+                  cursor: newCategoryName.trim() ? 'pointer' : 'not-allowed',
+                  opacity: newCategoryName.trim() ? 1 : 0.6
+                }}
+              >
+                + Add
+              </button>
+            </form>
+
+            {/* Categories List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+              {menuCategories.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+                  No custom categories yet.
+                </div>
+              ) : (
+                menuCategories.map((c) => {
+                  const catId = c._id || c.id;
+                  const isEditing = editingCategory && editingCategory._id === catId;
+
+                  return (
+                    <div
+                      key={catId || c.name}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 12px', borderRadius: '8px',
+                        background: 'var(--bg-secondary)', border: '1px solid var(--color-border)'
+                      }}
+                    >
+                      {isEditing ? (
+                        <div style={{ display: 'flex', gap: '6px', flex: 1, marginRight: '8px' }}>
+                          <input
+                            type="text"
+                            value={editingCategory.name}
+                            onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                            style={{
+                              flex: 1, padding: '6px 10px', borderRadius: '6px',
+                              border: '1px solid var(--color-primary)', background: 'var(--bg-card)',
+                              color: 'var(--color-text-primary)', fontSize: '13px'
+                            }}
+                          />
+                          <button
+                            onClick={() => handleUpdateCategory(catId, editingCategory.name)}
+                            style={{ background: '#27ae60', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingCategory(null)}
+                            style={{ background: 'transparent', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', padding: '6px 10px', borderRadius: '6px', fontSize: '11.5px', cursor: 'pointer' }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <strong style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                          {c.name}
+                        </strong>
+                      )}
+
+                      {!isEditing && (
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            onClick={() => setEditingCategory({ _id: catId, name: c.name })}
+                            style={{ background: 'transparent', border: '1px solid var(--color-border)', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-primary)', cursor: 'pointer' }}
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(catId, c.name)}
+                            style={{ background: 'rgba(231, 76, 60, 0.1)', border: '1px solid rgba(231, 76, 60, 0.3)', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, color: '#e74c3c', cursor: 'pointer' }}
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div style={{ marginTop: '16px', textAlign: 'right' }}>
+              <button
+                onClick={() => { setShowCategoryModal(false); setEditingCategory(null); }}
+                style={{
+                  padding: '8px 18px', borderRadius: '8px', border: 'none',
+                  background: 'var(--color-primary)', color: 'white',
+                  fontWeight: 800, fontSize: '13px', cursor: 'pointer'
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
 
 export default StaffOrderWorkspace;
+
 

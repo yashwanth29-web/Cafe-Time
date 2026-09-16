@@ -46,8 +46,8 @@ router.use((req, res, next) => {
 });
 
 router.get('/', getMenuItems);
-router.post('/', protect, restrictTo('super_admin', 'admin', 'owner', 'manager'), createMenuItem);
-router.post('/upload-image', protect, restrictTo('super_admin', 'admin', 'owner', 'manager'), upload.single('image'), async (req, res) => {
+router.post('/', protect, restrictTo('super_admin', 'admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier', 'waiter_cashier'), createMenuItem);
+router.post('/upload-image', protect, restrictTo('super_admin', 'admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier', 'waiter_cashier'), upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No image file uploaded' });
   }
@@ -60,7 +60,7 @@ router.post('/upload-image', protect, restrictTo('super_admin', 'admin', 'owner'
     imageUrl
   });
 });
-router.patch('/:id', protect, restrictTo('super_admin', 'admin', 'owner', 'manager'), updateMenuItem);
-router.delete('/:id', protect, restrictTo('super_admin', 'admin', 'owner', 'manager'), deleteMenuItem);
+router.patch('/:id', protect, restrictTo('super_admin', 'admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier', 'waiter_cashier'), updateMenuItem);
+router.delete('/:id', protect, restrictTo('super_admin', 'admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier', 'waiter_cashier'), deleteMenuItem);
 
 module.exports = router;
