@@ -739,32 +739,110 @@ const StaffOrderWorkspace = () => {
     };
   }, [orders]);
 
-  // Completed payments log (receipt history)
+  // Completed payments log (receipt history) with Date Filtering & Pagination
   const [completedLogs, setCompletedLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [historyDate, setHistoryDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyPaymentFilter, setHistoryPaymentFilter] = useState('all');
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyPerPage = 20;
 
-  const fetchCompletedLogs = useCallback(async () => {
+  const todayDateStr = useMemo(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const yesterdayDateStr = useMemo(() => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const fetchCompletedLogs = useCallback(async (dateToQuery) => {
+    if (!user?.cafeId || !activeBranchId) return;
     setLogsLoading(true);
     try {
-      // Query todays completed orders by fetching server data with today's date
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const res = await getOrders({ active: false, cafeId: user?.cafeId, branchId: activeBranchId, date: todayStr });
+      const targetDate = dateToQuery || historyDate;
+      const res = await getOrders({ active: false, cafeId: user.cafeId, branchId: activeBranchId, date: targetDate });
       if (res.success) {
         setCompletedLogs(res.data.filter(o => o.status === 'Completed' || o.paymentStatus === 'Paid'));
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error fetching completed orders:', e);
     } finally {
       setLogsLoading(false);
     }
-  }, [user, activeBranchId]);
+  }, [user, activeBranchId, historyDate]);
 
   useEffect(() => {
     if (tabParam === 'receipts') {
-      fetchCompletedLogs();
+      fetchCompletedLogs(historyDate);
     }
-  }, [tabParam, fetchCompletedLogs]);
+  }, [tabParam, historyDate, fetchCompletedLogs]);
+
+  // Reset to page 1 on search or date change
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyDate, historySearch, historyPaymentFilter]);
+
+  // Filter completed logs by search query and payment method
+  const filteredCompletedLogs = useMemo(() => {
+    return completedLogs.filter((log) => {
+      const q = historySearch.toLowerCase().trim();
+      const matchesSearch = !q ||
+        String(log.tableNumber || '').toLowerCase().includes(q) ||
+        String(log._id || '').toLowerCase().includes(q) ||
+        String(log.tokenNumber || '').toLowerCase().includes(q) ||
+        String(log.customerName || '').toLowerCase().includes(q) ||
+        String(log.customerMobile || '').toLowerCase().includes(q) ||
+        (log.items || []).some(it => (it.name || '').toLowerCase().includes(q));
+
+      const matchesPayment = historyPaymentFilter === 'all' ||
+        String(log.paymentMethod || 'cash').toLowerCase() === historyPaymentFilter.toLowerCase();
+
+      return matchesSearch && matchesPayment;
+    });
+  }, [completedLogs, historySearch, historyPaymentFilter]);
+
+  // Summary analytics for the selected date
+  const historySummary = useMemo(() => {
+    let totalRev = 0;
+    let cashRev = 0;
+    let upiRev = 0;
+    let itemsCount = 0;
+
+    completedLogs.forEach((log) => {
+      const amt = Number(log.totalAmount) || 0;
+      totalRev += amt;
+      const method = (log.paymentMethod || 'cash').toLowerCase();
+      if (method.includes('upi') || method.includes('online') || method.includes('qr')) {
+        upiRev += amt;
+      } else {
+        cashRev += amt;
+      }
+      (log.items || []).forEach((it) => {
+        itemsCount += (Number(it.quantity) || 1);
+      });
+    });
+
+    return {
+      totalOrders: completedLogs.length,
+      totalRevenue: totalRev,
+      cashRevenue: cashRev,
+      upiRevenue: upiRev,
+      totalItems: itemsCount
+    };
+  }, [completedLogs]);
+
+  // Pagination calculation
+  const totalHistoryPages = Math.max(1, Math.ceil(filteredCompletedLogs.length / historyPerPage));
+  const paginatedCompletedLogs = useMemo(() => {
+    const start = (historyPage - 1) * historyPerPage;
+    return filteredCompletedLogs.slice(start, start + historyPerPage);
+  }, [filteredCompletedLogs, historyPage, historyPerPage]);
 
   return (
     <div className="workspace-wrapper">
@@ -832,7 +910,7 @@ const StaffOrderWorkspace = () => {
               border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px'
             }}
           >
-            📝 Completed (Today)
+            🧾 Order History
           </button>
           <button
             onClick={() => setSearchParams({ tab: 'menu' })}
@@ -1135,54 +1213,419 @@ const StaffOrderWorkspace = () => {
         </div>
       )}
 
-      {/* ======================= TAB 2: COMPLETED LOGS ======================= */}
+      {/* ======================= TAB 2: COMPLETED ORDER HISTORY ======================= */}
       {tabParam === 'receipts' && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' }}>
-          <h3 style={{ marginBottom: '16px', color: 'var(--color-text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>
-            🧾 Today's Completed Bills
-          </h3>
-
-          {logsLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
-              <p>Loading receipts...</p>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          
+          {/* Header & Date Picker Bar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                🧾 Order History & Bills
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                Showing completed & paid orders for <strong>{new Date(historyDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</strong>
+              </p>
             </div>
-          ) : completedLogs.length === 0 ? (
-            <div style={{ padding: '40px 0', textStyle: 'italic', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              No completed bills logged for today yet.
+
+            {/* Date Pickers */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setHistoryDate(todayDateStr)}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '10px',
+                  border: historyDate === todayDateStr ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                  background: historyDate === todayDateStr ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                  color: historyDate === todayDateStr ? '#fff' : 'var(--color-text-secondary)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setHistoryDate(yesterdayDateStr)}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '10px',
+                  border: historyDate === yesterdayDateStr ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                  background: historyDate === yesterdayDateStr ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                  color: historyDate === yesterdayDateStr ? '#fff' : 'var(--color-text-secondary)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Yesterday
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '4px 10px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>📅</span>
+                <input
+                  type="date"
+                  value={historyDate}
+                  onChange={(e) => {
+                    if (e.target.value) setHistoryDate(e.target.value);
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    cursor: 'pointer'
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={() => fetchCompletedLogs(historyDate)}
+                title="Refresh bills for selected date"
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--color-text-secondary)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                🔄 Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* Daily Summary Ribbon */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: '10px',
+            background: 'var(--bg-secondary)',
+            padding: '14px',
+            borderRadius: '12px',
+            border: '1px solid var(--color-border)'
+          }}>
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Bills</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>
+                {historySummary.totalOrders}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Revenue</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#27ae60', marginTop: '2px' }}>
+                ₹{historySummary.totalRevenue.toFixed(2)}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Cash Collected</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e67e22', marginTop: '2px' }}>
+                ₹{historySummary.cashRevenue.toFixed(2)}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>UPI / Online</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#2980b9', marginTop: '2px' }}>
+                ₹{historySummary.upiRevenue.toFixed(2)}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Dishes Sold</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)', marginTop: '2px' }}>
+                {historySummary.totalItems} items
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Filter Row */}
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ position: 'relative', flex: '1 1 260px' }}>
+              <input
+                type="text"
+                placeholder="🔍 Search by Table, Token #, Bill ID, Customer..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  paddingRight: historySearch ? '36px' : '14px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--color-text-primary)',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              />
+              {historySearch && (
+                <button
+                  onClick={() => setHistorySearch('')}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: '13px'
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Payment Filter Pills */}
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              {[
+                { id: 'all', label: 'All Modes' },
+                { id: 'cash', label: '💵 Cash' },
+                { id: 'upi', label: '📱 UPI' }
+              ].map((pill) => (
+                <button
+                  key={pill.id}
+                  onClick={() => setHistoryPaymentFilter(pill.id)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: historyPaymentFilter === pill.id ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                    background: historyPaymentFilter === pill.id ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                    color: historyPaymentFilter === pill.id ? '#fff' : 'var(--color-text-secondary)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Orders Content */}
+          {logsLoading ? (
+            <div style={{ textAlign: 'center', padding: '50px 0' }}>
+              <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>Fetching bills for {historyDate}...</p>
+            </div>
+          ) : filteredCompletedLogs.length === 0 ? (
+            <div style={{
+              padding: '50px 20px',
+              textAlign: 'center',
+              color: 'var(--color-text-secondary)',
+              background: 'var(--bg-secondary)',
+              borderRadius: '12px',
+              border: '1px dashed var(--color-border)'
+            }}>
+              <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🧾</div>
+              <div style={{ fontWeight: 700, color: 'var(--color-text-primary)', fontSize: '15px' }}>
+                No completed orders found
+              </div>
+              <p style={{ fontSize: '12.5px', marginTop: '4px' }}>
+                {historySearch || historyPaymentFilter !== 'all'
+                  ? 'No bills match your current search or payment filter.'
+                  : `No orders were recorded on ${historyDate}.`}
+              </p>
+              {(historySearch || historyPaymentFilter !== 'all') && (
+                <button
+                  onClick={() => { setHistorySearch(''); setHistoryPaymentFilter('all'); }}
+                  className="btn btn-secondary"
+                  style={{ width: 'auto', marginTop: '10px', fontSize: '12px', padding: '6px 14px' }}
+                >
+                  Clear Filters
+                </button>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {completedLogs.map((log) => (
-                <div
-                  key={log._id}
-                  style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    background: 'var(--bg-secondary)', padding: '12px 18px', borderRadius: '12px'
-                  }}
-                >
-                  <div>
-                    <strong style={{ color: 'var(--color-text-primary)', fontSize: '13.5px' }}>Table {log.tableNumber}</strong>
-                    <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '2px' }}>
-                      Bill ID: #{log._id.toUpperCase()} · Paid via {log.paymentMethod || 'Cash'} at {log.paidAt ? new Date(log.paidAt).toLocaleTimeString() : new Date(log.createdAt).toLocaleTimeString()}
-                    </span>
+              {paginatedCompletedLogs.map((log) => {
+                const isTableOrder = log.tableNumber && log.tableNumber !== 'Takeaway' && log.tableNumber !== 'Walk-in';
+                const timeStr = log.paidAt
+                  ? new Date(log.paidAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const tokenStr = log.tokenNumber ? `#${log.tokenNumber}` : `#${String(log._id).slice(-4).toUpperCase()}`;
+
+                return (
+                  <div
+                    key={log._id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: 'var(--bg-secondary)',
+                      padding: '14px 18px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--color-border)',
+                      flexWrap: 'wrap',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ minWidth: '220px', flex: '1 1 300px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          background: isTableOrder ? 'var(--color-primary)' : '#7f8c8d',
+                          color: '#fff',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 700
+                        }}>
+                          {isTableOrder ? `Table ${log.tableNumber}` : log.tableNumber || 'Takeaway'}
+                        </span>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                          {tokenStr}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                          🕒 {timeStr}
+                        </span>
+                        <span style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          fontWeight: 600,
+                          background: (log.paymentMethod || '').toLowerCase().includes('upi') ? 'rgba(41, 128, 185, 0.15)' : 'rgba(230, 126, 34, 0.15)',
+                          color: (log.paymentMethod || '').toLowerCase().includes('upi') ? '#2980b9' : '#e67e22'
+                        }}>
+                          Paid via {log.paymentMethod || 'Cash'}
+                        </span>
+                      </div>
+
+                      {/* Items Preview */}
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '6px', lineHeight: '1.4' }}>
+                        {(log.items || []).map((it, idx) => (
+                          <span key={idx} style={{ marginRight: '8px' }}>
+                            <strong style={{ color: 'var(--color-text-primary)' }}>{it.quantity}x</strong> {it.name}
+                            {idx < (log.items.length - 1) ? ',' : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ color: '#27ae60', fontSize: '1.15rem', fontWeight: 800 }}>
+                          ₹{Number(log.totalAmount).toFixed(2)}
+                        </div>
+                        <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)' }}>
+                          ID: {String(log._id).slice(-6).toUpperCase()}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={() => printPOSReceipt(log, user, cafeInfo, currentBranch)}
+                          style={{
+                            background: 'var(--color-primary)',
+                            color: 'white',
+                            border: 'none',
+                            padding: '7px 12px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="Reprint Customer POS Bill"
+                        >
+                          🖨️ POS
+                        </button>
+                        <button
+                          onClick={() => printKOT(log, user, cafeInfo, currentBranch)}
+                          style={{
+                            background: 'var(--bg-card)',
+                            color: 'var(--color-text-primary)',
+                            border: '1px solid var(--color-border)',
+                            padding: '7px 10px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 600
+                          }}
+                          title="Reprint Kitchen KOT Ticket"
+                        >
+                          🧾 KOT
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <strong style={{ color: '#27ae60', fontSize: '14px' }}>₹{log.totalAmount}</strong>
-                    <button
-                      onClick={() => printPOSReceipt(log, user, cafeInfo, currentBranch)}
-                      style={{
-                        background: 'var(--color-primary)', color: 'white', border: 'none',
-                        padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold'
-                      }}
-                    >
-                      Reprint POS
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
+
+          {/* Pagination Footer */}
+          {filteredCompletedLogs.length > historyPerPage && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingTop: '12px',
+              borderTop: '1px solid var(--color-border)',
+              flexWrap: 'wrap',
+              gap: '10px'
+            }}>
+              <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
+                Showing <strong>{((historyPage - 1) * historyPerPage) + 1}</strong> – <strong>{Math.min(historyPage * historyPerPage, filteredCompletedLogs.length)}</strong> of <strong>{filteredCompletedLogs.length}</strong> bills
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  disabled={historyPage === 1}
+                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: historyPage === 1 ? 'transparent' : 'var(--bg-secondary)',
+                    color: historyPage === 1 ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: historyPage === 1 ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  ◀ Prev
+                </button>
+
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)', padding: '0 8px' }}>
+                  Page {historyPage} of {totalHistoryPages}
+                </span>
+
+                <button
+                  disabled={historyPage === totalHistoryPages}
+                  onClick={() => setHistoryPage((p) => Math.min(totalHistoryPages, p + 1))}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: historyPage === totalHistoryPages ? 'transparent' : 'var(--bg-secondary)',
+                    color: historyPage === totalHistoryPages ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: historyPage === totalHistoryPages ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Next ▶
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 
