@@ -374,16 +374,21 @@ const StaffOrderWorkspace = () => {
     try {
       const mergedItems = [...selectedOrderForAddItems.items];
       for (const add of itemsToAdd) {
+        const itemId = String(add.id || add._id || '');
         const existingIdx = mergedItems.findIndex(
-          (it) => (it.menuItemId && String(it.menuItemId) === String(add._id)) || it.name.toLowerCase() === add.name.toLowerCase()
+          (it) => (it.id && (String(it.id) === itemId)) ||
+                  (it.menuItemId && String(it.menuItemId) === itemId) ||
+                  it.name.toLowerCase() === add.name.toLowerCase()
         );
         if (existingIdx !== -1) {
           mergedItems[existingIdx] = {
             ...mergedItems[existingIdx],
+            id: String(mergedItems[existingIdx].id || mergedItems[existingIdx]._id || itemId),
             quantity: mergedItems[existingIdx].quantity + add.quantity
           };
         } else {
           mergedItems.push({
+            id: itemId || String(Date.now()),
             menuItemId: add._id,
             name: add.name,
             price: add.price,
@@ -416,7 +421,10 @@ const StaffOrderWorkspace = () => {
       _id: order._id,
       tableNumber: order.tableNumber,
       specialInstructions: order.specialInstructions || '',
-      items: order.items.map((it) => ({ ...it }))
+      items: order.items.map((it) => ({
+        ...it,
+        id: String(it.id || it._id || Math.random().toString(36).substring(2, 9))
+      }))
     });
     setShowEditOrderModal(true);
   };

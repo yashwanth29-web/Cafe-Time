@@ -870,13 +870,22 @@ const updateOrderDetails = async (req, res, next) => {
       const prevItems = order.items || [];
       const wasDeducted = order.inventoryDeducted;
 
+      // Normalize each item to ensure id is always present
+      const normalizedItems = items.map((it) => ({
+        id: String(it.id || it._id || it.menuItemId || new mongoose.Types.ObjectId()),
+        name: String(it.name || 'Item'),
+        price: Number(it.price) || 0,
+        quantity: Math.max(1, Number(it.quantity) || 1),
+        image: it.image || '/images/default-food.png'
+      }));
+
       // Recalculate totals
-      const subtotal = items.reduce((sum, it) => sum + (Number(it.price) * Number(it.quantity)), 0);
+      const subtotal = normalizedItems.reduce((sum, it) => sum + (Number(it.price) * Number(it.quantity)), 0);
       const taxRate = order.tax && order.subtotal ? (order.tax / order.subtotal) : 0.05;
       const tax = Number((subtotal * taxRate).toFixed(2));
       const grandTotal = Number((subtotal + tax).toFixed(2));
 
-      order.items = items;
+      order.items = normalizedItems;
       order.subtotal = subtotal;
       order.tax = tax;
       order.totalAmount = grandTotal;
