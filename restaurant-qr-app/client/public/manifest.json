@@ -1,16 +1,43 @@
 {
-  "short_name": "Dr. Chai Cafe",
-  "name": "Dr. Chai Cafe - Smart QR Ordering",
-  "icons": [
-    {
-      "src": "/logo.png",
-      "type": "image/png",
-      "sizes": "192x192 512x512"
-    }
-  ],
+  "name": "Dr. Chai Cafe",
+  "short_name": "Dr.Chai",
+  "description": "Dr. Chai Cafe - Smart QR Table Ordering & Management",
   "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#FAF6F0",
   "theme_color": "#6F4E37",
-  "display": "standalone",
-  "orientation": "portrait"
+  "lang": "en-IN",
+  "icons": [
+    {
+      "src": "/logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Staff Dashboard",
+      "short_name": "Staff",
+      "description": "Open Staff Order Workspace",
+      "url": "/staff/workspace",
+      "icons": [{ "src": "/logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Owner Dashboard",
+      "short_name": "Owner",
+      "description": "Open Owner Dashboard",
+      "url": "/owner/dashboard",
+      "icons": [{ "src": "/logo192.png", "sizes": "192x192" }]
+    }
+  ],
+  "categories": ["food", "business", "productivity"]
 }
