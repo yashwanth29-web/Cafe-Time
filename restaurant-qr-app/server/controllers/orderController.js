@@ -157,8 +157,8 @@ const appendLegacyFallback = async (order, branchMap = null) => {
 
   if (!orderObj.grandTotal) {
     orderObj.grandTotal = orderObj.totalAmount || 0;
-    orderObj.subtotal = Number((orderObj.grandTotal / 1.05).toFixed(2));
-    orderObj.tax = Number((orderObj.grandTotal - orderObj.subtotal).toFixed(2));
+    orderObj.subtotal = orderObj.subtotal !== undefined ? orderObj.subtotal : orderObj.grandTotal;
+    orderObj.tax = orderObj.tax !== undefined ? orderObj.tax : 0;
   }
 
   return orderObj;
@@ -331,9 +331,10 @@ const createOrder = async (req, res, next) => {
     }
 
     // 7. Payment Config tax and platformCharge
-    const paymentConfig = await PaymentConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean();
-    const taxRate = paymentConfig ? (paymentConfig.taxRate || 0) : 5; // Default 5%
-    const platformCharge = paymentConfig ? (paymentConfig.platformCharge || 0) : 0;
+    const paymentConfig = await PaymentConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean()
+      || await PaymentConfig.findOne({ cafeId: activeCafeId }).lean();
+    const taxRate = paymentConfig && paymentConfig.taxRate !== undefined ? Number(paymentConfig.taxRate) : 0;
+    const platformCharge = paymentConfig && paymentConfig.platformCharge !== undefined ? Number(paymentConfig.platformCharge) : 0;
 
     const finalSubtotal = computedTotal;
     const finalTax = Number((finalSubtotal * (taxRate / 100)).toFixed(2));
@@ -860,9 +861,21 @@ const updateOrderDetails = async (req, res, next) => {
 
       // Recalculate totals
       const subtotal = normalizedItems.reduce((sum, it) => sum + (Number(it.price) * Number(it.quantity)), 0);
-      const taxRate = order.tax && order.subtotal ? (order.tax / order.subtotal) : 0.05;
+      
+      // Determine tax rate accurately without arbitrary hardcoding
+      let taxRate = 0;
+      if (order.subtotal && order.subtotal > 0 && order.tax !== undefined && order.tax !== null) {
+        taxRate = order.tax / order.subtotal;
+      } else {
+        const PaymentConfig = require('../models/PaymentConfig');
+        const paymentConfig = await PaymentConfig.findOne({ cafeId: order.cafeId, branchId: order.branchId }).lean()
+          || await PaymentConfig.findOne({ cafeId: order.cafeId }).lean();
+        taxRate = paymentConfig && paymentConfig.taxRate !== undefined ? (Number(paymentConfig.taxRate) / 100) : 0;
+      }
+
       const tax = Number((subtotal * taxRate).toFixed(2));
-      const grandTotal = Number((subtotal + tax).toFixed(2));
+      const platformCharge = Number(order.platformCharge || 0);
+      const grandTotal = Number((subtotal + tax + platformCharge).toFixed(2));
 
       order.items = normalizedItems;
       order.subtotal = subtotal;
