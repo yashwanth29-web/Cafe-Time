@@ -1000,17 +1000,6 @@ const StaffOrderWorkspace = () => {
                       >
                         🗑️ Delete
                       </button>
-                      <button
-                        onClick={() => window.location.href = `/?table=${order.tableNumber || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`}
-                        style={{
-                          background: 'rgba(46, 204, 113, 0.12)', color: '#27ae60', border: '1px solid rgba(46, 204, 113, 0.3)',
-                          padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700,
-                          display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto'
-                        }}
-                        title="Take a new order for this table"
-                      >
-                        📋 +New Order
-                      </button>
                     </div>
 
                     {/* Special Instructions */}
