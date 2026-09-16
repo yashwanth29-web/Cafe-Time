@@ -1791,11 +1791,11 @@ const getDashboardStats = async (req, res) => {
     
     const startOfYear = new Date(Date.UTC(year, 0, 1) - (5.5 * 60 * 60 * 1000));
 
-    // Completed & Paid orders for revenue calculations
+    // Revenue: count orders that are Ready, Delivered, or Completed
+    // (In a cafe counter model, Order Ready = sale is fulfilled)
     const revenueMatch = {
       ...orderMatchQuery,
-      status: 'Completed',
-      paymentStatus: 'Paid'
+      status: { $in: ['Ready', 'Delivered', 'Completed'] }
     };
     
     const invMatchQuery = { cafeId };
@@ -1864,7 +1864,8 @@ const getDashboardStats = async (req, res) => {
         }
       ]),
       Order.aggregate([
-        { $match: { ...revenueMatch, createdAt: { $gte: startOfMonth } } },
+        // Order Source: count all non-cancelled orders this month (any status)
+        { $match: { ...orderMatchQuery, createdAt: { $gte: startOfMonth }, status: { $nin: ['Cancelled', 'Failed', 'Expired'] } } },
         { $group: { _id: '$orderSource', count: { $sum: 1 } } }
       ]),
       Order.aggregate([

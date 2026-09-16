@@ -2336,8 +2336,9 @@ const exportStaffToCSV = () => {
  };
 
   // Analytical Calculations
+  // Count Ready/Delivered/Completed orders as revenue (cafe counter model: Order Ready = sale done)
   const completedOrders = useMemo(() => {
-    return orders.filter((o) => o.paymentStatus === 'Paid' && o.status === 'Completed');
+    return orders.filter((o) => ['Ready', 'Delivered', 'Completed'].includes(o.status));
   }, [orders]);
 
   const todayOrders = useMemo(() => {
