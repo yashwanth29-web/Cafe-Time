@@ -298,7 +298,7 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
             return (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => setSelectedCategory(prev => prev === cat ? 'All' : cat)}
                 className={`category-btn ${selectedCategory === cat ? 'active' : ''}`}
               >
                 <div className="category-btn-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>

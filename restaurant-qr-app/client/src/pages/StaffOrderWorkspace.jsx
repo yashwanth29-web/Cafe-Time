@@ -77,11 +77,15 @@ const StaffOrderWorkspace = () => {
     price: '',
     makingCost: '',
     category: 'Signature Chai',
-    description: '',
     available: true,
     image: '',
+    recipe: [],
     preparationTime: 10
   });
+
+  // Recipe Ingredient Mapping State
+  const [selectedIngredient, setSelectedIngredient] = useState('');
+  const [ingredientQuantity, setIngredientQuantity] = useState('');
 
   // Category Management Modal
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -143,6 +147,7 @@ const StaffOrderWorkspace = () => {
   const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
   const [purchaseForm, setPurchaseForm] = useState({
     quantityAdded: '',
+    totalCost: '',
     costPrice: '',
     supplier: '',
     notes: ''
@@ -366,6 +371,84 @@ const StaffOrderWorkspace = () => {
   }, [inventory, inventorySearch, selectedInventoryCategory, selectedInventoryStatus]);
 
   // Menu Management Handlers
+  const handleAddIngredientToNewItem = () => {
+    if (!selectedIngredient || !ingredientQuantity || parseFloat(ingredientQuantity) <= 0) {
+      alert('Please select an ingredient and enter a valid quantity.');
+      return;
+    }
+    const currentRecipe = newMenuItem.recipe || [];
+    const exists = currentRecipe.some((i) => i.name === selectedIngredient);
+    if (exists) {
+      alert('This ingredient is already mapped. You can edit its quantity in the list below.');
+      return;
+    }
+    const updatedRecipe = [...currentRecipe, { name: selectedIngredient, quantity: parseFloat(ingredientQuantity) }];
+    const calculatedCost = updatedRecipe.reduce((sum, ing) => {
+      const inv = inventory.find((i) => i.name === ing.name);
+      return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+    }, 0);
+
+    setNewMenuItem({
+      ...newMenuItem,
+      recipe: updatedRecipe,
+      makingCost: calculatedCost > 0 ? calculatedCost.toFixed(2) : newMenuItem.makingCost
+    });
+    setSelectedIngredient('');
+    setIngredientQuantity('');
+  };
+
+  const handleRemoveIngredientFromNewItem = (ingName) => {
+    const updatedRecipe = (newMenuItem.recipe || []).filter((i) => i.name !== ingName);
+    const calculatedCost = updatedRecipe.reduce((sum, ing) => {
+      const inv = inventory.find((i) => i.name === ing.name);
+      return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+    }, 0);
+    setNewMenuItem({
+      ...newMenuItem,
+      recipe: updatedRecipe,
+      makingCost: calculatedCost > 0 ? calculatedCost.toFixed(2) : (updatedRecipe.length === 0 ? '0' : newMenuItem.makingCost)
+    });
+  };
+
+  const handleAddIngredientToEditingItem = () => {
+    if (!selectedIngredient || !ingredientQuantity || parseFloat(ingredientQuantity) <= 0) {
+      alert('Please select an ingredient and enter a valid quantity.');
+      return;
+    }
+    const currentRecipe = editingMenuItem.recipe || [];
+    const exists = currentRecipe.some((i) => i.name === selectedIngredient);
+    if (exists) {
+      alert('This ingredient is already mapped. You can edit its quantity in the list below.');
+      return;
+    }
+    const updatedRecipe = [...currentRecipe, { name: selectedIngredient, quantity: parseFloat(ingredientQuantity) }];
+    const calculatedCost = updatedRecipe.reduce((sum, ing) => {
+      const inv = inventory.find((i) => i.name === ing.name);
+      return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+    }, 0);
+
+    setEditingMenuItem({
+      ...editingMenuItem,
+      recipe: updatedRecipe,
+      makingCost: calculatedCost > 0 ? calculatedCost.toFixed(2) : editingMenuItem.makingCost
+    });
+    setSelectedIngredient('');
+    setIngredientQuantity('');
+  };
+
+  const handleRemoveIngredientFromEditingItem = (ingName) => {
+    const updatedRecipe = (editingMenuItem.recipe || []).filter((i) => i.name !== ingName);
+    const calculatedCost = updatedRecipe.reduce((sum, ing) => {
+      const inv = inventory.find((i) => i.name === ing.name);
+      return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+    }, 0);
+    setEditingMenuItem({
+      ...editingMenuItem,
+      recipe: updatedRecipe,
+      makingCost: calculatedCost > 0 ? calculatedCost.toFixed(2) : (updatedRecipe.length === 0 ? '0' : editingMenuItem.makingCost)
+    });
+  };
+
   const handleAddMenuItem = async (e) => {
     e.preventDefault();
     if (isMenuSubmitting) return;
@@ -381,6 +464,7 @@ const StaffOrderWorkspace = () => {
         price: parseFloat(newMenuItem.price) || 0,
         makingCost: parseFloat(newMenuItem.makingCost) || 0,
         preparationTime: parseInt(newMenuItem.preparationTime, 10) || 10,
+        recipe: newMenuItem.recipe || [],
         branchId: branchIdToSave
       });
       if (response.success && response.data) {
@@ -396,9 +480,9 @@ const StaffOrderWorkspace = () => {
           price: '',
           makingCost: '',
           category: menuCategories[0]?.name || 'Signature Chai',
-          description: '',
           available: true,
           image: '',
+          recipe: [],
           preparationTime: 10
         });
         alert('Dish added to menu successfully!');
@@ -427,7 +511,8 @@ const StaffOrderWorkspace = () => {
         ...editingMenuItem,
         price: parseFloat(editingMenuItem.price) || 0,
         makingCost: parseFloat(editingMenuItem.makingCost) || 0,
-        preparationTime: parseInt(editingMenuItem.preparationTime, 10) || 10
+        preparationTime: parseInt(editingMenuItem.preparationTime, 10) || 10,
+        recipe: editingMenuItem.recipe || []
       });
       if (response.success && response.data) {
         const updatedItem = { ...response.data, id: response.data._id || response.data.id };
@@ -970,20 +1055,25 @@ const StaffOrderWorkspace = () => {
   const handleRecordPurchase = async (e) => {
     e.preventDefault();
     if (!selectedInventoryItem || inventoryActionLoading) return;
+    const qty = parseFloat(purchaseForm.quantityAdded);
+    if (!qty || qty <= 0) {
+      alert('Please enter a valid quantity.');
+      return;
+    }
     setInventoryActionLoading(true);
     try {
       const res = await recordPurchase({
         itemId: selectedInventoryItem._id,
-        quantityAdded: parseFloat(purchaseForm.quantityAdded),
+        quantityAdded: qty,
         costPrice: parseFloat(purchaseForm.costPrice) || 0,
         supplier: purchaseForm.supplier || selectedInventoryItem.supplier || '',
         notes: purchaseForm.notes || ''
       });
       if (res && res.success) {
-        alert('Stock purchase recorded successfully.');
+        alert('Purchase entry recorded successfully.');
         setShowPurchaseModal(false);
         setSelectedInventoryItem(null);
-        setPurchaseForm({ quantityAdded: '', costPrice: '', supplier: '', notes: '' });
+        setPurchaseForm({ quantityAdded: '', totalCost: '', costPrice: '', supplier: '', notes: '' });
         fetchInventory();
       }
     } catch (err) {
@@ -2251,7 +2341,7 @@ const StaffOrderWorkspace = () => {
               return (
                 <button
                   key={cat.name}
-                  onClick={() => setSelectedMenuCategory(cat.name)}
+                  onClick={() => setSelectedMenuCategory(prev => prev.toLowerCase() === cat.name.toLowerCase() ? 'all' : cat.name)}
                   style={{
                     padding: '7px 14px',
                     borderRadius: '20px',
@@ -2551,7 +2641,7 @@ const StaffOrderWorkspace = () => {
               All Items ({inventory.length})
             </button>
             <button
-              onClick={() => setSelectedInventoryStatus('low')}
+              onClick={() => setSelectedInventoryStatus(prev => prev === 'low' ? 'all' : 'low')}
               style={{
                 padding: '6px 14px', borderRadius: '20px',
                 border: selectedInventoryStatus === 'low' ? '1.5px solid #f39c12' : '1px solid var(--color-border)',
@@ -2567,7 +2657,7 @@ const StaffOrderWorkspace = () => {
               }).length})
             </button>
             <button
-              onClick={() => setSelectedInventoryStatus('out')}
+              onClick={() => setSelectedInventoryStatus(prev => prev === 'out' ? 'all' : 'out')}
               style={{
                 padding: '6px 14px', borderRadius: '20px',
                 border: selectedInventoryStatus === 'out' ? '1.5px solid #e74c3c' : '1px solid var(--color-border)',
@@ -2579,7 +2669,7 @@ const StaffOrderWorkspace = () => {
               ❌ Out of Stock ({inventory.filter(i => (i.quantity !== undefined ? i.quantity : (i.stock ?? 0)) <= 0).length})
             </button>
             <button
-              onClick={() => setSelectedInventoryStatus('in')}
+              onClick={() => setSelectedInventoryStatus(prev => prev === 'in' ? 'all' : 'in')}
               style={{
                 padding: '6px 14px', borderRadius: '20px',
                 border: selectedInventoryStatus === 'in' ? '1.5px solid #27ae60' : '1px solid var(--color-border)',
@@ -3155,50 +3245,34 @@ const StaffOrderWorkspace = () => {
                 paddingRight: '4px',
                 maxHeight: '340px'
               }}>
-                {tableNums.map((tNum) => {
-                  const hasActiveOrders = orders.some((o) => String(o.tableNumber).trim() === tNum);
-                  return (
-                    <button
-                      key={tNum}
-                      onClick={() => {
-                        setShowTakeOrderModal(false);
-                        window.location.href = `/?table=${tNum}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
-                      }}
-                      style={{
-                        padding: '13px 10px',
-                        borderRadius: '12px',
-                        border: `1.5px solid ${hasActiveOrders ? 'rgba(224, 142, 39, 0.5)' : 'var(--color-border)'}`,
-                        background: hasActiveOrders ? 'rgba(224, 142, 39, 0.08)' : 'var(--bg-secondary)',
-                        color: 'var(--color-text-primary)',
-                        fontSize: '14px',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        transition: 'all 0.15s ease',
-                        fontFamily: 'inherit'
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>🪑</span>
-                        <span>Table {tNum}</span>
-                      </span>
-                      {hasActiveOrders && (
-                        <span style={{
-                          fontSize: '10px',
-                          background: 'var(--color-primary)',
-                          color: '#ffffff',
-                          padding: '2px 5px',
-                          borderRadius: '6px',
-                          fontWeight: 700
-                        }}>
-                          Active
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                {tableNums.map((tNum) => (
+                  <button
+                    key={tNum}
+                    onClick={() => {
+                      setShowTakeOrderModal(false);
+                      window.location.href = `/?table=${tNum}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
+                    }}
+                    style={{
+                      padding: '13px 10px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--color-border)',
+                      background: 'var(--bg-secondary)',
+                      color: 'var(--color-text-primary)',
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease',
+                      fontFamily: 'inherit'
+                    }}
+                  >
+                    <span>🪑</span>
+                    <span>Table {tNum}</span>
+                  </button>
+                ))}
               </div>
 
               {/* Takeaway / Walk-in Button */}
@@ -3724,74 +3798,170 @@ const StaffOrderWorkspace = () => {
       {showPurchaseModal && selectedInventoryItem && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1100,
           display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px'
         }}>
           <div style={{
             background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
-            width: '100%', maxWidth: '400px', boxShadow: 'var(--shadow-lg)'
+            width: '100%', maxWidth: '440px', boxShadow: 'var(--shadow-lg)'
           }}>
-            <h3 style={{ margin: '0 0 8px 0', color: '#27ae60', fontSize: '1.15rem', fontWeight: 700 }}>
-              📦 Purchase & Restock
-            </h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-              Adding stock for: <strong>{selectedInventoryItem.name}</strong> (Current: {selectedInventoryItem.quantity !== undefined ? selectedInventoryItem.quantity : selectedInventoryItem.stock} {selectedInventoryItem.unit})
-            </p>
-            <form onSubmit={handleRecordPurchase} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                Record Purchase Entry
+              </h3>
+              <button
+                onClick={() => { setShowPurchaseModal(false); setSelectedInventoryItem(null); }}
+                style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordPurchase} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Quantity to Add ({selectedInventoryItem.unit}) *
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                  Ingredient: <strong style={{ color: 'var(--color-text-primary)' }}>{selectedInventoryItem.name}</strong> {selectedInventoryItem.unit ? `(${selectedInventoryItem.unit})` : ''}
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Quantity Purchased {selectedInventoryItem.unit ? `(${selectedInventoryItem.unit})` : ''} *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    min="0.001"
+                    placeholder="e.g. 10"
+                    value={purchaseForm.quantityAdded}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const qty = parseFloat(val);
+                      const unitCost = parseFloat(purchaseForm.costPrice);
+                      let newTotal = purchaseForm.totalCost;
+                      if (!isNaN(qty) && qty > 0 && !isNaN(unitCost) && unitCost >= 0) {
+                        newTotal = Number((qty * unitCost).toFixed(2));
+                      } else if (val === '') {
+                        newTotal = '';
+                      }
+                      setPurchaseForm((prev) => ({
+                        ...prev,
+                        quantityAdded: val,
+                        totalCost: newTotal
+                      }));
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Total Bill Amount (₹) <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(Optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="e.g. 150"
+                    value={purchaseForm.totalCost}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const total = parseFloat(val);
+                      const qty = parseFloat(purchaseForm.quantityAdded);
+                      let newUnitCost = purchaseForm.costPrice;
+                      if (!isNaN(total) && !isNaN(qty) && qty > 0) {
+                        newUnitCost = Number((total / qty).toFixed(4));
+                      }
+                      setPurchaseForm((prev) => ({
+                        ...prev,
+                        totalCost: val,
+                        costPrice: newUnitCost
+                      }));
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Cost Price per {selectedInventoryItem.unit || 'Unit'} (₹) *
+                  <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', fontWeight: 'normal', marginLeft: '6px' }}>
+                    (Auto-calculated from ingredient / total bill)
+                  </span>
                 </label>
                 <input
+                  type="number"
+                  step="any"
                   required
-                  autoFocus
-                  type="number"
-                  step="any"
-                  min="0.001"
-                  placeholder="e.g. 5"
-                  value={purchaseForm.quantityAdded}
-                  onChange={(e) => setPurchaseForm({ ...purchaseForm, quantityAdded: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Unit Cost Price (₹)
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="0.00"
+                  min="0"
+                  placeholder="e.g. 1.50"
                   value={purchaseForm.costPrice}
-                  onChange={(e) => setPurchaseForm({ ...purchaseForm, costPrice: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const unitCost = parseFloat(val);
+                    const qty = parseFloat(purchaseForm.quantityAdded);
+                    let newTotal = purchaseForm.totalCost;
+                    if (!isNaN(unitCost) && !isNaN(qty) && qty > 0) {
+                      newTotal = Number((qty * unitCost).toFixed(2));
+                    }
+                    setPurchaseForm((prev) => ({
+                      ...prev,
+                      costPrice: val,
+                      totalCost: newTotal
+                    }));
+                  }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
                 />
               </div>
 
+              {/* Auto Calculation Preview Banner */}
+              {Number(purchaseForm.quantityAdded) > 0 && Number(purchaseForm.costPrice) >= 0 && (
+                <div style={{
+                  background: 'rgba(46, 204, 113, 0.12)',
+                  border: '1px solid rgba(46, 204, 113, 0.3)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  fontSize: '13px',
+                  color: '#27ae60',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '6px'
+                }}>
+                  <span>✓ <strong>Total Bill:</strong> ₹{(Number(purchaseForm.quantityAdded) * Number(purchaseForm.costPrice)).toFixed(2)}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                    ₹{Number(purchaseForm.costPrice).toFixed(2)} per {selectedInventoryItem.unit || 'unit'}
+                  </span>
+                </div>
+              )}
+
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Supplier / Vendor Name
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Supplier
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Metro Cash & Carry"
+                  placeholder="e.g. Metro Cash & Carry (Optional)"
                   value={purchaseForm.supplier}
                   onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Notes / Bill Ref
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                  Notes
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Invoice #4482"
+                <textarea
+                  rows="2"
+                  placeholder="e.g. Weekly restocking"
                   value={purchaseForm.notes}
                   onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', boxSizing: 'border-box', resize: 'vertical' }}
                 />
               </div>
 
@@ -3799,16 +3969,16 @@ const StaffOrderWorkspace = () => {
                 <button
                   type="button"
                   onClick={() => { setShowPurchaseModal(false); setSelectedInventoryItem(null); }}
-                  style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}
+                  style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', fontWeight: 700, fontSize: '13px', color: 'var(--color-text-secondary)' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={inventoryActionLoading}
-                  style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#27ae60', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px' }}
+                  style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: 'var(--color-primary)', color: 'white', cursor: inventoryActionLoading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px' }}
                 >
-                  {inventoryActionLoading ? 'Saving...' : 'Record Purchase'}
+                  {inventoryActionLoading ? 'Saving...' : 'Save Entry'}
                 </button>
               </div>
             </form>
@@ -4035,22 +4205,121 @@ const StaffOrderWorkspace = () => {
                 </div>
               </div>
 
-              {/* Description */}
-              <div>
-                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
-                  Description & Recipe
+              {/* Recipe Mapping (Ingredients) */}
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '14px', marginTop: '4px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '8px' }}>
+                  Recipe Mapping (Ingredients)
                 </label>
-                <textarea
-                  rows="2"
-                  placeholder="Ingredients or special preparation notes..."
-                  value={newMenuItem.description}
-                  onChange={(e) => setNewMenuItem({ ...newMenuItem, description: e.target.value })}
-                  style={{
-                    width: '100%', padding: '10px 14px', borderRadius: '8px',
-                    border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
-                    color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box', resize: 'vertical'
-                  }}
-                />
+                
+                {(!newMenuItem.recipe || newMenuItem.recipe.length === 0) ? (
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '4px 0 10px 0' }}>
+                    No ingredients mapped yet. This item will not deduct stock.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                    {newMenuItem.recipe.map((ing, idx) => {
+                      const invItem = inventory.find((i) => i.name === ing.name);
+                      return (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{ing.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="number"
+                              value={ing.quantity}
+                              min="0.001"
+                              step="0.001"
+                              onChange={(e) => {
+                                const updated = [...newMenuItem.recipe];
+                                updated[idx].quantity = Number(e.target.value);
+                                const calculatedCost = updated.reduce((sum, item) => {
+                                  const inv = inventory.find((i) => i.name === item.name);
+                                  return sum + (Number(item.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+                                }, 0);
+                                setNewMenuItem({
+                                  ...newMenuItem,
+                                  recipe: updated,
+                                  makingCost: calculatedCost > 0 ? calculatedCost.toFixed(2) : newMenuItem.makingCost
+                                });
+                              }}
+                              style={{ width: '65px', padding: '4px 6px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent', textAlign: 'center' }}
+                            />
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{invItem?.unit || 'unit'}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveIngredientFromNewItem(ing.name)}
+                              style={{ background: 'transparent', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: '14px', padding: '2px' }}
+                              title="Remove ingredient"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Auto Calculated Ingredient Cost Banner */}
+                {newMenuItem.recipe && newMenuItem.recipe.length > 0 && (() => {
+                  const calcMakingCost = newMenuItem.recipe.reduce((sum, ing) => {
+                    const inv = inventory.find(i => i.name === ing.name);
+                    return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+                  }, 0);
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 107, 8, 0.08)', border: '1px dashed var(--color-primary)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                      <span style={{ fontSize: '12.5px', color: 'var(--color-text-primary)' }}>
+                        Ingredient Cost from Recipe: <strong style={{ color: 'var(--color-primary)' }}>₹{calcMakingCost.toFixed(2)}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setNewMenuItem({ ...newMenuItem, makingCost: calcMakingCost.toFixed(2) })}
+                        style={{ padding: '4px 10px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        Use as Making Cost
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {/* Add Ingredient Selector Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      Select Ingredient
+                    </label>
+                    <select
+                      value={selectedIngredient}
+                      onChange={(e) => setSelectedIngredient(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', fontSize: '12px', boxSizing: 'border-box' }}
+                    >
+                      <option value="">-- Choose Ingredient --</option>
+                      {inventory.map((inv) => (
+                        <option key={inv._id} value={inv.name}>{inv.name} ({inv.unit || 'unit'})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      Quantity
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0.001"
+                      placeholder="e.g. 10"
+                      value={ingredientQuantity}
+                      onChange={(e) => setIngredientQuantity(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddIngredientToNewItem}
+                    style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 700, fontSize: '12.5px', height: '36px' }}
+                  >
+                    Map
+                  </button>
+                </div>
               </div>
 
               {/* Dish Photo Upload */}
@@ -4252,21 +4521,121 @@ const StaffOrderWorkspace = () => {
                 </div>
               </div>
 
-              {/* Description */}
-              <div>
-                <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
-                  Description & Recipe
+              {/* Recipe Mapping (Ingredients) */}
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '14px', marginTop: '4px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '8px' }}>
+                  Recipe Mapping (Ingredients)
                 </label>
-                <textarea
-                  rows="2"
-                  value={editingMenuItem.description}
-                  onChange={(e) => setEditingMenuItem({ ...editingMenuItem, description: e.target.value })}
-                  style={{
-                    width: '100%', padding: '10px 14px', borderRadius: '8px',
-                    border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
-                    color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box', resize: 'vertical'
-                  }}
-                />
+                
+                {(!editingMenuItem.recipe || editingMenuItem.recipe.length === 0) ? (
+                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '4px 0 10px 0' }}>
+                    No ingredients mapped yet. This item will not deduct stock.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                    {editingMenuItem.recipe.map((ing, idx) => {
+                      const invItem = inventory.find((i) => i.name === ing.name);
+                      return (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{ing.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="number"
+                              value={ing.quantity}
+                              min="0.001"
+                              step="0.001"
+                              onChange={(e) => {
+                                const updated = [...editingMenuItem.recipe];
+                                updated[idx].quantity = Number(e.target.value);
+                                const calculatedCost = updated.reduce((sum, item) => {
+                                  const inv = inventory.find((i) => i.name === item.name);
+                                  return sum + (Number(item.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+                                }, 0);
+                                setEditingMenuItem({
+                                  ...editingMenuItem,
+                                  recipe: updated,
+                                  makingCost: calculatedCost > 0 ? calculatedCost.toFixed(2) : editingMenuItem.makingCost
+                                });
+                              }}
+                              style={{ width: '65px', padding: '4px 6px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent', textAlign: 'center' }}
+                            />
+                            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{invItem?.unit || 'unit'}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveIngredientFromEditingItem(ing.name)}
+                              style={{ background: 'transparent', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: '14px', padding: '2px' }}
+                              title="Remove ingredient"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Auto Calculated Ingredient Cost Banner */}
+                {editingMenuItem.recipe && editingMenuItem.recipe.length > 0 && (() => {
+                  const calcMakingCost = editingMenuItem.recipe.reduce((sum, ing) => {
+                    const inv = inventory.find(i => i.name === ing.name);
+                    return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
+                  }, 0);
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 107, 8, 0.08)', border: '1px dashed var(--color-primary)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                      <span style={{ fontSize: '12.5px', color: 'var(--color-text-primary)' }}>
+                        Ingredient Cost from Recipe: <strong style={{ color: 'var(--color-primary)' }}>₹{calcMakingCost.toFixed(2)}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditingMenuItem({ ...editingMenuItem, makingCost: calcMakingCost.toFixed(2) })}
+                        style={{ padding: '4px 10px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        Use as Making Cost
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {/* Add Ingredient Selector Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      Select Ingredient
+                    </label>
+                    <select
+                      value={selectedIngredient}
+                      onChange={(e) => setSelectedIngredient(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', fontSize: '12px', boxSizing: 'border-box' }}
+                    >
+                      <option value="">-- Choose Ingredient --</option>
+                      {inventory.map((inv) => (
+                        <option key={inv._id} value={inv.name}>{inv.name} ({inv.unit || 'unit'})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                      Quantity
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0.001"
+                      placeholder="e.g. 10"
+                      value={ingredientQuantity}
+                      onChange={(e) => setIngredientQuantity(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', fontSize: '12px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddIngredientToEditingItem}
+                    style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 700, fontSize: '12.5px', height: '36px' }}
+                  >
+                    Map
+                  </button>
+                </div>
               </div>
 
               {/* Dish Photo Upload */}

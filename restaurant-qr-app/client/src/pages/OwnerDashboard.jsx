@@ -3692,7 +3692,7 @@ const exportStaffToCSV = () => {
       return (
         <button
           key={cat.name}
-          onClick={() => setSelectedMenuCategory(cat.name)}
+          onClick={() => setSelectedMenuCategory(prev => prev.toLowerCase().trim() === cat.name.toLowerCase().trim() ? 'all' : cat.name)}
           style={{
             padding: '7px 14px',
             borderRadius: '20px',

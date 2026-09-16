@@ -233,7 +233,7 @@ const ManualOrderPage = () => {
                   <button
                     key={cat}
                     type="button"
-                    onClick={() => setSelectedCategory(cat)}
+                    onClick={() => setSelectedCategory(prev => prev === cat ? 'All' : cat)}
                     style={{
                       padding: '8px 16px',
                       borderRadius: '20px',
