@@ -401,8 +401,32 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   return (
     <div className="cart-page">
-      <div className="cart-header">
+      <div className="cart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 className="cart-title">Your Order Cart</h2>
+        {isStaff && (
+          <button
+            onClick={() => {
+              sessionStorage.removeItem('orderSource');
+              window.location.href = '/staff/workspace';
+            }}
+            style={{
+              background: 'rgba(231, 76, 60, 0.12)',
+              color: '#e74c3c',
+              border: '1px solid #e74c3c',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontFamily: 'inherit'
+            }}
+          >
+            <span>✖</span> Exit to Workspace
+          </button>
+        )}
       </div>
 
       {errorMsg && (
