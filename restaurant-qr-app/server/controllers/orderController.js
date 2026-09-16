@@ -287,32 +287,11 @@ const createOrder = async (req, res, next) => {
 
     // Extract customer details (handles both flat and nested 'customer' payload structure)
     const customerObj = req.body.customer || {};
-    const finalCustomerName = (customerName || customerObj.name || '').trim();
-    const finalCustomerEmail = (customerEmail || customerObj.email || '').trim();
+    const isStaffOrder = (source === 'STAFF' || orderSource === 'STAFF' || (req.user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'].includes(req.user.role)));
+    const defaultName = isStaffOrder ? (req.user?.name || 'Staff') : 'Guest Customer';
+    const finalCustomerName = (customerName || customerObj.name || defaultName).trim();
+    const finalCustomerEmail = (customerEmail || customerObj.email || (isStaffOrder ? 'staff@cafesystem.local' : '')).trim();
     const finalCustomerPhone = (customerPhone || customerObj.phone || '').trim();
-
-    // 5. Customer Validation (mandatory for QR orders)
-    const isQR = (source === 'QR' || orderSource === 'QR' || (!source && !orderSource));
-    if (isQR) {
-      if (!finalCustomerName) {
-        return res.status(400).json({ success: false, message: 'Customer name is required' });
-      }
-      if (!finalCustomerPhone) {
-        return res.status(400).json({ success: false, message: 'Customer phone number is required' });
-      }
-    }
-
-    // Strict 10-digit numeric phone number validation
-    if (finalCustomerPhone) {
-      const cleanPhone = String(finalCustomerPhone).trim();
-      const phoneRegex = /^[0-9]{10}$/;
-      if (!phoneRegex.test(cleanPhone)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Please enter a valid 10-digit mobile number.'
-        });
-      }
-    }
 
     // 6. Menu and Cart Item Validation
     let computedTotal = 0;
