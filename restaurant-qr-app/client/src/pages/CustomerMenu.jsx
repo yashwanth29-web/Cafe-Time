@@ -2,10 +2,17 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Coffee, CupSoda, Utensils, UtensilsCrossed, Cake, LayoutGrid } from 'lucide-react';
 import { getMenu, getCategories, getAssetUrl } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import MenuCard from '../components/MenuCard';
 import frontendCache from '../utils/frontendCache';
 
 const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) => {
+  const { user } = useAuth();
+  const searchParams = new URLSearchParams(window.location.search);
+  const isStaffMode = searchParams.get('source') === 'staff' ||
+    sessionStorage.getItem('orderSource') === 'staff' ||
+    Boolean(user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'].includes(user?.role?.toLowerCase()));
+
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState(['All']);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -25,14 +32,16 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
       });
     } catch (e) {}
 
-    // Only show tracker banner if there are active, uncompleted orders in the CURRENT session
-    const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-    if (activeIds.length > 0) {
-      setHasHistory(true);
-    } else {
+    // Never show customer order tracking banner in staff take-order mode
+    if (isStaffMode) {
       setHasHistory(false);
+    } else {
+      const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+      setHasHistory(activeIds.length > 0);
     }
+  }, [isStaffMode]);
 
+  useEffect(() => {
     let isMounted = true;
     const fetchMenuAndCategories = async (isFirst = false) => {
       const cachedMenu = frontendCache.getMenu();
@@ -334,15 +343,13 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
         </div>
       }
 
-      {/* Sticky Bottom Cart Banner */}
-      
-      {hasHistory && totalItems === 0 &&
-      <div className="sticky-cart-banner" style={{ background: 'var(--color-primary)' }}>
+      {!isStaffMode && hasHistory && totalItems === 0 && (
+        <div className="sticky-cart-banner" style={{ background: 'var(--color-primary)' }}>
           <Link to="/history" className="sticky-cart-banner-content" style={{ justifyContent: 'center' }}>
             <span style={{ fontWeight: 800, fontSize: '15px' }}>🧾 View My Orders & Tracker</span>
           </Link>
         </div>
-      }
+      )}
       
       {totalItems > 0 &&
       <div className="sticky-cart-banner">
