@@ -19,26 +19,32 @@ const {
 } = require('../controllers/inventoryCategoryController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
+// All staff roles allowed for inventory management
+const ALL_STAFF = ['super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'];
+const ADMIN_ONLY = ['super_admin', 'admin', 'owner'];
+
 router.use(protect);
 
-router.get('/', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'staff', 'cashier', 'waiter_cashier'), getInventory);
-router.post('/', restrictTo('super_admin', 'admin', 'owner'), createInventoryItem);
-router.patch('/:id', restrictTo('super_admin', 'admin', 'owner', 'manager'), updateInventoryItem);
-router.delete('/:id', restrictTo('super_admin', 'admin', 'owner'), deleteInventoryItem);
+// Inventory CRUD
+router.get('/', restrictTo(...ALL_STAFF), getInventory);
+router.post('/', restrictTo(...ALL_STAFF), createInventoryItem);        // Staff can add items
+router.patch('/:id', restrictTo(...ALL_STAFF), updateInventoryItem);   // Staff can edit items
+router.delete('/:id', restrictTo(...ADMIN_ONLY), deleteInventoryItem); // Only admin/owner can delete
 
-// Advanced stock operations & logs
-router.get('/logs', restrictTo('super_admin', 'admin', 'owner', 'manager'), getInventoryLogs);
-router.post('/purchase', restrictTo('super_admin', 'admin', 'owner', 'manager'), recordPurchase);
-router.post('/wastage', restrictTo('super_admin', 'admin', 'owner', 'manager'), recordWastage);
-router.post('/shortage', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef'), reportShortage);
+// Advanced stock operations & logs — all staff can purchase, wastage, shortage
+router.get('/logs', restrictTo(...ALL_STAFF), getInventoryLogs);
+router.post('/purchase', restrictTo(...ALL_STAFF), recordPurchase);
+router.post('/wastage', restrictTo(...ALL_STAFF), recordWastage);
+router.post('/shortage', restrictTo(...ALL_STAFF), reportShortage);
 
 // Inventory Category routes
-router.get('/categories', restrictTo('super_admin', 'admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'), getInventoryCategories);
-router.post('/categories', restrictTo('super_admin', 'admin', 'owner'), createInventoryCategory);
-router.delete('/categories/:id', restrictTo('super_admin', 'admin', 'owner'), deleteInventoryCategory);
+router.get('/categories', restrictTo(...ALL_STAFF), getInventoryCategories);
+router.post('/categories', restrictTo(...ALL_STAFF), createInventoryCategory);
+router.delete('/categories/:id', restrictTo(...ADMIN_ONLY), deleteInventoryCategory);
 
-// Reports
-router.get('/reports/wastage', restrictTo('super_admin', 'admin', 'owner', 'manager'), getWastageReport);
-router.get('/reports/consumption', restrictTo('super_admin', 'admin', 'owner', 'manager'), getConsumptionReport);
+// Reports — all staff can view
+router.get('/reports/wastage', restrictTo(...ALL_STAFF), getWastageReport);
+router.get('/reports/consumption', restrictTo(...ALL_STAFF), getConsumptionReport);
 
 module.exports = router;
+

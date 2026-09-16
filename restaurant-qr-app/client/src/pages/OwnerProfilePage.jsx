@@ -88,6 +88,27 @@ const OwnerProfilePage = () => {
     showToast('Table URL copied!');
   };
 
+  const handleDownloadQr = async (table) => {
+    const qrUrl = `${window.location.origin}/?table=${table}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
+    const imgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(qrUrl)}`;
+    try {
+      const res = await fetch(imgUrl);
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `Table_${table}_QR.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+      showToast(`Table ${table} QR downloaded!`);
+    } catch (e) {
+      console.error('Download QR failed:', e);
+      window.open(imgUrl, '_blank');
+    }
+  };
+
   const showToast = (msg, ok = true) => {setToast({ msg, ok });setTimeout(() => setToast(null), 3000);};
 
   const handleLogoChange = async (e) => {
@@ -475,21 +496,25 @@ const OwnerProfilePage = () => {
           
             </div>
             
-            <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+            <div style={{ display: 'flex', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
               <button
-            onClick={() => handleCopyUrl(selectedQrTable)}
-            className="mbtn-save"
-            style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}>
-            
+                onClick={() => handleCopyUrl(selectedQrTable)}
+                className="mbtn-save"
+                style={{ flex: 1, padding: '8px', fontSize: '0.8rem', minWidth: '90px' }}>
                 {copiedLink ? '✓ Copied' : '🔗 Copy Link'}
               </button>
+              <button
+                onClick={() => handleDownloadQr(selectedQrTable)}
+                className="mbtn-save"
+                style={{ flex: 1, padding: '8px', fontSize: '0.8rem', minWidth: '110px', background: '#27ae60' }}>
+                📥 Download QR
+              </button>
               <a
-            href={`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`}
-            target="_blank"
-            rel="noreferrer"
-            className="mbtn-cancel"
-            style={{ flex: 1, padding: '8px', fontSize: '0.8rem', textAlign: 'center', textDecoration: 'none', border: '1px solid rgba(230,213,195,0.2)' }}>
-            
+                href={`${window.location.origin}/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mbtn-cancel"
+                style={{ flex: 1, padding: '8px', fontSize: '0.8rem', textAlign: 'center', textDecoration: 'none', border: '1px solid rgba(230,213,195,0.2)', minWidth: '90px' }}>
                 🌐 Test Link
               </a>
             </div>

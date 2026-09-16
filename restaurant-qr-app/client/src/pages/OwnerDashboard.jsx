@@ -777,6 +777,28 @@ const OwnerDashboard = () =>{
  const [copiedLink, setCopiedLink] = useState(false);
  const [dynamicTables, setDynamicTables] = useState(['1', '2', '3', '4', '5']);
 
+
+
+ const handleDownloadQr = async (tableNum) => {
+   const qrUrl = `${window.location.origin}/?table=${tableNum}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
+   const imgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(qrUrl)}`;
+   try {
+     const res = await fetch(imgUrl);
+     const blob = await res.blob();
+     const blobUrl = window.URL.createObjectURL(blob);
+     const a = document.createElement('a');
+     a.href = blobUrl;
+     a.download = `Table_${tableNum}_QR.png`;
+     document.body.appendChild(a);
+     a.click();
+     document.body.removeChild(a);
+     window.URL.revokeObjectURL(blobUrl);
+   } catch (e) {
+     console.error('Download QR failed:', e);
+     window.open(imgUrl, '_blank');
+   }
+ };
+
  // Settings / Config States
 
   const [taxRate, setTaxRate] = useState(5); // mock GST
@@ -5502,12 +5524,15 @@ const exportStaffToCSV = () => {
  style={{ width: '150px', height: '150px', display: 'block' }} />
  
 </div>
-<div style={{ display: 'flex', gap: '10px' }}>
+<div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
 <a href={`/?table=${selectedQrTable}&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', textDecoration: 'none', width: 'auto' }}>
  Open Menu Tab
 </a>
 <button onClick={() =>handleCopyUrl(selectedQrTable)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', width: 'auto' }}>
  {copiedLink ? ' Copied!' : ' Copy URL'}
+</button>
+<button onClick={() => handleDownloadQr(selectedQrTable)} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', width: 'auto', background: '#27ae60', borderColor: '#27ae60', color: '#fff' }}>
+ 📥 Download QR
 </button>
 </div>
 </div>

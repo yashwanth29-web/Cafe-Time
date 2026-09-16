@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
-import { getOrders, updateOrderStatus, getInventory, reportShortage, getMenu, getAssetUrl, getCafeInfo, getPaymentInfo } from '../services/api';
+import { getOrders, updateOrderStatus, getInventory, createInventoryItem, updateInventoryItem, recordPurchase, recordWastage, reportShortage, getInventoryCategories, getMenu, getAssetUrl, getCafeInfo, getPaymentInfo } from '../services/api';
 import socket, { connectSocket } from '../socket';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { QRCodeSVG } from 'qrcode.react';
@@ -43,6 +43,48 @@ const StaffOrderWorkspace = () => {
   const [paymentInfo, setPaymentInfo] = useState({ enableUpi: false, upiId: '' });
   const [showUpiModal, setShowUpiModal] = useState(false);
   const [upiOrder, setUpiOrder] = useState(null);
+
+  // Auto-print KOT toggle
+  const [autoPrintKOT, setAutoPrintKOT] = useState(() => localStorage.getItem('autoPrintKOT') === 'true');
+  const autoPrintKOTRef = useRef(autoPrintKOT);
+  useEffect(() => {
+    autoPrintKOTRef.current = autoPrintKOT;
+    localStorage.setItem('autoPrintKOT', String(autoPrintKOT));
+  }, [autoPrintKOT]);
+
+  // Inventory Management states for Staff
+  const [categories, setCategories] = useState([]);
+  const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
+  const [addInventoryForm, setAddInventoryForm] = useState({
+    name: '',
+    unit: 'kg',
+    quantity: '',
+    reorderLevel: '5',
+    costPrice: '',
+    category: 'General',
+    supplier: '',
+    supplierPhone: ''
+  });
+
+  const [showEditInventoryModal, setShowEditInventoryModal] = useState(false);
+  const [editingInventoryItem, setEditingInventoryItem] = useState(null);
+
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
+  const [purchaseForm, setPurchaseForm] = useState({
+    quantityAdded: '',
+    costPrice: '',
+    supplier: '',
+    notes: ''
+  });
+
+  const [showWastageModal, setShowWastageModal] = useState(false);
+  const [wastageForm, setWastageForm] = useState({
+    quantityWasted: '',
+    type: 'spoiled',
+    reason: ''
+  });
+  const [inventoryActionLoading, setInventoryActionLoading] = useState(false);
   
   // Fetch Cafe Details & Payment Info
   useEffect(() => {
@@ -215,6 +257,13 @@ const StaffOrderWorkspace = () => {
               ? `for Table ${newOrder.tableNumber}`
               : 'for Takeaway';
             speakText(`New order received ${tableMsg}.`);
+            if (autoPrintKOTRef.current) {
+              try {
+                printKOT(newOrder, user, cafeInfo, currentBranch);
+              } catch (kotErr) {
+                console.warn('Auto print KOT failed:', kotErr);
+              }
+            }
           }
           return [newOrder, ...prev];
         });
@@ -358,6 +407,158 @@ const StaffOrderWorkspace = () => {
       console.error(err);
       alert('Failed to report shortage.');
     }
+  };
+
+  // Fetch Inventory Categories
+  useEffect(() => {
+    const fetchCats = async () => {
+      try {
+        const res = await getInventoryCategories();
+        if (res && res.success) {
+          setCategories(res.data);
+        }
+      } catch (err) {
+        console.warn('Could not fetch categories:', err);
+      }
+    };
+    fetchCats();
+  }, []);
+
+  // Add Inventory Item
+  const handleAddInventoryItem = async (e) => {
+    e.preventDefault();
+    if (inventoryActionLoading) return;
+    setInventoryActionLoading(true);
+    try {
+      const payload = {
+        name: addInventoryForm.name,
+        unit: addInventoryForm.unit,
+        quantity: parseFloat(addInventoryForm.quantity) || 0,
+        reorderLevel: parseFloat(addInventoryForm.reorderLevel) || 5,
+        costPrice: parseFloat(addInventoryForm.costPrice) || 0,
+        category: addInventoryForm.category || 'General',
+        supplier: addInventoryForm.supplier || '',
+        supplierPhone: addInventoryForm.supplierPhone || '',
+        branch: currentBranch?.branchName || currentBranch?.name || 'Main'
+      };
+      const res = await createInventoryItem(payload);
+      if (res && res.success) {
+        alert('Ingredient added successfully.');
+        setShowAddInventoryModal(false);
+        setAddInventoryForm({ name: '', unit: 'kg', quantity: '', reorderLevel: '5', costPrice: '', category: 'General', supplier: '', supplierPhone: '' });
+        fetchInventory();
+      }
+    } catch (err) {
+      console.error('Error adding inventory item:', err);
+      alert(err.response?.data?.message || 'Failed to add ingredient.');
+    } finally {
+      setInventoryActionLoading(false);
+    }
+  };
+
+  // Edit Inventory Item
+  const handleEditInventoryItem = async (e) => {
+    e.preventDefault();
+    if (!editingInventoryItem || inventoryActionLoading) return;
+    setInventoryActionLoading(true);
+    try {
+      const payload = {
+        ...editingInventoryItem,
+        quantity: parseFloat(editingInventoryItem.quantity) || 0,
+        reorderLevel: parseFloat(editingInventoryItem.reorderLevel) || 5,
+        costPrice: parseFloat(editingInventoryItem.costPrice) || 0,
+        sellingPrice: 0,
+        branch: editingInventoryItem.branch || currentBranch?.branchName || currentBranch?.name || 'Main'
+      };
+      const res = await updateInventoryItem(editingInventoryItem._id, payload);
+      if (res && res.success) {
+        alert('Ingredient updated successfully.');
+        setShowEditInventoryModal(false);
+        setEditingInventoryItem(null);
+        fetchInventory();
+      }
+    } catch (err) {
+      console.error('Error updating ingredient:', err);
+      alert(err.response?.data?.message || 'Failed to update ingredient.');
+    } finally {
+      setInventoryActionLoading(false);
+    }
+  };
+
+  // Record Stock Purchase
+  const handleRecordPurchase = async (e) => {
+    e.preventDefault();
+    if (!selectedInventoryItem || inventoryActionLoading) return;
+    setInventoryActionLoading(true);
+    try {
+      const res = await recordPurchase({
+        itemId: selectedInventoryItem._id,
+        quantityAdded: parseFloat(purchaseForm.quantityAdded),
+        costPrice: parseFloat(purchaseForm.costPrice) || 0,
+        supplier: purchaseForm.supplier || selectedInventoryItem.supplier || '',
+        notes: purchaseForm.notes || ''
+      });
+      if (res && res.success) {
+        alert('Stock purchase recorded successfully.');
+        setShowPurchaseModal(false);
+        setSelectedInventoryItem(null);
+        setPurchaseForm({ quantityAdded: '', costPrice: '', supplier: '', notes: '' });
+        fetchInventory();
+      }
+    } catch (err) {
+      console.error('Error recording purchase:', err);
+      alert(err.response?.data?.message || 'Failed to record purchase.');
+    } finally {
+      setInventoryActionLoading(false);
+    }
+  };
+
+  // Record Stock Wastage
+  const handleRecordWastage = async (e) => {
+    e.preventDefault();
+    if (!selectedInventoryItem || inventoryActionLoading) return;
+    setInventoryActionLoading(true);
+    try {
+      const res = await recordWastage({
+        itemId: selectedInventoryItem._id,
+        quantityWasted: parseFloat(wastageForm.quantityWasted),
+        type: wastageForm.type || 'spoiled',
+        reason: wastageForm.reason || ''
+      });
+      if (res && res.success) {
+        alert('Wastage logged successfully.');
+        setShowWastageModal(false);
+        setSelectedInventoryItem(null);
+        setWastageForm({ quantityWasted: '', type: 'spoiled', reason: '' });
+        fetchInventory();
+      }
+    } catch (err) {
+      console.error('Error recording wastage:', err);
+      alert(err.response?.data?.message || 'Failed to record wastage.');
+    } finally {
+      setInventoryActionLoading(false);
+    }
+  };
+
+  // Download UPI QR as PNG
+  const handleDownloadUpiQr = () => {
+    const svg = document.getElementById('staff-upi-qr-code');
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      const pngFile = canvas.toDataURL('image/png');
+      const downloadLink = document.createElement('a');
+      downloadLink.download = `UPI_Payment_Order_${upiOrder?.orderNumber || 'bill'}.png`;
+      downloadLink.href = pngFile;
+      downloadLink.click();
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
   // Active branch context
@@ -526,6 +727,22 @@ const StaffOrderWorkspace = () => {
           }}
         >
           {soundEnabled ? '🔊 Sound Alerts ON' : '🔇 Mute Alerts'}
+        </button>
+
+        {/* Auto-Print KOT toggle */}
+        <button
+          onClick={() => setAutoPrintKOT(!autoPrintKOT)}
+          style={{
+            flexShrink: 0,
+            background: autoPrintKOT ? 'rgba(39, 174, 96, 0.15)' : 'transparent',
+            border: `1px solid ${autoPrintKOT ? '#27ae60' : 'var(--color-border)'}`,
+            borderRadius: '12px', padding: '8px 14px', fontSize: '12px',
+            display: 'flex', alignItems: 'center', gap: '6px',
+            cursor: 'pointer', color: autoPrintKOT ? '#27ae60' : 'var(--color-text-secondary)', fontWeight: 'bold'
+          }}
+          title="Automatically print Kitchen Order Ticket (KOT) on receipt of new orders"
+        >
+          {autoPrintKOT ? '🖨️ Auto-Print KOT: ON' : '🖨️ Auto-Print KOT: OFF'}
         </button>
       </div>
 
@@ -856,9 +1073,29 @@ const StaffOrderWorkspace = () => {
       {/* ======================= TAB 4: INGREDIENT STOCK ======================= */}
       {tabParam === 'inventory' && (
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px' }}>
-          <h3 style={{ marginBottom: '16px', color: 'var(--color-text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>
-            📦 Ingredient Stock Levels
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>
+                📦 Ingredient Stock Levels
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
+                Staff access: add ingredients, update stock, log purchases & record kitchen wastage.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setAddInventoryForm({ name: '', unit: 'kg', quantity: '', reorderLevel: '5', costPrice: '', category: 'General', supplier: '', supplierPhone: '' });
+                setShowAddInventoryModal(true);
+              }}
+              style={{
+                background: 'var(--color-primary)', color: 'white', border: 'none',
+                padding: '9px 16px', borderRadius: '8px', cursor: 'pointer',
+                fontWeight: 'bold', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              ➕ Add Ingredient
+            </button>
+          </div>
 
           {inventoryLoading ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
@@ -867,50 +1104,110 @@ const StaffOrderWorkspace = () => {
             </div>
           ) : inventory.length === 0 ? (
             <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              No inventory ingredients configured.
+              No inventory ingredients configured. Click <strong>+ Add Ingredient</strong> to add your first stock item.
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
-                  <th style={{ padding: '10px 8px' }}>Item Name</th>
-                  <th style={{ padding: '10px 8px' }}>Stock Level</th>
-                  <th style={{ padding: '10px 8px' }}>Min Alert Level</th>
-                  <th style={{ padding: '10px 8px' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inventory.map((inv) => {
-                  const currentStock = inv.quantity !== undefined ? inv.quantity : (inv.stock ?? 0);
-                  const minAlert = inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock ?? 0);
-                  const isOutOfStock = currentStock <= 0;
-                  const isLow = !isOutOfStock && currentStock <= minAlert;
-                  return (
-                    <tr key={inv._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '10px 8px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{inv.name}</td>
-                      <td style={{ padding: '10px 8px' }}>
-                        <span style={{ fontWeight: 700, color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : 'var(--color-text-primary)') }}>
-                          {currentStock}
-                        </span>{' '}
-                        {inv.unit || 'units'}
-                      </td>
-                      <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>
-                        {minAlert} {inv.unit || 'units'}
-                      </td>
-                      <td style={{ padding: '10px 8px' }}>
-                        <span style={{
-                          background: isOutOfStock ? 'rgba(231, 76, 60, 0.15)' : (isLow ? 'rgba(243, 156, 18, 0.15)' : 'rgba(46, 204, 113, 0.15)'),
-                          color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : '#27ae60'),
-                          padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold'
-                        }}>
-                          {isOutOfStock ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock')}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left', minWidth: '640px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                    <th style={{ padding: '10px 8px' }}>Item Name</th>
+                    <th style={{ padding: '10px 8px' }}>Category</th>
+                    <th style={{ padding: '10px 8px' }}>Current Stock</th>
+                    <th style={{ padding: '10px 8px' }}>Min Alert Level</th>
+                    <th style={{ padding: '10px 8px' }}>Status</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventory.map((inv) => {
+                    const currentStock = inv.quantity !== undefined ? inv.quantity : (inv.stock ?? 0);
+                    const minAlert = inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock ?? 0);
+                    const isOutOfStock = currentStock <= 0;
+                    const isLow = !isOutOfStock && currentStock <= minAlert;
+                    return (
+                      <tr key={inv._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '10px 8px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{inv.name}</td>
+                        <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>{inv.category || 'General'}</td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span style={{ fontWeight: 700, color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : 'var(--color-text-primary)') }}>
+                            {currentStock}
+                          </span>{' '}
+                          {inv.unit || 'units'}
+                        </td>
+                        <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>
+                          {minAlert} {inv.unit || 'units'}
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span style={{
+                            background: isOutOfStock ? 'rgba(231, 76, 60, 0.15)' : (isLow ? 'rgba(243, 156, 18, 0.15)' : 'rgba(46, 204, 113, 0.15)'),
+                            color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : '#27ae60'),
+                            padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold'
+                          }}>
+                            {isOutOfStock ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock')}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: '6px' }}>
+                            <button
+                              onClick={() => {
+                                setSelectedInventoryItem(inv);
+                                setPurchaseForm({ quantityAdded: '', costPrice: inv.costPrice || '', supplier: inv.supplier || '', notes: '' });
+                                setShowPurchaseModal(true);
+                              }}
+                              style={{
+                                background: 'rgba(39, 174, 96, 0.15)', color: '#27ae60', border: '1px solid #27ae60',
+                                padding: '4px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer'
+                              }}
+                              title="Purchase and add to stock"
+                            >
+                              + Purchase
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedInventoryItem(inv);
+                                setWastageForm({ quantityWasted: '', type: 'spoiled', reason: '' });
+                                setShowWastageModal(true);
+                              }}
+                              style={{
+                                background: 'rgba(231, 76, 60, 0.15)', color: '#e74c3c', border: '1px solid #e74c3c',
+                                padding: '4px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer'
+                              }}
+                              title="Record spoiled or wasted stock"
+                            >
+                              ⚠️ Wastage
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingInventoryItem({
+                                  _id: inv._id,
+                                  name: inv.name,
+                                  unit: inv.unit || 'kg',
+                                  quantity: inv.quantity !== undefined ? inv.quantity : (inv.stock || 0),
+                                  reorderLevel: inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock || 5),
+                                  costPrice: inv.costPrice || 0,
+                                  category: inv.category || 'General',
+                                  supplier: inv.supplier || '',
+                                  supplierPhone: inv.supplierPhone || ''
+                                });
+                                setShowEditInventoryModal(true);
+                              }}
+                              style={{
+                                background: 'rgba(52, 152, 219, 0.15)', color: '#2980b9', border: '1px solid #2980b9',
+                                padding: '4px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer'
+                              }}
+                              title="Edit all fields of ingredient"
+                            >
+                              ✏️ Edit
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -1036,6 +1333,7 @@ const StaffOrderWorkspace = () => {
             
             <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', display: 'inline-block', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', marginBottom: '20px' }}>
               <QRCodeSVG 
+                id="staff-upi-qr-code"
                 value={`upi://pay?pa=${paymentInfo.upiId}&pn=${encodeURIComponent(cafeInfo?.name || 'Cafe')}&am=${upiOrder.totalAmount}&cu=INR&tn=Order%20${upiOrder.orderNumber}`} 
                 size={200} 
                 level="M" 
@@ -1046,11 +1344,16 @@ const StaffOrderWorkspace = () => {
             <div style={{ fontSize: '24px', fontWeight: '800', color: '#2c3e50', marginBottom: '8px' }}>
               ₹{upiOrder.totalAmount.toFixed(2)}
             </div>
-            <div style={{ fontSize: '14px', color: '#7f8c8d', marginBottom: '24px' }}>
+            <div style={{ fontSize: '14px', color: '#7f8c8d', marginBottom: '16px' }}>
               Order #{upiOrder.orderNumber}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button 
+                onClick={handleDownloadUpiQr}
+                style={{ padding: '10px', background: '#34495e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
+                📥 Download QR Code
+              </button>
               <button 
                 onClick={() => {
                   handleCollectPayment(upiOrder._id, 'UPI');
@@ -1065,6 +1368,448 @@ const StaffOrderWorkspace = () => {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: ADD INGREDIENT ======================= */}
+      {showAddInventoryModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
+            width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
+            <h3 style={{ margin: '0 0 12px 0', color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 700 }}>
+              ➕ Add New Ingredient
+            </h3>
+            <form onSubmit={handleAddInventoryItem} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Ingredient Name *
+                </label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. Arabica Coffee Beans"
+                  value={addInventoryForm.name}
+                  onChange={(e) => setAddInventoryForm({ ...addInventoryForm, name: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Unit *
+                  </label>
+                  <select
+                    value={addInventoryForm.unit}
+                    onChange={(e) => setAddInventoryForm({ ...addInventoryForm, unit: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  >
+                    {['kg', 'g', 'l', 'ml', 'pcs', 'packets', 'cans', 'boxes'].map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Category
+                  </label>
+                  <select
+                    value={addInventoryForm.category}
+                    onChange={(e) => setAddInventoryForm({ ...addInventoryForm, category: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  >
+                    <option value="General">General</option>
+                    <option value="Dairy">Dairy</option>
+                    <option value="Beverages">Beverages</option>
+                    <option value="Bakery">Bakery</option>
+                    <option value="Produce">Produce</option>
+                    <option value="Dry Goods">Dry Goods</option>
+                    {categories.map((c) => (
+                      <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Initial Stock ({addInventoryForm.unit}) *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    placeholder="0"
+                    value={addInventoryForm.quantity}
+                    onChange={(e) => setAddInventoryForm({ ...addInventoryForm, quantity: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Safety Minimum ({addInventoryForm.unit})
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="5"
+                    value={addInventoryForm.reorderLevel}
+                    onChange={(e) => setAddInventoryForm({ ...addInventoryForm, reorderLevel: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Unit Cost Price (₹)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  value={addInventoryForm.costPrice}
+                  onChange={(e) => setAddInventoryForm({ ...addInventoryForm, costPrice: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddInventoryModal(false)}
+                  style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={inventoryActionLoading}
+                  style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px' }}
+                >
+                  {inventoryActionLoading ? 'Saving...' : 'Save Ingredient'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: EDIT INGREDIENT ======================= */}
+      {showEditInventoryModal && editingInventoryItem && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
+            width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
+            <h3 style={{ margin: '0 0 12px 0', color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 700 }}>
+              ✏️ Edit Ingredient
+            </h3>
+            <form onSubmit={handleEditInventoryItem} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Ingredient Name *
+                </label>
+                <input
+                  required
+                  type="text"
+                  value={editingInventoryItem.name}
+                  onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, name: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Unit
+                  </label>
+                  <select
+                    value={editingInventoryItem.unit}
+                    onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, unit: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  >
+                    {['kg', 'g', 'l', 'ml', 'pcs', 'packets', 'cans', 'boxes'].map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Category
+                  </label>
+                  <select
+                    value={editingInventoryItem.category}
+                    onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, category: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  >
+                    <option value="General">General</option>
+                    <option value="Dairy">Dairy</option>
+                    <option value="Beverages">Beverages</option>
+                    <option value="Bakery">Bakery</option>
+                    <option value="Produce">Produce</option>
+                    <option value="Dry Goods">Dry Goods</option>
+                    {categories.map((c) => (
+                      <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Current Stock ({editingInventoryItem.unit}) *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    value={editingInventoryItem.quantity}
+                    onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, quantity: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                    Safety Minimum ({editingInventoryItem.unit})
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editingInventoryItem.reorderLevel}
+                    onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, reorderLevel: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Unit Cost Price (₹)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={editingInventoryItem.costPrice}
+                  onChange={(e) => setEditingInventoryItem({ ...editingInventoryItem, costPrice: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowEditInventoryModal(false); setEditingInventoryItem(null); }}
+                  style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={inventoryActionLoading}
+                  style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'var(--color-primary)', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px' }}
+                >
+                  {inventoryActionLoading ? 'Saving...' : 'Update Ingredient'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: PURCHASE STOCK ======================= */}
+      {showPurchaseModal && selectedInventoryItem && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
+            width: '100%', maxWidth: '400px', boxShadow: 'var(--shadow-lg)'
+          }}>
+            <h3 style={{ margin: '0 0 8px 0', color: '#27ae60', fontSize: '1.15rem', fontWeight: 700 }}>
+              📦 Purchase & Restock
+            </h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+              Adding stock for: <strong>{selectedInventoryItem.name}</strong> (Current: {selectedInventoryItem.quantity !== undefined ? selectedInventoryItem.quantity : selectedInventoryItem.stock} {selectedInventoryItem.unit})
+            </p>
+            <form onSubmit={handleRecordPurchase} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Quantity to Add ({selectedInventoryItem.unit}) *
+                </label>
+                <input
+                  required
+                  autoFocus
+                  type="number"
+                  step="any"
+                  min="0.001"
+                  placeholder="e.g. 5"
+                  value={purchaseForm.quantityAdded}
+                  onChange={(e) => setPurchaseForm({ ...purchaseForm, quantityAdded: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Unit Cost Price (₹)
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  value={purchaseForm.costPrice}
+                  onChange={(e) => setPurchaseForm({ ...purchaseForm, costPrice: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Supplier / Vendor Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Metro Cash & Carry"
+                  value={purchaseForm.supplier}
+                  onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Notes / Bill Ref
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Invoice #4482"
+                  value={purchaseForm.notes}
+                  onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowPurchaseModal(false); setSelectedInventoryItem(null); }}
+                  style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={inventoryActionLoading}
+                  style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#27ae60', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px' }}
+                >
+                  {inventoryActionLoading ? 'Saving...' : 'Record Purchase'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: LOG WASTAGE ======================= */}
+      {showWastageModal && selectedInventoryItem && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
+            width: '100%', maxWidth: '400px', boxShadow: 'var(--shadow-lg)'
+          }}>
+            <h3 style={{ margin: '0 0 8px 0', color: '#e74c3c', fontSize: '1.15rem', fontWeight: 700 }}>
+              ⚠️ Record Stock Wastage
+            </h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+              Logging wasted quantity for: <strong>{selectedInventoryItem.name}</strong>
+            </p>
+            <form onSubmit={handleRecordWastage} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Quantity Wasted ({selectedInventoryItem.unit}) *
+                </label>
+                <input
+                  required
+                  autoFocus
+                  type="number"
+                  step="any"
+                  min="0.001"
+                  placeholder="e.g. 1.5"
+                  value={wastageForm.quantityWasted}
+                  onChange={(e) => setWastageForm({ ...wastageForm, quantityWasted: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Wastage Type
+                </label>
+                <select
+                  value={wastageForm.type}
+                  onChange={(e) => setWastageForm({ ...wastageForm, type: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                >
+                  <option value="spoiled">Spoiled / Expired</option>
+                  <option value="spill">Spilled / Dropped</option>
+                  <option value="burn">Burnt / Preparation Error</option>
+                  <option value="damage">Damaged Packaging</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
+                  Reason / Explanation
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Milk turned sour in fridge"
+                  value={wastageForm.reason}
+                  onChange={(e) => setWastageForm({ ...wastageForm, reason: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowWastageModal(false); setSelectedInventoryItem(null); }}
+                  style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={inventoryActionLoading}
+                  style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#e74c3c', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px' }}
+                >
+                  {inventoryActionLoading ? 'Saving...' : 'Record Wastage'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

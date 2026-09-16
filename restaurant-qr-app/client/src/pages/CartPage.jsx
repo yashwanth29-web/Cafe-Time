@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CartItem from '../components/CartItem';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getPaymentInfo } from '../services/api';
-import { printPOSReceipt } from '../utils/printHelpers';
+import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { useAuth } from '../context/AuthContext';
 import socket, { connectSocket } from '../socket';
 
@@ -362,8 +362,19 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         clearCart();
         sessionStorage.removeItem('orderSource');
 
+        // Automatically trigger Kitchen Order Ticket (KOT) print
+        if (response.data) {
+          try {
+            printKOT(response.data, user, cafeInfo, null);
+          } catch (printErr) {
+            console.error('Error auto-printing KOT:', printErr);
+          }
+        }
+
         if (isStaff) {
-          window.location.href = '/staff/workspace';
+          setTimeout(() => {
+            window.location.href = '/staff/workspace';
+          }, 800);
           return;
         }
 
