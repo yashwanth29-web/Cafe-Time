@@ -3,7 +3,7 @@ import { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { BranchProvider, useBranch } from './context/BranchContext';
 import './styles/App.css';
@@ -25,6 +25,53 @@ const ManagerDashboard = React.lazy(() => import('./pages/ManagerDashboard'));
 const EmployeePayrollPage = React.lazy(() => import('./pages/EmployeePayrollPage'));
 const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
 const StaffOrderWorkspace = React.lazy(() => import('./pages/StaffOrderWorkspace'));
+
+function HomeRoute({ cart, addToCart, increaseQuantity, decreaseQuantity }) {
+  const [searchParams] = useSearchParams();
+  const { user, loading } = useAuth();
+  
+  const hasQrParams = Boolean(searchParams.get('table') || searchParams.get('cafeId'));
+
+  // 1. If QR scan with query params -> Customer Menu
+  if (hasQrParams) {
+    return (
+      <CustomerMenu 
+        cart={cart}
+        addToCart={addToCart}
+        increaseQuantity={increaseQuantity}
+        decreaseQuantity={decreaseQuantity}
+      />
+    );
+  }
+
+  // 2. If Auth is still verifying session
+  if (loading) {
+    return (
+      <div className="initial-splash">
+        <div className="spinner" style={{ border: '2px solid #5C4331', borderTop: '2px solid #6F4E37', borderRadius: '50%', width: '30px', height: '30px', animation: 'spin 0.8s linear infinite' }}></div>
+        <div style={{ marginTop: '10px', color: '#A0826C' }}>Loading Cafe Portal...</div>
+      </div>
+    );
+  }
+
+  // 3. If user is logged in -> redirect to their role dashboard
+  if (user) {
+    const role = (user.role || '').toLowerCase();
+    if (role === 'super_admin') {
+      return <Navigate to="/super-admin/dashboard" replace />;
+    } else if (role === 'admin' || role === 'owner') {
+      return <Navigate to="/owner/dashboard" replace />;
+    } else if (role === 'manager') {
+      return <Navigate to="/manager/dashboard" replace />;
+    } else {
+      // staff, chef, waiter, cashier, waiter_cashier
+      return <Navigate to="/staff/workspace" replace />;
+    }
+  }
+
+  // 4. If no QR query params and user is NOT logged in -> redirect to login
+  return <Navigate to="/login" replace />;
+}
 
 function AppContent() {
   const [cart, setCart] = useState([]);
@@ -182,7 +229,7 @@ function AppContent() {
           <Route 
             path="/" 
             element={
-              <CustomerMenu 
+              <HomeRoute 
                 cart={cart}
                 addToCart={addToCart}
                 increaseQuantity={increaseQuantity}

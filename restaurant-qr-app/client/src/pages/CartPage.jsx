@@ -423,7 +423,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
       <div className="cart-empty">
           <div className="cart-empty-icon">🛒</div>
           <p className="cart-empty-text">Your cart is currently empty.</p>
-          <Link to="/" className="btn btn-secondary">
+          <Link to="/menu" className="btn btn-secondary">
             Browse Delicious Menu
           </Link>
         </div> :

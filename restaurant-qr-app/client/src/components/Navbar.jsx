@@ -23,9 +23,13 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
 
   const logoSrc = cafeInfo?.logoUrl ? getAssetUrl(cafeInfo.logoUrl) : null;
 
+  const homeLink = (tableNumber || cafeId)
+    ? `/?table=${encodeURIComponent(tableNumber || '')}&cafeId=${encodeURIComponent(cafeId || '')}`
+    : '/menu';
+
   return (
     <nav className="navbar">
-      <Link to="/" className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <Link to={homeLink} className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         {logoSrc ? (
           <img src={logoSrc} alt={`${cafeInfo?.name || 'Cafe'} Logo`} style={{ height: '40px', width: '40px', borderRadius: '50%', objectFit: 'contain', border: '1px solid #6F4E37' }} />
         ) : (

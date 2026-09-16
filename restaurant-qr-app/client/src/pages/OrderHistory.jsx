@@ -703,7 +703,7 @@ const OrderHistory = ({ cafeId }) => {
             </div>
           )}
 
-          <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
+          <Link to="/menu" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
             View Menu
           </Link>
         </div>
@@ -888,7 +888,7 @@ const OrderHistory = ({ cafeId }) => {
             </div>
           }
 
-          <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '20px' }}>
+          <Link to="/menu" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '20px' }}>
             View Menu
           </Link>
         </div>
@@ -901,7 +901,7 @@ const OrderHistory = ({ cafeId }) => {
     <div className="cart-page" style={{ textAlign: 'center', padding: '100px 20px' }}>
       <h2 style={{ color: 'var(--color-primary)' }}>Order History</h2>
       <p style={{ color: 'var(--color-text-secondary)', marginTop: '20px' }}>You have no active or recently completed orders in this session.</p>
-      <Link to="/" className="btn btn-primary" style={{ marginTop: '20px', display: 'inline-block' }}>
+      <Link to="/menu" className="btn btn-primary" style={{ marginTop: '20px', display: 'inline-block' }}>
         View Menu
       </Link>
     </div>);
