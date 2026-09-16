@@ -890,11 +890,41 @@ const OwnerDashboard = () =>{
  });
   const [reviewsFilterRating, setReviewsFilterRating] = useState('');
   const [isMenuSubmitting, setIsMenuSubmitting] = useState(false);
-  const [isInventorySubmitting, setIsInventorySubmitting] = useState(false);
+   // Search and filter states
+  const [menuSearch, setMenuSearch] = useState('');
+  const [selectedMenuCategory, setSelectedMenuCategory] = useState('all');
+  const [inventorySearch, setInventorySearch] = useState('');
 
- // Search states
- const [menuSearch, setMenuSearch] = useState('');
- const [inventorySearch, setInventorySearch] = useState('');
+  const menuCategoriesWithCounts = useMemo(() => {
+    const rawCategories = categories.length > 0
+      ? categories.map((c) => (typeof c === 'string' ? c : c.name))
+      : (typeof presetCategories !== 'undefined' ? presetCategories : []);
+
+    const allCatSet = new Set(rawCategories);
+    (menuItems || []).forEach((item) => {
+      if (item.category && item.category.trim()) {
+        allCatSet.add(item.category.trim());
+      }
+    });
+
+    const counts = {};
+    let totalCount = 0;
+    (menuItems || []).forEach((item) => {
+      totalCount++;
+      const cat = (item.category || 'Uncategorized').trim();
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+
+    const categoryList = Array.from(allCatSet).map((catName) => ({
+      name: catName,
+      count: counts[catName] || 0
+    }));
+
+    return {
+      allCount: totalCount,
+      list: categoryList
+    };
+  }, [categories, menuItems]);
 
   const filteredMenuItems = useMemo(() => {
     const seenIds = new Set();
@@ -908,11 +938,18 @@ const OwnerDashboard = () =>{
         uniqueItems.push(item);
       }
     }
-    return uniqueItems.filter((item) =>
-      item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
-      (item.category || '').toLowerCase().includes(menuSearch.toLowerCase())
-    );
-  }, [menuItems, menuSearch]);
+    return uniqueItems.filter((item) => {
+      const matchesSearch =
+        item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
+        (item.category || '').toLowerCase().includes(menuSearch.toLowerCase());
+
+      const matchesCategory =
+        selectedMenuCategory === 'all' ||
+        (item.category || '').toLowerCase().trim() === selectedMenuCategory.toLowerCase().trim();
+
+      return matchesSearch && matchesCategory;
+    });
+  }, [menuItems, menuSearch, selectedMenuCategory]);
 
   const filteredInventoryList = useMemo(() => {
     return inventoryList.filter((item) =>
@@ -3562,42 +3599,188 @@ const exportStaffToCSV = () => {
 </div>
 
 <div style={{ marginBottom: '20px' }}>
-<input
- type="text"
- placeholder=" Search dishes by name or category..."
- value={menuSearch}
- onChange={(e) =>setMenuSearch(e.target.value)}
- style={{
- width: '100%',
- padding: '12px 16px',
- borderRadius: '8px',
- border: '1px solid var(--color-border)',
- background: 'var(--bg-secondary)',
- color: 'var(--color-text-primary)',
- fontSize: '14px',
- outline: 'none'
- }} />
- 
-</div>
-
- {menuLoading ?
-<div style={{ textAlign: 'center', padding: '40px 0', width: '100%' }}>
-<div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading menu items...</p>
-</div>:
-
-<div className="menu-grid-admin">
-  {filteredMenuItems.map((item) => (
-    <AdminMenuCard
-      key={item._id || item.id}
-      item={item}
-      onEdit={handleEditMenuCallback}
-      onDelete={handleDeleteMenuCallback}
-      onToggle={handleToggleMenuCallback}
+  <div style={{ position: 'relative', marginBottom: '12px' }}>
+    <input
+      type="text"
+      placeholder="🔍 Search dishes by name or category..."
+      value={menuSearch}
+      onChange={(e) => setMenuSearch(e.target.value)}
+      style={{
+        width: '100%',
+        padding: '12px 16px',
+        paddingRight: menuSearch ? '40px' : '16px',
+        borderRadius: '10px',
+        border: '1px solid var(--color-border)',
+        background: 'var(--bg-secondary)',
+        color: 'var(--color-text-primary)',
+        fontSize: '14px',
+        outline: 'none'
+      }} 
     />
-  ))}
+    {menuSearch && (
+      <button
+        onClick={() => setMenuSearch('')}
+        style={{
+          position: 'absolute',
+          right: '12px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          background: 'none',
+          border: 'none',
+          color: 'var(--color-text-secondary)',
+          cursor: 'pointer',
+          fontSize: '14px',
+          padding: '4px 8px'
+        }}
+        title="Clear search"
+      >
+        ✕
+      </button>
+    )}
+  </div>
+
+  {/* Category Filter Pills */}
+  <div
+    className="no-scrollbar"
+    style={{
+      display: 'flex',
+      gap: '8px',
+      overflowX: 'auto',
+      paddingBottom: '6px',
+      WebkitOverflowScrolling: 'touch',
+      alignItems: 'center'
+    }}
+  >
+    <button
+      onClick={() => setSelectedMenuCategory('all')}
+      style={{
+        padding: '7px 14px',
+        borderRadius: '20px',
+        border: selectedMenuCategory === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+        background: selectedMenuCategory === 'all' ? 'var(--color-primary)' : 'var(--bg-secondary)',
+        color: selectedMenuCategory === 'all' ? '#fff' : 'var(--color-text-secondary)',
+        fontSize: '12.5px',
+        fontWeight: selectedMenuCategory === 'all' ? 700 : 600,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        transition: 'all 0.2s ease',
+        fontFamily: 'inherit'
+      }}
+    >
+      <span>All Dishes</span>
+      <span
+        style={{
+          fontSize: '11px',
+          padding: '1px 7px',
+          borderRadius: '10px',
+          background: selectedMenuCategory === 'all' ? 'rgba(255, 255, 255, 0.25)' : 'var(--bg-card)',
+          color: selectedMenuCategory === 'all' ? '#fff' : 'var(--color-text-muted)'
+        }}
+      >
+        {menuCategoriesWithCounts.allCount}
+      </span>
+    </button>
+
+    {menuCategoriesWithCounts.list.map((cat) => {
+      const isSelected = selectedMenuCategory.toLowerCase().trim() === cat.name.toLowerCase().trim();
+      return (
+        <button
+          key={cat.name}
+          onClick={() => setSelectedMenuCategory(cat.name)}
+          style={{
+            padding: '7px 14px',
+            borderRadius: '20px',
+            border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+            background: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
+            color: isSelected ? '#fff' : 'var(--color-text-secondary)',
+            fontSize: '12.5px',
+            fontWeight: isSelected ? 700 : 600,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.2s ease',
+            fontFamily: 'inherit'
+          }}
+        >
+          <span>{cat.name}</span>
+          <span
+            style={{
+              fontSize: '11px',
+              padding: '1px 7px',
+              borderRadius: '10px',
+              background: isSelected ? 'rgba(255, 255, 255, 0.25)' : 'var(--bg-card)',
+              color: isSelected ? '#fff' : 'var(--color-text-muted)'
+            }}
+          >
+            {cat.count}
+          </span>
+        </button>
+      );
+    })}
+  </div>
 </div>
- }
+
+{menuLoading ? (
+  <div style={{ textAlign: 'center', padding: '40px 0', width: '100%' }}>
+    <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
+    <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading menu items...</p>
+  </div>
+) : filteredMenuItems.length === 0 ? (
+  <div style={{ textAlign: 'center', padding: '50px 20px', background: 'var(--bg-card)', borderRadius: '12px', border: '1px dashed var(--color-border)', marginTop: '10px' }}>
+    <div style={{ fontSize: '2.2rem', marginBottom: '8px' }}>🍽️</div>
+    <div style={{ fontWeight: 700, color: 'var(--color-text-primary)', fontSize: '15px' }}>
+      No dishes found
+    </div>
+    <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px', marginTop: '4px' }}>
+      {selectedMenuCategory !== 'all'
+        ? `No dishes in "${selectedMenuCategory}" match your current filters.`
+        : 'No dishes match your search query.'}
+    </p>
+    <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '14px', flexWrap: 'wrap' }}>
+      {(selectedMenuCategory !== 'all' || menuSearch) && (
+        <button
+          onClick={() => {
+            setSelectedMenuCategory('all');
+            setMenuSearch('');
+          }}
+          className="btn btn-secondary"
+          style={{ width: 'auto', fontSize: '12px', padding: '6px 14px' }}
+        >
+          Clear Filters
+        </button>
+      )}
+      <button
+        onClick={() => {
+          if (selectedMenuCategory !== 'all') {
+            setNewItem((prev) => ({ ...prev, category: selectedMenuCategory }));
+          }
+          setShowAddModal(true);
+        }}
+        className="btn btn-primary"
+        style={{ width: 'auto', fontSize: '12px', padding: '6px 14px' }}
+      >
+        ➕ Add Item {selectedMenuCategory !== 'all' ? `to ${selectedMenuCategory}` : ''}
+      </button>
+    </div>
+  </div>
+) : (
+  <div className="menu-grid-admin">
+    {filteredMenuItems.map((item) => (
+      <AdminMenuCard
+        key={item._id || item.id}
+        item={item}
+        onEdit={handleEditMenuCallback}
+        onDelete={handleDeleteMenuCallback}
+        onToggle={handleToggleMenuCallback}
+      />
+    ))}
+  </div>
+)}
 </>:
 
 <div className="fade-in">
