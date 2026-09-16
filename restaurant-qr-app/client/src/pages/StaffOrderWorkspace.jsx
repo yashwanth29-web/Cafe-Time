@@ -716,17 +716,53 @@ const StaffOrderWorkspace = () => {
   const canServe = isUnifiedMode || ['admin', 'owner', 'manager', 'waiter', 'cashier', 'waiter_cashier'].includes(userRole);
   const canCollect = isUnifiedMode || ['admin', 'owner', 'manager', 'waiter', 'cashier', 'waiter_cashier'].includes(userRole);
 
-  // Filter orders by sub-tab columns
+  // Table filter state for Live Queue
+  const [selectedTableFilter, setSelectedTableFilter] = useState('all');
+
+  // Extract unique active tables and count per table
+  const activeTablesList = useMemo(() => {
+    const tableMap = new Map();
+    orders.forEach((o) => {
+      const rawTable = String(o.tableNumber || '').trim();
+      const isTakeaway = !rawTable || rawTable.toLowerCase() === 'takeaway' || rawTable.toLowerCase() === 'walk-in';
+      const key = isTakeaway ? 'Takeaway' : rawTable;
+      tableMap.set(key, (tableMap.get(key) || 0) + 1);
+    });
+
+    const entries = Array.from(tableMap.entries());
+    entries.sort((a, b) => {
+      if (a[0] === 'Takeaway') return 1;
+      if (b[0] === 'Takeaway') return -1;
+      const numA = parseInt(a[0], 10);
+      const numB = parseInt(b[0], 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a[0].localeCompare(b[0]);
+    });
+
+    return entries.map(([table, count]) => ({ table, count }));
+  }, [orders]);
+
+  // Filter orders by sub-tab columns and selected table
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      if (subTabParam === 'all') return true;
-      if (subTabParam === 'placed') return o.status === 'Placed';
-      if (subTabParam === 'preparing') return o.status === 'Preparing';
-      if (subTabParam === 'ready') return o.status === 'Ready';
-      if (subTabParam === 'unpaid') return (o.status === 'Delivered' || o.status === 'Completed') && o.paymentStatus === 'Pending';
+      if (subTabParam === 'placed' && o.status !== 'Placed') return false;
+      if (subTabParam === 'preparing' && o.status !== 'Preparing') return false;
+      if (subTabParam === 'ready' && o.status !== 'Ready') return false;
+      if (subTabParam === 'unpaid' && !((o.status === 'Delivered' || o.status === 'Completed') && o.paymentStatus === 'Pending')) return false;
+
+      if (selectedTableFilter !== 'all') {
+        const rawTable = String(o.tableNumber || '').trim();
+        const isTakeaway = !rawTable || rawTable.toLowerCase() === 'takeaway' || rawTable.toLowerCase() === 'walk-in';
+        if (selectedTableFilter === 'Takeaway') {
+          if (!isTakeaway) return false;
+        } else {
+          if (rawTable !== selectedTableFilter) return false;
+        }
+      }
+
       return true;
     });
-  }, [orders, subTabParam]);
+  }, [orders, subTabParam, selectedTableFilter]);
 
   // Statistics summaries
   const stats = useMemo(() => {
@@ -1023,6 +1059,77 @@ const StaffOrderWorkspace = () => {
                 {col.label} <span style={{ background: 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: '6px', fontSize: '11px' }}>{col.count}</span>
               </button>
             ))}
+          </div>
+
+          {/* Table Filter Chips */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            overflowX: 'auto',
+            padding: '2px 0 6px 0',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none'
+          }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>🪑</span> Tables:
+            </span>
+
+            <button
+              onClick={() => setSelectedTableFilter('all')}
+              style={{
+                flexShrink: 0,
+                background: selectedTableFilter === 'all' ? 'var(--color-primary)' : 'var(--bg-card)',
+                color: selectedTableFilter === 'all' ? '#ffffff' : 'var(--color-text-primary)',
+                border: `1px solid ${selectedTableFilter === 'all' ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                padding: '6px 14px',
+                borderRadius: '20px',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              All ({orders.length})
+            </button>
+
+            {activeTablesList.map(({ table, count }) => {
+              const isSelected = selectedTableFilter === table;
+              return (
+                <button
+                  key={table}
+                  onClick={() => setSelectedTableFilter(isSelected ? 'all' : table)}
+                  style={{
+                    flexShrink: 0,
+                    background: isSelected ? 'var(--color-primary)' : 'var(--bg-card)',
+                    color: isSelected ? '#ffffff' : 'var(--color-text-primary)',
+                    border: `1px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>{table === 'Takeaway' ? '🛍️ Takeaway' : `Table ${table}`}</span>
+                  <span style={{
+                    background: isSelected ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                    fontSize: '10.5px'
+                  }}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {loading ? (

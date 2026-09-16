@@ -159,45 +159,6 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
 
   return (
     <div className="customer-menu-layout">
-      {isStaffMode && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: 'rgba(224, 142, 39, 0.12)',
-          border: '1px solid rgba(224, 142, 39, 0.3)',
-          borderRadius: '10px',
-          padding: '8px 14px',
-          marginBottom: '12px',
-          fontSize: '13px'
-        }}>
-          <span style={{ fontWeight: 700, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span>📝</span> Staff Order Mode
-          </span>
-          <button
-            onClick={() => {
-              sessionStorage.removeItem('orderSource');
-              window.location.href = '/staff/workspace';
-            }}
-            style={{
-              background: '#e74c3c',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              padding: '4px 10px',
-              fontSize: '11.5px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-          >
-            <span>✖</span> Cancel & Exit
-          </button>
-        </div>
-      )}
-
       {errorMsg &&
         <div className="success-details" style={{ backgroundColor: 'var(--color-danger-bg)', borderColor: 'var(--color-danger)', color: 'var(--color-text-primary)', padding: '12px', marginBottom: '20px' }}>
           ⚠️ {errorMsg}

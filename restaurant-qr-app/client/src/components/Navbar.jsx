@@ -58,42 +58,30 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
 
   return (
     <nav className="navbar" style={{ position: 'sticky', top: 0, zIndex: 100 }}>
-      <Link to={getHomeLink()} className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+      <Link to={getHomeLink()} className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', minWidth: 0 }}>
         {logoSrc ? (
-          <img src={logoSrc} alt={`${cafeInfo?.name || 'Cafe'} Logo`} style={{ height: '40px', width: '40px', borderRadius: '50%', objectFit: 'contain', border: '1px solid #6F4E37' }} />
+          <img src={logoSrc} alt={`${cafeInfo?.name || 'Cafe'} Logo`} style={{ height: '36px', width: '36px', borderRadius: '50%', objectFit: 'contain', border: '1px solid #6F4E37', flexShrink: 0 }} />
         ) : (
           <span style={{ fontSize: '0.75rem', color: '#A0826C', border: '1px solid #5C4331', padding: '4px 8px', borderRadius: '4px', whiteSpace: 'nowrap' }}>No Logo Uploaded</span>
         )}
-        <span className="nav-brand-text">{cafeInfo?.name || 'Cafe'}</span>
+        <span className="nav-brand-text" title={cafeInfo?.name || 'Cafe'}>{cafeInfo?.name || 'Cafe'}</span>
       </Link>
-      <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
         {isStaffMode && (
           <button
             onClick={handleExitOrderTaking}
+            className="navbar-exit-btn"
             title="Cancel / Exit Order Mode and return to Workspace"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '5px 12px',
-              background: 'rgba(231, 76, 60, 0.15)',
-              color: '#e74c3c',
-              border: '1px solid #e74c3c',
-              borderRadius: '20px',
-              fontSize: '12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              fontFamily: 'inherit'
-            }}
           >
-            <span style={{ fontSize: '14px', lineHeight: 1 }}>✖</span>
-            <span>Exit Order</span>
+            <span style={{ fontSize: '12px', lineHeight: 1 }}>✖</span>
+            <span className="navbar-exit-text">Exit</span>
           </button>
         )}
 
         {tableNumber && (
           <div className="table-badge">
-            TABLE {tableNumber}
+            <span className="table-badge-full">TABLE {tableNumber}</span>
+            <span className="table-badge-short">T{tableNumber}</span>
           </div>
         )}
         

@@ -2317,3 +2317,80 @@ textarea.form-input {
   }
 }
 
+/* Mobile Navbar & Staff Header Enhancements */
+.navbar-exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: rgba(231, 76, 60, 0.12);
+  color: #e74c3c;
+  border: 1px solid #e74c3c;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.navbar-exit-btn:hover {
+  background: #e74c3c;
+  color: #ffffff;
+}
+.table-badge-short {
+  display: none;
+}
+.table-badge-full {
+  display: inline;
+}
+
+@media (max-width: 540px) {
+  .navbar {
+    padding: 10px 12px !important;
+  }
+  .nav-brand {
+    gap: 8px !important;
+    max-width: 48% !important;
+    min-width: 0 !important;
+  }
+  .nav-brand img {
+    height: 32px !important;
+    width: 32px !important;
+    flex-shrink: 0 !important;
+  }
+  .nav-brand-text {
+    font-size: 15px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: inline-block !important;
+    max-width: 105px !important;
+  }
+  .nav-right {
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+  .navbar-exit-btn {
+    padding: 5px 8px !important;
+    font-size: 11px !important;
+  }
+  .table-badge {
+    padding: 4px 7px !important;
+    font-size: 11px !important;
+    letter-spacing: 0px !important;
+  }
+  .table-badge-full {
+    display: none !important;
+  }
+  .table-badge-short {
+    display: inline !important;
+  }
+  .nav-cart-icon {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 16px !important;
+  }
+}
+
+
