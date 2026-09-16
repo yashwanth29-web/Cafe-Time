@@ -2365,63 +2365,138 @@ const StaffOrderWorkspace = () => {
       )}
 
       {/* ======================= MODAL: TAKE ORDER ======================= */}
-      {showTakeOrderModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-          display: 'flex', justifyContent: 'center', alignItems: 'center'
-        }}>
+      {showTakeOrderModal && (() => {
+        const configuredCount = Math.max(12, Number(cafeInfo?.totalTables || currentBranch?.totalTables || 10));
+        const tableNums = Array.from({ length: configuredCount }, (_, i) => String(i + 1));
+        orders.forEach((o) => {
+          const raw = String(o.tableNumber || '').trim();
+          if (raw && raw.toLowerCase() !== 'takeaway' && raw.toLowerCase() !== 'walk-in' && !tableNums.includes(raw)) {
+            tableNums.push(raw);
+          }
+        });
+
+        return (
           <div style={{
-            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
-            width: '90%', maxWidth: '380px', boxShadow: 'var(--shadow-lg)'
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+            display: 'flex', justifyContent: 'center', alignItems: 'center',
+            padding: '16px'
           }}>
-            <h3 style={{ margin: '0 0 12px 0', color: 'var(--color-text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>Take New Order</h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-              Enter Table Number (leave blank for takeaway / walk-in):
-            </p>
-            <input
-              autoFocus
-              type="text"
-              placeholder="e.g. 8"
-              value={takeOrderTable}
-              onChange={(e) => setTakeOrderTable(e.target.value)}
-              style={{
-                width: '100%', padding: '12px 14px', borderRadius: '8px',
-                border: '1px solid var(--color-border)', marginBottom: '20px',
-                background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)',
-                fontFamily: 'inherit', outline: 'none'
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
-                }
-              }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <div style={{
+              background: 'var(--bg-card)', padding: '22px', borderRadius: '20px',
+              width: '100%', maxWidth: '400px', maxHeight: '85vh',
+              display: 'flex', flexDirection: 'column',
+              boxShadow: 'var(--shadow-lg)', border: '1px solid var(--color-border)'
+            }}>
+              {/* Modal Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                    Take New Order
+                  </h3>
+                  <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
+                    Tap a table to open menu:
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowTakeOrderModal(false)}
+                  style={{
+                    background: 'var(--bg-secondary)', border: '1px solid var(--color-border)',
+                    borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '14px', fontWeight: 700, color: 'var(--color-text-secondary)'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 2-Column Table Grid */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '10px',
+                overflowY: 'auto',
+                paddingRight: '4px',
+                maxHeight: '340px'
+              }}>
+                {tableNums.map((tNum) => {
+                  const hasActiveOrders = orders.some((o) => String(o.tableNumber).trim() === tNum);
+                  return (
+                    <button
+                      key={tNum}
+                      onClick={() => {
+                        setShowTakeOrderModal(false);
+                        window.location.href = `/?table=${tNum}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
+                      }}
+                      style={{
+                        padding: '13px 10px',
+                        borderRadius: '12px',
+                        border: `1.5px solid ${hasActiveOrders ? 'rgba(224, 142, 39, 0.5)' : 'var(--color-border)'}`,
+                        background: hasActiveOrders ? 'rgba(224, 142, 39, 0.08)' : 'var(--bg-secondary)',
+                        color: 'var(--color-text-primary)',
+                        fontSize: '14px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'all 0.15s ease',
+                        fontFamily: 'inherit'
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>🪑</span>
+                        <span>Table {tNum}</span>
+                      </span>
+                      {hasActiveOrders && (
+                        <span style={{
+                          fontSize: '10px',
+                          background: 'var(--color-primary)',
+                          color: '#ffffff',
+                          padding: '2px 5px',
+                          borderRadius: '6px',
+                          fontWeight: 700
+                        }}>
+                          Active
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Takeaway / Walk-in Button */}
               <button
-                onClick={() => { setShowTakeOrderModal(false); setTakeOrderTable(''); }}
+                onClick={() => {
+                  setShowTakeOrderModal(false);
+                  window.location.href = `/?table=Takeaway&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
+                }}
                 style={{
-                  padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--color-border)',
-                  background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px',
-                  color: 'var(--color-text-secondary)'
+                  width: '100%',
+                  marginTop: '12px',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: '1.5px dashed var(--color-primary)',
+                  background: 'rgba(224, 142, 39, 0.08)',
+                  color: 'var(--color-primary)',
+                  fontSize: '13.5px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  fontFamily: 'inherit'
                 }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={() => window.location.href = `/?table=${takeOrderTable || 'Takeaway'}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`}
-                style={{
-                  padding: '10px 18px', borderRadius: '8px', border: 'none',
-                  background: 'var(--color-primary)', color: 'white', cursor: 'pointer',
-                  fontWeight: 'bold', fontSize: '12.5px'
-                }}
-              >
-                Open Menu
+                <span>🛍️</span>
+                <span>Takeaway / Walk-in</span>
               </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ======================= MODAL: REPORT INGREDIENT SHORTAGE ======================= */}
       {showShortageModal && selectedItemForShortage && (

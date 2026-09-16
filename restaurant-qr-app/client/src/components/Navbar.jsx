@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { getCafeInfo, getAssetUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import socket from '../socket';
 
 const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
   const [cafeInfo, setCafeInfo] = useState(null);
+  const [waiterCalled, setWaiterCalled] = useState(false);
 
   const searchParams = new URLSearchParams(location.search);
   const isStaffMode = Boolean(
@@ -15,6 +17,23 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
     sessionStorage.getItem('orderSource') === 'staff' ||
     (user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()))
   );
+
+  const handleCallWaiter = () => {
+    if (waiterCalled) return;
+    setWaiterCalled(true);
+    const resolvedCafe = cafeId || sessionStorage.getItem('cafeId') || 'CP007';
+    const resolvedBranch = sessionStorage.getItem('branchId') || 'default';
+    try {
+      socket.emit('call_waiter', {
+        tableNumber: tableNumber || 'Customer Table',
+        cafeId: resolvedCafe,
+        branchId: resolvedBranch
+      });
+    } catch (e) {
+      console.warn('Socket emit call_waiter failed:', e);
+    }
+    setTimeout(() => setWaiterCalled(false), 30000);
+  };
 
   useEffect(() => {
     const fetchCafe = async () => {
@@ -75,6 +94,33 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
           >
             <span style={{ fontSize: '12px', lineHeight: 1 }}>✖</span>
             <span className="navbar-exit-text">Exit</span>
+          </button>
+        )}
+
+        {!isStaffMode && tableNumber && (
+          <button
+            onClick={handleCallWaiter}
+            disabled={waiterCalled}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              background: waiterCalled ? 'rgba(39, 174, 96, 0.15)' : 'rgba(224, 142, 39, 0.1)',
+              color: waiterCalled ? '#27ae60' : 'var(--color-primary)',
+              border: `1px solid ${waiterCalled ? '#27ae60' : 'var(--color-primary)'}`,
+              borderRadius: '16px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: waiterCalled ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+              transition: 'all 0.2s ease',
+              flexShrink: 0
+            }}
+            title="Call staff to Table"
+          >
+            <span>{waiterCalled ? '✅' : '🔔'}</span>
+            <span>{waiterCalled ? 'Called' : 'Help'}</span>
           </button>
         )}
 

@@ -535,6 +535,42 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             <label htmlFor="special-instructions" style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>📝</span> Special Instructions (Optional)
             </label>
+
+            {/* 1-Tap Quick Note Chips */}
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '2px 0 2px 0' }}>
+              {['☕ Extra Hot', '🧊 Less Ice', '🍬 Less Sugar', '🥛 Extra Milk', '🌶️ Make Spicy'].map((tag) => {
+                const cleanTag = tag.replace(/^[^\s]+\s/, '');
+                const isIncluded = specialInstructions.includes(cleanTag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => {
+                      if (isIncluded) {
+                        setSpecialInstructions(prev => prev.replace(cleanTag, '').replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, '').trim());
+                      } else {
+                        setSpecialInstructions(prev => (prev ? `${prev}, ${cleanTag}` : cleanTag));
+                      }
+                    }}
+                    style={{
+                      background: isIncluded ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                      color: isIncluded ? '#ffffff' : 'var(--color-text-primary)',
+                      border: `1px solid ${isIncluded ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      borderRadius: '16px',
+                      padding: '4px 9px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      fontFamily: 'inherit'
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+
             <textarea
               id="special-instructions"
               name="specialInstructions"
@@ -547,11 +583,11 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
                 padding: '10px 12px',
                 borderRadius: '8px',
                 border: '1px solid var(--color-border)',
-                background: 'rgba(0,0,0,0.15)',
+                background: 'rgba(0,0,0,0.03)',
                 color: 'var(--color-text-primary)',
                 outline: 'none',
                 fontSize: '13px',
-                minHeight: '55px',
+                minHeight: '50px',
                 resize: 'vertical',
                 boxSizing: 'border-box'
               }}
