@@ -532,37 +532,29 @@ const OrderHistory = ({ cafeId }) => {
                       </p>
                     </div>
                   )}
-                  {orderStatus === 'Ready' && (
+                  {(orderStatus === 'Ready' || orderStatus === 'Delivered' || orderStatus === 'Completed') && (
                     <div style={{ textAlign: 'center', marginBottom: '10px' }}>
                       <p style={{ fontSize: '12.5px', color: 'var(--color-success)', margin: 0, fontWeight: 800 }}>
                         🎉 Your order is READY!
                       </p>
                     </div>
                   )}
-                  {(orderStatus === 'Delivered' || orderStatus === 'Completed') && (
-                    <div style={{ textAlign: 'center', marginBottom: '10px' }}>
-                      <p style={{ fontSize: '11.5px', color: 'var(--color-success)', margin: 0, fontWeight: 700 }}>
-                        🍽️ Delivered & Enjoy your meal!
-                      </p>
-                    </div>
-                  )}
 
-                  {/* Interactive 4-Step Progress Track: ORDER PLACED -> PREPARING -> READY -> DELIVERED */}
+                  {/* Interactive 3-Step Progress Track: ORDER PLACED -> PREPARING -> READY */}
                   {(() => {
                     const stepRank = {
                       'Placed': 1,
                       'Preparing': 2,
                       'Ready': 3,
-                      'Delivered': 4,
-                      'Completed': 4
+                      'Delivered': 3,
+                      'Completed': 3
                     };
                     const currentRank = stepRank[orderStatus] || 1;
 
                     const steps = [
                       { label: 'Placed', rank: 1 },
                       { label: 'Preparing', rank: 2 },
-                      { label: 'Ready', rank: 3 },
-                      { label: 'Delivered', rank: 4 }
+                      { label: 'Ready', rank: 3 }
                     ];
 
                     return (
@@ -570,7 +562,7 @@ const OrderHistory = ({ cafeId }) => {
                         {steps.map((st, i) => {
                           const isDone = currentRank >= st.rank;
                           const isCurrent = currentRank === st.rank;
-                          const activeColor = st.rank === 4 ? 'var(--color-success)' : st.rank === 3 ? '#27ae60' : 'var(--color-primary)';
+                          const activeColor = st.rank === 3 ? 'var(--color-success)' : 'var(--color-primary)';
                           return (
                             <React.Fragment key={st.rank}>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flexShrink: 0 }}>

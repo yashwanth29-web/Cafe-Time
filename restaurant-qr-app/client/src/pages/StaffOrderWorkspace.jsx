@@ -1007,10 +1007,7 @@ const StaffOrderWorkspace = () => {
           <div className="scrollable-tabs-container" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '10px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
             {[
               { id: 'all', label: 'All Orders', count: stats.all, color: 'var(--color-text-primary)' },
-              { id: 'placed', label: 'Placed / New', count: stats.placed, color: '#3498db' },
-              { id: 'preparing', label: 'Preparing', count: stats.preparing, color: '#ff9800' },
-              { id: 'ready', label: 'Ready to Serve', count: stats.ready, color: '#2ecc71' },
-              { id: 'unpaid', label: 'Awaiting Payment', count: stats.unpaid, color: '#9b59b6' }
+              { id: 'placed', label: 'Placed / New', count: stats.placed, color: '#3498db' }
             ].map((col) => (
               <button
                 key={col.id}
