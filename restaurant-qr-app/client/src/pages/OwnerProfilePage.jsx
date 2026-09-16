@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useBranch } from '../context/BranchContext';
 import OwnerLayout, { invalidateOwnerLayoutCache } from '../components/OwnerLayout';
-import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getAssetUrl } from '../services/api';
+import { getSetupData, saveSetupData, updateOwnerProfile, getBranches, createBranch, updateBranch, deleteBranch, getAssetUrl, uploadCafeLogo, saveCafeLogoUrl } from '../services/api';
 
 // Global in-memory cache for profile page data
 const profileCache = {
@@ -70,6 +70,8 @@ const OwnerProfilePage = () => {
   const [activeModal, setActiveModal] = useState(null);
   const [form, setForm] = useState({});
   const [editingBranchId, setEditingBranchId] = useState(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef(null);
 
   const prevUserIdRef = useRef(user?._id);
 
@@ -87,6 +89,35 @@ const OwnerProfilePage = () => {
   };
 
   const showToast = (msg, ok = true) => {setToast({ msg, ok });setTimeout(() => setToast(null), 3000);};
+
+  const handleLogoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      showToast('Only JPG, PNG, WEBP images allowed', false);
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Logo must be under 2MB', false);
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const uploadRes = await uploadCafeLogo(file);
+      if (!uploadRes.success) throw new Error(uploadRes.message || 'Upload failed');
+      const logoUrl = uploadRes.logoUrl;
+      // Update local state immediately
+      setCafeData(prev => ({ ...prev, logoUrl }));
+      // Invalidate owner layout cache so navbar logo updates too
+      invalidateOwnerLayoutCache();
+      showToast('Logo updated successfully!');
+    } catch (err) {
+      showToast(err?.response?.data?.message || err.message || 'Logo upload failed', false);
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
 
   const openEditBranchModal = (branch) => {
     setForm({
@@ -737,12 +768,52 @@ const OwnerProfilePage = () => {
           {/* Banner */}
           <div className="pp-banner">
             <div className="pp-avatar-wrap">
-              <div className="pp-avatar">
-                {cafeData?.logoUrl ? (
-                  <img src={getAssetUrl(cafeData.logoUrl)} alt={`${cafeData?.name || 'Cafe'} Logo`} />
+              {/* Clickable logo upload circle */}
+              <div
+                className="pp-avatar"
+                onClick={() => !logoUploading && logoInputRef.current?.click()}
+                title="Click to upload cafe logo"
+                style={{ cursor: logoUploading ? 'wait' : 'pointer', position: 'relative', overflow: 'hidden' }}
+              >
+                {logoUploading ? (
+                  // Spinner while uploading
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '6px' }}>
+                    <div style={{ width: '28px', height: '28px', border: '3px solid rgba(160,130,108,.25)', borderTop: '3px solid #A0826C', borderRadius: '50%', animation: 'spin 0.9s linear infinite' }} />
+                    <span style={{ fontSize: '0.6rem', color: '#A0826C' }}>Uploading…</span>
+                  </div>
+                ) : cafeData?.logoUrl ? (
+                  <>
+                    <img src={getAssetUrl(cafeData.logoUrl)} alt={`${cafeData?.name || 'Cafe'} Logo`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    {/* Camera overlay on hover */}
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      background: 'rgba(0,0,0,0.45)',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      opacity: 0, transition: 'opacity .2s',
+                      fontSize: '0.6rem', color: '#fff', gap: '4px'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                    onMouseLeave={e => e.currentTarget.style.opacity = 0}
+                    >
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                      Change Logo
+                    </div>
+                  </>
                 ) : (
-                  <span style={{ fontSize: '0.65rem', color: '#A0826C', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '2px' }}>No Logo Uploaded</span>
+                  // Empty state — camera icon + text
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '6px', padding: '8px' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A0826C" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    <span style={{ fontSize: '0.58rem', color: '#A0826C', textAlign: 'center', lineHeight: 1.3 }}>Upload Logo</span>
+                  </div>
                 )}
+                {/* Hidden file input */}
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleLogoChange}
+                />
               </div>
               <div className="pp-identity">
                 <h2>{cafeData?.name || 'My Cafe'}</h2>

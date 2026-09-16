@@ -302,6 +302,22 @@ export const seedTenantAssets = async () => {
   return response.data;
 };
 
+// Upload cafe logo image — returns { success, logoUrl }
+export const uploadCafeLogo = async (file) => {
+  const formData = new FormData();
+  formData.append('logo', file);
+  const response = await API.post('/admin/upload-logo', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+  return response.data;
+};
+
+// Save logoUrl into the Cafe model via saveSetupData
+export const saveCafeLogoUrl = async (logoUrl) => {
+  const response = await API.post('/admin/setup', { logoUrl });
+  return response.data;
+};
+
 // Branches Management APIs
 export const getBranches = async (params = {}) => {
   const response = await API.get('/admin/branches', { params });

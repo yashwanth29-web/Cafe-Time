@@ -1034,27 +1034,42 @@ const getStaffSummary = async (req, res) => {
 };
 
 /**
- * Handle Cafe logo image upload
+ * Handle Cafe logo image upload — stores file and updates Cafe.logoUrl atomically
  */
 const uploadLogo = async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'No logo file uploaded' });
   }
 
-  // Sync to GridFS
+  const cafeId = req.user.cafeId;
+  if (!cafeId) {
+    return res.status(400).json({ success: false, message: 'No cafe assignment for this user' });
+  }
+
+  // Sync to GridFS for cloud storage
   try {
     const { syncToGridFS } = require('../utils/gridfs');
     await syncToGridFS(req.file);
   } catch (err) {
     console.error('Error syncing logo to GridFS:', err);
   }
+
   const logoUrl = `/uploads/${req.file.filename}`;
+
+  // Save logoUrl directly to the Cafe document
+  try {
+    await Cafe.findOneAndUpdate({ cafeId }, { $set: { logoUrl } });
+  } catch (err) {
+    console.error('Error saving logoUrl to Cafe:', err);
+    return res.status(500).json({ success: false, message: 'Logo uploaded but failed to save to profile' });
+  }
 
   return res.status(200).json({
     success: true,
     logoUrl
   });
 };
+
 
 /**
  * Update Branch details
