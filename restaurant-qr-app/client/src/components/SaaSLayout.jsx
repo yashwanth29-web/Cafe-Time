@@ -302,9 +302,9 @@ const SaaSLayout = ({ children }) => {
       case 'chef':
         return [
         { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
-        { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
+        { label: 'My Attendance', icon: '⏰', path: '/staff/attendance', disabled: true },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
-        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
+        { label: 'My Salary', icon: '💵', path: '/employee/payroll', disabled: true }];
 
       case 'waiter':
       case 'cashier':
@@ -312,9 +312,9 @@ const SaaSLayout = ({ children }) => {
       case 'staff':
         return [
         { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
-        { label: 'My Attendance', icon: '⏰', path: '/staff/attendance' },
+        { label: 'My Attendance', icon: '⏰', path: '/staff/attendance', disabled: true },
         { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
-        { label: 'My Salary', icon: '💵', path: '/employee/payroll' }];
+        { label: 'My Salary', icon: '💵', path: '/employee/payroll', disabled: true }];
 
       default:
         return [];
@@ -897,12 +897,17 @@ const SaaSLayout = ({ children }) => {
         }}>
           {navItems.map((item, index) => {
             const isActive = isPathActive(item.path);
+            const isDisabled = !!item.disabled;
 
             return (
               <button
                 key={index}
-                onClick={() => navigate(item.path)}
-                title={sidebarCollapsed ? item.label : ''}
+                disabled={isDisabled}
+                onClick={() => {
+                  if (isDisabled) return;
+                  navigate(item.path);
+                }}
+                title={isDisabled ? `${item.label} (Inactive)` : (sidebarCollapsed ? item.label : '')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -913,23 +918,24 @@ const SaaSLayout = ({ children }) => {
                   border: 'none',
                   borderLeft: isActive ? '4px solid var(--color-primary)' : '4px solid transparent',
                   background: isActive ? 'rgba(143, 168, 155, 0.16)' : 'transparent',
-                  color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  color: isDisabled ? 'var(--color-text-secondary)' : (isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)'),
+                  opacity: isDisabled ? 0.45 : 1,
                   fontSize: '16px',
                   fontWeight: isActive ? 800 : 600,
                   letterSpacing: '-0.2px',
-                  cursor: 'pointer',
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
                   width: '100%',
                   transition: 'all 0.2s ease',
                   textAlign: 'left'
                 }}
                 onMouseEnter={(e) => {
-                  if (!isActive) {
+                  if (!isActive && !isDisabled) {
                     e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)';
                     e.currentTarget.style.color = 'var(--color-text-primary)';
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) {
+                  if (!isActive && !isDisabled) {
                     e.currentTarget.style.background = 'transparent';
                     e.currentTarget.style.color = 'var(--color-text-secondary)';
                   }
@@ -1236,11 +1242,20 @@ const SaaSLayout = ({ children }) => {
       <nav className="bottom-nav">
         {primaryMobileItems.map((item, index) => {
           const isActive = isPathActive(item.path);
+          const isDisabled = !!item.disabled;
           return (
             <button
               key={index}
-              onClick={() => navigate(item.path)}
-              className={`bnav-item ${isActive ? 'active' : ''}`}>
+              disabled={isDisabled}
+              onClick={() => {
+                if (isDisabled) return;
+                navigate(item.path);
+              }}
+              className={`bnav-item ${isActive ? 'active' : ''}`}
+              style={{
+                opacity: isDisabled ? 0.45 : 1,
+                cursor: isDisabled ? 'not-allowed' : 'pointer'
+              }}>
               
               <span className="bnav-icon">{renderSvgIcon(item.label, isActive) || item.icon}</span>
               <span className="bnav-label">{getBottomBarLabel(item.label)}</span>
@@ -1322,10 +1337,13 @@ const SaaSLayout = ({ children }) => {
         }}>
           {remainingMobileItems.map((item, index) => {
             const isActive = isPathActive(item.path);
+            const isDisabled = !!item.disabled;
             return (
               <button
                 key={index}
+                disabled={isDisabled}
                 onClick={() => {
+                  if (isDisabled) return;
                   navigate(item.path);
                   setMoreMenuOpen(false);
                 }}
@@ -1339,7 +1357,8 @@ const SaaSLayout = ({ children }) => {
                   borderRadius: '12px',
                   background: isActive ? 'rgba(143, 168, 155, 0.12)' : 'rgba(0, 0, 0, 0.02)',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                  cursor: 'pointer',
+                  opacity: isDisabled ? 0.45 : 1,
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s',
                   border: isActive ? '1px solid rgba(143, 168, 155, 0.3)' : '1px solid rgba(0, 0, 0, 0.03)'
                 }}>
