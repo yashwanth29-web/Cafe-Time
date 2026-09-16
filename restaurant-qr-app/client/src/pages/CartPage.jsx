@@ -9,7 +9,12 @@ import socket, { connectSocket } from '../socket';
 const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId, branchId }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isStaff = sessionStorage.getItem('orderSource') === 'staff';
+  const searchParams = new URLSearchParams(window.location.search);
+  const isStaff = Boolean(
+    searchParams.get('source') === 'staff' ||
+    sessionStorage.getItem('orderSource') === 'staff' ||
+    (user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()))
+  );
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);

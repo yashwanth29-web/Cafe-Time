@@ -3,10 +3,13 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 import socket, { connectSocket } from '../socket';
+import { useAuth } from '../context/AuthContext';
 
 const OrderHistory = ({ cafeId }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+  const isStaffUser = Boolean(user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()));
   const newOrderFromNav = location.state?.newOrder;
 
   const [loading, setLoading] = useState(false);
@@ -411,6 +414,28 @@ const OrderHistory = ({ cafeId }) => {
           }}>
             ⏳ Active Orders Tracker
           </h3>
+
+          {isStaffUser && (
+            <div style={{ marginBottom: '14px', textAlign: 'center' }}>
+              <Link
+                to="/staff/workspace"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  background: 'var(--color-primary)',
+                  color: 'var(--color-text-primary)',
+                  textDecoration: 'none'
+                }}
+              >
+                ← Back to Staff Workspace
+              </Link>
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {activeOrders.map((order) => {
