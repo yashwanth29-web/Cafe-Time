@@ -385,15 +385,31 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
     }
   };
 
+  const handleBackToMenu = () => {
+    const params = new URLSearchParams();
+    const currentTable = tableNumber || sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber');
+    const currentCafe = cafeId || sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId');
+    const currentBranch = branchId || sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId');
+    const isStaffOrder = sessionStorage.getItem('orderSource') === 'staff' || isStaff;
+
+    if (currentTable) params.set('table', currentTable);
+    if (isStaffOrder) params.set('source', 'staff');
+    if (currentCafe) params.set('cafeId', currentCafe);
+    if (currentBranch) params.set('branchId', currentBranch);
+
+    const search = params.toString();
+    navigate(search ? `/?${search}` : '/menu');
+  };
+
   if (cart.length === 0) {
     return (
       <div className="cart-page">
         <div className="cart-empty">
           <div className="cart-empty-icon">🛒</div>
           <p className="cart-empty-text">Your cart is currently empty.</p>
-          <Link to="/menu" className="btn btn-secondary">
-            Browse Delicious Menu
-          </Link>
+          <button onClick={handleBackToMenu} className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+            ← Browse Delicious Menu
+          </button>
         </div>
       </div>
     );
@@ -401,8 +417,54 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
 
   return (
     <div className="cart-page">
-      <div className="cart-header">
-        <h2 className="cart-title">Your Order Cart</h2>
+      <div className="cart-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={handleBackToMenu}
+            aria-label="Back to Menu"
+            title="Back to Menu"
+            style={{
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '50%',
+              width: '36px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--color-text-primary)',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              transition: 'all 0.2s ease',
+              flexShrink: 0
+            }}
+          >
+            ←
+          </button>
+          <h2 className="cart-title" style={{ margin: 0, fontSize: '1.25rem' }}>Your Order Cart</h2>
+        </div>
+
+        <button
+          onClick={handleBackToMenu}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--color-primary)',
+            color: 'var(--color-primary)',
+            borderRadius: '20px',
+            padding: '6px 12px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            fontFamily: 'inherit',
+            flexShrink: 0
+          }}
+        >
+          <span>➕</span> Add More
+        </button>
       </div>
 
       {errorMsg && (
@@ -423,6 +485,29 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
               removeFromCart={removeFromCart}
             />
           ))}
+
+          <button
+            onClick={handleBackToMenu}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '1px dashed var(--color-primary)',
+              borderRadius: '12px',
+              background: 'rgba(255, 107, 8, 0.05)',
+              color: 'var(--color-primary)',
+              fontWeight: 700,
+              fontSize: '13px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              marginTop: '10px',
+              fontFamily: 'inherit'
+            }}
+          >
+            <span>➕</span> Browse Menu & Add More Dishes
+          </button>
         </div>
 
         {/* Cart Summary Panel */}
