@@ -1067,6 +1067,43 @@ const StaffOrderWorkspace = () => {
                       </span>
                     </div>
 
+                    {/* Quick Order Actions: Add Items, Edit Order, Delete Order */}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', background: 'var(--bg-secondary)', padding: '6px 8px', borderRadius: '8px' }}>
+                      <button
+                        onClick={() => handleOpenAddItems(order)}
+                        style={{
+                          background: 'rgba(52, 152, 219, 0.12)', color: '#2980b9', border: '1px solid rgba(52, 152, 219, 0.3)',
+                          padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                        title="Add items to this existing order"
+                      >
+                        ➕ Add Items
+                      </button>
+                      <button
+                        onClick={() => handleOpenEditOrder(order)}
+                        style={{
+                          background: 'rgba(243, 156, 18, 0.12)', color: '#d35400', border: '1px solid rgba(243, 156, 18, 0.3)',
+                          padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                        title="Edit order quantities and instructions"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteOrder(order._id)}
+                        style={{
+                          background: 'rgba(231, 76, 60, 0.12)', color: '#c0392b', border: '1px solid rgba(231, 76, 60, 0.3)',
+                          padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                        title="Delete order and restore inventory"
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+
                     {/* Special Instructions */}
                     {order.specialInstructions && (
                       <div style={{ background: 'var(--color-warning-bg)', borderLeft: '3px solid var(--color-warning)', padding: '6px 10px', borderRadius: '4px', fontSize: '12px', color: 'var(--color-text-primary)' }}>
