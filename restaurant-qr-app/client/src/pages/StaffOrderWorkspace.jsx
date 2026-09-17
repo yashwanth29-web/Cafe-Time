@@ -965,12 +965,17 @@ const StaffOrderWorkspace = () => {
     }
   };
 
-  // Mark order as paid
+  // Mark order as paid - Instant 0ms modal close and smooth background sync
   const handleCollectPayment = async (orderId, paymentMethod) => {
+    // 1. Immediately close the modal to eliminate the 5-second freeze
+    setPaymentModalOrder(null);
     setPaymentSubmitting(true);
     try {
       await handleStatusTransition(orderId, 'Completed', { paymentStatus: 'Paid', paymentMethod });
-      setPaymentModalOrder(null);
+      // Refresh completed logs in background if on today's view
+      if (typeof fetchCompletedLogs === 'function') {
+        fetchCompletedLogs(historyDate || todayDateStr);
+      }
     } catch (err) {
       console.error('Error collecting payment:', err);
     } finally {
