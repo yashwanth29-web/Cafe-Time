@@ -883,24 +883,18 @@ const updateOrderDetails = async (req, res, next) => {
       order.totalAmount = grandTotal;
       order.grandTotal = grandTotal;
 
-      // If order was already Ready/Deducted, deduct for newly added items
-      if (wasDeducted && ['Ready', 'Delivered', 'Completed'].includes(order.status)) {
-        const newItemsToAdd = [];
-        for (const newItem of items) {
-          const oldItem = prevItems.find(oi => (String(oi.id || oi._id) === String(newItem.id || newItem._id) || oi.name === newItem.name));
-          const oldQty = oldItem ? oldItem.quantity : 0;
-          if (newItem.quantity > oldQty) {
-            newItemsToAdd.push({
-              ...newItem,
-              quantity: newItem.quantity - oldQty
-            });
-          }
-        }
-        if (newItemsToAdd.length > 0) {
-          deductInventoryForOrder(order._id, order.cafeId, newItemsToAdd)
-            .catch(err => console.warn('Inventory deduction warning on adding items:', err.message));
+      // If order was already Ready/Deducted, restore previous inventory deduction
+      if (wasDeducted) {
+        try {
+          await restoreInventoryForOrder(order._id, order.cafeId, prevItems, order.branchId);
+        } catch (restErr) {
+          console.warn('Inventory restore warning during order edit:', restErr.message);
         }
       }
+
+      // Reset status to Placed and inventoryDeducted to false so staff can click Order Ready & Mark Paid again
+      order.status = 'Placed';
+      order.inventoryDeducted = false;
     }
 
     const savedOrder = await order.save();
