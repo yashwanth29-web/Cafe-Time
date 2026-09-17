@@ -599,6 +599,8 @@ const printOrderReceipt = async (req, res, next) => {
   } catch (error) {
     error.controllerName = 'orderController';
     error.serviceName = 'printOrderReceipt';
+    next(error);
+  }
 };
 
 // @desc    Update order status
