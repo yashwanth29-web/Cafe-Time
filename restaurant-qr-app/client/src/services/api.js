@@ -230,28 +230,30 @@ export const payExistingOrder = async (payload) => {
 };
 
 // Auth API helpers
-export const sendOtp = async (email) => {
-  const response = await API.post('/auth/send-otp', { email });
+export const loginUser = async (username, password) => {
+  const response = await API.post('/auth/login', { username, password });
   return response.data;
 };
 
-export const verifyOtp = async (email, otp) => {
-  const response = await API.post('/auth/verify-otp', { email, otp });
+export const changePasswordApi = async (currentPassword, newPassword) => {
+  const response = await API.post('/auth/change-password', { currentPassword, newPassword });
   return response.data;
 };
 
-export const resendOtp = async (email) => {
-  const response = await API.post('/auth/resend-otp', { email });
+export const resetStaffPasswordApi = async (payloadOrId, newPassword) => {
+  const payload = typeof payloadOrId === 'object' ? payloadOrId : { staffId: payloadOrId, newPassword };
+  const response = await API.post('/admin/staff/reset-password', payload);
+  return response.data;
+};
+
+export const resetOwnerPasswordApi = async (payloadOrId, newPassword) => {
+  const payload = typeof payloadOrId === 'object' ? payloadOrId : { ownerId: payloadOrId, newPassword };
+  const response = await API.post('/superadmin/reset-owner-password', payload);
   return response.data;
 };
 
 export const logoutUser = async () => {
   const response = await API.post('/auth/logout');
-  return response.data;
-};
-
-export const loginWithGoogleApi = async (credential) => {
-  const response = await API.post('/auth/google', { credential });
   return response.data;
 };
 
@@ -634,6 +636,11 @@ export const getCafeInfo = async (cafeId) => {
 
 export const getPaymentInfo = async (params) => {
   const response = await API.get('/cafe/payment-info/config', { params });
+  return response.data;
+};
+
+export const getCafeTables = async (params) => {
+  const response = await API.get('/cafe/tables/config', { params });
   return response.data;
 };
 

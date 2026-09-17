@@ -23,11 +23,11 @@ const isDev = import.meta.env.DEV;
 const socket = io(SOCKET_URL, {
   autoConnect: false,
   reconnection: true,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 3000,
   reconnectionAttempts: Infinity,
-  timeout: 20000,
-  transports: ['polling', 'websocket'] // Reliable HTTP polling handshake with seamless WebSocket upgrade
+  timeout: 10000,
+  transports: ['websocket', 'polling'] // Instant WebSocket first for sub-millisecond sync
 });
 
 // Cache for room tracking

@@ -22,7 +22,8 @@ const {
   updateCafeTheme,
   getReports,
   getDashboardStats,
-  initializeTenantAssets
+  initializeTenantAssets,
+  resetStaffPassword
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -64,6 +65,7 @@ const upload = multer({
 
 // Staff Management Routes
 router.post('/create-staff', restrictTo('admin', 'owner'), createStaff);
+router.post('/staff/reset-password', restrictTo('admin', 'owner'), resetStaffPassword);
 router.get('/staff', restrictTo('admin', 'owner', 'manager'), getStaff);
 router.put('/staff/:id', restrictTo('admin', 'owner'), updateStaff);
 router.delete('/staff/:id', restrictTo('admin', 'owner'), deleteStaff);

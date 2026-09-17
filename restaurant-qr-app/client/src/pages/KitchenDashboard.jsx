@@ -228,15 +228,23 @@ const KitchenDashboard = () =>{
       connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);
 
       const handleOrderCreated = (newOrder) => {
-        // Only accept real-time order creation if it matches the current branch context
         if (activeBranchId && activeBranchId !== 'all') {
-          const activeBranchDoc = (branches || []).find(b => b.branchId === activeBranchId || b._id === activeBranchId);
-          const orderBranchDoc = (branches || []).find(b => b.branchId === newOrder.branchId || b._id === newOrder.branchId);
-          const activeBranchObjectId = activeBranchDoc ? String(activeBranchDoc._id) : '';
-          const orderBranchObjectId = orderBranchDoc ? String(orderBranchDoc._id) : newOrder.branchId;
+          const activeBranchDoc = (branches || []).find(b => b.branchId === activeBranchId || String(b._id) === String(activeBranchId));
+          const orderBranchDoc = (branches || []).find(b => b.branchId === newOrder.branchId || String(b._id) === String(newOrder.branchId));
+          
+          const activeCode = activeBranchDoc?.branchId || activeBranchId;
+          const orderCode = orderBranchDoc?.branchId || newOrder.branchId;
+          const activeObjId = activeBranchDoc ? String(activeBranchDoc._id) : '';
+          const orderObjId = orderBranchDoc ? String(orderBranchDoc._id) : '';
 
-          if (activeBranchObjectId && activeBranchObjectId !== orderBranchObjectId) {
-            return; // Ignore order from another branch
+          const isMatching = (activeCode === orderCode) ||
+                             (activeCode === 'default' || orderCode === 'default') ||
+                             (activeObjId && orderObjId && activeObjId === orderObjId) ||
+                             (activeObjId && activeObjId === String(newOrder.branchId)) ||
+                             (orderObjId && orderObjId === String(activeBranchId));
+
+          if (!isMatching) {
+            return;
           }
         }
 
@@ -259,12 +267,34 @@ const KitchenDashboard = () =>{
         );
       };
 
+      const handleOrderDeleted = (data) => {
+        const delId = typeof data === 'object' ? data.orderId || data._id : data;
+        setOrders((prev) => prev.filter((o) => o._id !== delId));
+      };
+
+      const handleOrderCancelled = (cancelledOrder) => {
+        const canId = typeof cancelledOrder === 'object' ? cancelledOrder._id : cancelledOrder;
+        setOrders((prev) => prev.filter((o) => o._id !== canId));
+      };
+
       socket.on('order_created', handleOrderCreated);
+      socket.on('orderCreated', handleOrderCreated);
       socket.on('order_updated', handleOrderUpdated);
+      socket.on('orderUpdated', handleOrderUpdated);
+      socket.on('order_deleted', handleOrderDeleted);
+      socket.on('orderDeleted', handleOrderDeleted);
+      socket.on('order_cancelled', handleOrderCancelled);
+      socket.on('orderCancelled', handleOrderCancelled);
 
       return () => {
         socket.off('order_created', handleOrderCreated);
+        socket.off('orderCreated', handleOrderCreated);
         socket.off('order_updated', handleOrderUpdated);
+        socket.off('orderUpdated', handleOrderUpdated);
+        socket.off('order_deleted', handleOrderDeleted);
+        socket.off('orderDeleted', handleOrderDeleted);
+        socket.off('order_cancelled', handleOrderCancelled);
+        socket.off('orderCancelled', handleOrderCancelled);
         clearInterval(pollInterval);
       };
     }

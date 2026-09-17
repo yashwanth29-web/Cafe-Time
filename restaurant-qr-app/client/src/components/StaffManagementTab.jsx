@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { resetStaffPasswordApi } from '../services/api';
 
 const StaffManagementTab = () => {
   const [staffList, setStaffList] = useState([]);
@@ -7,8 +8,10 @@ const StaffManagementTab = () => {
   const [toast, setToast] = useState(null);
   
   const [activeModal, setActiveModal] = useState(null);
+  const [resetModalStaff, setResetModalStaff] = useState(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
   const [form, setForm] = useState({ 
-    name: '', phone: '', email: '', staffRole: 'staff', isActive: true,
+    name: '', username: '', password: '', phone: '', email: '', staffRole: 'waiter', isActive: true,
     salaryType: 'DAILY', dailyRate: 0, hourlyRate: 0, weeklyRate: 0, monthlyRate: 0,
     weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE'
   });
@@ -35,14 +38,12 @@ const StaffManagementTab = () => {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadStaff();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadStaff]);
 
   const handleOpenAdd = () => {
     setForm({ 
-      name: '', phone: '', email: '', staffRole: 'staff', isActive: true,
+      name: '', username: '', password: '', phone: '', email: '', staffRole: 'waiter', isActive: true,
       salaryType: 'DAILY', dailyRate: 0, hourlyRate: 0, weeklyRate: 0, monthlyRate: 0,
       weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE'
     });
@@ -53,7 +54,9 @@ const StaffManagementTab = () => {
   const handleOpenEdit = (staff) => {
     setForm({
       name: staff.name,
-      phone: staff.phone,
+      username: staff.username || '',
+      password: '',
+      phone: staff.phone || '',
       email: staff.email || '',
       staffRole: staff.staffRole || staff.role,
       isActive: staff.isActive !== false,
@@ -78,13 +81,26 @@ const StaffManagementTab = () => {
         showToast('Staff updated successfully');
       } else {
         await axios.post('/api/admin/create-staff', form, { withCredentials: true });
-        showToast('Staff created successfully');
+        showToast('Staff created successfully with login access');
       }
       setActiveModal(null);
       loadStaff();
     } catch (err) {
       console.error('Error saving staff:', err);
       showToast(err.response?.data?.message || 'Error saving staff', false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e) => {
+    e.preventDefault();
+    if (!resetModalStaff || !newPasswordInput.trim()) return;
+    try {
+      await resetStaffPasswordApi(resetModalStaff._id, newPasswordInput.trim());
+      showToast(`Password for ${resetModalStaff.name} reset successfully!`);
+      setResetModalStaff(null);
+      setNewPasswordInput('');
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to reset password', false);
     }
   };
 
@@ -125,10 +141,15 @@ const StaffManagementTab = () => {
       )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0, color: 'var(--color-text-primary)' }}>Staff Management</h2>
+        <div>
+          <h2 style={{ margin: 0, color: 'var(--color-text-primary)' }}>Staff Management</h2>
+          <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+            Manage employee login credentials, roles, and wages
+          </p>
+        </div>
         <button 
           onClick={handleOpenAdd}
-          style={{ background: 'var(--color-primary)', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+          style={{ background: 'var(--color-primary, #D47F46)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
         >
           + Add New Staff
         </button>
@@ -146,9 +167,9 @@ const StaffManagementTab = () => {
             <thead>
               <tr style={{ background: 'var(--bg-secondary)', borderBottom: '2px solid var(--color-border)' }}>
                 <th style={{ padding: '16px', color: 'var(--color-text-primary)' }}>Staff Details</th>
+                <th style={{ padding: '16px', color: 'var(--color-text-primary)' }}>Login Username</th>
                 <th style={{ padding: '16px', color: 'var(--color-text-primary)' }}>Role</th>
                 <th style={{ padding: '16px', color: 'var(--color-text-primary)' }}>Salary Rate</th>
-                <th style={{ padding: '16px', color: 'var(--color-text-primary)' }}>Performance</th>
                 <th style={{ padding: '16px', color: 'var(--color-text-primary)' }}>Status</th>
                 <th style={{ padding: '16px', color: 'var(--color-text-primary)', textAlign: 'right' }}>Actions</th>
               </tr>
@@ -158,8 +179,21 @@ const StaffManagementTab = () => {
                 <tr key={staff._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '16px' }}>
                     <div style={{ fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{staff.name}</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>{staff.phone}</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>{staff.phone || 'No phone'}</div>
                     {staff.email && <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', opacity: 0.8 }}>{staff.email}</div>}
+                  </td>
+                  <td style={{ padding: '16px' }}>
+                    <span style={{ 
+                      fontFamily: 'monospace', 
+                      background: 'rgba(212, 127, 70, 0.1)', 
+                      color: 'var(--color-primary, #D47F46)', 
+                      padding: '4px 8px', 
+                      borderRadius: '6px', 
+                      fontSize: '0.85rem', 
+                      fontWeight: 'bold' 
+                    }}>
+                      @{staff.username || 'n/a'}
+                    </span>
                   </td>
                   <td style={{ padding: '16px' }}>
                     <span style={{ 
@@ -187,14 +221,6 @@ const StaffManagementTab = () => {
                     </div>
                   </td>
                   <td style={{ padding: '16px' }}>
-                    <div style={{ fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
-                      <strong>{staff.ordersHandledToday || 0}</strong> orders today
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                      Last Login: {staff.lastLogin ? new Date(staff.lastLogin).toLocaleDateString() : 'Never'}
-                    </div>
-                  </td>
-                  <td style={{ padding: '16px' }}>
                     <span 
                       style={{ 
                         background: staff.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)', 
@@ -203,14 +229,20 @@ const StaffManagementTab = () => {
                         cursor: 'pointer'
                       }}
                       onClick={() => toggleStatus(staff)}
-                      title="Click to toggle status"
+                      title="Click to toggle active status"
                     >
                       {staff.isActive ? '● Active' : '○ Inactive'}
                     </span>
                   </td>
                   <td style={{ padding: '16px', textAlign: 'right' }}>
-                    <button onClick={() => handleOpenEdit(staff)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', padding: '6px 12px', borderRadius: '6px', marginRight: '8px', cursor: 'pointer' }}>Edit</button>
-                    <button onClick={() => handleDelete(staff)} style={{ background: 'transparent', border: '1px solid rgba(231, 76, 60, 0.5)', color: '#e74c3c', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' }}>Delete</button>
+                    <button 
+                      onClick={() => { setResetModalStaff(staff); setNewPasswordInput(''); }}
+                      style={{ background: 'rgba(212, 127, 70, 0.1)', border: '1px solid rgba(212, 127, 70, 0.3)', color: 'var(--color-primary, #D47F46)', padding: '6px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}
+                    >
+                      Reset Pass
+                    </button>
+                    <button onClick={() => handleOpenEdit(staff)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', padding: '6px 10px', borderRadius: '6px', marginRight: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Edit</button>
+                    <button onClick={() => handleDelete(staff)} style={{ background: 'transparent', border: '1px solid rgba(231, 76, 60, 0.5)', color: '#e74c3c', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Delete</button>
                   </td>
                 </tr>
               ))}
@@ -222,48 +254,71 @@ const StaffManagementTab = () => {
       {/* Modal Form */}
       {activeModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'var(--bg-card)', padding: '30px', borderRadius: '16px', width: '100%', maxWidth: '400px', border: '1px solid var(--color-border)' }}>
+          <div style={{ background: 'var(--bg-card)', padding: '30px', borderRadius: '16px', width: '100%', maxWidth: '440px', border: '1px solid var(--color-border)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ margin: '0 0 20px 0', color: 'var(--color-text-primary)' }}>{editingId ? 'Edit Staff Member' : 'Add New Staff'}</h3>
             
             <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '8px', fontWeight: 'bold' }}>Full Name *</label>
-                <input required value={form.name} onChange={fld('name')} style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Full Name *</label>
+                <input required value={form.name} onChange={fld('name')} style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} placeholder="e.g. Rahul Sharma" />
               </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  Login Username {editingId ? '(Read-only)' : '*'}
+                </label>
+                <input 
+                  required={!editingId}
+                  disabled={!!editingId}
+                  value={form.username} 
+                  onChange={fld('username')} 
+                  style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} 
+                  placeholder="e.g. rahul_waiter (unique login name)" 
+                />
+              </div>
+
+              {!editingId && (
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Initial Password (Optional)</label>
+                  <input 
+                    type="password"
+                    value={form.password} 
+                    onChange={fld('password')} 
+                    style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} 
+                    placeholder="Defaults to Cafe@12345" 
+                  />
+                </div>
+              )}
               
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '8px', fontWeight: 'bold' }}>Phone Number *</label>
-                <input required value={form.phone} onChange={fld('phone')} type="tel" style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Phone Number</label>
+                <input value={form.phone} onChange={fld('phone')} type="tel" style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} placeholder="e.g. +91 9876543210" />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '8px', fontWeight: 'bold' }}>Email Address (Optional)</label>
-                <input value={form.email} onChange={fld('email')} type="email" style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} placeholder="Required for web dashboard access" />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '8px', fontWeight: 'bold' }}>Role *</label>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Role *</label>
                 <select value={form.staffRole} onChange={fld('staffRole')} style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}>
-                  <option value="waiter">Waiter / Cashier (Floor &amp; Billing)</option>
+                  <option value="waiter">Waiter (Floor service)</option>
                   <option value="chef">Chef / Kitchen</option>
+                  <option value="cashier">Cashier (Billing POS)</option>
+                  <option value="waiter_cashier">Waiter &amp; Cashier</option>
                   <option value="manager">Manager</option>
                   <option value="staff">General Staff</option>
                 </select>
               </div>
 
               {/* Salary Configuration Fields */}
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', marginTop: '12px', marginBottom: '16px' }}>
-                <h4 style={{ margin: '12px 0 10px 0', color: 'var(--color-primary)', fontSize: '0.95rem' }}>Salary & Wage Configuration</h4>
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', marginTop: '12px', marginBottom: '14px' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-primary, #D47F46)', fontSize: '0.9rem' }}>Salary & Wage Configuration</h4>
                 
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Daily Wage (₹) *</label>
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Daily Wage (₹) *</label>
                   <input type="number" required min="0" value={form.dailyRate} onChange={fld('dailyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
                 </div>
-              </div>
 
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Weekly Off *</label>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Weekly Off</label>
                     <select value={form.weeklyOff} onChange={fld('weeklyOff')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}>
                       <option value="Sunday">Sunday</option>
                       <option value="Monday">Monday</option>
@@ -275,14 +330,46 @@ const StaffManagementTab = () => {
                     </select>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Joining Date *</label>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Joining Date</label>
                     <input type="date" required value={form.joiningDate} onChange={fld('joiningDate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
                   </div>
                 </div>
+              </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button type="button" onClick={() => setActiveModal(null)} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
-                <button type="submit" style={{ flex: 1, padding: '12px', background: 'var(--color-primary)', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Save Staff</button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button type="button" onClick={() => setActiveModal(null)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ background: 'var(--color-primary, #D47F46)', border: 'none', color: 'white', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>{editingId ? 'Save Changes' : 'Create Staff'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetModalStaff && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: 'var(--bg-card)', padding: '26px', borderRadius: '16px', width: '100%', maxWidth: '380px', border: '1px solid var(--color-border)' }}>
+            <h3 style={{ margin: '0 0 10px 0', color: 'var(--color-text-primary)' }}>Reset Staff Password</h3>
+            <p style={{ margin: '0 0 18px 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+              Assign a new login password for <strong>{resetModalStaff.name}</strong> (@{resetModalStaff.username}).
+            </p>
+            <form onSubmit={handleResetPasswordSubmit}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>New Password *</label>
+                <input 
+                  type="password"
+                  required
+                  minLength={6}
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+                  placeholder="Enter at least 6 characters"
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" onClick={() => setResetModalStaff(null)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" style={{ background: 'var(--color-primary, #D47F46)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Update Password</button>
               </div>
             </form>
           </div>
@@ -293,4 +380,3 @@ const StaffManagementTab = () => {
 };
 
 export default StaffManagementTab;
-

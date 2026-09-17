@@ -53,25 +53,46 @@ const emitOrderUpdated = async (order, branchMap = null) => {
     const orderIdStr = String(order._id || '');
     const cafeId = order.cafeId;
 
-    // Broadcast standard events (camelCase) to standard room names (strictly isolated with cafeId)
+    // Broadcast standard events (camelCase & snake_case) to all rooms
     if (branchStr) {
       io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('orderCreated', order);
       io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('orderUpdated', order);
-    }
-    io.to(`cafe:${cafeId}:owner`).emit('orderCreated', order);
-    io.to(`cafe:${cafeId}:owner`).emit('orderUpdated', order);
-    io.to(`order:${orderIdStr}`).emit('orderUpdated', order);
-
-    // Broadcast compatibility events (snake_case) to compatibility room names
-    if (branchStr) {
+      io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('order_created', order);
+      io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('order_updated', order);
+      io.to(`branch_${cafeId}_${branchStr}`).emit('orderCreated', order);
+      io.to(`branch_${cafeId}_${branchStr}`).emit('orderUpdated', order);
       io.to(`branch_${cafeId}_${branchStr}`).emit('order_created', order);
       io.to(`branch_${cafeId}_${branchStr}`).emit('order_updated', order);
     }
+    io.to(`cafe:${cafeId}`).emit('orderCreated', order);
+    io.to(`cafe:${cafeId}`).emit('orderUpdated', order);
+    io.to(`cafe:${cafeId}`).emit('order_created', order);
+    io.to(`cafe:${cafeId}`).emit('order_updated', order);
+    io.to(`cafe_${cafeId}`).emit('orderCreated', order);
+    io.to(`cafe_${cafeId}`).emit('orderUpdated', order);
     io.to(`cafe_${cafeId}`).emit('order_created', order);
     io.to(`cafe_${cafeId}`).emit('order_updated', order);
+
+    io.to(`cafe:${cafeId}:owner`).emit('orderCreated', order);
+    io.to(`cafe:${cafeId}:owner`).emit('orderUpdated', order);
+    io.to(`cafe:${cafeId}:owner`).emit('order_created', order);
+    io.to(`cafe:${cafeId}:owner`).emit('order_updated', order);
+    io.to(`cafe_${cafeId}_owner`).emit('orderCreated', order);
+    io.to(`cafe_${cafeId}_owner`).emit('orderUpdated', order);
     io.to(`cafe_${cafeId}_owner`).emit('order_created', order);
     io.to(`cafe_${cafeId}_owner`).emit('order_updated', order);
+
+    io.to(`order:${orderIdStr}`).emit('orderUpdated', order);
+    io.to(`order:${orderIdStr}`).emit('order_updated', order);
+    io.to(`order_${orderIdStr}`).emit('orderUpdated', order);
     io.to(`order_${orderIdStr}`).emit('order_updated', order);
+
+    // Dashboard Realtime Sync Event
+    const syncPayload = { cafeId, branchId: branchStr || 'all', model: 'Order', action: 'update', orderId: orderIdStr };
+    io.to(`cafe:${cafeId}`).emit('dashboard_realtime_sync', syncPayload);
+    io.to(`cafe_${cafeId}`).emit('dashboard_realtime_sync', syncPayload);
+    io.to(`cafe:${cafeId}:owner`).emit('dashboard_realtime_sync', syncPayload);
+    io.to(`cafe_${cafeId}_owner`).emit('dashboard_realtime_sync', syncPayload);
 
     // If order payment is paid, broadcast payment events
     if (order.paymentStatus === 'Paid') {
@@ -506,6 +527,10 @@ const getOrders = async (req, res, next) => {
     } else if (!req.query.status && req.query.includeCancelled !== 'true') {
       // Exclude cancelled orders from general monitor/history lists
       filterQuery.status = { $nin: ['Cancelled', 'cancelled'] };
+      if (!req.query.date && req.query.allTime !== 'true') {
+        const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        filterQuery.createdAt = { $gte: last30Days };
+      }
     }
     if (req.query.status) {
       filterQuery.status = req.query.status;
@@ -784,11 +809,39 @@ const deleteOrder = async (req, res, next) => {
 
     await Order.findByIdAndDelete(id);
 
-    // Broadcast delete event over sockets
+    // Broadcast delete event over sockets to all branches and cafe rooms
     try {
       const { getIO } = require('../config/socket');
       const io = getIO();
-      io.to(`cafe_${order.cafeId}`).emit('order_deleted', { orderId: id, tableNumber: order.tableNumber });
+      if (io) {
+        const branchStr = String(order.branchId || '');
+        const cafeId = order.cafeId;
+        const deletePayload = { orderId: id, _id: id, tableNumber: order.tableNumber, cafeId, branchId: branchStr };
+
+        if (branchStr) {
+          io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('orderDeleted', deletePayload);
+          io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('order_deleted', deletePayload);
+          io.to(`branch_${cafeId}_${branchStr}`).emit('orderDeleted', deletePayload);
+          io.to(`branch_${cafeId}_${branchStr}`).emit('order_deleted', deletePayload);
+        }
+        io.to(`cafe:${cafeId}`).emit('orderDeleted', deletePayload);
+        io.to(`cafe:${cafeId}`).emit('order_deleted', deletePayload);
+        io.to(`cafe_${cafeId}`).emit('orderDeleted', deletePayload);
+        io.to(`cafe_${cafeId}`).emit('order_deleted', deletePayload);
+        io.to(`cafe:${cafeId}:owner`).emit('orderDeleted', deletePayload);
+        io.to(`cafe:${cafeId}:owner`).emit('order_deleted', deletePayload);
+        io.to(`cafe_${cafeId}_owner`).emit('orderDeleted', deletePayload);
+        io.to(`cafe_${cafeId}_owner`).emit('order_deleted', deletePayload);
+        io.to(`order:${id}`).emit('orderDeleted', deletePayload);
+        io.to(`order_${id}`).emit('order_deleted', deletePayload);
+
+        // Realtime sync notification
+        const syncPayload = { cafeId, branchId: branchStr || 'all', model: 'Order', action: 'delete', orderId: id };
+        io.to(`cafe:${cafeId}`).emit('dashboard_realtime_sync', syncPayload);
+        io.to(`cafe_${cafeId}`).emit('dashboard_realtime_sync', syncPayload);
+        io.to(`cafe:${cafeId}:owner`).emit('dashboard_realtime_sync', syncPayload);
+        io.to(`cafe_${cafeId}_owner`).emit('dashboard_realtime_sync', syncPayload);
+      }
     } catch (sockErr) {
       console.warn('Socket broadcast error on order deletion:', sockErr.message);
     }

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Cafe = require('../models/Cafe');
 const PaymentConfig = require('../models/PaymentConfig');
@@ -39,13 +40,13 @@ const parseCoords = (locationStr) => {
  */
 const createStaff = async (req, res) => {
   const { 
-    name, email, phone, staffRole, assignedBranch, isActive,
+    name, username, password, email, phone, staffRole, assignedBranch, isActive,
     salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
   } = req.body;
   const cafeId = req.user.cafeId;
 
-  if (!name || !phone || !staffRole) {
-    return res.status(400).json({ success: false, message: 'Name, Phone, and Role are required' });
+  if (!name || !staffRole) {
+    return res.status(400).json({ success: false, message: 'Name and Role are required' });
   }
 
   if (!cafeId) {
@@ -53,16 +54,30 @@ const createStaff = async (req, res) => {
   }
 
   try {
-    let cleanEmail = undefined;
-    if (email && email.trim() !== '') {
-      cleanEmail = email.trim().toLowerCase();
-      const existingUser = await User.findOne({ email: cleanEmail });
+    // Generate or sanitize unique username
+    let cleanUsername = username ? username.trim().toLowerCase() : '';
+    if (!cleanUsername) {
+      const namePart = name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+      let candidate = `${namePart}_${staffRole.toLowerCase().slice(0, 4)}`;
+      let counter = 1;
+      cleanUsername = candidate;
+      while (await User.findOne({ username: cleanUsername })) {
+        cleanUsername = `${candidate}${counter}`;
+        counter++;
+      }
+    } else {
+      const existingUser = await User.findOne({ username: cleanUsername });
       if (existingUser) {
         return res.status(400).json({ 
           success: false, 
-          message: `An account with email ${email} is already registered.` 
+          message: `Username "${cleanUsername}" is already in use. Please choose another username.` 
         });
       }
+    }
+
+    let cleanEmail = undefined;
+    if (email && email.trim() !== '') {
+      cleanEmail = email.trim().toLowerCase();
     }
 
     const cafe = await Cafe.findOne({ cafeId });
@@ -94,10 +109,17 @@ const createStaff = async (req, res) => {
       if (!existingEmp) exists = false;
     }
 
+    // Hash password with bcrypt (default to Cafe@12345 if not provided)
+    const rawPassword = password && password.trim() !== '' ? password.trim() : 'Cafe@12345';
+    const hashedPassword = await bcrypt.hash(rawPassword, 12);
+
     const newStaff = await User.create({
       name: name.trim(),
+      displayName: name.trim(),
+      username: cleanUsername,
+      password: hashedPassword,
       email: cleanEmail || undefined,
-      phone: phone.trim(),
+      phone: (phone || '').trim(),
       role: targetRole,
       staffRole: staffRole.trim(),
       employeeId,
@@ -119,18 +141,65 @@ const createStaff = async (req, res) => {
       emailService.sendWelcomeEmail(cleanEmail, name, targetRole, {
         cafeName,
         cafeId,
-        staffRole
+        staffRole,
+        username: cleanUsername
       });
     }
 
     return res.status(201).json({
       success: true,
-      message: `Staff member "${name}" registered successfully with Employee ID "${employeeId}".`,
-      staff: newStaff
+      message: `Staff member "${name}" registered successfully with username "${cleanUsername}".`,
+      staff: {
+        id: newStaff._id,
+        name: newStaff.name,
+        displayName: newStaff.displayName,
+        username: newStaff.username,
+        role: newStaff.role,
+        staffRole: newStaff.staffRole,
+        employeeId: newStaff.employeeId,
+        assignedBranch: newStaff.assignedBranch,
+        isActive: newStaff.isActive,
+        createdAt: newStaff.createdAt
+      }
     });
   } catch (error) {
     console.error('createStaff error:', error);
     return res.status(500).json({ success: false, message: 'Server error registering staff member' });
+  }
+};
+
+/**
+ * Reset Staff Password (by Admin/Owner)
+ */
+const resetStaffPassword = async (req, res) => {
+  const { staffId, newPassword } = req.body;
+  const cafeId = req.user.cafeId;
+
+  if (!staffId || !newPassword) {
+    return res.status(400).json({ success: false, message: 'Staff ID and new password are required' });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+  }
+
+  try {
+    const staff = await User.findOne({ _id: staffId, cafeId });
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found in your cafe' });
+    }
+
+    staff.password = await bcrypt.hash(newPassword, 12);
+    staff.mustChangePassword = false;
+    await staff.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Password for staff member "${staff.name}" (${staff.username}) reset successfully.`
+    });
+  } catch (error) {
+    console.error('resetStaffPassword error:', error);
+    return res.status(500).json({ success: false, message: 'Server error resetting staff password' });
   }
 };
 
@@ -405,7 +474,29 @@ const updateStaff = async (req, res) => {
       }
     }
 
-    if (name) staffMember.name = name.trim();
+    if (name) {
+      staffMember.name = name.trim();
+      staffMember.displayName = name.trim();
+    }
+    if (req.body.username && req.body.username.trim() !== '') {
+      const cleanUsername = req.body.username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+      if (cleanUsername.length < 3) {
+        return res.status(400).json({ success: false, message: 'Username must be at least 3 characters long and contain only letters, numbers, underscores, dashes, or dots.' });
+      }
+      const existingUser = await User.findOne({ username: cleanUsername, _id: { $ne: id } });
+      if (existingUser) {
+        return res.status(400).json({ success: false, message: `Username "${cleanUsername}" is already taken.` });
+      }
+      staffMember.username = cleanUsername;
+    }
+    if (req.body.password && req.body.password.trim() !== '') {
+      const rawPassword = req.body.password.trim();
+      if (rawPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
+      }
+      staffMember.password = await bcrypt.hash(rawPassword, 12);
+      staffMember.mustChangePassword = false;
+    }
     if (email !== undefined) {
       if (email && email.trim() !== '') {
         const cleanEmail = email.trim().toLowerCase();
@@ -2593,5 +2684,6 @@ module.exports = {
   getStorageHealth,
   updateCafeTheme,
   getReports,
-  initializeTenantAssets
+  initializeTenantAssets,
+  resetStaffPassword
 };

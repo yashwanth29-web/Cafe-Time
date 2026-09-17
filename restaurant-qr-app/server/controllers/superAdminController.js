@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Cafe = require('../models/Cafe');
 const SystemHealth = require('../models/SystemHealth');
@@ -9,23 +10,35 @@ const SupportTicket = require('../models/SupportTicket');
  * Create a new Cafe Owner and register the Cafe in the system (V2 Onboarding Registration)
  */
 const createOwner = async (req, res) => {
-  const { name, email, phone, cafeName, cafeId, city, state, branchCount, businessType } = req.body;
+  const { name, username, password, email, phone, cafeName, cafeId, city, state, branchCount, businessType } = req.body;
 
-  if (!name || !email || !phone || !cafeName || !cafeId || !city || !state || !businessType) {
-    return res.status(400).json({ success: false, message: 'All registration fields are required' });
+  if (!name || !cafeName || !cafeId || !city || !state || !businessType) {
+    return res.status(400).json({ success: false, message: 'All required registration fields must be filled' });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
   const cleanCafeId = cafeId.trim().toUpperCase();
+  const cleanEmail = email ? email.trim().toLowerCase() : '';
 
   try {
-    // 1. Check if owner email is already taken
-    const existingUser = await User.findOne({ email: cleanEmail });
-    if (existingUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `An account with email ${email} is already registered.` 
-      });
+    // Generate or validate unique username
+    let cleanUsername = username ? username.trim().toLowerCase() : '';
+    if (!cleanUsername) {
+      const namePart = name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+      let candidate = `${namePart}_owner`;
+      let counter = 1;
+      cleanUsername = candidate;
+      while (await User.findOne({ username: cleanUsername })) {
+        cleanUsername = `${candidate}${counter}`;
+        counter++;
+      }
+    } else {
+      const existingUser = await User.findOne({ username: cleanUsername });
+      if (existingUser) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Username "${cleanUsername}" is already taken. Please choose another username.` 
+        });
+      }
     }
 
     // 2. Check if cafeId is already taken
@@ -37,21 +50,28 @@ const createOwner = async (req, res) => {
       });
     }
 
-    // 3. Create the Owner (admin role)
+    // 3. Hash password with bcrypt (default to Cafe@12345 if not provided)
+    const rawPassword = password && password.trim() !== '' ? password.trim() : 'Cafe@12345';
+    const hashedPassword = await bcrypt.hash(rawPassword, 12);
+
+    // 4. Create the Owner (admin role)
     const newOwner = await User.create({
       name: name.trim(),
-      email: cleanEmail,
-      phone: phone.trim(),
+      displayName: name.trim(),
+      username: cleanUsername,
+      password: hashedPassword,
+      email: cleanEmail || undefined,
+      phone: (phone || '').trim(),
       role: 'admin',
       cafeId: cleanCafeId,
       isActive: true
     });
 
-    // 4. Create the Cafe with V2 fields
+    // 5. Create the Cafe with V2 fields
     const newCafe = await Cafe.create({
       cafeId: cleanCafeId,
       name: cafeName.trim(),
-      ownerEmail: cleanEmail,
+      ownerEmail: cleanEmail || `${cleanUsername}@cafe.internal`,
       city: city.trim(),
       state: state.trim(),
       businessType: businessType,
@@ -60,7 +80,7 @@ const createOwner = async (req, res) => {
       isActive: true
     });
 
-    // 5. Initialize System Health tracker
+    // 6. Initialize System Health tracker
     await SystemHealth.create({
       cafeId: cleanCafeId,
       lastHeartbeat: new Date(),
@@ -70,21 +90,94 @@ const createOwner = async (req, res) => {
       printerFailures: 0
     });
 
-    // 7. Send Welcome email (async)
-    emailService.sendWelcomeEmail(cleanEmail, name, 'admin', {
-      cafeName: cafeName,
-      cafeId: cleanCafeId
-    });
+    // 7. Send Welcome email if email is provided (async)
+    if (cleanEmail) {
+      emailService.sendWelcomeEmail(cleanEmail, name, 'admin', {
+        cafeName: cafeName,
+        cafeId: cleanCafeId,
+        username: cleanUsername
+      });
+    }
 
     return res.status(201).json({
       success: true,
-      message: 'Cafe Owner and Cafe registered successfully with Health Monitor. Please configure your branch in the setup wizard.',
-      owner: newOwner,
+      message: `Cafe Owner registered successfully with username "${cleanUsername}".`,
+      owner: {
+        id: newOwner._id,
+        name: newOwner.name,
+        displayName: newOwner.displayName,
+        username: newOwner.username,
+        role: newOwner.role,
+        cafeId: newOwner.cafeId,
+        isActive: newOwner.isActive
+      },
       cafe: newCafe
     });
   } catch (error) {
     console.error('createOwner V2 error:', error);
     return res.status(500).json({ success: false, message: 'Server error registering owner and cafe' });
+  }
+};
+
+/**
+ * Reset Owner Password / Edit Credentials (by Super Admin)
+ */
+const resetOwnerPassword = async (req, res) => {
+  const { ownerId, cafeId, newName, newUsername, newPassword, mustChangePassword } = req.body;
+
+  try {
+    let owner;
+    if (ownerId) {
+      owner = await User.findById(ownerId);
+    } else if (cafeId) {
+      owner = await User.findOne({ cafeId: cafeId.toUpperCase(), role: { $in: ['admin', 'owner', 'ADMIN', 'OWNER'] } });
+    }
+
+    if (!owner) {
+      return res.status(404).json({ success: false, message: 'Owner account not found for this cafe' });
+    }
+
+    if (newName && newName.trim() !== '') {
+      owner.name = newName.trim();
+      owner.displayName = newName.trim();
+    }
+
+    if (newUsername && newUsername.trim() !== '') {
+      const cleanUsername = newUsername.trim().toLowerCase();
+      if (cleanUsername !== owner.username) {
+        const usernameExists = await User.findOne({ username: cleanUsername, _id: { $ne: owner._id } });
+        if (usernameExists) {
+          return res.status(400).json({ success: false, message: `Username "${cleanUsername}" is already taken.` });
+        }
+        owner.username = cleanUsername;
+      }
+    }
+
+    if (newPassword && newPassword.trim() !== '') {
+      if (newPassword.trim().length < 6) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+      }
+      owner.password = await bcrypt.hash(newPassword.trim(), 12);
+      owner.mustChangePassword = typeof mustChangePassword !== 'undefined' ? !!mustChangePassword : true;
+    }
+
+    await owner.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Credentials for owner "${owner.name}" (@${owner.username}) updated successfully.`,
+      owner: {
+        id: owner._id,
+        name: owner.displayName || owner.name,
+        username: owner.username,
+        role: owner.role,
+        cafeId: owner.cafeId,
+        mustChangePassword: owner.mustChangePassword
+      }
+    });
+  } catch (error) {
+    console.error('resetOwnerPassword error:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating owner credentials' });
   }
 };
 
@@ -97,13 +190,20 @@ const getCafes = async (req, res) => {
     
     // Fetch details for each cafe (Owner details, branch count, health log)
     const cafesWithDetails = await Promise.all(cafes.map(async (cafe) => {
-      const owner = await User.findOne({ email: cafe.ownerEmail, role: { $in: ['admin', 'owner', 'ADMIN', 'OWNER'] } });
+      const owner = await User.findOne({
+        $or: [
+          { cafeId: cafe.cafeId, role: { $in: ['admin', 'owner', 'ADMIN', 'OWNER'] } },
+          { email: cafe.ownerEmail, role: { $in: ['admin', 'owner', 'ADMIN', 'OWNER'] } }
+        ]
+      });
       const health = await SystemHealth.findOne({ cafeId: cafe.cafeId });
       const branches = await Branch.find({ cafeId: cafe.cafeId });
 
       return {
         ...cafe.toObject(),
-        ownerName: owner ? owner.name : 'Unknown Owner',
+        ownerId: owner ? owner._id : null,
+        ownerName: owner ? (owner.displayName || owner.name) : 'Unknown Owner',
+        ownerUsername: owner ? (owner.username || '') : '',
         ownerPhone: owner ? owner.phone : 'N/A',
         ownerIsActive: owner ? owner.isActive : false,
         ownerLastLogin: owner ? owner.lastLogin : null,
@@ -360,6 +460,7 @@ const updateTicketStatus = async (req, res) => {
 
 module.exports = {
   createOwner,
+  resetOwnerPassword,
   getCafes,
   updateCafe,
   deleteCafe,

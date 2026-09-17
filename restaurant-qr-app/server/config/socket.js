@@ -151,11 +151,11 @@ const initializeSocket = (server) => {
       }
 
       // Join Cafe Owner Room
-      if (role === 'owner') {
+      if (role === 'owner' || role === 'admin' || role === 'superadmin') {
         socket.join(`cafe:${cafeId}:owner`);
         socket.join(`cafe_${cafeId}_owner`);
         if (isDev) {
-          console.log(`[SOCKET] Socket ${socket.id} joined room cafe:${cafeId}:owner`);
+          console.log(`[SOCKET] Socket ${socket.id} joined room cafe:${cafeId}:owner | Role: ${role}`);
         }
       }
     }
@@ -170,6 +170,8 @@ const initializeSocket = (server) => {
         // Join Cafe Rooms
         socket.join(`cafe:${targetCafe}`);
         socket.join(`cafe_${targetCafe}`);
+        socket.join(`cafe:${targetCafe}:owner`);
+        socket.join(`cafe_${targetCafe}_owner`);
 
         // Join Branch Rooms (strictly isolated with cafeId)
         socket.join(`cafe:${targetCafe}:branch:${targetBranch}`);

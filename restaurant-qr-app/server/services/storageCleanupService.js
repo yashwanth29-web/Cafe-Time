@@ -427,8 +427,29 @@ const generateWeeklyStorageReport = async () => {
 
   fs.writeFileSync(weeklyReportPath, JSON.stringify(reportData, null, 2));
   console.log(`Weekly storage report written to ${weeklyReportPath}`);
+};
 
-  updateLastWeeklyAuditTimestamp();
+/**
+ * Cleanup / Purge completed/cancelled orders older than 30 days to save database storage
+ */
+const cleanupExpiredOrders = async (retentionDays = 30) => {
+  const conn = mongoose.connection;
+  if (!conn || !conn.db) {
+    return { success: false, count: 0 };
+  }
+  try {
+    const Order = require('../models/Order');
+    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    const result = await Order.deleteMany({
+      createdAt: { $lt: cutoffDate },
+      status: { $in: ['Completed', 'Cancelled', 'Delivered'] }
+    });
+    console.log(`[Storage Cleanup] Purged ${result.deletedCount || 0} orders older than ${retentionDays} days to save storage.`);
+    return { success: true, count: result.deletedCount || 0 };
+  } catch (err) {
+    console.error('[Storage Cleanup] Error purging expired orders:', err.message);
+    return { success: false, error: err.message };
+  }
 };
 
 /**
@@ -439,8 +460,9 @@ const runAutoCleanup = async () => {
     console.log('[Storage Cleanup] Starting automatic cleanup process...');
     const wrResult = await cleanupExpiredWorkReports();
     const attResult = await cleanupExpiredAttendanceProofImages();
+    const orderResult = await cleanupExpiredOrders(30);
     await generateStorageHealthReport();
-    return { wrResult, attResult };
+    return { wrResult, attResult, orderResult };
   } catch (error) {
     console.error('Error in runAutoCleanup:', error);
     return { success: false, error: error.message };
@@ -450,6 +472,7 @@ const runAutoCleanup = async () => {
 module.exports = {
   cleanupExpiredWorkReports,
   cleanupExpiredAttendanceProofImages,
+  cleanupExpiredOrders,
   auditOrphanGridFSFiles,
   verifyChunkIntegrity,
   getStorageHealthData,

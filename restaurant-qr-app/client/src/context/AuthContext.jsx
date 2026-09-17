@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useContext } from 'react';
-import API, { getMe, sendOtp, verifyOtp, logoutUser, loginWithGoogleApi } from '../services/api';
+import API, { getMe, loginUser, changePasswordApi, logoutUser } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -8,7 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Check if user has an active session cookie on app boot
+  // Check if user has an active session on app boot
   const checkSession = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -30,7 +30,7 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (err) {
       if (err.response?.status !== 401) {
-        
+        console.warn('Session check note:', err.message);
       }
       localStorage.removeItem('token');
       setUser(null);
@@ -77,27 +77,12 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   /**
-   * Initiate passwordless login by sending an OTP
+   * Authenticate using username and password
    */
-  const initiateLogin = async (email) => {
+  const login = async (username, password) => {
     setError(null);
     try {
-      const response = await sendOtp(email);
-      return response;
-    } catch (err) {
-      const errMsg = err.response?.data?.message || 'Failed to send verification code. Please check your email.';
-      setError(errMsg);
-      throw new Error(errMsg);
-    }
-  };
-
-  /**
-   * Verify the OTP and authenticate the user
-   */
-  const confirmOtp = async (email, otp) => {
-    setError(null);
-    try {
-      const response = await verifyOtp(email, otp);
+      const response = await loginUser(username, password);
       if (response.success && response.user) {
         if (response.token) {
           localStorage.setItem('token', response.token);
@@ -109,31 +94,22 @@ export const AuthProvider = ({ children }) => {
       }
       return response;
     } catch (err) {
-      const errMsg = err.response?.data?.message || 'Incorrect verification code. Please try again.';
+      const errMsg = err.response?.data?.message || 'Login failed. Please check your credentials.';
       setError(errMsg);
       throw new Error(errMsg);
     }
   };
 
   /**
-   * Login with Google credential
+   * Change user password
    */
-  const loginWithGoogle = async (credential) => {
+  const changePassword = async (currentPassword, newPassword) => {
     setError(null);
     try {
-      const response = await loginWithGoogleApi(credential);
-      if (response.success && response.user) {
-        if (response.token) {
-          localStorage.setItem('token', response.token);
-        }
-        if (response.user.cafeId) {
-          localStorage.setItem('activeCafeId', response.user.cafeId);
-        }
-        setUser(response.user);
-      }
+      const response = await changePasswordApi(currentPassword, newPassword);
       return response;
     } catch (err) {
-      const errMsg = err.response?.data?.message || 'Google authentication failed. Please try again.';
+      const errMsg = err.response?.data?.message || 'Failed to change password.';
       setError(errMsg);
       throw new Error(errMsg);
     }
@@ -181,7 +157,6 @@ export const AuthProvider = ({ children }) => {
           }
         });
       } catch (err) {
-        // Silently skip transient network drops/restarts during dev or momentary offline states
         const isNetworkError = err.code === 'ERR_NETWORK' || !err.response || err.message?.includes('Network Error');
         if (!isNetworkError) {
           console.warn('Heartbeat reporting warning:', err.message);
@@ -200,9 +175,8 @@ export const AuthProvider = ({ children }) => {
         user,
         loading,
         error,
-        initiateLogin,
-        confirmOtp,
-        loginWithGoogle,
+        login,
+        changePassword,
         logout,
         checkSession,
         setUser
@@ -220,6 +194,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-
-

@@ -97,9 +97,25 @@ router.get('/:id', async (req, res) => {
       }
     }
 
+    // Fetch OperationalConfig to get actual configured tables for the cafe/branch
+    const OperationalConfig = require('../models/OperationalConfig');
+    const branchId = req.headers['x-branch-id'] || req.query.branchId || 'default';
+    let opConfig = await OperationalConfig.findOne({ cafeId, branchId }).lean();
+    if (!opConfig && branchId !== 'default') {
+      opConfig = await OperationalConfig.findOne({ cafeId, branchId: 'default' }).lean();
+    }
+    if (!opConfig) {
+      opConfig = await OperationalConfig.findOne({ cafeId }).lean();
+    }
+
+    const tables = opConfig?.tables || [];
+    const totalTables = tables.length > 0 ? tables.length : 10;
+
     const cafeData = {
       ...(typeof cafe.toObject === 'function' ? cafe.toObject() : cafe),
-      ownerName
+      ownerName,
+      tables,
+      totalTables
     };
 
     cafeDetailsCache.set(cafeId, {
@@ -110,6 +126,38 @@ router.get('/:id', async (req, res) => {
     return res.status(200).json({ success: true, data: cafeData });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error fetching cafe details', error: error.message });
+  }
+});
+
+// GET /api/cafe/tables/config (Accessible to staff & customers)
+router.get('/tables/config', async (req, res) => {
+  try {
+    const OperationalConfig = require('../models/OperationalConfig');
+    const cafeId = req.cafeId || req.query.cafeId;
+    const branchId = req.branchId || req.query.branchId || req.headers['x-branch-id'] || 'default';
+
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Missing cafeId context' });
+    }
+
+    let opConfig = await OperationalConfig.findOne({ cafeId, branchId }).lean();
+    if (!opConfig && branchId !== 'default') {
+      opConfig = await OperationalConfig.findOne({ cafeId, branchId: 'default' }).lean();
+    }
+    if (!opConfig) {
+      opConfig = await OperationalConfig.findOne({ cafeId }).lean();
+    }
+
+    const tables = opConfig?.tables || [];
+    return res.status(200).json({
+      success: true,
+      data: {
+        tables,
+        totalTables: tables.length > 0 ? tables.length : 10
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error fetching tables config', error: error.message });
   }
 });
 

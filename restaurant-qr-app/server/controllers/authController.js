@@ -1,11 +1,7 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
-const OtpVerification = require('../models/OtpVerification');
 const Cafe = require('../models/Cafe');
-const emailService = require('../services/emailService');
-const { OAuth2Client } = require('google-auth-library');
-
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Cookie options helper
 const getCookieOptions = () => ({
@@ -16,296 +12,188 @@ const getCookieOptions = () => ({
 });
 
 /**
- * Send OTP Code to User's Email
+ * Format user payload for client responses (no sensitive info)
  */
-const sendOTP = async (req, res) => {
-  const { email } = req.body;
+const formatUserPayload = (user, setupCompleted = true) => ({
+  id: user._id,
+  name: user.displayName || user.name || user.username,
+  displayName: user.displayName || user.name || user.username,
+  username: user.username,
+  email: user.email || '',
+  phone: user.phone || '',
+  role: user.role,
+  staffRole: user.staffRole || '',
+  employeeId: user.employeeId || '',
+  cafeId: user.cafeId || '',
+  assignedBranch: user.assignedBranch || '',
+  branchId: user.assignedBranch || '',
+  salaryType: user.salaryType || 'DAILY',
+  dailyRate: user.dailyRate !== undefined ? user.dailyRate : 0,
+  hourlyRate: user.hourlyRate !== undefined ? user.hourlyRate : 0,
+  weeklyRate: user.weeklyRate !== undefined ? user.weeklyRate : 0,
+  monthlyRate: user.monthlyRate !== undefined ? user.monthlyRate : 0,
+  requiredHours: user.requiredHours || 8,
+  isActive: user.isActive,
+  mustChangePassword: user.mustChangePassword || false,
+  lastLogin: user.lastLogin,
+  lastSeen: user.lastSeen,
+  setupCompleted
+});
 
-  if (!email) {
-    return res.status(400).json({ success: false, message: 'Email address is required' });
+/**
+ * Username + Password Login for Super Admin, Admin, and Staff
+ * POST /api/auth/login
+ */
+const login = async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Username and password are required' 
+    });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanUsername = username.trim().toLowerCase();
 
   try {
-    const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+    // 1. Find user by username and explicitly include the password hash
+    const user = await User.findOne({ username: cleanUsername }).select('+password');
 
-    if (!isSuperAdmin) {
-      const user = await User.findOne({ email: cleanEmail });
-      if (!user) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
-        });
-      }
-      if (!user.isActive) {
-        return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
-      }
-    }
-
-    // Check if OTP record already exists for resend count check
-    let otpRecord = await OtpVerification.findOne({ email: cleanEmail });
-    if (otpRecord && otpRecord.resendCount >= 3) {
-      // Check if it's expired. If expired, we can clear it and let them try again.
-      if (otpRecord.expiresAt < new Date()) {
-        await OtpVerification.deleteOne({ email: cleanEmail });
-        otpRecord = null;
-      } else {
-        return res.status(429).json({ 
-          success: false, 
-          message: 'Maximum resend attempts reached. Please wait for the current code to expire.' 
-        });
-      }
-    }
-
-    // Generate 6-digit OTP code
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
-
-    if (otpRecord) {
-      // Update existing record
-      otpRecord.otp = otp;
-      otpRecord.expiresAt = expiresAt;
-      // Note: we do not increment resendCount on initial send, only on resend-otp
-      await otpRecord.save();
-    } else {
-      // Create new record
-      await OtpVerification.create({
-        email: cleanEmail,
-        otp,
-        expiresAt,
-        resendCount: 0
+    // 2. Generic invalid credential protection against enumeration
+    if (!user || !user.password) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid username or password' 
       });
     }
 
-    // Log the generated OTP to console for easy developer bypass / testing
-    console.log('--- GENERATED OTP FOR DEV BYPASS ---');
-    console.log('Email:', cleanEmail, 'OTP:', otp);
-    console.log('------------------------------------');
-
-    // Send email via Nodemailer in the background without waiting
-    emailService.sendOTP(cleanEmail, otp).catch(err => {
-      console.warn('Background email delivery failed:', err.message);
-    });
-
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Verification code generated successfully.' 
-    });
-  } catch (error) {
-    console.error('sendOTP controller error:', error);
-    return res.status(500).json({ success: false, message: error.message || 'Server error initiating OTP send' });
-  }
-};
-
-/**
- * Verify OTP Code and Generate JWT Session Cookie
- */
-const verifyOTP = async (req, res) => {
-  const { email, otp } = req.body;
-
-  if (!email || !otp) {
-    return res.status(400).json({ success: false, message: 'Email and verification code are required' });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanOtp = otp.trim();
-
-  try {
-    const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
-
-    // Check for OTP verification record
-    const otpRecord = await OtpVerification.findOne({ email: cleanEmail });
-    if (!otpRecord) {
-      return res.status(400).json({ success: false, message: 'Verification request expired or invalid code' });
+    // 3. Verify active status
+    if (!user.isActive) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'This account has been deactivated. Please contact your cafe administrator.' 
+      });
     }
 
-    // Check expiration
-    if (otpRecord.expiresAt < new Date()) {
-      await OtpVerification.deleteOne({ email: cleanEmail });
-      return res.status(400).json({ success: false, message: 'Verification code has expired. Request a new one.' });
-    }
-
-    // Validate OTP match
-    if (otpRecord.otp !== cleanOtp) {
-      return res.status(400).json({ success: false, message: 'Incorrect verification code. Please check and try again.' });
-    }
-
-    // Delete OTP record since it's verified successfully
-    await OtpVerification.deleteOne({ email: cleanEmail });
-
-    let user;
-
-    if (isSuperAdmin) {
-      // Find or create the Super Admin account
-      user = await User.findOne({ email: cleanEmail });
-      if (!user) {
-        user = await User.create({
-          name: 'Super Admin',
-          email: cleanEmail,
-          phone: 'N/A',
-          role: 'super_admin',
-          cafeId: '',
-          isActive: true
-        });
-      }
-    } else {
-      user = await User.findOne({ email: cleanEmail });
-      if (!user) {
-        return res.status(400).json({ 
+    // 4. Check if associated cafe is soft-deleted
+    if (user.cafeId) {
+      const cafe = await Cafe.findOne({ cafeId: user.cafeId });
+      if (cafe && cafe.isDeleted) {
+        return res.status(401).json({ 
           success: false, 
-          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
+          message: 'Access denied. The cafe associated with this account has been deleted.' 
         });
-      } else if (!user.isActive) {
-        return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
-      }
-
-      if (user.cafeId) {
-        const Cafe = require('../models/Cafe');
-        const cafe = await Cafe.findOne({ cafeId: user.cafeId });
-        if (cafe && cafe.isDeleted) {
-          return res.status(401).json({ success: false, message: 'Access denied. The cafe associated with this account has been deleted.' });
-        }
-      }
-
-      // Self-heal existing corrupted demo users who have an empty cafeId
-      if (user.role === 'owner' && !user.cafeId) {
-        user.cafeId = 'CD001';
-        await user.save();
       }
     }
 
-    // Update login timestamps
+    // 5. Verify password hash with bcrypt
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid username or password' 
+      });
+    }
+
+    // 6. Update login and activity timestamps
     const now = new Date();
     user.lastLogin = now;
     user.lastSeen = now;
     await user.save();
 
-    // Sign JWT token
+    // 7. Sign 7-day JWT Token
     const token = jwt.sign(
-      { id: user._id, role: user.role, cafeId: user.cafeId },
+      { 
+        id: user._id, 
+        username: user.username,
+        role: user.role, 
+        cafeId: user.cafeId,
+        assignedBranch: user.assignedBranch || ''
+      },
       process.env.JWT_SECRET || 'super_secret_cafe_key_12345',
       { expiresIn: '7d' }
     );
 
-    // Save token in cookie
+    // 8. Set HTTP-only Cookie
     res.cookie('token', token, getCookieOptions());
 
-    // In Demo Mode, always bypass the Setup Wizard
+    // 9. Determine setup completion
     let setupCompleted = true;
+    if (user.cafeId) {
+      const cafe = await Cafe.findOne({ cafeId: user.cafeId });
+      if (cafe) {
+        setupCompleted = cafe.setupCompleted;
+      }
+    }
 
     return res.status(200).json({
       success: true,
       message: 'Logged in successfully',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        cafeId: user.cafeId,
-        assignedBranch: user.assignedBranch || '',
-        branchId: user.assignedBranch || '',
-        salaryType: user.salaryType || 'DAILY',
-        dailyRate: user.dailyRate !== undefined ? user.dailyRate : 0,
-        hourlyRate: user.hourlyRate !== undefined ? user.hourlyRate : 0,
-        weeklyRate: user.weeklyRate !== undefined ? user.weeklyRate : 0,
-        monthlyRate: user.monthlyRate !== undefined ? user.monthlyRate : 0,
-        requiredHours: user.requiredHours || 8,
-        isActive: user.isActive,
-        lastLogin: user.lastLogin,
-        lastSeen: user.lastSeen,
-        setupCompleted
-      },
-      token // Fallback return token to frontend in case they store in local storage too
+      user: formatUserPayload(user, setupCompleted),
+      token
     });
   } catch (error) {
-    console.error('verifyOTP controller error:', error);
-    return res.status(500).json({ success: false, message: 'Server error verifying OTP' });
+    console.error('Login controller error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error processing login request' 
+    });
   }
 };
 
 /**
- * Resend OTP Code (max 3 resends)
+ * Change Password (for logged-in users)
+ * POST /api/auth/change-password
  */
-const resendOTP = async (req, res) => {
-  const { email } = req.body;
+const changePassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ success: false, message: 'Email address is required' });
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Current password and new password are required' 
+    });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
+  if (newPassword.length < 6) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'New password must be at least 6 characters long' 
+    });
+  }
 
   try {
-    const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
-    if (!isSuperAdmin) {
-      const user = await User.findOne({ email: cleanEmail });
-      if (!user) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
-        });
-      }
-      if (!user.isActive) {
-        return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
-      }
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const otpRecord = await OtpVerification.findOne({ email: cleanEmail });
-    
-    // Check if they exceed the resend count limit (max 3 resends)
-    if (otpRecord && otpRecord.resendCount >= 3) {
-      if (otpRecord.expiresAt < new Date()) {
-        // Expired, clear and recreate
-        await OtpVerification.deleteOne({ email: cleanEmail });
-      } else {
-        return res.status(429).json({ 
-          success: false, 
-          message: 'Maximum resend attempts reached. Please wait for the current code to expire.' 
-        });
-      }
-    }
-
-    // Generate new OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-    if (otpRecord) {
-      otpRecord.otp = otp;
-      otpRecord.expiresAt = expiresAt;
-      otpRecord.resendCount += 1;
-      await otpRecord.save();
-    } else {
-      await OtpVerification.create({
-        email: cleanEmail,
-        otp,
-        expiresAt,
-        resendCount: 1 // Counted as first resend
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Incorrect current password' 
       });
     }
 
-    // Log the generated OTP to console for easy developer bypass / testing
-    console.log('--- GENERATED RESEND OTP FOR DEV BYPASS ---');
-    console.log('Email:', cleanEmail, 'OTP:', otp);
-    console.log('-------------------------------------------');
-
-    // Send email via Nodemailer
-    await emailService.sendOTP(cleanEmail, otp);
+    user.password = await bcrypt.hash(newPassword, 12);
+    user.mustChangePassword = false;
+    await user.save();
 
     return res.status(200).json({ 
       success: true, 
-      message: 'New verification code has been sent successfully.',
-      resendCount: otpRecord ? otpRecord.resendCount + 1 : 1
+      message: 'Password changed successfully' 
     });
   } catch (error) {
-    console.error('resendOTP controller error:', error);
-    return res.status(500).json({ success: false, message: 'Server error resending OTP' });
+    console.error('changePassword error:', error);
+    return res.status(500).json({ success: false, message: 'Server error updating password' });
   }
 };
 
 /**
  * Log Out User and Clear Cookie
+ * POST /api/auth/logout
  */
 const logout = async (req, res) => {
   res.clearCookie('token', {
@@ -318,10 +206,10 @@ const logout = async (req, res) => {
 
 /**
  * Get Current Logged-in User Profile Details
+ * GET /api/auth/me
  */
 const getMe = async (req, res) => {
-  // User is already attached by protect middleware
-  let setupCompleted = false;
+  let setupCompleted = true;
   try {
     if (req.user.cafeId) {
       const cafe = await Cafe.findOne({ cafeId: req.user.cafeId });
@@ -335,144 +223,13 @@ const getMe = async (req, res) => {
 
   return res.status(200).json({
     success: true,
-    user: {
-      id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      phone: req.user.phone,
-      role: req.user.role,
-      cafeId: req.user.cafeId,
-      assignedBranch: req.user.assignedBranch || '',
-      branchId: req.user.assignedBranch || '',
-      salaryType: req.user.salaryType || 'DAILY',
-      dailyRate: req.user.dailyRate !== undefined ? req.user.dailyRate : 0,
-      hourlyRate: req.user.hourlyRate !== undefined ? req.user.hourlyRate : 0,
-      weeklyRate: req.user.weeklyRate !== undefined ? req.user.weeklyRate : 0,
-      monthlyRate: req.user.monthlyRate !== undefined ? req.user.monthlyRate : 0,
-      requiredHours: req.user.requiredHours || 8,
-      isActive: req.user.isActive,
-      lastLogin: req.user.lastLogin,
-      lastSeen: req.user.lastSeen,
-      setupCompleted
-    }
+    user: formatUserPayload(req.user, setupCompleted)
   });
 };
 
-
-/**
- * Google OAuth Login
- */
-const googleLogin = async (req, res) => {
-  const { credential } = req.body;
-
-  if (!credential) {
-    return res.status(400).json({ success: false, message: 'Google credential is required' });
-  }
-
-  try {
-    // Verify the Google token
-    const ticket = await googleClient.verifyIdToken({
-      idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-    const { email, name } = payload;
-    
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Could not extract email from Google token' });
-    }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const isSuperAdmin = cleanEmail === (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
-
-    let user;
-
-    if (isSuperAdmin) {
-      user = await User.findOne({ email: cleanEmail });
-      if (!user) {
-        user = await User.create({
-          name: name || 'Super Admin',
-          email: cleanEmail,
-          phone: 'N/A',
-          role: 'super_admin',
-          cafeId: '',
-          isActive: true
-        });
-      }
-    } else {
-      user = await User.findOne({ email: cleanEmail });
-      if (!user) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'This email is not registered. Please contact your cafe administrator or super admin.' 
-        });
-      } else if (!user.isActive) {
-        return res.status(401).json({ success: false, message: 'This account has been deactivated.' });
-      }
-
-      if (user.cafeId) {
-        const Cafe = require('../models/Cafe');
-        const cafe = await Cafe.findOne({ cafeId: user.cafeId });
-        if (cafe && cafe.isDeleted) {
-          return res.status(401).json({ success: false, message: 'Access denied. The cafe associated with this account has been deleted.' });
-        }
-      }
-
-      // Self-heal existing corrupted demo users who have an empty cafeId
-      if (user.role === 'owner' && !user.cafeId) {
-        user.cafeId = 'CD001';
-        await user.save();
-      }
-    }
-
-    // Update login timestamps
-    const now = new Date();
-    user.lastLogin = now;
-    user.lastSeen = now;
-    await user.save();
-
-    // Sign JWT token
-    const token = jwt.sign(
-      { id: user._id, role: user.role, cafeId: user.cafeId },
-      process.env.JWT_SECRET || 'super_secret_cafe_key_12345',
-      { expiresIn: '7d' }
-    );
-
-    // Save token in cookie
-    res.cookie('token', token, getCookieOptions());
-
-    let setupCompleted = true; // In demo mode, bypass setup wizard
-
-    return res.status(200).json({
-      success: true,
-      message: 'Logged in successfully with Google',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        cafeId: user.cafeId,
-        assignedBranch: user.assignedBranch,
-        isActive: user.isActive,
-        lastLogin: user.lastLogin,
-        lastSeen: user.lastSeen,
-        setupCompleted
-      },
-      token
-    });
-
-  } catch (error) {
-    console.error('googleLogin controller error:', error);
-    return res.status(401).json({ success: false, message: 'Google Authentication failed' });
-  }
-};
-
 module.exports = {
-  sendOTP,
-  verifyOTP,
-  resendOTP,
+  login,
+  changePassword,
   logout,
-  getMe,
-  googleLogin
+  getMe
 };

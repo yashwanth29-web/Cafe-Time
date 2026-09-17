@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { getInventory, getNotifications, markNotificationRead, getCafeInfo, getAssetUrl } from '../services/api';
 import BranchSwitcher from './BranchSwitcher';
 import { useBranch } from '../context/BranchContext';
+import NotificationDropdown from './NotificationDropdown';
 
 // Simple global cache for layout notifications and low-stock alerts
 const layoutCache = {
@@ -109,43 +110,8 @@ const SaaSLayout = ({ children }) => {
 
 
 
-  const renderNotificationList = () => {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', maxHeight: '250px', overflowY: 'auto' }}>
-        {lowStockAlerts.map((item, idx) => (
-          <div key={`stock-${idx}`} style={{ padding: '8px 0', borderBottom: '1px solid #2D2D2D', color: '#F39C12' }}>
-            ⚠️ <strong>{item.name}</strong> inventory running low ({item.quantity !== undefined ? item.quantity : item.stock} {item.unit} left).
-          </div>
-        ))}
-        {notifications.map((n, idx) => (
-          <div 
-            key={`db-notif-${n._id || idx}`}
-            onClick={() => !n.isRead && handleMarkAsRead(n._id)}
-            style={{ 
-              padding: '8px 0', 
-              borderBottom: '1px solid #2D2D2D', 
-              color: n.isRead ? '#888' : '#FFF',
-              cursor: n.isRead ? 'default' : 'pointer',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}
-          >
-            <div style={{ paddingRight: '4px' }}>
-              <strong>{n.title}</strong>
-              <div style={{ marginTop: '2px', opacity: 0.9 }}>{n.message}</div>
-              <span style={{ fontSize: '9px', opacity: 0.6, display: 'block', marginTop: '4px' }}>{new Date(n.createdAt).toLocaleTimeString()}</span>
-            </div>
-            {!n.isRead && <span style={{ minWidth: '8px', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--color-primary)', marginLeft: '8px' }} />}
-          </div>
-        ))}
-        {lowStockAlerts.length === 0 && notifications.length === 0 && (
-          <div style={{ padding: '12px 0', color: '#bbb', textAlign: 'center' }}>
-            🟢 No alerts or updates.
-          </div>
-        )}
-      </div>
-    );
+  const handleDismissLowStock = (itemName) => {
+    setLowStockAlerts(prev => prev.filter(item => item.name !== itemName));
   };
 
   const userRole = (user?.role || '').toLowerCase();
@@ -689,25 +655,15 @@ const SaaSLayout = ({ children }) => {
               <span className="bnav-badge" style={{ top: '-4px', right: '-4px' }}>{unreadCount}</span>
               }
             </button>
-            {notificationsOpen &&
-            <div style={{
-              position: 'absolute',
-              top: '50px',
-              right: 0,
-              width: '280px',
-              backgroundColor: '#1E1E1E',
-              border: '1px solid #333',
-              borderRadius: '12px',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-              padding: '16px',
-              zIndex: 700
-            }}>
-                <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '10px', color: '#FFFFFF' }}>
-                  Notifications & Alerts
-                </div>
-                {renderNotificationList()}
-              </div>
-            }
+            <NotificationDropdown
+              isOpen={notificationsOpen}
+              onClose={() => setNotificationsOpen(false)}
+              lowStockAlerts={lowStockAlerts}
+              notifications={notifications}
+              onMarkAsRead={handleMarkAsRead}
+              userRole={userRole}
+              onDismissLowStock={handleDismissLowStock}
+            />
           </div>
           {/* Avatar Dropdown */}
           <div style={{ position: 'relative' }}>
@@ -1104,31 +1060,15 @@ const SaaSLayout = ({ children }) => {
                 )}
               </button>
 
-              {notificationsOpen && (
-                <div style={{
-                  position: 'absolute',
-                  top: '50px',
-                  right: 0,
-                  width: '340px',
-                  backgroundColor: '#1E1E1E',
-                  border: '1px solid #333',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                  padding: '16px',
-                  zIndex: 200
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #2d2d2d', paddingBottom: '8px' }}>
-                    <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#FFFFFF' }}>Notifications & Alerts</span>
-                    <button 
-                      onClick={() => setNotificationsOpen(false)}
-                      style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px' }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {renderNotificationList()}
-                </div>
-              )}
+              <NotificationDropdown
+                isOpen={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+                lowStockAlerts={lowStockAlerts}
+                notifications={notifications}
+                onMarkAsRead={handleMarkAsRead}
+                userRole={userRole}
+                onDismissLowStock={handleDismissLowStock}
+              />
             </div>
 
             {/* Profile Avatar Trigger */}

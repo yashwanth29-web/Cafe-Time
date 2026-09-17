@@ -13,6 +13,7 @@ import {
  createStaff,
  updateStaff,
  deleteStaff,
+ resetStaffPasswordApi,
  getSetupData,
  saveSetupData,
  getInventory,
@@ -690,25 +691,31 @@ const OwnerDashboard = () =>{
  // Form / Dialog States
  const [showAddModal, setShowAddModal] = useState(false);
  const [showEditModal, setShowEditModal] = useState(false);
- const [showEditStaffModal, setShowEditStaffModal] = useState(false);
- const [showAddStaffModal, setShowAddStaffModal] = useState(false);
- const [editingStaff, setEditingStaff] = useState(null);
- const [editingItem, setEditingItem] = useState(null);
- const [expandedStaffId, setExpandedStaffId] = useState(null);
- const [selectedSalaryStaff, setSelectedSalaryStaff] = useState(null);
- const [showSalaryDetailModal, setShowSalaryDetailModal] = useState(false);
- const [editingWageId, setEditingWageId] = useState(null);
- const [tempWage, setTempWage] = useState(0);
+  const [showEditStaffModal, setShowEditStaffModal] = useState(false);
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [editingStaff, setEditingStaff] = useState(null);
+  const [resetModalStaff, setResetModalStaff] = useState(null);
+  const [newStaffPasswordInput, setNewStaffPasswordInput] = useState('');
+  const [showStaffPassToggle, setShowStaffPassToggle] = useState(false);
+  const [resetStaffLoading, setResetStaffLoading] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [expandedStaffId, setExpandedStaffId] = useState(null);
+  const [selectedSalaryStaff, setSelectedSalaryStaff] = useState(null);
+  const [showSalaryDetailModal, setShowSalaryDetailModal] = useState(false);
+  const [editingWageId, setEditingWageId] = useState(null);
+  const [tempWage, setTempWage] = useState(0);
 
- // New staff input state
- const [newStaff, setNewStaff] = useState({
- name: '',
- email: '',
- phone: '',
- staffRole: 'waiter',
- assignedBranch: '',
- dailyRate: 0
- });
+  // New staff input state
+  const [newStaff, setNewStaff] = useState({
+    name: '',
+    username: '',
+    password: '',
+    email: '',
+    phone: '',
+    staffRole: 'waiter',
+    assignedBranch: '',
+    dailyRate: 0
+  });
 
  // New menu item input state
  // Dynamic Category States
@@ -1663,11 +1670,13 @@ const OwnerDashboard = () =>{
       setStaffLoading(true);
       const response = await createStaff({
         ...newStaff,
+        username: newStaff.username ? newStaff.username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '') : undefined,
+        password: newStaff.password ? newStaff.password.trim() : undefined,
         dailyRate: Number(newStaff.dailyRate || 0)
       });
       if (response.success) {
         alert(response.message || `Staff member "${newStaff.name}" registered successfully.`);
-        setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });
+        setNewStaff({ name: '', username: '', password: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });
         setShowAddStaffModal(false);
         fetchStaffList();
       }
@@ -1679,37 +1688,73 @@ const OwnerDashboard = () =>{
     }
   };
 
- // Edit staff
- const handleEditStaff = async (e) =>{
- e.preventDefault();
- if (!editingStaff.name || !editingStaff.phone || !editingStaff.staffRole) {
- alert('Name, Phone Number, and Role are required.');
- return;
- }
- try {
- setStaffLoading(true);
- const response = await updateStaff(editingStaff._id, {
- name: editingStaff.name,
- email: editingStaff.email,
- phone: editingStaff.phone,
- staffRole: editingStaff.staffRole,
- assignedBranch: editingStaff.assignedBranch,
- isActive: editingStaff.isActive,
- dailyRate: Number(editingStaff.dailyRate || 0)
- });
- if (response.success) {
- alert('Staff member updated successfully.');
- setShowEditStaffModal(false);
- setEditingStaff(null);
- fetchStaffList();
- }
- } catch (error) {
- console.error('Error updating staff:', error);
- alert(error.response?.data?.message || 'Failed to update staff member.');
- } finally {
- setStaffLoading(false);
- }
- };
+  // Edit staff
+  const handleEditStaff = async (e) =>{
+    e.preventDefault();
+    if (!editingStaff.name || !editingStaff.phone || !editingStaff.staffRole) {
+      alert('Name, Phone Number, and Role are required.');
+      return;
+    }
+    try {
+      setStaffLoading(true);
+      const payload = {
+        name: editingStaff.name,
+        username: editingStaff.username ? editingStaff.username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '') : undefined,
+        email: editingStaff.email,
+        phone: editingStaff.phone,
+        staffRole: editingStaff.staffRole,
+        assignedBranch: editingStaff.assignedBranch,
+        isActive: editingStaff.isActive,
+        dailyRate: Number(editingStaff.dailyRate || 0)
+      };
+      if (editingStaff.newPassword && editingStaff.newPassword.trim()) {
+        payload.password = editingStaff.newPassword.trim();
+      }
+      const response = await updateStaff(editingStaff._id, payload);
+      if (response.success) {
+        alert('Staff member updated successfully.');
+        setShowEditStaffModal(false);
+        setEditingStaff(null);
+        fetchStaffList();
+      }
+    } catch (error) {
+      console.error('Error updating staff:', error);
+      alert(error.response?.data?.message || 'Failed to update staff member.');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  // Direct Staff Password Reset Handler
+  const handleDirectPasswordReset = async (e) => {
+    e.preventDefault();
+    if (!resetModalStaff || !newStaffPasswordInput.trim()) {
+      alert('Please enter a new password (min 6 characters).');
+      return;
+    }
+    if (newStaffPasswordInput.trim().length < 6) {
+      alert('Password must be at least 6 characters long.');
+      return;
+    }
+    try {
+      setResetStaffLoading(true);
+      const res = await resetStaffPasswordApi({
+        staffId: resetModalStaff._id,
+        newPassword: newStaffPasswordInput.trim()
+      });
+      if (res.success) {
+        alert(res.message || `Password for ${resetModalStaff.name} reset successfully!`);
+        setResetModalStaff(null);
+        setNewStaffPasswordInput('');
+        fetchStaffList();
+      }
+    } catch (err) {
+      console.error('Password reset error:', err);
+      alert(err.response?.data?.message || 'Failed to reset staff password.');
+    } finally {
+      setResetStaffLoading(false);
+    }
+  };
 
  // Delete staff
   const handleSaveWage = async (staffId, wage) => {
@@ -2762,11 +2807,17 @@ const exportStaffToCSV = () => {
       const handleOrderCreated = (newOrder) => {
         setOrders(prev => {
           if (prev.some(o => o._id === newOrder._id)) return prev;
-          if (activeBranchId && activeBranchId !== 'all' && newOrder.branchId !== activeBranchId) {
+          const isMatching = !activeBranchId || activeBranchId === 'all' ||
+            newOrder.branchId === activeBranchId ||
+            newOrder.branchId === 'default' ||
+            activeBranchId === 'default' ||
+            (activeBranch && (activeBranch.branchId === newOrder.branchId || String(activeBranch._id) === String(newOrder.branchId)));
+          if (!isMatching) {
             return prev;
           }
           const updated = [newOrder, ...prev];
-          cache.orders = updated;
+          const targetCache = getBranchCache(activeBranchId);
+          targetCache.orders = updated;
           return updated;
         });
         fetchDashboardStats(true, activeBranchId);
@@ -2775,12 +2826,45 @@ const exportStaffToCSV = () => {
       const handleOrderUpdated = (updatedOrder) => {
         setOrders(prev => {
           let updated;
-          if (activeBranchId && activeBranchId !== 'all' && updatedOrder.branchId !== activeBranchId) {
+          const isMatching = !activeBranchId || activeBranchId === 'all' ||
+            updatedOrder.branchId === activeBranchId ||
+            updatedOrder.branchId === 'default' ||
+            activeBranchId === 'default' ||
+            (activeBranch && (activeBranch.branchId === updatedOrder.branchId || String(activeBranch._id) === String(updatedOrder.branchId)));
+          if (!isMatching) {
             updated = prev.filter(o => o._id !== updatedOrder._id);
           } else {
-            updated = prev.map(o => o._id === updatedOrder._id ? updatedOrder : o);
+            const exists = prev.some(o => o._id === updatedOrder._id);
+            if (exists) {
+              updated = prev.map(o => o._id === updatedOrder._id ? updatedOrder : o);
+            } else {
+              updated = [updatedOrder, ...prev];
+            }
           }
-          cache.orders = updated;
+          const targetCache = getBranchCache(activeBranchId);
+          targetCache.orders = updated;
+          return updated;
+        });
+        fetchDashboardStats(true, activeBranchId);
+      };
+
+      const handleOrderDeleted = (data) => {
+        const delId = typeof data === 'object' ? data.orderId || data._id : data;
+        setOrders(prev => {
+          const updated = prev.filter(o => o._id !== delId);
+          const targetCache = getBranchCache(activeBranchId);
+          targetCache.orders = updated;
+          return updated;
+        });
+        fetchDashboardStats(true, activeBranchId);
+      };
+
+      const handleOrderCancelled = (cancelledOrder) => {
+        const canId = typeof cancelledOrder === 'object' ? cancelledOrder._id : cancelledOrder;
+        setOrders(prev => {
+          const updated = prev.map(o => (o._id === canId ? { ...o, ...(typeof cancelledOrder === 'object' ? cancelledOrder : {}), status: 'Cancelled' } : o));
+          const targetCache = getBranchCache(activeBranchId);
+          targetCache.orders = updated;
           return updated;
         });
         fetchDashboardStats(true, activeBranchId);
@@ -2904,7 +2988,13 @@ const exportStaffToCSV = () => {
       };
 
       socket.on('order_created', handleOrderCreated);
+      socket.on('orderCreated', handleOrderCreated);
       socket.on('order_updated', handleOrderUpdated);
+      socket.on('orderUpdated', handleOrderUpdated);
+      socket.on('order_deleted', handleOrderDeleted);
+      socket.on('orderDeleted', handleOrderDeleted);
+      socket.on('order_cancelled', handleOrderCancelled);
+      socket.on('orderCancelled', handleOrderCancelled);
       socket.on('menu_updated', handleMenuUpdated);
       socket.on('dashboard_realtime_sync', handleRealtimeSync);
       socket.on('inventory_updated', handleInventoryUpdated);
@@ -2915,7 +3005,13 @@ const exportStaffToCSV = () => {
 
       return () => {
         socket.off('order_created', handleOrderCreated);
+        socket.off('orderCreated', handleOrderCreated);
         socket.off('order_updated', handleOrderUpdated);
+        socket.off('orderUpdated', handleOrderUpdated);
+        socket.off('order_deleted', handleOrderDeleted);
+        socket.off('orderDeleted', handleOrderDeleted);
+        socket.off('order_cancelled', handleOrderCancelled);
+        socket.off('orderCancelled', handleOrderCancelled);
         socket.off('menu_updated', handleMenuUpdated);
         socket.off('dashboard_realtime_sync', handleRealtimeSync);
         socket.off('inventory_updated', handleInventoryUpdated);
@@ -4118,17 +4214,29 @@ const exportStaffToCSV = () => {
 
  {/* Form */}
 <form onSubmit={handleAddStaff} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="roster-full-name" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Name *</label>
-<input type="text" id="roster-full-name" name="roster-full-name" className="form-input" placeholder="e.g. Ravi Kumar" value={newStaff.name} onChange={(e) =>setNewStaff({ ...newStaff, name: e.target.value })} required />
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <label htmlFor="roster-full-name" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Name *</label>
+    <input type="text" id="roster-full-name" name="roster-full-name" className="form-input" placeholder="e.g. Ravi Kumar" value={newStaff.name} onChange={(e) =>setNewStaff({ ...newStaff, name: e.target.value })} required />
+  </div>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <label htmlFor="roster-username" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Username *</label>
+    <input type="text" id="roster-username" name="roster-username" className="form-input" placeholder="e.g. ravikumar" value={newStaff.username || ''} onChange={(e) =>setNewStaff({ ...newStaff, username: e.target.value })} required />
+  </div>
+</div>
+<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <label htmlFor="roster-password" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Initial Password *</label>
+    <input type="text" id="roster-password" name="roster-password" className="form-input" placeholder="e.g. Cafe@12345" value={newStaff.password || ''} onChange={(e) =>setNewStaff({ ...newStaff, password: e.target.value })} required />
+  </div>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <label htmlFor="roster-phone-number" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Phone Number *</label>
+    <input type="text" id="roster-phone-number" name="roster-phone-number" className="form-input" placeholder="e.g. 9876543210" value={newStaff.phone} onChange={(e) =>setNewStaff({ ...newStaff, phone: e.target.value })} required />
+  </div>
 </div>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="roster-email-address" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email Address<span style={{ opacity: 0.5 }}>(Optional)</span></label>
+<label htmlFor="roster-email-address" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email Address <span style={{ opacity: 0.5 }}>(Optional)</span></label>
 <input type="email" id="roster-email-address" name="roster-email-address" className="form-input" placeholder="staff@cafe.com" value={newStaff.email} onChange={(e) =>setNewStaff({ ...newStaff, email: e.target.value })} />
-</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="roster-phone-number" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Phone Number *</label>
-<input type="text" id="roster-phone-number" name="roster-phone-number" className="form-input" placeholder="e.g. 9876543210" value={newStaff.phone} onChange={(e) =>setNewStaff({ ...newStaff, phone: e.target.value })} required />
 </div>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
 <label htmlFor="roster-daily-wage" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Daily Wage (₹) *</label>
@@ -4247,10 +4355,17 @@ const exportStaffToCSV = () => {
 </thead>
 <tbody>
  {staff.map((member) => (
-  <React.Fragment key={member._id}>
+   <React.Fragment key={member._id}>
 <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
 <td style={{ padding: '12px 10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</td>
-<td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
+<td style={{ padding: '12px 10px' }}>
+  <div style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</div>
+  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+    <span style={{ fontSize: '11px', fontWeight: 700, color: '#D47F46', background: 'rgba(212, 127, 70, 0.12)', padding: '1px 6px', borderRadius: '4px' }}>
+      @{member.username || member.name.toLowerCase().replace(/\s+/g, '')}
+    </span>
+  </div>
+</td>
 <td style={{ padding: '12px 10px' }}>
   <div style={{ fontSize: '13px' }}>{member.phone}</div>
   <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{member.email || 'N/A'}</div>
@@ -4296,9 +4411,10 @@ const exportStaffToCSV = () => {
 </span>
 </td>
 <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-<div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-<button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}> Edit</button>
-<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
+<div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+<button onClick={() =>{setEditingStaff({ ...member, newPassword: '' });setShowEditStaffModal(true);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}>Edit</button>
+<button onClick={() =>{setResetModalStaff(member);setNewStaffPasswordInput('');setShowStaffPassToggle(false);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: '#D47F46', color: '#D47F46', fontWeight: 600 }} title="Reset Staff Password">🔑 Pass</button>
+<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>Delete</button>
 </div>
 </td>
 </tr>
@@ -4356,10 +4472,15 @@ const exportStaffToCSV = () => {
 
 <div className="mobile-only-staff" style={{ display: 'none' }}>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
- {staff.map((member) =>
+ {staff.map((member) => (
 <div key={member._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-<span style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</span>
+<div>
+  <div style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</div>
+  <span style={{ fontSize: '11px', fontWeight: 700, color: '#D47F46', background: 'rgba(212, 127, 70, 0.12)', padding: '1px 6px', borderRadius: '4px' }}>
+    @{member.username || member.name.toLowerCase().replace(/\s+/g, '')}
+  </span>
+</div>
 <span className="admin-menu-badge" style={{ textTransform: 'capitalize', background: 'rgba(255, 107, 8, 0.15)', color: '#FF6B08', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>{member.staffRole}</span>
 </div>
 <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
@@ -4410,13 +4531,14 @@ const exportStaffToCSV = () => {
  }}>
  {member.isActive ? 'Active' : 'Inactive'}
 </span>
-<div style={{ display: 'flex', gap: '10px' }}>
-<button onClick={() =>{setEditingStaff({ ...member });setShowEditStaffModal(true);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px' }}> Edit</button>
-<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}> Delete</button>
+<div style={{ display: 'flex', gap: '8px' }}>
+<button onClick={() =>{setEditingStaff({ ...member, newPassword: '' });setShowEditStaffModal(true);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px' }}>Edit</button>
+<button onClick={() =>{setResetModalStaff(member);setNewStaffPasswordInput('');setShowStaffPassToggle(false);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: '#D47F46', color: '#D47F46', fontWeight: 600 }}>🔑 Pass</button>
+<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>Delete</button>
 </div>
 </div>
 </div>
-)}
+))}
 </div>
 </div>
 </>
@@ -7138,22 +7260,46 @@ const exportStaffToCSV = () => {
 <div className="modal-overlay">
 <div className="modal-container">
 <div className="modal-header">
-<h3 className="modal-title"> Edit Staff Member</h3>
+<h3 className="modal-title">✏️ Edit Staff Member</h3>
 <button onClick={() =>{setShowEditStaffModal(false);setEditingStaff(null);}} className="modal-close">&times;</button>
 </div>
 <form onSubmit={handleEditStaff}>
 <div className="modal-body">
-<div className="form-group">
-<label className="form-label">Full Name *</label>
-<input type="text" required value={editingStaff.name} onChange={(e) =>setEditingStaff({ ...editingStaff, name: e.target.value })} className="form-input" />
+<div className="form-row">
+  <div className="form-group">
+    <label className="form-label">Full Name *</label>
+    <input type="text" required value={editingStaff.name || ''} onChange={(e) =>setEditingStaff({ ...editingStaff, name: e.target.value })} className="form-input" />
+  </div>
+  <div className="form-group">
+    <label className="form-label">Login Username (@username) *</label>
+    <input type="text" required value={editingStaff.username || ''} onChange={(e) =>setEditingStaff({ ...editingStaff, username: e.target.value })} className="form-input" placeholder="e.g. ravi_waiter" />
+  </div>
 </div>
-<div className="form-group">
-<label className="form-label">Email Address (Optional)</label>
-<input type="email" value={editingStaff.email || ''} onChange={(e) =>setEditingStaff({ ...editingStaff, email: e.target.value })} className="form-input" />
+<div className="form-row">
+  <div className="form-group">
+    <label className="form-label">Phone Number *</label>
+    <input type="text" required value={editingStaff.phone || ''} onChange={(e) =>setEditingStaff({ ...editingStaff, phone: e.target.value })} className="form-input" />
+  </div>
+  <div className="form-group">
+    <label className="form-label">Email Address (Optional)</label>
+    <input type="email" value={editingStaff.email || ''} onChange={(e) =>setEditingStaff({ ...editingStaff, email: e.target.value })} className="form-input" placeholder="staff@cafe.com" />
+  </div>
 </div>
-<div className="form-group">
-<label className="form-label">Phone Number *</label>
-<input type="text" required value={editingStaff.phone} onChange={(e) =>setEditingStaff({ ...editingStaff, phone: e.target.value })} className="form-input" />
+<div className="form-group" style={{ background: 'rgba(212, 127, 70, 0.08)', border: '1px dashed #D47F46', padding: '12px 14px', borderRadius: '10px' }}>
+  <label className="form-label" style={{ color: '#D47F46', fontWeight: 700, marginBottom: '4px' }}>
+    🔑 Set New Password (Optional)
+  </label>
+  <input 
+    type="text" 
+    value={editingStaff.newPassword || ''} 
+    onChange={(e) =>setEditingStaff({ ...editingStaff, newPassword: e.target.value })} 
+    className="form-input" 
+    placeholder="Leave blank to keep current password unchanged"
+    autoComplete="new-password"
+  />
+  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
+    Minimum 6 characters. Enter a new password only if resetting.
+  </span>
 </div>
 <div className="form-group">
 <label className="form-label">Assigned Branch *</label>
@@ -7196,6 +7342,91 @@ const exportStaffToCSV = () => {
 </div>
 </div>
  }
+
+ {/* MODAL 3B: DIRECT RESET STAFF PASSWORD */}
+ {resetModalStaff && (
+  <div className="modal-overlay" style={{ zIndex: 9999 }}>
+    <div className="modal-container" style={{ maxWidth: '420px', borderRadius: '16px', overflow: 'hidden' }}>
+      <div className="modal-header" style={{ borderBottom: '1px solid var(--color-border)', padding: '18px 24px' }}>
+        <h3 className="modal-title" style={{ fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          🔑 Reset Staff Password
+        </h3>
+        <button onClick={() => setResetModalStaff(null)} className="modal-close">&times;</button>
+      </div>
+      <form onSubmit={handleDirectPasswordReset}>
+        <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '12px 14px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Staff Member</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)', marginTop: '2px' }}>
+              {resetModalStaff.name}
+            </div>
+            <div style={{ fontSize: '12px', color: '#D47F46', fontWeight: 600, marginTop: '2px' }}>
+              @{resetModalStaff.username || resetModalStaff.name.toLowerCase().replace(/\s+/g, '')} • {resetModalStaff.staffRole}
+            </div>
+          </div>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+              New Password *
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showStaffPassToggle ? 'text' : 'password'}
+                required
+                value={newStaffPasswordInput}
+                onChange={(e) => setNewStaffPasswordInput(e.target.value)}
+                className="form-input"
+                placeholder="Enter new password (min 6 chars)"
+                style={{ paddingRight: '42px' }}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowStaffPassToggle(!showStaffPassToggle)}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  padding: '4px'
+                }}
+              >
+                {showStaffPassToggle ? '🙈' : '👁️'}
+              </button>
+            </div>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '4px', display: 'block' }}>
+              Staff member will use this new password immediately to sign in.
+            </span>
+          </div>
+        </div>
+
+        <div className="modal-footer" style={{ borderTop: '1px solid var(--color-border)', padding: '14px 24px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => setResetModalStaff(null)}
+            className="btn btn-secondary"
+            style={{ width: 'auto', padding: '9px 18px' }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={{ width: 'auto', padding: '9px 22px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            disabled={resetStaffLoading}
+          >
+            {resetStaffLoading ? 'Saving...' : 'Save Password'}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+ )}
 
  {/* MODAL 4: ADD BRANCH */}
  {showAddBranchModal &&

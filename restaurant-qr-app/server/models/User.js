@@ -6,16 +6,35 @@ const UserSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  displayName: {
+    type: String,
+    trim: true
+  },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    lowercase: true,
+    sparse: true
+  },
+  password: {
+    type: String,
+    select: false
+  },
+  mustChangePassword: {
+    type: Boolean,
+    default: false
+  },
   email: {
     type: String,
     lowercase: true,
     trim: true,
-    unique: true,
     sparse: true
   },
   phone: {
     type: String,
-    required: true,
+    default: '',
     trim: true
   },
   role: {

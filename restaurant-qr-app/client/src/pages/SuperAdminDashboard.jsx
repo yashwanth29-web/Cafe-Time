@@ -2,7 +2,7 @@ import React from 'react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { createOwner, getCafes, updateCafe, deleteCafe, restoreCafe, getTickets, updateTicketStatus, createBranch, updateBranch, deleteBranch } from '../services/api';
+import { createOwner, resetOwnerPasswordApi, getCafes, updateCafe, deleteCafe, restoreCafe, getTickets, updateTicketStatus, createBranch, updateBranch, deleteBranch } from '../services/api';
 import { Building, Activity, ShieldCheck, HeartPulse, CreditCard, Ticket, Plus, X, Server, Search, TerminalSquare, RefreshCw, Edit, Trash2, Banknote, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
 
 const getStatusBadge = (lastHeartbeat, services = {}) => {
@@ -45,6 +45,8 @@ const SuperAdminDashboard = () => {
   // Form state for Cafe Creation
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
+    password: '',
     email: '',
     phone: '',
     cafeName: '',
@@ -54,6 +56,47 @@ const SuperAdminDashboard = () => {
     branchCount: 1,
     businessType: 'Cafe'
   });
+
+  const [resetModalOwner, setResetModalOwner] = useState(null);
+  const [resetOwnerNameInput, setResetOwnerNameInput] = useState('');
+  const [resetOwnerUsernameInput, setResetOwnerUsernameInput] = useState('');
+  const [resetOwnerPasswordInput, setResetOwnerPasswordInput] = useState('');
+  const [resetOwnerMustChangePass, setResetOwnerMustChangePass] = useState(true);
+
+  const openResetOwnerModal = (cafe) => {
+    setResetModalOwner(cafe);
+    setResetOwnerNameInput(cafe.ownerName || '');
+    setResetOwnerUsernameInput(cafe.ownerUsername || '');
+    setResetOwnerPasswordInput('');
+    setResetOwnerMustChangePass(true);
+  };
+
+  const handleOwnerCredentialsSubmit = async (e) => {
+    e.preventDefault();
+    if (!resetModalOwner) return;
+    try {
+      setLoading(true);
+      setErrorMsg('');
+      setSuccessMsg('');
+      const res = await resetOwnerPasswordApi({
+        ownerId: resetModalOwner.ownerId,
+        cafeId: resetModalOwner.cafeId,
+        newName: resetOwnerNameInput.trim(),
+        newUsername: resetOwnerUsernameInput.trim(),
+        newPassword: resetOwnerPasswordInput.trim(),
+        mustChangePassword: resetOwnerMustChangePass
+      });
+      if (res.success) {
+        setSuccessMsg(res.message);
+        setResetModalOwner(null);
+        loadCafes();
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to update owner credentials');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Modal Control States
   const [selectedCafeForDetails, setSelectedCafeForDetails] = useState(null);
@@ -706,40 +749,50 @@ const SuperAdminDashboard = () => {
               <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div className="form-grid-v2">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>OWNER NAME</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>OWNER FULL NAME *</label>
                     <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
-                  placeholder="John Doe"
-                  disabled={loading} />
-                
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
+                      placeholder="John Doe"
+                      required
+                      disabled={loading} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>OWNER EMAIL</label>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>LOGIN USERNAME *</label>
                     <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
-                  placeholder="john@example.com"
-                  disabled={loading} />
-                
+                      type="text"
+                      name="username"
+                      value={formData.username}
+                      onChange={handleInputChange}
+                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
+                      placeholder="e.g. johndoe (unique login)"
+                      required
+                      disabled={loading} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>INITIAL PASSWORD</label>
+                    <input
+                      type="password"
+                      name="password"
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
+                      placeholder="Defaults to Cafe@12345"
+                      disabled={loading} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-secondary)', letterSpacing: '0.5px' }}>OWNER PHONE</label>
                     <input
-                  type="text"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
-                  placeholder="+91 9876543210"
-                  disabled={loading} />
-                
+                      type="text"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', outline: 'none', fontSize: '0.9rem', color: 'var(--color-text-primary)', background: 'var(--bg-primary)' }}
+                      placeholder="+91 9876543210"
+                      disabled={loading} />
                   </div>
                 </div>
     
@@ -935,7 +988,9 @@ const SuperAdminDashboard = () => {
                   <div className="cafe-card-details-expanded">
                           <div className="details-row">
                             <span>Owner Name:</span>
-                            <span style={{ color: 'var(--color-text-primary)', fontWeight: 650 }}>{cafe.ownerName}</span>
+                            <span style={{ color: 'var(--color-text-primary)', fontWeight: 650 }}>
+                              {cafe.ownerName} {cafe.ownerUsername && <span style={{ color: 'var(--color-primary)', fontSize: '0.8rem', fontFamily: 'monospace', marginLeft: '6px' }}>@{cafe.ownerUsername}</span>}
+                            </span>
                           </div>
                           <div className="details-row">
                             <span>Owner Email:</span>
@@ -1002,7 +1057,15 @@ const SuperAdminDashboard = () => {
                                 startEditing(cafe);
                               }}
                               style={{ backgroundColor: 'transparent', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
-                              Edit
+                              Edit Cafe
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openResetOwnerModal(cafe);
+                              }}
+                              style={{ backgroundColor: 'rgba(212, 127, 70, 0.12)', color: 'var(--color-primary, #D47F46)', border: '1px solid rgba(212, 127, 70, 0.4)', padding: '6px 14px', borderRadius: '9999px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}>
+                              🔑 Password & Login
                             </button>
                             <button
                               onClick={(e) => {
@@ -2262,6 +2325,89 @@ const SuperAdminDashboard = () => {
                   }}
                 >
                   {loading ? 'Saving...' : editingBranch ? 'Update Branch' : 'Create Branch'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal: Edit Admin / Owner Login Credentials */}
+      {resetModalOwner && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: 'var(--bg-card)', padding: '30px', borderRadius: '16px', width: '100%', maxWidth: '440px', border: '1px solid var(--color-border)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ margin: 0, color: 'var(--color-text-primary)' }}>Edit Admin Credentials</h3>
+              <button onClick={() => setResetModalOwner(null)} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            
+            <p style={{ margin: '0 0 20px 0', color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+              Managing login credentials for <strong>{resetModalOwner.name}</strong> ({resetModalOwner.cafeId})
+            </p>
+
+            <form onSubmit={handleOwnerCredentialsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>OWNER FULL NAME</label>
+                <input 
+                  type="text"
+                  required
+                  value={resetOwnerNameInput}
+                  onChange={(e) => setResetOwnerNameInput(e.target.value)}
+                  style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>LOGIN USERNAME</label>
+                <input 
+                  type="text"
+                  required
+                  value={resetOwnerUsernameInput}
+                  onChange={(e) => setResetOwnerUsernameInput(e.target.value)}
+                  style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>NEW PASSWORD</label>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                      let token = '';
+                      for (let i = 0; i < 6; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
+                      setResetOwnerPasswordInput(`Cafe#${token}`);
+                    }}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-primary, #D47F46)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    🎲 Generate Temp Password
+                  </button>
+                </div>
+                <input 
+                  type="text"
+                  value={resetOwnerPasswordInput}
+                  onChange={(e) => setResetOwnerPasswordInput(e.target.value)}
+                  placeholder="Leave blank to keep unchanged"
+                  style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <input 
+                  type="checkbox" 
+                  id="mustChangePassCheck"
+                  checked={resetOwnerMustChangePass}
+                  onChange={(e) => setResetOwnerMustChangePass(e.target.checked)}
+                />
+                <label htmlFor="mustChangePassCheck" style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+                  Require owner to change password on next login
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                <button type="button" onClick={() => setResetModalOwner(null)} style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" disabled={loading} style={{ background: 'var(--color-primary, #D47F46)', border: 'none', color: 'white', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+                  {loading ? 'Updating...' : 'Save & Update Credentials'}
                 </button>
               </div>
             </form>

@@ -26,7 +26,8 @@ import {
   deleteCategory,
   getAssetUrl,
   getCafeInfo,
-  getPaymentInfo
+  getPaymentInfo,
+  getCafeTables
 } from '../services/api';
 import socket, { connectSocket } from '../socket';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
@@ -39,6 +40,7 @@ const StaffOrderWorkspace = () => {
   const userRole = user?.role?.toLowerCase() || '';
   
   const [cafeInfo, setCafeInfo] = useState(null);
+  const [configuredTables, setConfiguredTables] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -171,11 +173,22 @@ const StaffOrderWorkspace = () => {
           const res = await getCafeInfo(user.cafeId);
           if (res.success) {
             setCafeInfo(res.data);
+            if (res.data.tables && Array.isArray(res.data.tables) && res.data.tables.length > 0) {
+              setConfiguredTables(res.data.tables);
+            }
           }
           if (activeBranchId) {
             const payRes = await getPaymentInfo();
             if (payRes.success && payRes.data) {
               setPaymentInfo(payRes.data);
+            }
+            try {
+              const tblRes = await getCafeTables({ cafeId: user.cafeId, branchId: activeBranchId });
+              if (tblRes && tblRes.success && tblRes.data?.tables) {
+                setConfiguredTables(tblRes.data.tables);
+              }
+            } catch (tblErr) {
+              console.warn('Could not fetch branch tables config:', tblErr);
             }
           }
         } catch (e) {
@@ -677,12 +690,21 @@ const StaffOrderWorkspace = () => {
       const handleOrderCreated = (newOrder) => {
         // Only accept real-time order creation if it matches the current branch context
         if (activeBranchId && activeBranchId !== 'all') {
-          const activeBranchDoc = (branches || []).find(b => b.branchId === activeBranchId || b._id === activeBranchId);
-          const orderBranchDoc = (branches || []).find(b => b.branchId === newOrder.branchId || b._id === newOrder.branchId);
-          const activeBranchObjectId = activeBranchDoc ? String(activeBranchDoc._id) : '';
-          const orderBranchObjectId = orderBranchDoc ? String(orderBranchDoc._id) : newOrder.branchId;
+          const activeBranchDoc = (branches || []).find(b => b.branchId === activeBranchId || String(b._id) === String(activeBranchId));
+          const orderBranchDoc = (branches || []).find(b => b.branchId === newOrder.branchId || String(b._id) === String(newOrder.branchId));
+          
+          const activeCode = activeBranchDoc?.branchId || activeBranchId;
+          const orderCode = orderBranchDoc?.branchId || newOrder.branchId;
+          const activeObjId = activeBranchDoc ? String(activeBranchDoc._id) : '';
+          const orderObjId = orderBranchDoc ? String(orderBranchDoc._id) : '';
 
-          if (activeBranchObjectId && activeBranchObjectId !== orderBranchObjectId) {
+          const isMatching = (activeCode === orderCode) ||
+                             (activeCode === 'default' || orderCode === 'default') ||
+                             (activeObjId && orderObjId && activeObjId === orderObjId) ||
+                             (activeObjId && activeObjId === String(newOrder.branchId)) ||
+                             (orderObjId && orderObjId === String(activeBranchId));
+
+          if (!isMatching) {
             return; // Ignore order from another branch
           }
         }
@@ -707,9 +729,35 @@ const StaffOrderWorkspace = () => {
           }
           return [newOrder, ...prev];
         });
+
+        // Real-time sync for order history / receipts tab
+        setCompletedLogs((prev) => {
+          if (prev.some((o) => o._id === newOrder._id)) return prev;
+          return [newOrder, ...prev];
+        });
       };
 
       const handleOrderUpdated = (updatedOrder) => {
+        if (activeBranchId && activeBranchId !== 'all') {
+          const activeBranchDoc = (branches || []).find(b => b.branchId === activeBranchId || String(b._id) === String(activeBranchId));
+          const orderBranchDoc = (branches || []).find(b => b.branchId === updatedOrder.branchId || String(b._id) === String(updatedOrder.branchId));
+          
+          const activeCode = activeBranchDoc?.branchId || activeBranchId;
+          const orderCode = orderBranchDoc?.branchId || updatedOrder.branchId;
+          const activeObjId = activeBranchDoc ? String(activeBranchDoc._id) : '';
+          const orderObjId = orderBranchDoc ? String(orderBranchDoc._id) : '';
+
+          const isMatching = (activeCode === orderCode) ||
+                             (activeCode === 'default' || orderCode === 'default') ||
+                             (activeObjId && orderObjId && activeObjId === orderObjId) ||
+                             (activeObjId && activeObjId === String(updatedOrder.branchId)) ||
+                             (orderObjId && orderObjId === String(activeBranchId));
+
+          if (!isMatching) {
+            return; // Ignore update from another branch
+          }
+        }
+
         setOrders((prev) => {
           const index = prev.findIndex((o) => o._id === updatedOrder._id);
           
@@ -724,38 +772,68 @@ const StaffOrderWorkspace = () => {
           }
 
           if (index !== -1) {
-            // Keep in local list if still active, otherwise filter completed
-            if (updatedOrder.status === 'Completed' || updatedOrder.paymentStatus === 'Paid') {
+            // Keep in local list if still active, otherwise filter completed or cancelled
+            if (updatedOrder.status === 'Completed' || updatedOrder.status === 'Cancelled' || updatedOrder.paymentStatus === 'Paid') {
               return prev.filter((o) => o._id !== updatedOrder._id);
             }
             return prev.map((o) => (o._id === updatedOrder._id ? updatedOrder : o));
           } else {
             // If new to active orders list (e.g. state transitioned back)
-            if (updatedOrder.status !== 'Completed' && updatedOrder.paymentStatus !== 'Paid') {
+            if (updatedOrder.status !== 'Completed' && updatedOrder.status !== 'Cancelled' && updatedOrder.paymentStatus !== 'Paid') {
               return [updatedOrder, ...prev];
             }
             return prev;
           }
+        });
+
+        // Instant real-time sync for Order History / Receipts tab
+        setCompletedLogs((prev) => {
+          const exists = prev.some((o) => o._id === updatedOrder._id);
+          if (exists) {
+            return prev.map((o) => (o._id === updatedOrder._id ? updatedOrder : o));
+          }
+          return [updatedOrder, ...prev];
         });
       };
 
       const handleOrderDeleted = (data) => {
         const delId = typeof data === 'object' ? data.orderId || data._id : data;
         setOrders((prev) => prev.filter((o) => o._id !== delId));
+        setCompletedLogs((prev) => prev.filter((o) => o._id !== delId));
       };
 
       const handleOrderCancelled = (cancelledOrder) => {
         const canId = typeof cancelledOrder === 'object' ? cancelledOrder._id : cancelledOrder;
         setOrders((prev) => prev.filter((o) => o._id !== canId));
+        setCompletedLogs((prev) => {
+          if (typeof cancelledOrder === 'object' && cancelledOrder._id) {
+            const exists = prev.some(o => o._id === canId);
+            if (exists) {
+              return prev.map(o => o._id === canId ? { ...o, ...cancelledOrder, status: 'Cancelled' } : o);
+            }
+            return [{ ...cancelledOrder, status: 'Cancelled' }, ...prev];
+          }
+          return prev.filter((o) => o._id !== canId);
+        });
         playNotificationSound();
         speakText('Order was cancelled by customer.');
       };
 
+      const handleRealtimeSync = (payload) => {
+        if (payload && payload.model === 'Order') {
+          fetchWorkspaceOrders();
+        }
+      };
+
       socket.on('order_created', handleOrderCreated);
+      socket.on('orderCreated', handleOrderCreated);
       socket.on('order_updated', handleOrderUpdated);
+      socket.on('orderUpdated', handleOrderUpdated);
       socket.on('order_deleted', handleOrderDeleted);
+      socket.on('orderDeleted', handleOrderDeleted);
       socket.on('order_cancelled', handleOrderCancelled);
       socket.on('orderCancelled', handleOrderCancelled);
+      socket.on('dashboard_realtime_sync', handleRealtimeSync);
 
       // Graceful poll if socket goes down
       const pollTimer = setInterval(() => {
@@ -766,10 +844,14 @@ const StaffOrderWorkspace = () => {
 
       return () => {
         socket.off('order_created', handleOrderCreated);
+        socket.off('orderCreated', handleOrderCreated);
         socket.off('order_updated', handleOrderUpdated);
+        socket.off('orderUpdated', handleOrderUpdated);
         socket.off('order_deleted', handleOrderDeleted);
+        socket.off('orderDeleted', handleOrderDeleted);
         socket.off('order_cancelled', handleOrderCancelled);
         socket.off('orderCancelled', handleOrderCancelled);
+        socket.off('dashboard_realtime_sync', handleRealtimeSync);
         clearInterval(pollTimer);
       };
     }
@@ -939,6 +1021,31 @@ const StaffOrderWorkspace = () => {
       }).filter((o) => o.status !== 'Completed' || o.paymentStatus === 'Pending');
     });
 
+    // Optimistically update completedLogs (Order History)
+    setCompletedLogs((prev) => {
+      const nowStr = new Date().toISOString();
+      const updatedFields = { status: targetStatus, ...payload };
+      if (targetStatus === 'Ready') {
+        updatedFields.readyBy = user?._id || null;
+        updatedFields.readyByName = user?.name || 'Staff';
+        updatedFields.readyAt = nowStr;
+      } else if (targetStatus === 'Completed') {
+        updatedFields.paidBy = user?._id || null;
+        updatedFields.paidByName = user?.name || 'Staff';
+        updatedFields.paidAt = nowStr;
+        updatedFields.paymentStatus = 'Paid';
+      }
+      const exists = prev.some((o) => o._id === orderId);
+      if (exists) {
+        return prev.map((o) => (o._id === orderId ? { ...o, ...updatedFields } : o));
+      }
+      const matchOrder = orders.find((o) => o._id === orderId);
+      if (matchOrder) {
+        return [{ ...matchOrder, ...updatedFields }, ...prev];
+      }
+      return prev;
+    });
+
     try {
       const res = await updateOrderStatus(orderId, { status: targetStatus, ...payload });
       if (res.success) {
@@ -953,6 +1060,13 @@ const StaffOrderWorkspace = () => {
           } else {
             return prev.filter((o) => o._id !== orderId);
           }
+        });
+        setCompletedLogs((prev) => {
+          const exists = prev.some((o) => o._id === orderId);
+          if (exists) {
+            return prev.map((o) => (o._id === orderId ? { ...o, ...res.data } : o));
+          }
+          return [res.data, ...prev];
         });
       } else {
         if (originalOrders) setOrders(originalOrders);
@@ -1198,7 +1312,7 @@ const StaffOrderWorkspace = () => {
 
   // Filter orders by sub-tab columns and selected table
   const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
+    const list = orders.filter((o) => {
       if (subTabParam === 'unpaid' && o.paymentStatus === 'Paid') return false;
 
       if (selectedTableFilter !== 'all') {
@@ -1213,6 +1327,9 @@ const StaffOrderWorkspace = () => {
 
       return true;
     });
+
+    // Always sort newest orders first (createdAt descending)
+    return list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   }, [orders, subTabParam, selectedTableFilter]);
 
   // Statistics summaries
@@ -1244,6 +1361,11 @@ const StaffOrderWorkspace = () => {
   const yesterdayDateStr = useMemo(() => {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
     return `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const minDateStr = useMemo(() => {
+    const minD = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    return `${minD.getFullYear()}-${String(minD.getMonth() + 1).padStart(2, '0')}-${String(minD.getDate()).padStart(2, '0')}`;
   }, []);
 
   const fetchCompletedLogs = useCallback(async (dateToQuery) => {
@@ -1300,6 +1422,7 @@ const StaffOrderWorkspace = () => {
   // Summary analytics for the selected date
   const historySummary = useMemo(() => {
     let totalRev = 0;
+    let fulfilledRev = 0;
     let paidRev = 0;
     let pendingRev = 0;
     let cashRev = 0;
@@ -1312,6 +1435,10 @@ const StaffOrderWorkspace = () => {
     completedLogs.forEach((log) => {
       const amt = Number(log.totalAmount) || 0;
       totalRev += amt;
+      const isFulfilled = ['Ready', 'Delivered', 'Completed'].includes(log.status);
+      if (isFulfilled) {
+        fulfilledRev += amt;
+      }
       const isPaid = log.paymentStatus === 'Paid' || log.status === 'Completed';
       if (isPaid) {
         paidRev += amt;
@@ -1337,6 +1464,7 @@ const StaffOrderWorkspace = () => {
     return {
       totalOrders: completedLogs.length,
       totalRevenue: totalRev,
+      fulfilledRevenue: fulfilledRev,
       paidRevenue: paidRev,
       pendingRevenue: pendingRev,
       cashRevenue: cashRev,
@@ -1812,6 +1940,8 @@ const StaffOrderWorkspace = () => {
                 <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>📅</span>
                 <input
                   type="date"
+                  min={minDateStr}
+                  max={todayDateStr}
                   value={historyDate}
                   onChange={(e) => {
                     if (e.target.value) setHistoryDate(e.target.value);
@@ -1866,9 +1996,11 @@ const StaffOrderWorkspace = () => {
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Sales</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>
-                ₹{historySummary.totalRevenue.toFixed(2)}
+              <div style={{ fontSize: '11px', color: '#10B981', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>💰</span> Total Revenue
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10B981', marginTop: '2px' }}>
+                ₹{historySummary.fulfilledRevenue.toFixed(2)}
               </div>
             </div>
 
@@ -1883,6 +2015,13 @@ const StaffOrderWorkspace = () => {
               <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>📱 Online Total</div>
               <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#27ae60', marginTop: '2px' }}>
                 ₹{historySummary.upiRevenue.toFixed(2)}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>⏳ Pending / Unpaid</div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f39c12', marginTop: '2px' }}>
+                ₹{historySummary.pendingRevenue.toFixed(2)}
               </div>
             </div>
           </div>
@@ -3178,13 +3317,36 @@ const StaffOrderWorkspace = () => {
 
       {/* ======================= MODAL: TAKE ORDER ======================= */}
       {showTakeOrderModal && (() => {
-        const configuredCount = Math.max(12, Number(cafeInfo?.totalTables || currentBranch?.totalTables || 10));
-        const tableNums = Array.from({ length: configuredCount }, (_, i) => String(i + 1));
+        let tableNums = [];
+        if (configuredTables && Array.isArray(configuredTables) && configuredTables.length > 0) {
+          tableNums = configuredTables.map((t) => {
+            const rawId = typeof t === 'string' ? t : (t.id || t.label || '');
+            return rawId.replace(/^T/i, '').replace(/^Table-?/i, '').trim();
+          }).filter(Boolean);
+        } else if (cafeInfo?.tables && Array.isArray(cafeInfo.tables) && cafeInfo.tables.length > 0) {
+          tableNums = cafeInfo.tables.map((t) => {
+            const rawId = typeof t === 'string' ? t : (t.id || t.label || '');
+            return rawId.replace(/^T/i, '').replace(/^Table-?/i, '').trim();
+          }).filter(Boolean);
+        } else {
+          const total = Number(cafeInfo?.totalTables || currentBranch?.totalTables || 10);
+          tableNums = Array.from({ length: total > 0 ? total : 10 }, (_, i) => String(i + 1));
+        }
+
+        // Add any active order tables not in the standard list
         orders.forEach((o) => {
           const raw = String(o.tableNumber || '').trim();
           if (raw && raw.toLowerCase() !== 'takeaway' && raw.toLowerCase() !== 'walk-in' && !tableNums.includes(raw)) {
             tableNums.push(raw);
           }
+        });
+
+        // Numeric sort if possible
+        tableNums.sort((a, b) => {
+          const numA = parseInt(a, 10);
+          const numB = parseInt(b, 10);
+          if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+          return a.localeCompare(b);
         });
 
         return (
