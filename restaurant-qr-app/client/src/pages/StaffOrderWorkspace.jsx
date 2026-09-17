@@ -1165,10 +1165,10 @@ const StaffOrderWorkspace = () => {
 
   const isUnifiedMode = currentBranch ? !!currentBranch.unifiedStaffMode : false;
 
-  // Permission helpers (Waiter and Cashier unified: Floor Service + Payment Collection)
-  const canPrepare = isUnifiedMode || ['admin', 'owner', 'manager', 'chef'].includes(userRole);
-  const canServe = isUnifiedMode || ['admin', 'owner', 'manager', 'waiter', 'cashier', 'waiter_cashier'].includes(userRole);
-  const canCollect = isUnifiedMode || ['admin', 'owner', 'manager', 'waiter', 'cashier', 'waiter_cashier'].includes(userRole);
+  // Permission helpers - Always enabled for all staff in workspace for seamless counter operations
+  const canPrepare = true;
+  const canServe = true;
+  const canCollect = true;
 
   // Table filter state for Live Queue
   const [selectedTableFilter, setSelectedTableFilter] = useState('all');

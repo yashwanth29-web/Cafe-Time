@@ -446,11 +446,6 @@ const createOrder = async (req, res, next) => {
     // Broadcast the new order over socket
     await emitOrderUpdated(formattedOrder);
 
-    // Trigger printing receipt asynchronously (fire-and-forget) to not block user response
-    printReceipt(formattedOrder).catch(err => {
-      console.error('[ORDER CONTROLLER] Error invoking printReceipt in background:', err.message);
-    });
-
     return res.status(201).json({ success: true, data: formattedOrder });
   } catch (error) {
     if (useTransaction && session) {
@@ -548,20 +543,14 @@ const getOrders = async (req, res, next) => {
 
 // @desc    Get order by ID
 // @route   GET /api/orders/:id
-// @access  Public (Customer Live Tracker)
+// @access  Public
 const getOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const cafeId = req.cafeId || req.query.cafeId || (req.user && req.user.cafeId);
-    if (!cafeId) {
-      return res.status(400).json({ success: false, message: 'Missing cafeId' });
-    }
-    
-    let order = await Order.findOne({ _id: id, cafeId }, null, { bypassBranchFilter: true }).lean();
+    const order = await Order.findById(id, null, { bypassBranchFilter: true }).lean();
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found under this cafe context' });
+      return res.status(404).json({ success: false, message: 'Order not found' });
     }
-    
     const formattedOrder = await appendLegacyFallback(order);
     return res.status(200).json({ success: true, data: formattedOrder });
   } catch (error) {
@@ -572,53 +561,26 @@ const getOrderById = async (req, res, next) => {
 };
 
 // @desc    Update order status
-// @route   PATCH /api/orders/:id
-// @access  Public (Owner Dashboard)
+// @route   PATCH /api/orders/:id/status
+// @access  Private (Owner/Staff)
 const updateOrderStatus = async (req, res, next) => {
   try {
     const { status, paymentStatus, paymentMethod } = req.body;
     const { id } = req.params;
 
-    const userRole = (req.user?.role || '').toLowerCase();
-    const isOwnerOrAdmin = ['owner', 'admin', 'super_admin'].includes(userRole);
-
-    // Strict Branch/Cafe Isolation Query
-    if (!req.cafeId) {
-      return res.status(400).json({ success: false, message: 'Missing cafeId' });
-    }
-    const query = { _id: id, cafeId: req.cafeId };
-    if (!isOwnerOrAdmin) {
-      query.branchId = req.branchId || 'default';
-    }
-
-    const order = await Order.findOne(query, null, { bypassBranchFilter: true });
+    const order = await Order.findById(id, null, { bypassBranchFilter: true });
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found in this branch context' });
+      return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
     const activeBranchId = order.branchId || req.branchId || 'default';
-    const branch = await getCachedBranch(`mode:${activeBranchId}:${req.cafeId}`, () => Branch.findOne({ 
+    const branch = await getCachedBranch(`mode:${activeBranchId}:${order.cafeId || req.cafeId}`, () => Branch.findOne({ 
       $or: [
         { branchId: activeBranchId },
         { _id: mongoose.isValidObjectId(activeBranchId) ? activeBranchId : undefined }
       ],
-      cafeId: req.cafeId
+      cafeId: order.cafeId || req.cafeId
     }).lean());
-    
-    const isUnified = branch ? !!branch.unifiedStaffMode : false;
-
-    // Check role permissions if Unified Staff Mode is disabled
-    if (!isUnified && !isOwnerOrAdmin && !['manager'].includes(userRole)) {
-      if (status === 'Preparing' || status === 'Ready') {
-        if (userRole !== 'chef') {
-          return res.status(403).json({ success: false, message: 'Access Denied: Only Kitchen staff (Chefs) can prepare orders or mark them as ready.' });
-        }
-      } else if (status === 'Delivered' || status === 'Completed') {
-        if (userRole !== 'waiter' && userRole !== 'cashier') {
-          return res.status(403).json({ success: false, message: 'Access Denied: Only Waiters or Cashiers can serve orders or collect payment.' });
-        }
-      }
-    }
 
     const updateFields = {};
 
