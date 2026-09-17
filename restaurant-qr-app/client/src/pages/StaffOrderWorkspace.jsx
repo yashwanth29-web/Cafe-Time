@@ -1482,27 +1482,7 @@ const StaffOrderWorkspace = () => {
       {tabParam === 'orders' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* Sub Tab Queue Filter Indicators */}
-          <div className="scrollable-tabs-container" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '10px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
-            {[
-              { id: 'all', label: 'All Orders', count: stats.all, color: 'var(--color-text-primary)' },
-              { id: 'unpaid', label: 'Unpaid Orders', count: stats.unpaid, color: '#e67e22' }
-            ].map((col) => (
-              <button
-                key={col.id}
-                onClick={() => setSearchParams({ tab: 'orders', sub: subTabParam === col.id ? 'all' : col.id })}
-                style={{
-                  flexShrink: 0,
-                  background: subTabParam === col.id ? 'var(--color-border)' : 'var(--bg-card)',
-                  color: col.color, border: '1px solid var(--color-border)', padding: '8px 14px',
-                  borderRadius: '10px', fontWeight: 'bold', fontSize: '12.5px', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '8px'
-                }}
-              >
-                {col.label} <span style={{ background: col.id === 'unpaid' ? 'rgba(230, 126, 34, 0.15)' : 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: '6px', fontSize: '11px', color: col.id === 'unpaid' ? '#e67e22' : 'inherit', fontWeight: 800 }}>{col.count}</span>
-              </button>
-            ))}
-          </div>
+
 
           {/* Table Filter Chips */}
           <div style={{
