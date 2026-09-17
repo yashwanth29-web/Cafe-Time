@@ -1194,10 +1194,7 @@ const StaffOrderWorkspace = () => {
   // Filter orders by sub-tab columns and selected table
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      if (subTabParam === 'placed' && o.status !== 'Placed') return false;
-      if (subTabParam === 'preparing' && o.status !== 'Preparing') return false;
-      if (subTabParam === 'ready' && o.status !== 'Ready') return false;
-      if (subTabParam === 'unpaid' && !((o.status === 'Delivered' || o.status === 'Completed') && o.paymentStatus === 'Pending')) return false;
+      if (subTabParam === 'unpaid' && o.paymentStatus === 'Paid') return false;
 
       if (selectedTableFilter !== 'all') {
         const rawTable = String(o.tableNumber || '').trim();
@@ -1216,10 +1213,7 @@ const StaffOrderWorkspace = () => {
   // Statistics summaries
   const stats = useMemo(() => {
     return {
-      placed: orders.filter((o) => o.status === 'Placed').length,
-      preparing: orders.filter((o) => o.status === 'Preparing').length,
-      ready: orders.filter((o) => o.status === 'Ready').length,
-      unpaid: orders.filter((o) => (o.status === 'Delivered' || o.status === 'Completed') && o.paymentStatus === 'Pending').length,
+      unpaid: orders.filter((o) => o.paymentStatus !== 'Paid').length,
       all: orders.length
     };
   }, [orders]);
@@ -1492,11 +1486,11 @@ const StaffOrderWorkspace = () => {
           <div className="scrollable-tabs-container" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '10px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
             {[
               { id: 'all', label: 'All Orders', count: stats.all, color: 'var(--color-text-primary)' },
-              { id: 'placed', label: 'Placed / New', count: stats.placed, color: '#3498db' }
+              { id: 'unpaid', label: 'Unpaid Orders', count: stats.unpaid, color: '#e67e22' }
             ].map((col) => (
               <button
                 key={col.id}
-                onClick={() => setSearchParams({ tab: 'orders', sub: col.id })}
+                onClick={() => setSearchParams({ tab: 'orders', sub: subTabParam === col.id ? 'all' : col.id })}
                 style={{
                   flexShrink: 0,
                   background: subTabParam === col.id ? 'var(--color-border)' : 'var(--bg-card)',
@@ -1505,7 +1499,7 @@ const StaffOrderWorkspace = () => {
                   display: 'flex', alignItems: 'center', gap: '8px'
                 }}
               >
-                {col.label} <span style={{ background: 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: '6px', fontSize: '11px' }}>{col.count}</span>
+                {col.label} <span style={{ background: col.id === 'unpaid' ? 'rgba(230, 126, 34, 0.15)' : 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: '6px', fontSize: '11px', color: col.id === 'unpaid' ? '#e67e22' : 'inherit', fontWeight: 800 }}>{col.count}</span>
               </button>
             ))}
           </div>
