@@ -1,16 +1,80 @@
 import API, { getAssetUrl } from '../services/api';
 
+/**
+ * Sends print job directly to local network printer bridge (HTTP / Port 8090)
+ * Tries localhost, tablet IP, and cafe counter laptop IP.
+ */
+export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null, branch = null) => {
+  const candidateUrls = [
+    localStorage.getItem('printerBridgeUrl'),
+    'http://127.0.0.1:8090/print',
+    'http://localhost:8090/print',
+    'http://192.168.0.103:8090/print',
+    'http://192.168.0.106:8090/print'
+  ].filter(Boolean);
+
+  const payload = {
+    type,
+    order: {
+      ...order,
+      cafeName: order.cafeName || cafe?.name || 'Cafe',
+      branchName: order.branchName || branch?.branchName || '',
+      branchAddress: order.branchAddress || branch?.address || cafe?.address || '',
+      cafeSupportNumber: order.cafeSupportNumber || cafe?.phone || cafe?.contact || '',
+      cafeGstNumber: order.cafeGstNumber || cafe?.gstNumber || ''
+    }
+  };
+
+  for (const url of candidateUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          console.log(`[PRINT] Direct thermal print (${type}) succeeded via bridge: ${url}`);
+          // Remember the working bridge URL
+          localStorage.setItem('printerBridgeUrl', url);
+          return true;
+        }
+      }
+    } catch (e) {
+      // Try next candidate
+    }
+  }
+
+  return false;
+};
+
 export const printPOSReceipt = async (order, user = null, cafe = null, branch = null) => {
+  // 1. Try direct local Printer Bridge on Wi-Fi (Instant 0.1s silent print)
+  const bridgeSuccess = await sendDirectToPrinterBridge(order, 'POS', cafe, branch);
+  if (bridgeSuccess) {
+    return;
+  }
+
+  // 2. Try Server-side direct network printer (if running locally)
   try {
     const response = await API.post(`/orders/${order._id}/print`, { type: 'POS' });
     if (response.data?.success) {
-      console.log('[PRINT] POS receipt sent to network printer successfully.');
+      console.log('[PRINT] POS receipt sent to network printer via server successfully.');
       return;
     }
   } catch (err) {
-    console.error('[PRINT] Failed to print POS receipt via network printer, falling back to browser print:', err.message);
+    console.warn('[PRINT] Server-side print failed, falling back to browser print:', err.message);
   }
 
+  // 3. Fallback: Browser Print Dialog
   let iframe = document.getElementById('receipt-print-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');
@@ -26,7 +90,7 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
 
   const gstRate = cafe?.gstRate || 0;
   const platformCharge = cafe?.serviceChargeRate || 0;
-  const itemsSubtotal = order.items.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
+  const itemsSubtotal = (order.items || []).reduce((acc, curr) => acc + (curr.price || 0) * (curr.quantity || 1), 0);
   const gstAmount = itemsSubtotal * (gstRate / 100);
   const grandTotal = order.totalAmount || (itemsSubtotal + gstAmount + platformCharge);
 
@@ -37,12 +101,12 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
   const logoUrl = getAssetUrl(order.cafeLogo || cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
   const cafeGST = order.cafeGstNumber || cafe?.gstNumber || '';
 
-  const itemsHtml = order.items.map(item => `
+  const itemsHtml = (order.items || []).map(item => `
     <tr>
       <td style="padding: 6px 0; font-family: monospace; font-size: 12px;">${item.name}</td>
       <td style="padding: 6px 0; text-align: center; font-family: monospace; font-size: 12px;">${item.quantity}</td>
-      <td style="padding: 6px 0; text-align: right; font-family: monospace; font-size: 12px;">₹${item.price.toFixed(2)}</td>
-      <td style="padding: 6px 0; text-align: right; font-family: monospace; font-size: 12px;">₹${(item.price * item.quantity).toFixed(2)}</td>
+      <td style="padding: 6px 0; text-align: right; font-family: monospace; font-size: 12px;">₹${(item.price || 0).toFixed(2)}</td>
+      <td style="padding: 6px 0; text-align: right; font-family: monospace; font-size: 12px;">₹${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</td>
     </tr>
   `).join('');
 
@@ -52,90 +116,64 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Invoice - ${order._id.toUpperCase()}</title>
+        <title>Invoice - ${String(order._id || '').toUpperCase()}</title>
         <style>
           @page { size: auto; margin: 5mm; }
           body { 
             font-family: 'Courier New', Courier, monospace; 
             color: #000; 
-            background: #fff; 
             margin: 0; 
             padding: 10px;
             font-size: 12px;
-            line-height: 1.4;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            line-height: 1.2;
           }
-          .invoice-box {
-            width: 100%;
-            max-width: 80mm;
-            padding: 5px;
-            box-sizing: border-box;
-          }
-          .text-center { text-align: center; }
-          .text-right { text-align: right; }
+          .receipt-container { width: 100%; max-width: 80mm; margin: 0 auto; }
+          .center { text-align: center; }
           .bold { font-weight: bold; }
-          .header { border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-          .header h2 { margin: 0 0 5px 0; font-size: 16px; font-weight: bold; }
-          .header p { margin: 2px 0; font-size: 10px; }
-          .info-table { width: 100%; margin-bottom: 10px; font-size: 11px; }
-          .info-table td { padding: 2px 0; vertical-align: top; }
-          .items-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-          .items-table th { border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 5px 0; font-size: 11px; font-weight: bold; }
-          .items-table td { padding: 4px 0; }
-          .totals { border-top: 1px dashed #000; padding-top: 6px; margin-top: 6px; font-size: 11px; }
-          .totals td { padding: 2px 0; }
-          .footer { border-top: 1px dashed #000; padding-top: 8px; margin-top: 12px; font-size: 10px; }
-          .footer p { margin: 3px 0; }
+          .header-title { font-size: 16px; margin: 4px 0; text-transform: uppercase; font-weight: 900; }
+          .logo { max-height: 45px; max-width: 120px; object-fit: contain; margin-bottom: 4px; }
+          .divider { border-top: 1px dashed #000; margin: 8px 0; }
+          .double-divider { border-top: 2px dashed #000; margin: 8px 0; }
+          table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+          .flex-between { display: flex; justify-content: space-between; margin: 3px 0; }
+          .meta-text { font-size: 11px; margin: 2px 0; }
         </style>
       </head>
       <body>
-        <div class="invoice-box">
-          <div class="header text-center">
-            ${logoUrl ? `<div style="margin-bottom: 8px;"><img src="${logoUrl}" style="max-height: 45px; border-radius: 50%; object-fit: cover;" /></div>` : ''}
-            <h2 style="font-size: 14px; margin-bottom: 2px;">${cafeName}</h2>
-            <h3 style="font-size: 12px; margin: 0 0 4px 0; font-weight: normal;">${displayBranchName}</h3>
-            <p>${displayAddress}</p>
-            ${displayContact ? `<p>Contact: ${displayContact}</p>` : ''}
-            <p class="bold">GSTIN: ${cafeGST}</p>
+        <div class="receipt-container">
+          <div class="center">
+            ${logoUrl ? `<img src="${logoUrl}" class="logo" alt="Logo" />` : ''}
+            <div class="header-title">${cafeName}</div>
+            ${displayBranchName ? `<div class="meta-text bold">${displayBranchName}</div>` : ''}
+            ${displayAddress ? `<div class="meta-text">${displayAddress}</div>` : ''}
+            ${displayContact ? `<div class="meta-text">Tel: ${displayContact}</div>` : ''}
+            ${cafeGST ? `<div class="meta-text bold">GSTIN: ${cafeGST}</div>` : ''}
           </div>
 
-          <table class="info-table">
-            <tr>
-              <td class="bold">Invoice No:</td>
-              <td>${(order.invoiceId || order._id).toUpperCase()}</td>
-            </tr>
-            <tr>
-              <td class="bold">Order No:</td>
-              <td>#${(order.receiptId || order._id.slice(-6)).toUpperCase()}</td>
-            </tr>
-            <tr>
-              <td class="bold">Date/Time:</td>
-              <td>${new Date(order.createdAt).toLocaleString()}</td>
-            </tr>
-            <tr>
-              <td class="bold">Table:</td>
-              <td>Table ${order.tableNumber}</td>
-            </tr>
-            <tr>
-              <td class="bold">Customer:</td>
-              <td>${order.customerName || 'Walk-in Customer'}</td>
-            </tr>
-            ${order.customerPhone ? `
-            <tr>
-              <td class="bold">Phone:</td>
-              <td>${order.customerPhone}</td>
-            </tr>` : ''}
-          </table>
+          <div class="divider"></div>
 
-          <table class="items-table">
+          <div>
+            <div class="flex-between">
+              <span class="bold">INVOICE: #${order.invoiceId || String(order._id || '').substring(0, 8).toUpperCase()}</span>
+              <span class="bold">TABLE: ${order.tableNumber || 'N/A'}</span>
+            </div>
+            <div class="flex-between">
+              <span>Date: ${new Date(order.createdAt || Date.now()).toLocaleDateString()}</span>
+              <span>Time: ${new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            ${order.customerName ? `<div class="meta-text">Customer: ${order.customerName}</div>` : ''}
+            ${order.customerPhone ? `<div class="meta-text">Phone: ${order.customerPhone}</div>` : ''}
+          </div>
+
+          <div class="divider"></div>
+
+          <table>
             <thead>
-              <tr>
-                <th style="text-align: left;">Item</th>
-                <th>Qty</th>
-                <th style="text-align: right;">Rate</th>
-                <th style="text-align: right;">Amount</th>
+              <tr style="border-bottom: 1px dashed #000;">
+                <th style="text-align: left; padding-bottom: 4px;">ITEM</th>
+                <th style="text-align: center; padding-bottom: 4px;">QTY</th>
+                <th style="text-align: right; padding-bottom: 4px;">PRICE</th>
+                <th style="text-align: right; padding-bottom: 4px;">AMT</th>
               </tr>
             </thead>
             <tbody>
@@ -143,42 +181,48 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
             </tbody>
           </table>
 
-          <table class="totals" style="width: 100%;">
-            <tr>
-              <td>Subtotal:</td>
-              <td class="text-right">₹${itemsSubtotal.toFixed(2)}</td>
-            </tr>
+          <div class="divider"></div>
+
+          <div>
+            <div class="flex-between">
+              <span>Subtotal:</span>
+              <span>₹${itemsSubtotal.toFixed(2)}</span>
+            </div>
             ${gstRate > 0 ? `
-            <tr>
-              <td>CGST (${(gstRate / 2).toFixed(1)}%):</td>
-              <td class="text-right">₹${(gstAmount / 2).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td>SGST (${(gstRate / 2).toFixed(1)}%):</td>
-              <td class="text-right">₹${(gstAmount / 2).toFixed(2)}</td>
-            </tr>
+              <div class="flex-between">
+                <span>GST (${gstRate}%):</span>
+                <span>₹${gstAmount.toFixed(2)}</span>
+              </div>
             ` : ''}
             ${platformCharge > 0 ? `
-            <tr>
-              <td>Platform Charge:</td>
-              <td class="text-right">₹${platformCharge.toFixed(2)}</td>
-            </tr>
+              <div class="flex-between">
+                <span>Platform Fee:</span>
+                <span>₹${platformCharge.toFixed(2)}</span>
+              </div>
             ` : ''}
-            <tr class="bold" style="font-size: 13px;">
-              <td style="border-top: 1px dashed #000; padding-top: 4px;">GRAND TOTAL:</td>
-              <td class="text-right" style="border-top: 1px dashed #000; padding-top: 4px;">₹${grandTotal.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td style="font-size: 10px; color: #555;">Payment Method:</td>
-              <td class="text-right bold" style="font-size: 10px;">${order.paymentMethod || 'Counter'}</td>
-            </tr>
-          </table>
+            <div class="double-divider"></div>
+            <div class="flex-between" style="font-size: 15px; font-weight: 900;">
+              <span>GRAND TOTAL:</span>
+              <span>₹${grandTotal.toFixed(2)}</span>
+            </div>
+            <div class="double-divider"></div>
+            <div class="flex-between meta-text">
+              <span>Payment Mode:</span>
+              <span class="bold">${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'PENDING'}</span>
+            </div>
+            <div class="flex-between meta-text">
+              <span>Payment Status:</span>
+              <span class="bold">${order.paymentStatus ? order.paymentStatus.toUpperCase() : 'UNPAID'}</span>
+            </div>
+          </div>
 
-          <div class="footer text-center">
-            <p class="bold">Thank you for visiting us!</p>
-            <p>Please share your valuable feedback.</p>
+          <div class="divider"></div>
+
+          <div class="center" style="margin-top: 10px;">
+            <p class="bold" style="margin: 2px 0;">THANK YOU FOR VISITING!</p>
+            <p style="margin: 2px 0; font-size: 10px;">Please visit us again soon.</p>
             <p style="font-size: 8px; margin-top: 10px; color: #555;">
-              Printed By: ${user?.name || 'Cashier'} | Ref ID: ${order._id.substring(0, 8)}
+              Printed By: ${user?.name || 'Cashier'} | Ref ID: ${String(order._id || '').substring(0, 8)}
             </p>
           </div>
         </div>
@@ -194,16 +238,24 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
 };
 
 export const printKOT = async (order, user = null, cafe = null, branch = null) => {
+  // 1. Try direct local Printer Bridge on Wi-Fi (Instant 0.1s silent print)
+  const bridgeSuccess = await sendDirectToPrinterBridge(order, 'KOT', cafe, branch);
+  if (bridgeSuccess) {
+    return;
+  }
+
+  // 2. Try Server-side direct network printer (if running locally)
   try {
     const response = await API.post(`/orders/${order._id}/print`, { type: 'KOT' });
     if (response.data?.success) {
-      console.log('[PRINT] KOT sent to network printer successfully.');
+      console.log('[PRINT] KOT sent to network printer via server successfully.');
       return;
     }
   } catch (err) {
-    console.error('[PRINT] Failed to print KOT via network printer, falling back to browser print:', err.message);
+    console.warn('[PRINT] Server-side print failed, falling back to browser print:', err.message);
   }
 
+  // 3. Fallback: Browser Print Dialog
   let iframe = document.getElementById('kot-print-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');
