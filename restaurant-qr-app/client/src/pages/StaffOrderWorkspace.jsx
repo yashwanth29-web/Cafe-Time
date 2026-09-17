@@ -659,6 +659,7 @@ const StaffOrderWorkspace = () => {
       fetchInventory();
     } else if (tabParam === 'menu') {
       fetchMenu();
+      fetchInventory();
     }
   }, [tabParam, fetchInventory, fetchMenu, activeBranchId]);
 
@@ -2237,6 +2238,9 @@ const StaffOrderWorkspace = () => {
               </button>
               <button
                 onClick={() => {
+                  fetchInventory();
+                  setSelectedIngredient('');
+                  setIngredientQuantity('');
                   setNewMenuItem({
                     name: '',
                     price: '',
@@ -2245,6 +2249,7 @@ const StaffOrderWorkspace = () => {
                     description: '',
                     available: true,
                     image: '',
+                    recipe: [],
                     preparationTime: 10
                   });
                   setShowAddMenuModal(true);
@@ -2501,6 +2506,9 @@ const StaffOrderWorkspace = () => {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
                         <button
                           onClick={() => {
+                            fetchInventory();
+                            setSelectedIngredient('');
+                            setIngredientQuantity('');
                             setEditingMenuItem({
                               _id: item._id || item.id,
                               name: item.name,
@@ -2510,6 +2518,7 @@ const StaffOrderWorkspace = () => {
                               description: item.description || '',
                               available: item.available !== false,
                               image: item.image || '',
+                              recipe: item.recipe || [],
                               preparationTime: item.preparationTime || 10
                             });
                             setShowEditMenuModal(true);
