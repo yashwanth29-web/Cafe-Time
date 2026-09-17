@@ -1,9 +1,22 @@
 const http = require('http');
 const net = require('net');
 
+let ioClient;
+try {
+  ioClient = require('./server/node_modules/socket.io-client');
+} catch (e) {
+  try {
+    ioClient = require('socket.io-client');
+  } catch (err) {
+    console.warn('[BRIDGE] socket.io-client not loaded, continuing in local HTTP mode only');
+  }
+}
+
 const PRINTER_IP = process.env.PRINTER_IP || '192.168.0.101';
 const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '8090', 10);
+const CLOUD_URL = process.env.CLOUD_URL || 'https://cafe-time-iqqb.onrender.com';
+const CAFE_ID = process.env.CAFE_ID || 'CP007';
 
 // ESC/POS Commands
 const ESC = '\x1b';
@@ -175,7 +188,7 @@ function sendToPrinter(ip, port, buffer) {
   });
 }
 
-// HTTP Server with CORS enabled for local network calls from browser
+// 1. Setup Local HTTP Server
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -202,7 +215,7 @@ const server = http.createServer(async (req, res) => {
         const orderData = payload.order || payload;
         const type = payload.type || 'POS';
 
-        console.log(`[BRIDGE] Received print job (${type}) for order ${orderData._id || 'N/A'}`);
+        console.log(`[BRIDGE] Received local HTTP print job (${type}) for order ${orderData._id || 'N/A'}`);
         const buffer = compileReceiptBuffer(orderData, type);
         await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
         console.log(`[BRIDGE] Successfully printed (${type}) on ${PRINTER_IP}:${PRINTER_PORT}`);
@@ -226,8 +239,47 @@ server.listen(BRIDGE_PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(`🖨️  CAFE PRINTER BRIDGE RUNNING on port ${BRIDGE_PORT}`);
   console.log(`    Printer Destination: ${PRINTER_IP}:${PRINTER_PORT}`);
-  console.log(`    Endpoints:`);
-  console.log(`      GET  http://localhost:${BRIDGE_PORT}/health`);
-  console.log(`      POST http://localhost:${BRIDGE_PORT}/print`);
+  console.log(`    Cloud Tunnel Target: ${CLOUD_URL}`);
   console.log(`=======================================================`);
 });
+
+// 2. Setup Real-time Cloud Socket.IO Tunnel to Render
+if (ioClient) {
+  function connectCloudSocket() {
+    console.log(`[CLOUD TUNNEL] Connecting to cloud server at ${CLOUD_URL}...`);
+    const socket = ioClient(CLOUD_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionAttempts: Infinity
+    });
+
+    socket.on('connect', () => {
+      console.log(`[CLOUD TUNNEL] ✅ Connected to Render Cloud! Tunnel Socket ID: ${socket.id}`);
+      socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'default' });
+    });
+
+    socket.on('print:job', async (data) => {
+      try {
+        const orderData = data.order || data;
+        const type = data.type || 'POS';
+        console.log(`[CLOUD TUNNEL] ⚡ Received cloud print job (${type}) for order ${orderData._id || 'N/A'}`);
+        const buffer = compileReceiptBuffer(orderData, type);
+        await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
+        console.log(`[CLOUD TUNNEL] ✅ Printed successfully to RETSOL RTP-81!`);
+      } catch (err) {
+        console.error('[CLOUD TUNNEL] Print error:', err.message);
+      }
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.warn(`[CLOUD TUNNEL] Disconnected from cloud server: ${reason}. Will auto-reconnect...`);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.warn(`[CLOUD TUNNEL] Connection attempt notice: ${err.message}`);
+    });
+  }
+
+  connectCloudSocket();
+}

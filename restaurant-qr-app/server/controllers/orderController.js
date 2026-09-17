@@ -503,6 +503,9 @@ const getOrders = async (req, res, next) => {
         const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
         filterQuery.createdAt = { $gte: last24h };
       }
+    } else if (!req.query.status && req.query.includeCancelled !== 'true') {
+      // Exclude cancelled orders from general monitor/history lists
+      filterQuery.status = { $nin: ['Cancelled', 'cancelled'] };
     }
     if (req.query.status) {
       filterQuery.status = req.query.status;
@@ -558,6 +561,44 @@ const getOrderById = async (req, res, next) => {
     error.serviceName = 'getOrderById';
     next(error);
   }
+};
+
+// @desc    Print order receipt (POS or KOT) on-demand
+// @route   POST /api/orders/:id/print
+// @access  Private (Staff/Owner)
+const printOrderReceipt = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { type } = req.body; // 'KOT' or 'POS' (default 'POS')
+
+    const order = await Order.findOne({ _id: id }, null, { bypassBranchFilter: true }).lean();
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const formattedOrder = await appendLegacyFallback(order);
+
+    // 1. Broadcast real-time print job event over Socket.io so the local bridge picks it up automatically
+    try {
+      const { getIO } = require('../config/socket');
+      const io = getIO();
+      if (io) {
+        io.to(`cafe:${order.cafeId}`).emit('print:job', { order: formattedOrder, type: type || 'POS' });
+        io.to(`cafe_${order.cafeId}`).emit('print:job', { order: formattedOrder, type: type || 'POS' });
+      }
+    } catch (sockErr) {
+      console.warn('Socket print event warning:', sockErr.message);
+    }
+
+    // 2. Try direct local network printer (if running locally on LAN)
+    printReceipt(formattedOrder, type || 'POS').catch(err => {
+      console.warn('Local printReceipt notice:', err.message);
+    });
+
+    return res.status(200).json({ success: true, message: `Receipt (${type || 'POS'}) sent to printer successfully` });
+  } catch (error) {
+    error.controllerName = 'orderController';
+    error.serviceName = 'printOrderReceipt';
 };
 
 // @desc    Update order status

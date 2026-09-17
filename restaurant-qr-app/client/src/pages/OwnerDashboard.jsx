@@ -5503,6 +5503,7 @@ const exportStaffToCSV = () => {
 <div className="orders-monitor-grid">
  {orders
  .filter((order) => {
+ if (order.status === 'Cancelled' || order.status === 'cancelled') return false;
  if (!order.createdAt) return true;
  const localDate = new Date(order.createdAt);
  const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
