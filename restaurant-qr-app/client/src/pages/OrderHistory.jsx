@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl } from '../services/api';
+import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getAssetUrl, cancelOrder } from '../services/api';
 import { printPOSReceipt } from '../utils/printHelpers';
 import socket, { connectSocket } from '../socket';
 import { useAuth } from '../context/AuthContext';
@@ -16,11 +16,49 @@ const OrderHistory = ({ cafeId }) => {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(() => !!newOrderFromNav);
   const [errorMsg, setErrorMsg] = useState('');
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
   const [activeOrders, setActiveOrders] = useState(() => {
     if (newOrderFromNav) return [newOrderFromNav];
     return [];
   });
   const [completedOrders, setCompletedOrders] = useState([]);
+
+  const getMenuUrl = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';
+    const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || '';
+    const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || '';
+    const params = new URLSearchParams();
+    if (c) params.set('cafeId', c);
+    if (b && b !== 'default') params.set('branchId', b);
+    if (t && t !== 'default') params.set('table', t);
+    const q = params.toString();
+    return q ? `/menu?${q}` : '/menu';
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm('Are you sure you want to cancel this order?')) return;
+    setCancellingOrderId(orderId);
+    setErrorMsg('');
+    try {
+      const res = await cancelOrder(orderId, 'Cancelled by customer');
+      if (res && res.success) {
+        const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+        const updated = activeIds.filter(id => id !== orderId);
+        sessionStorage.setItem('activeOrderIds', JSON.stringify(updated));
+
+        setActiveOrders(prev => prev.filter(o => o._id !== orderId));
+        alert('Order has been cancelled successfully.');
+      } else {
+        alert(res?.message || 'Failed to cancel order.');
+      }
+    } catch (err) {
+      console.error('Cancel order error:', err);
+      alert(err.response?.data?.message || 'Could not cancel order. It may have already been accepted by the kitchen.');
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
 
   // Special Instructions State
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -624,9 +662,35 @@ const OrderHistory = ({ cafeId }) => {
                     </div>
                   </div>
 
+                  {/* Cancel Order Option for Placed status */}
+                  {order.status === 'Placed' && (
+                    <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelOrder(order._id)}
+                        disabled={cancellingOrderId === order._id}
+                        style={{
+                          background: 'rgba(231, 76, 60, 0.08)',
+                          color: '#e74c3c',
+                          border: '1px solid rgba(231, 76, 60, 0.3)',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        {cancellingOrderId === order._id ? 'Cancelling...' : '🔴 Cancel Order'}
+                      </button>
+                    </div>
+                  )}
+
                   {/* Payment Options */}
                   {isServed && !isPaid && (
-                    <div style={{ background: 'rgba(0, 0, 0, 0.02)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '10px', borderRadius: '8px' }}>
+                    <div style={{ background: 'rgba(0, 0, 0, 0.02)', border: '1px solid rgba(0, 0, 0, 0.04)', padding: '10px', borderRadius: '8px', marginTop: '8px' }}>
                       <div>
                         <h4 style={{ color: 'var(--color-text-primary)', fontSize: '11px', fontWeight: '800', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           💵 Cash Payment at Counter
@@ -648,8 +712,23 @@ const OrderHistory = ({ cafeId }) => {
             </div>
           )}
 
-          <Link to="/menu" className="btn btn-primary" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '12px', padding: '8px 16px', fontSize: '13px' }}>
-            View Menu
+          <Link
+            to={getMenuUrl()}
+            className="btn btn-primary"
+            style={{
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: '14px',
+              padding: '10px 16px',
+              fontSize: '13px',
+              fontWeight: 700,
+              gap: '6px',
+              borderRadius: '10px'
+            }}
+          >
+            ⬅️ Back to Menu (Add More Items)
           </Link>
         </div>
       </div>

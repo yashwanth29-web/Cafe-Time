@@ -502,7 +502,7 @@ const getOrders = async (req, res, next) => {
     }
 
     if (req.query.active === 'true') {
-      filterQuery.status = { $ne: 'Completed' };
+      filterQuery.status = { $nin: ['Completed', 'Cancelled'] };
       // Limit live active orders to last 24 hours if no explicit date is provided
       if (!req.query.date && req.query.allTime !== 'true') {
         const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -917,6 +917,74 @@ const updateOrderDetails = async (req, res, next) => {
   }
 };
 
+// @desc    Cancel order by customer (Allowed strictly when status is 'Placed')
+// @route   PATCH /api/orders/:id/cancel
+// @access  Public (Customer)
+const cancelOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
+    }
+
+    if (order.status !== 'Placed') {
+      return res.status(400).json({
+        success: false,
+        message: `Order cannot be cancelled because it is already ${order.status.toLowerCase()}.`
+      });
+    }
+
+    order.status = 'Cancelled';
+    if (reason) {
+      order.specialInstructions = order.specialInstructions
+        ? `${order.specialInstructions} | Cancelled: ${reason}`
+        : `Cancelled: ${reason}`;
+    }
+    await order.save();
+
+    const branchMap = new Map();
+    const formattedOrder = await appendLegacyFallback(order.toObject(), branchMap);
+
+    // Broadcast cancel event across rooms
+    try {
+      const { getIO } = require('../config/socket');
+      const io = getIO();
+      if (io) {
+        const branchStr = String(order.branchId || '');
+        const cafeId = order.cafeId;
+        const orderIdStr = String(order._id);
+
+        if (branchStr) {
+          io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('orderCancelled', formattedOrder);
+          io.to(`branch_${cafeId}_${branchStr}`).emit('order_cancelled', formattedOrder);
+        }
+        io.to(`cafe:${cafeId}:owner`).emit('orderCancelled', formattedOrder);
+        io.to(`cafe_${cafeId}`).emit('order_cancelled', formattedOrder);
+        io.to(`cafe_${cafeId}_owner`).emit('order_cancelled', formattedOrder);
+        io.to(`order:${orderIdStr}`).emit('orderCancelled', formattedOrder);
+        io.to(`order_${orderIdStr}`).emit('order_cancelled', formattedOrder);
+      }
+    } catch (e) {
+      console.warn('Socket broadcast error on order cancel:', e.message);
+    }
+
+    await emitOrderUpdated(formattedOrder, branchMap);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Order cancelled successfully.',
+      data: formattedOrder
+    });
+  } catch (error) {
+    error.controllerName = 'orderController';
+    error.serviceName = 'cancelOrder';
+    next(error);
+  }
+};
+
 module.exports = {
   createOrder,
   getOrders,
@@ -925,5 +993,7 @@ module.exports = {
   updateOrderPaymentMethod,
   printOrderReceipt,
   deleteOrder,
-  updateOrderDetails
+  updateOrderDetails,
+  cancelOrder
 };
+

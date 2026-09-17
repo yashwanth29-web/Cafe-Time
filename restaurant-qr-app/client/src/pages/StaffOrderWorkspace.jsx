@@ -124,6 +124,8 @@ const StaffOrderWorkspace = () => {
   const [showEditOrderModal, setShowEditOrderModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [orderActionLoading, setOrderActionLoading] = useState(false);
+  const [paymentModalOrder, setPaymentModalOrder] = useState(null);
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
 
   // Inventory Management states for Staff
   const [categories, setCategories] = useState([]);
@@ -742,9 +744,18 @@ const StaffOrderWorkspace = () => {
         setOrders((prev) => prev.filter((o) => o._id !== delId));
       };
 
+      const handleOrderCancelled = (cancelledOrder) => {
+        const canId = typeof cancelledOrder === 'object' ? cancelledOrder._id : cancelledOrder;
+        setOrders((prev) => prev.filter((o) => o._id !== canId));
+        playNotificationSound();
+        speakText('Order was cancelled by customer.');
+      };
+
       socket.on('order_created', handleOrderCreated);
       socket.on('order_updated', handleOrderUpdated);
       socket.on('order_deleted', handleOrderDeleted);
+      socket.on('order_cancelled', handleOrderCancelled);
+      socket.on('orderCancelled', handleOrderCancelled);
 
       // Graceful poll if socket goes down
       const pollTimer = setInterval(() => {
@@ -757,6 +768,8 @@ const StaffOrderWorkspace = () => {
         socket.off('order_created', handleOrderCreated);
         socket.off('order_updated', handleOrderUpdated);
         socket.off('order_deleted', handleOrderDeleted);
+        socket.off('order_cancelled', handleOrderCancelled);
+        socket.off('orderCancelled', handleOrderCancelled);
         clearInterval(pollTimer);
       };
     }
@@ -954,8 +967,15 @@ const StaffOrderWorkspace = () => {
 
   // Mark order as paid
   const handleCollectPayment = async (orderId, paymentMethod) => {
-    if (!window.confirm(`Confirm payment received via ${paymentMethod}?`)) return;
-    await handleStatusTransition(orderId, 'Completed', { paymentStatus: 'Paid', paymentMethod });
+    setPaymentSubmitting(true);
+    try {
+      await handleStatusTransition(orderId, 'Completed', { paymentStatus: 'Paid', paymentMethod });
+      setPaymentModalOrder(null);
+    } catch (err) {
+      console.error('Error collecting payment:', err);
+    } finally {
+      setPaymentSubmitting(false);
+    }
   };
 
   // Report item shortage
@@ -1688,7 +1708,7 @@ const StaffOrderWorkspace = () => {
                           🖨️ KOT
                         </button>
 
-                        {/* ONE single button for order ready for Placed and Preparing orders */}
+                        {/* Order Ready Button for Placed and Preparing orders */}
                         {(order.status === 'Placed' || order.status === 'Preparing') && (
                           <button
                             disabled={!canPrepare}
@@ -1700,68 +1720,41 @@ const StaffOrderWorkspace = () => {
                               display: 'flex', alignItems: 'center', gap: '5px',
                               boxShadow: canPrepare ? '0 2px 8px rgba(39, 174, 96, 0.35)' : 'none'
                             }}
-                            title="Mark Order Ready and detect/deduct inventory"
+                            title="Mark Order Ready (Deducts Ingredients & Notifies Customer)"
                           >
                             ✅ Order Ready
                           </button>
                         )}
 
-                        {/* Ready status action: Serve Order */}
-                        {order.status === 'Ready' && (
+                        {/* Mark Paid button for Placed / Preparing */}
+                        {(order.status === 'Placed' || order.status === 'Preparing') && (
                           <button
-                            disabled={!canServe}
-                            onClick={() => handleStatusTransition(order._id, 'Delivered')}
+                            disabled={!canCollect}
+                            onClick={() => setPaymentModalOrder(order)}
                             style={{
-                              background: canServe ? '#9b59b6' : '#bdc3c7',
-                              color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px',
-                              cursor: canServe ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 'bold'
+                              background: '#e67e22', color: 'white', border: 'none', padding: '8px 12px',
+                              borderRadius: '8px', cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
                             }}
                           >
-                            🚀 Serve Order
+                            💵 Mark Paid
                           </button>
                         )}
 
-                        {/* Delivered / unpaid status actions */}
-                        {isUnpaid && (
-                          <>
-                            <button
-                              disabled={!canCollect}
-                              onClick={() => printPOSReceipt(order, user, cafeInfo, currentBranch)}
-                              style={{
-                                background: '#2980b9', color: 'white', border: 'none', padding: '8px 12px',
-                                borderRadius: '8px', cursor: 'pointer', fontSize: '12.5px', fontWeight: 'bold'
-                              }}
-                            >
-                              POS
-                            </button>
-                            <button
-                              disabled={!canCollect}
-                              onClick={() => {
-                                if (paymentInfo.enableUpi && paymentInfo.upiId) {
-                                  setUpiOrder(order);
-                                  setShowUpiModal(true);
-                                } else {
-                                  handleCollectPayment(order._id, 'UPI');
-                                }
-                              }}
-                              style={{
-                                background: '#27ae60', color: 'white', border: 'none', padding: '8px 12px',
-                                borderRadius: '8px', cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
-                              }}
-                            >
-                              Collect UPI
-                            </button>
-                            <button
-                              disabled={!canCollect}
-                              onClick={() => handleCollectPayment(order._id, 'Cash')}
-                              style={{
-                                background: '#e67e22', color: 'white', border: 'none', padding: '8px 12px',
-                                borderRadius: '8px', cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
-                              }}
-                            >
-                              Collect Cash
-                            </button>
-                          </>
+                        {/* Ready or Delivered status action: Mark Paid & Complete */}
+                        {(order.status === 'Ready' || order.status === 'Delivered') && (
+                          <button
+                            disabled={!canCollect}
+                            onClick={() => setPaymentModalOrder(order)}
+                            style={{
+                              background: canCollect ? '#27ae60' : '#bdc3c7',
+                              color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px',
+                              cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 'bold',
+                              display: 'flex', alignItems: 'center', gap: '5px',
+                              boxShadow: canCollect ? '0 2px 8px rgba(39, 174, 96, 0.35)' : 'none'
+                            }}
+                          >
+                            💵 Mark Paid / Serve
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1881,30 +1874,23 @@ const StaffOrderWorkspace = () => {
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Value</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Total Sales</div>
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>
                 ₹{historySummary.totalRevenue.toFixed(2)}
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Paid Amount</div>
-              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#27ae60', marginTop: '2px' }}>
-                ₹{historySummary.paidRevenue.toFixed(2)}
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Pending / Ready</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>💵 Cash Total</div>
               <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#e67e22', marginTop: '2px' }}>
-                ₹{historySummary.pendingRevenue.toFixed(2)}
+                ₹{historySummary.cashRevenue.toFixed(2)}
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Dishes Ordered</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)', marginTop: '2px' }}>
-                {historySummary.totalItems} items
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>📱 Online Total</div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#27ae60', marginTop: '2px' }}>
+                ₹{historySummary.upiRevenue.toFixed(2)}
               </div>
             </div>
           </div>
@@ -4852,6 +4838,111 @@ const StaffOrderWorkspace = () => {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick 1-Tap Fast Payment Modal (Cash vs Online) */}
+      {paymentModalOrder && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.55)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '16px',
+            padding: '20px',
+            width: '100%',
+            maxWidth: '360px',
+            boxShadow: 'var(--shadow-lg)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                Collect Payment
+              </h4>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                Table <strong>{paymentModalOrder.tableNumber}</strong> • Total: <strong style={{ color: 'var(--color-primary)', fontSize: '16px' }}>₹{paymentModalOrder.totalAmount}</strong>
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={paymentSubmitting}
+                onClick={() => handleCollectPayment(paymentModalOrder._id, 'Cash')}
+                style={{
+                  background: 'rgba(230, 126, 34, 0.1)',
+                  border: '1.5px solid #e67e22',
+                  color: '#e67e22',
+                  borderRadius: '12px',
+                  padding: '14px 10px',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: paymentSubmitting ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span style={{ fontSize: '22px' }}>💵</span>
+                <span>Cash</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={paymentSubmitting}
+                onClick={() => handleCollectPayment(paymentModalOrder._id, 'Online')}
+                style={{
+                  background: 'rgba(39, 174, 96, 0.1)',
+                  border: '1.5px solid #27ae60',
+                  color: '#27ae60',
+                  borderRadius: '12px',
+                  padding: '14px 10px',
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  cursor: paymentSubmitting ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span style={{ fontSize: '22px' }}>📱</span>
+                <span>Online (UPI)</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              disabled={paymentSubmitting}
+              onClick={() => setPaymentModalOrder(null)}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-secondary)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

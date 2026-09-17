@@ -152,6 +152,11 @@ export const deleteOrder = async (id) => {
   return response.data;
 };
 
+export const cancelOrder = async (id, reason) => {
+  const response = await API.patch(`/orders/${id}/cancel`, { reason });
+  return response.data;
+};
+
 // Menu API helpers
 export const getMenu = async () => {
   const response = await API.get('/menu');
