@@ -163,6 +163,7 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
             </div>
             ${order.customerName ? `<div class="meta-text">Customer: ${order.customerName}</div>` : ''}
             ${order.customerPhone ? `<div class="meta-text">Phone: ${order.customerPhone}</div>` : ''}
+            ${order.specialInstructions ? `<div class="meta-text bold" style="margin-top: 4px; padding: 3px 6px; background: #f0f0f0; border-radius: 4px;">📝 Note: ${order.specialInstructions}</div>` : ''}
           </div>
 
           <div class="divider"></div>

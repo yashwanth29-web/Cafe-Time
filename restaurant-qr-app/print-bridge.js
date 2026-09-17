@@ -115,6 +115,9 @@ function compileReceiptBuffer(orderData, type = 'POS') {
   if (orderData.customerPhone) {
     commands.push(`Phone:     ${orderData.customerPhone}` + LF);
   }
+  if (orderData.specialInstructions && orderData.specialInstructions.trim()) {
+    commands.push(`Notes:     ${orderData.specialInstructions.trim()}` + LF);
+  }
 
   commands.push('-'.repeat(48) + LF);
 
