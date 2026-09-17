@@ -134,14 +134,11 @@ function compileReceiptBuffer(orderData, type = 'POS') {
   const orderDate = orderData.createdAt ? new Date(orderData.createdAt) : new Date();
   commands.push(`Date/Time: ${orderDate.toLocaleString()}` + LF);
 
-  if (orderData.customerName) {
-    commands.push(`Customer:  ${orderData.customerName}` + LF);
-  }
-  if (orderData.customerPhone) {
-    commands.push(`Phone:     ${orderData.customerPhone}` + LF);
-  }
-  if (orderData.specialInstructions && orderData.specialInstructions.trim()) {
-    commands.push(`Notes:     ${orderData.specialInstructions.trim()}` + LF);
+  const specialNotes = String(orderData.specialInstructions || orderData.notes || orderData.note || orderData.instructions || orderData.special_instructions || '').trim();
+  if (specialNotes) {
+    commands.push(CMD_BOLD_ON);
+    commands.push(`Notes:     ${specialNotes}` + LF);
+    commands.push(CMD_BOLD_OFF);
   }
   
   commands.push('-'.repeat(48) + LF);

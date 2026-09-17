@@ -759,34 +759,6 @@ const updateOrderPaymentMethod = async (req, res, next) => {
   }
 };
 
-// @desc    Print order receipt (POS or KOT) on-demand
-// @route   POST /api/orders/:id/print
-// @access  Private (Staff/Owner)
-const printOrderReceipt = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { type } = req.body; // 'KOT' or 'POS' (default 'POS')
-
-    const order = await Order.findOne({ _id: id }, null, { bypassBranchFilter: true }).lean();
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    const formattedOrder = await appendLegacyFallback(order);
-
-    const success = await printReceipt(formattedOrder, type || 'POS');
-
-    if (success) {
-      return res.status(200).json({ success: true, message: `Receipt (${type || 'POS'}) sent to printer successfully` });
-    } else {
-      return res.status(500).json({ success: false, message: 'Failed to send print job to printer' });
-    }
-  } catch (error) {
-    error.controllerName = 'orderController';
-    error.serviceName = 'printOrderReceipt';
-    next(error);
-  }
-};
 
 // @desc    Delete an order and restore inventory if deducted
 // @route   DELETE /api/orders/:id

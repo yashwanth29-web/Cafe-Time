@@ -161,9 +161,7 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
               <span>Date: ${new Date(order.createdAt || Date.now()).toLocaleDateString()}</span>
               <span>Time: ${new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
-            ${order.customerName ? `<div class="meta-text">Customer: ${order.customerName}</div>` : ''}
-            ${order.customerPhone ? `<div class="meta-text">Phone: ${order.customerPhone}</div>` : ''}
-            ${order.specialInstructions ? `<div class="meta-text bold" style="margin-top: 4px; padding: 3px 6px; background: #f0f0f0; border-radius: 4px;">📝 Note: ${order.specialInstructions}</div>` : ''}
+            ${(order.specialInstructions || order.notes || order.note || order.instructions) ? `<div class="meta-text bold" style="margin-top: 4px; padding: 3px 6px; background: #f0f0f0; border-radius: 4px;">📝 Note: ${(order.specialInstructions || order.notes || order.note || order.instructions)}</div>` : ''}
           </div>
 
           <div class="divider"></div>
@@ -376,10 +374,10 @@ export const printKOT = async (order, user = null, cafe = null, branch = null) =
             </tbody>
           </table>
 
-          ${order.specialInstructions ? `
+          ${(order.specialInstructions || order.notes || order.note || order.instructions) ? `
           <div class="instructions-box">
             <div class="bold">⚠️ Special Instructions:</div>
-            <div style="font-weight: bold; margin-top: 4px; font-size: 13px;">${order.specialInstructions}</div>
+            <div style="font-weight: bold; margin-top: 4px; font-size: 13px;">${(order.specialInstructions || order.notes || order.note || order.instructions)}</div>
           </div>
           ` : ''}
 

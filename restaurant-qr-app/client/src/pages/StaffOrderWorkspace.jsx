@@ -1687,6 +1687,19 @@ const StaffOrderWorkspace = () => {
                           🖨️ KOT
                         </button>
 
+                        {/* Print POS button */}
+                        <button
+                          onClick={() => printPOSReceipt(order, user, cafeInfo, currentBranch)}
+                          style={{
+                            background: '#2980b9', color: 'white', border: 'none', padding: '8px 12px',
+                            borderRadius: '8px', cursor: 'pointer', fontSize: '12.5px', fontWeight: 'bold',
+                            display: 'flex', alignItems: 'center', gap: '4px'
+                          }}
+                          title="Print Customer POS Bill"
+                        >
+                          🖨️ POS
+                        </button>
+
                         {/* Order Ready Button for Placed and Preparing orders */}
                         {(order.status === 'Placed' || order.status === 'Preparing') && (
                           <button
