@@ -34,6 +34,28 @@ const CMD_FONT_LARGE = GS + '!\x11'; // Double height and double width
 const CMD_FEED_5 = ESC + 'd\x05';
 const CMD_CUT = GS + 'V\x42\x00';
 
+// Global In-Memory De-duplication Cache (prevents duplicate prints within 4 seconds)
+const recentlyPrinted = new Map();
+function shouldPrint(orderId, type) {
+  if (!orderId) return true;
+  const key = `${String(orderId)}_${type}`;
+  const now = Date.now();
+  if (recentlyPrinted.has(key)) {
+    const lastTime = recentlyPrinted.get(key);
+    if (now - lastTime < 3000) {
+      console.log(`[BRIDGE] ⚠️ Ignored duplicate print trigger for order ${orderId} (${type}) within 3s`);
+      return false;
+    }
+  }
+  recentlyPrinted.set(key, now);
+  if (recentlyPrinted.size > 200) {
+    for (const [k, time] of recentlyPrinted.entries()) {
+      if (now - time > 60000) recentlyPrinted.delete(k);
+    }
+  }
+  return true;
+}
+
 function padLine(left, right, width = 48) {
   const spacesNeeded = width - (left.length + right.length);
   if (spacesNeeded <= 0) {
@@ -78,18 +100,22 @@ function compileReceiptBuffer(orderData, type = 'POS') {
     commands.push('KITCHEN ORDER TICKET (KOT)' + LF);
     commands.push(CMD_FONT_NORMAL);
     commands.push(CMD_BOLD_OFF);
-    commands.push((orderData.cafeName || 'Cafe').toUpperCase() + LF);
+    commands.push((orderData.cafeName || 'DR.CAFE CHAI').toUpperCase() + LF);
   } else {
-    commands.push((orderData.cafeName || 'Cafe').toUpperCase() + LF);
+    commands.push((orderData.cafeName || 'DR.CAFE CHAI').toUpperCase() + LF);
     commands.push(CMD_FONT_NORMAL);
     commands.push(CMD_BOLD_OFF);
   }
 
   if (orderData.branchName && orderData.branchName !== 'default') {
     commands.push(`Branch: ${orderData.branchName}` + LF);
+  } else {
+    commands.push('Branch: CP007-B1' + LF);
   }
   if (orderData.branchAddress) {
     commands.push(orderData.branchAddress + LF);
+  } else {
+    commands.push('mangalagiri, Andhra Pradesh' + LF);
   }
 
   commands.push('='.repeat(48) + LF);
@@ -100,7 +126,7 @@ function compileReceiptBuffer(orderData, type = 'POS') {
   if (type === 'KOT') {
     commands.push(`KOT No:    ${orderData.kotId || 'KOT-' + String(orderData._id || '').slice(-6).toUpperCase()}` + LF);
   } else {
-    commands.push(`Order ID:  ${orderData.invoiceId || orderData._id || 'N/A'}` + LF);
+    commands.push(`Order ID:  ${orderData.invoiceId || 'INV-' + String(orderData._id || '').slice(-6).toUpperCase()}` + LF);
   }
 
   commands.push(`Table No:  ${orderData.tableNumber || 'N/A'}` + LF);
@@ -112,6 +138,7 @@ function compileReceiptBuffer(orderData, type = 'POS') {
   if (orderData.customerName) {
     commands.push(`Customer:  ${orderData.customerName}` + LF);
   }
+  
   const specialNotes = String(orderData.specialInstructions || orderData.notes || orderData.note || orderData.instructions || orderData.special_instructions || '').trim();
   if (specialNotes) {
     commands.push(CMD_BOLD_ON);
@@ -164,7 +191,7 @@ function compileReceiptBuffer(orderData, type = 'POS') {
   commands.push(CMD_FEED_5);
   commands.push(CMD_CUT);
 
-  return Buffer.from(commands.join(''), 'latin1');
+  return Buffer.from(commands.join(''), 'binary');
 }
 
 function sendToPrinter(ip, port, buffer) {
@@ -208,28 +235,6 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ status: 'ok', printerIp: PRINTER_IP, printerPort: PRINTER_PORT }));
     return;
   }
-
-// In-memory de-duplication cache to prevent printing 2 duplicate bills
-const recentlyPrinted = new Map();
-function shouldPrint(orderId, type) {
-  if (!orderId) return true;
-  const key = `${String(orderId)}_${type}`;
-  const now = Date.now();
-  if (recentlyPrinted.has(key)) {
-    const lastTime = recentlyPrinted.get(key);
-    if (now - lastTime < 4000) {
-      console.log(`[BRIDGE] ⚠️ Ignored duplicate print trigger for order ${orderId} (${type}) within 4s`);
-      return false;
-    }
-  }
-  recentlyPrinted.set(key, now);
-  if (recentlyPrinted.size > 200) {
-    for (const [k, time] of recentlyPrinted.entries()) {
-      if (now - time > 60000) recentlyPrinted.delete(k);
-    }
-  }
-  return true;
-}
 
   if (req.url === '/print' && req.method === 'POST') {
     let body = '';
@@ -290,6 +295,7 @@ if (ioClient) {
       socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'default' });
       socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'CP007-B1' });
       socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'all' });
+      socket.emit('join_room', { cafeId: 'CD001', branchId: 'default' });
     });
 
     socket.on('print:job', async (data) => {
@@ -305,7 +311,7 @@ if (ioClient) {
         console.log(`[CLOUD TUNNEL] ⚡ Received cloud print job (${type}) for order ${orderId || 'N/A'}`);
         const buffer = compileReceiptBuffer(orderData, type);
         await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
-        console.log(`[CLOUD TUNNEL] ✅ Printed successfully to RETSOL RTP-81!`);
+        console.log(`[CLOUD TUNNEL] ✅ Printed successfully to RETSOL RTP-81 (${PRINTER_IP}:${PRINTER_PORT})!`);
       } catch (err) {
         console.error('[CLOUD TUNNEL] Print error:', err.message);
       }
