@@ -15,8 +15,17 @@ try {
 const PRINTER_IP = process.env.PRINTER_IP || '192.168.0.101';
 const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '8090', 10);
-const CLOUD_URL = process.env.CLOUD_URL || 'https://cafe-time-iqqb.onrender.com';
 const CAFE_ID = process.env.CAFE_ID || 'CP007';
+
+// Target cloud endpoints to listen for real-time print events (both URLs supported simultaneously)
+const CLOUD_URLS = [
+  process.env.CLOUD_URL,
+  'https://cafe-time.onrender.com',
+  'https://cafe-time-iqqb.onrender.com'
+].filter(Boolean);
+
+// Unique set of URLs
+const UNIQUE_CLOUD_URLS = Array.from(new Set(CLOUD_URLS));
 
 // ESC/POS Commands
 const ESC = '\x1b';
@@ -34,7 +43,7 @@ const CMD_FONT_LARGE = GS + '!\x11'; // Double height and double width
 const CMD_FEED_5 = ESC + 'd\x05';
 const CMD_CUT = GS + 'V\x42\x00';
 
-// Global In-Memory De-duplication Cache (prevents duplicate prints within 4 seconds)
+// Global In-Memory De-duplication Cache (prevents duplicate prints within 3 seconds)
 const recentlyPrinted = new Map();
 function shouldPrint(orderId, type) {
   if (!orderId) return true;
@@ -275,56 +284,58 @@ server.listen(BRIDGE_PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(`🖨️  CAFE PRINTER BRIDGE RUNNING on port ${BRIDGE_PORT}`);
   console.log(`    Printer Destination: ${PRINTER_IP}:${PRINTER_PORT}`);
-  console.log(`    Cloud Tunnel Target: ${CLOUD_URL}`);
+  console.log(`    Cloud Targets:       ${UNIQUE_CLOUD_URLS.join(', ')}`);
   console.log(`=======================================================`);
 });
 
-// 2. Setup Real-time Cloud Socket.IO Tunnel to Render
+// 2. Setup Real-time Cloud Socket.IO Tunnel for all connected endpoints
 if (ioClient) {
-  function connectCloudSocket() {
-    console.log(`[CLOUD TUNNEL] Connecting to cloud server at ${CLOUD_URL}...`);
-    const socket = ioClient(CLOUD_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 2000,
-      reconnectionAttempts: Infinity
-    });
+  UNIQUE_CLOUD_URLS.forEach((cloudUrl) => {
+    function connectCloudSocket() {
+      console.log(`[CLOUD TUNNEL] Connecting to cloud server at ${cloudUrl}...`);
+      const socket = ioClient(cloudUrl, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 2000,
+        reconnectionAttempts: Infinity
+      });
 
-    socket.on('connect', () => {
-      console.log(`[CLOUD TUNNEL] ✅ Connected to Render Cloud! Tunnel Socket ID: ${socket.id}`);
-      socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'default' });
-      socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'CP007-B1' });
-      socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'all' });
-      socket.emit('join_room', { cafeId: 'CD001', branchId: 'default' });
-    });
+      socket.on('connect', () => {
+        console.log(`[CLOUD TUNNEL] ✅ Connected to Render Cloud (${cloudUrl})! Socket ID: ${socket.id}`);
+        socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'default' });
+        socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'CP007-B1' });
+        socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'all' });
+        socket.emit('join_room', { cafeId: 'CD001', branchId: 'default' });
+      });
 
-    socket.on('print:job', async (data) => {
-      try {
-        const orderData = data.order || data;
-        const type = data.type || 'POS';
-        const orderId = orderData._id || orderData.id || orderData.invoiceId || '';
+      socket.on('print:job', async (data) => {
+        try {
+          const orderData = data.order || data;
+          const type = data.type || 'POS';
+          const orderId = orderData._id || orderData.id || orderData.invoiceId || '';
 
-        if (!shouldPrint(orderId, type)) {
-          return;
+          if (!shouldPrint(orderId, type)) {
+            return;
+          }
+
+          console.log(`[CLOUD TUNNEL] ⚡ Received cloud print job (${type}) from ${cloudUrl} for order ${orderId || 'N/A'}`);
+          const buffer = compileReceiptBuffer(orderData, type);
+          await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
+          console.log(`[CLOUD TUNNEL] ✅ Printed successfully to RETSOL RTP-81 (${PRINTER_IP}:${PRINTER_PORT})!`);
+        } catch (err) {
+          console.error('[CLOUD TUNNEL] Print error:', err.message);
         }
+      });
 
-        console.log(`[CLOUD TUNNEL] ⚡ Received cloud print job (${type}) for order ${orderId || 'N/A'}`);
-        const buffer = compileReceiptBuffer(orderData, type);
-        await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
-        console.log(`[CLOUD TUNNEL] ✅ Printed successfully to RETSOL RTP-81 (${PRINTER_IP}:${PRINTER_PORT})!`);
-      } catch (err) {
-        console.error('[CLOUD TUNNEL] Print error:', err.message);
-      }
-    });
+      socket.on('disconnect', (reason) => {
+        console.warn(`[CLOUD TUNNEL] Disconnected from ${cloudUrl}: ${reason}. Will auto-reconnect...`);
+      });
 
-    socket.on('disconnect', (reason) => {
-      console.warn(`[CLOUD TUNNEL] Disconnected from cloud server: ${reason}. Will auto-reconnect...`);
-    });
+      socket.on('connect_error', (err) => {
+        // Suppress noisy logs during network fluctuation
+      });
+    }
 
-    socket.on('connect_error', (err) => {
-      console.warn(`[CLOUD TUNNEL] Connection attempt notice: ${err.message}`);
-    });
-  }
-
-  connectCloudSocket();
+    connectCloudSocket();
+  });
 }
