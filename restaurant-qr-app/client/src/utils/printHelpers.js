@@ -2,9 +2,13 @@ import API, { getAssetUrl } from '../services/api';
 
 /**
  * Sends print job directly to local network printer bridge (HTTP / Port 8090)
- * Tries localhost, tablet IP, and cafe counter laptop IP.
+ * Only attempted if running on localhost/LAN HTTP (not blocked by HTTPS Mixed Content)
  */
 export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null, branch = null) => {
+  if (window.location.protocol === 'https:') {
+    return false; // Modern browsers block HTTP 8090 from HTTPS due to Mixed Content policy
+  }
+
   const savedUrl = localStorage.getItem('printerBridgeUrl');
   const candidateUrls = [
     savedUrl,
@@ -47,37 +51,24 @@ export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null
         }
       }
     } catch (e) {
-      // Continue to next candidate or fallback
+      // Continue
     }
   }
 
   return false;
 };
 
-export const printPOSReceipt = async (order, user = null, cafe = null, branch = null) => {
-  // Fire server notification in background for cloud listeners
+/**
+ * Prints Customer POS Receipt
+ * 1. Emits cloud print job to Render Socket.IO for counter hardware printer
+ * 2. Opens instant 80mm thermal print dialog on tablet/mobile/desktop
+ */
+export const printPOSReceipt = (order, user = null, cafe = null, branch = null) => {
+  if (!order) return;
+
+  // 1. Notify cloud bridge in background (Fire-and-forget)
   if (order._id) {
     API.post(`/orders/${order._id}/print`, { type: 'POS' }).catch(() => {});
-  }
-
-  // 1. Try direct local Printer Bridge on Wi-Fi (Instant 0.1s silent print)
-  const bridgeSuccess = await sendDirectToPrinterBridge(order, 'POS', cafe, branch);
-  if (bridgeSuccess) {
-    return;
-  }
-
-  // 2. Direct Tablet / Phone Browser System Print Dialog (80mm Thermal Receipt)
-  let iframe = document.getElementById('receipt-print-iframe');
-  if (!iframe) {
-    iframe = document.createElement('iframe');
-    iframe.id = 'receipt-print-iframe';
-    iframe.style.position = 'absolute';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    iframe.style.top = '-9999px';
-    iframe.style.left = '-9999px';
-    document.body.appendChild(iframe);
   }
 
   const gstRate = cafe?.gstRate || 0;
@@ -86,299 +77,332 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
   const gstAmount = itemsSubtotal * (gstRate / 100);
   const grandTotal = order.totalAmount || (itemsSubtotal + gstAmount + platformCharge);
 
-  const cafeName = order.cafeName || cafe?.name || 'Our Cafe';
-  const displayBranchName = order.branchName || branch?.branchName || '';
-  const displayAddress = order.branchAddress || branch?.address || cafe?.address || '';
+  const cafeName = order.cafeName || cafe?.name || 'DR.CAFE CHAI';
+  const displayBranchName = order.branchName || branch?.branchName || 'Branch: CP007-B1';
+  const displayAddress = order.branchAddress || branch?.address || cafe?.address || 'mangalagiri, Andhra Pradesh';
   const displayContact = order.cafeSupportNumber || cafe?.phone || cafe?.contact || branch?.manager || '';
   const logoUrl = getAssetUrl(order.cafeLogo || cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
   const cafeGST = order.cafeGstNumber || cafe?.gstNumber || '';
+  const specialNotes = String(order.specialInstructions || order.notes || order.note || order.instructions || '').trim();
 
   const itemsHtml = (order.items || []).map(item => `
     <tr>
-      <td style="padding: 6px 0; font-family: monospace; font-size: 12px;">${item.name}</td>
-      <td style="padding: 6px 0; text-align: center; font-family: monospace; font-size: 12px;">${item.quantity}</td>
-      <td style="padding: 6px 0; text-align: right; font-family: monospace; font-size: 12px;">₹${(item.price || 0).toFixed(2)}</td>
-      <td style="padding: 6px 0; text-align: right; font-family: monospace; font-size: 12px;">₹${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</td>
+      <td style="padding: 5px 0; font-family: monospace; font-size: 13px; font-weight: bold; text-align: left;">${item.name}</td>
+      <td style="padding: 5px 0; text-align: center; font-family: monospace; font-size: 13px; font-weight: bold;">${item.quantity}</td>
+      <td style="padding: 5px 0; text-align: right; font-family: monospace; font-size: 13px;">${(item.price || 0).toFixed(2)}</td>
+      <td style="padding: 5px 0; text-align: right; font-family: monospace; font-size: 13px; font-weight: bold;">${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</td>
     </tr>
   `).join('');
 
-  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-  iframeDoc.open();
-  iframeDoc.write(`
+  const receiptHtml = `
+    <!DOCTYPE html>
     <html>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Invoice - ${String(order._id || '').toUpperCase()}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Receipt - ${order.invoiceId || String(order._id || '').slice(-6).toUpperCase()}</title>
         <style>
-          @page { size: auto; margin: 5mm; }
-          body { 
-            font-family: 'Courier New', Courier, monospace; 
-            color: #000; 
-            margin: 0; 
-            padding: 10px;
-            font-size: 12px;
-            line-height: 1.2;
+          @page {
+            size: 80mm auto;
+            margin: 0mm;
           }
-          .receipt-container { width: 100%; max-width: 80mm; margin: 0 auto; }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            color: #000;
+            background: #fff;
+            margin: 0 auto;
+            padding: 8px;
+            width: 100%;
+            max-width: 80mm;
+            font-size: 12px;
+            line-height: 1.3;
+          }
           .center { text-align: center; }
           .bold { font-weight: bold; }
-          .header-title { font-size: 16px; margin: 4px 0; text-transform: uppercase; font-weight: 900; }
-          .logo { max-height: 45px; max-width: 120px; object-fit: contain; margin-bottom: 4px; }
-          .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          .double-divider { border-top: 2px dashed #000; margin: 8px 0; }
+          .title { font-size: 17px; font-weight: 900; margin: 4px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+          .meta { font-size: 11px; margin: 2px 0; }
+          .divider { border-top: 1px dashed #000; margin: 6px 0; }
+          .double-divider { border-top: 2px dashed #000; margin: 6px 0; }
+          .notes-box {
+            background: #f0f0f0;
+            border: 1px solid #000;
+            padding: 5px 8px;
+            margin: 6px 0;
+            font-size: 12.5px;
+            font-weight: bold;
+          }
           table { width: 100%; border-collapse: collapse; margin: 6px 0; }
           .flex-between { display: flex; justify-content: space-between; margin: 3px 0; }
-          .meta-text { font-size: 11px; margin: 2px 0; }
+          .grand-total { font-size: 16px; font-weight: 900; padding: 4px 0; }
+          @media print {
+            body { padding: 3mm 1mm; width: 76mm; }
+            .no-print { display: none !important; }
+          }
         </style>
       </head>
       <body>
-        <div class="receipt-container">
-          <div class="center">
-            ${logoUrl ? `<img src="${logoUrl}" class="logo" alt="Logo" />` : ''}
-            <div class="header-title">${cafeName}</div>
-            ${displayBranchName ? `<div class="meta-text bold">${displayBranchName}</div>` : ''}
-            ${displayAddress ? `<div class="meta-text">${displayAddress}</div>` : ''}
-            ${displayContact ? `<div class="meta-text">Tel: ${displayContact}</div>` : ''}
-            ${cafeGST ? `<div class="meta-text bold">GSTIN: ${cafeGST}</div>` : ''}
+        <div class="center">
+          ${logoUrl ? `<img src="${logoUrl}" style="max-height: 40px; margin-bottom: 4px;" alt="Logo" />` : ''}
+          <div class="title">${cafeName}</div>
+          ${displayBranchName ? `<div class="meta bold">${displayBranchName}</div>` : ''}
+          ${displayAddress ? `<div class="meta">${displayAddress}</div>` : ''}
+          ${displayContact ? `<div class="meta">Tel: ${displayContact}</div>` : ''}
+          ${cafeGST ? `<div class="meta bold">GSTIN: ${cafeGST}</div>` : ''}
+        </div>
+
+        <div class="double-divider"></div>
+
+        <div>
+          <div class="flex-between">
+            <span class="bold">Order ID:  ${order.invoiceId || 'INV-' + String(order._id || '').slice(-6).toUpperCase()}</span>
+            <span class="bold">Table No: ${order.tableNumber || 'N/A'}</span>
           </div>
+          <div class="flex-between meta">
+            <span>Date/Time: ${new Date(order.createdAt || Date.now()).toLocaleDateString()}, ${new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+          <div class="meta">Customer:  ${order.customerName || 'Guest Customer'}</div>
+          ${specialNotes ? `<div class="notes-box">Notes:     ${specialNotes}</div>` : ''}
+        </div>
 
-          <div class="divider"></div>
+        <div class="divider"></div>
 
-          <div>
+        <table>
+          <thead>
+            <tr style="border-bottom: 1px dashed #000;">
+              <th style="text-align: left; padding-bottom: 4px;">ITEM</th>
+              <th style="text-align: center; padding-bottom: 4px;">QTY</th>
+              <th style="text-align: right; padding-bottom: 4px;">PRICE</th>
+              <th style="text-align: right; padding-bottom: 4px;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <div>
+          <div class="flex-between">
+            <span>Subtotal:</span>
+            <span>${itemsSubtotal.toFixed(2)}</span>
+          </div>
+          ${gstRate > 0 ? `
             <div class="flex-between">
-              <span class="bold">INVOICE: #${order.invoiceId || String(order._id || '').substring(0, 8).toUpperCase()}</span>
-              <span class="bold">TABLE: ${order.tableNumber || 'N/A'}</span>
+              <span>Tax / GST:</span>
+              <span>${gstAmount.toFixed(2)}</span>
             </div>
+          ` : `
             <div class="flex-between">
-              <span>Date: ${new Date(order.createdAt || Date.now()).toLocaleDateString()}</span>
-              <span>Time: ${new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <span>Tax / GST:</span>
+              <span>0.00</span>
             </div>
-            ${(order.specialInstructions || order.notes || order.note || order.instructions) ? `<div class="meta-text bold" style="margin-top: 4px; padding: 3px 6px; background: #f0f0f0; border-radius: 4px;">📝 Note: ${(order.specialInstructions || order.notes || order.note || order.instructions)}</div>` : ''}
+          `}
+          <div class="double-divider"></div>
+          <div class="flex-between grand-total">
+            <span>GRAND TOTAL:</span>
+            <span>${grandTotal.toFixed(2)}</span>
           </div>
+          <div class="double-divider"></div>
+        </div>
 
-          <div class="divider"></div>
-
-          <table>
-            <thead>
-              <tr style="border-bottom: 1px dashed #000;">
-                <th style="text-align: left; padding-bottom: 4px;">ITEM</th>
-                <th style="text-align: center; padding-bottom: 4px;">QTY</th>
-                <th style="text-align: right; padding-bottom: 4px;">PRICE</th>
-                <th style="text-align: right; padding-bottom: 4px;">AMT</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
-
-          <div class="divider"></div>
-
-          <div>
-            <div class="flex-between">
-              <span>Subtotal:</span>
-              <span>₹${itemsSubtotal.toFixed(2)}</span>
-            </div>
-            ${gstRate > 0 ? `
-              <div class="flex-between">
-                <span>GST (${gstRate}%):</span>
-                <span>₹${gstAmount.toFixed(2)}</span>
-              </div>
-            ` : ''}
-            ${platformCharge > 0 ? `
-              <div class="flex-between">
-                <span>Platform Fee:</span>
-                <span>₹${platformCharge.toFixed(2)}</span>
-              </div>
-            ` : ''}
-            <div class="double-divider"></div>
-            <div class="flex-between" style="font-size: 15px; font-weight: 900;">
-              <span>GRAND TOTAL:</span>
-              <span>₹${grandTotal.toFixed(2)}</span>
-            </div>
-            <div class="double-divider"></div>
-            <div class="flex-between meta-text">
-              <span>Payment Mode:</span>
-              <span class="bold">${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'PENDING'}</span>
-            </div>
-            <div class="flex-between meta-text">
-              <span>Payment Status:</span>
-              <span class="bold">${order.paymentStatus ? order.paymentStatus.toUpperCase() : 'UNPAID'}</span>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="center" style="margin-top: 10px;">
-            <p class="bold" style="margin: 2px 0;">THANK YOU FOR VISITING!</p>
-            <p style="margin: 2px 0; font-size: 10px;">Please visit us again soon.</p>
-            <p style="font-size: 8px; margin-top: 10px; color: #555;">
-              Printed By: ${user?.name || 'Cashier'} | Ref ID: ${String(order._id || '').substring(0, 8)}
-            </p>
-          </div>
+        <div class="center" style="margin-top: 10px;">
+          <p class="bold" style="margin: 2px 0;">Thank you for ordering with us!</p>
+          <p style="margin: 2px 0; font-size: 11px;">Please visit again.</p>
         </div>
       </body>
     </html>
-  `);
+  `;
+
+  // Synchronously execute print
+  let iframe = document.getElementById('receipt-print-iframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'receipt-print-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '300px';
+    iframe.style.height = '300px';
+    iframe.style.opacity = '0.01';
+    iframe.style.pointerEvents = 'none';
+    iframe.style.zIndex = '-999';
+    document.body.appendChild(iframe);
+  }
+
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(receiptHtml);
   iframeDoc.close();
 
   setTimeout(() => {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-  }, 300);
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (e) {
+      console.error('Print execution error:', e);
+    }
+  }, 200);
 };
 
-export const printKOT = async (order, user = null, cafe = null, branch = null) => {
-  // Fire server notification in background for cloud listeners
+/**
+ * Prints Kitchen Order Ticket (KOT)
+ * 1. Emits cloud print job to Render Socket.IO for kitchen hardware printer
+ * 2. Opens instant 80mm KOT print dialog on tablet/mobile/desktop
+ */
+export const printKOT = (order, user = null, cafe = null, branch = null) => {
+  if (!order) return;
+
+  // 1. Notify cloud bridge in background (Fire-and-forget)
   if (order._id) {
     API.post(`/orders/${order._id}/print`, { type: 'KOT' }).catch(() => {});
   }
 
-  // 1. Try direct local Printer Bridge on Wi-Fi (Instant 0.1s silent print)
-  const bridgeSuccess = await sendDirectToPrinterBridge(order, 'KOT', cafe, branch);
-  if (bridgeSuccess) {
-    return;
-  }
+  const cafeName = order.cafeName || cafe?.name || 'DR.CAFE CHAI';
+  const displayBranchName = order.branchName || branch?.branchName || 'Branch: CP007-B1';
+  const displayAddress = order.branchAddress || branch?.address || cafe?.address || 'mangalagiri, Andhra Pradesh';
+  const specialNotes = String(order.specialInstructions || order.notes || order.note || order.instructions || '').trim();
 
-  // 2. Direct Tablet / Phone Browser System Print Dialog (80mm KOT Ticket)
-  let iframe = document.getElementById('kot-print-iframe');
-  if (!iframe) {
-    iframe = document.createElement('iframe');
-    iframe.id = 'kot-print-iframe';
-    iframe.style.position = 'absolute';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    iframe.style.top = '-9999px';
-    iframe.style.left = '-9999px';
-    document.body.appendChild(iframe);
-  }
-
-  const cafeName = order.cafeName || cafe?.name || 'Our Cafe';
-  const displayBranchName = order.branchName || branch?.branchName || '';
-  const displayAddress = order.branchAddress || branch?.address || cafe?.address || '';
-  const displayContact = order.cafeSupportNumber || cafe?.phone || cafe?.contact || branch?.manager || '';
-  const logoUrl = getAssetUrl(order.cafeLogo || cafe?.logoUrl || (cafe?.logo ? `/uploads/${cafe.logo}` : ''));
-
-  const itemsHtml = order.items.map(item => `
+  const itemsHtml = (order.items || []).map(item => `
     <tr>
-      <td style="padding: 8px 0; font-size: 16px; font-weight: bold; font-family: monospace;">${item.name}</td>
-      <td style="padding: 8px 0; text-align: center; font-size: 18px; font-weight: bold; font-family: monospace;">${item.quantity}</td>
-      <td style="padding: 8px 0; text-align: right; font-size: 16px; font-weight: bold; font-family: monospace;">₹${item.price.toFixed(2)}</td>
-      <td style="padding: 8px 0; text-align: right; font-size: 16px; font-weight: bold; font-family: monospace;">₹${(item.price * item.quantity).toFixed(2)}</td>
+      <td style="padding: 6px 0; font-size: 15px; font-weight: bold; font-family: monospace; text-align: left;">${item.name}</td>
+      <td style="padding: 6px 0; text-align: center; font-size: 16px; font-weight: bold; font-family: monospace;">${item.quantity}</td>
+      <td style="padding: 6px 0; text-align: right; font-size: 14px; font-family: monospace;">${(item.price || 0).toFixed(2)}</td>
+      <td style="padding: 6px 0; text-align: right; font-size: 14px; font-weight: bold; font-family: monospace;">${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</td>
     </tr>
   `).join('');
 
-  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-  iframeDoc.open();
-  iframeDoc.write(`
+  const kotHtml = `
+    <!DOCTYPE html>
     <html>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>KOT - ${order._id.slice(-6).toUpperCase()}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>KOT - ${order.kotId || String(order._id || '').slice(-6).toUpperCase()}</title>
         <style>
-          @page { size: auto; margin: 5mm; }
-          body { 
-            font-family: 'Courier New', Courier, monospace; 
-            color: #000; 
-            background: #fff; 
-            margin: 0; 
-            padding: 10px;
-            font-size: 13px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+          @page {
+            size: 80mm auto;
+            margin: 0mm;
           }
-          .kot-box {
-            width: 100%;
-            max-width: 80mm;
+          * {
             box-sizing: border-box;
           }
-          .text-center { text-align: center; }
-          .bold { font-weight: bold; }
-          .header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 6px; }
-          .header h2 { margin: 0; font-size: 18px; font-weight: bold; }
-          .header p { margin: 3px 0; font-size: 11px; }
-          .meta-table { width: 100%; border-bottom: 1px dashed #000; padding-bottom: 6px; margin-bottom: 6px; font-size: 12px; }
-          .meta-table td { padding: 1px 0; }
-          .items-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-          .items-table th { border-bottom: 2px solid #000; border-top: 2px solid #000; padding: 6px 0; font-size: 13px; font-weight: bold; }
-          .instructions-box {
-            background: #f5f5f5;
-            border: 1px dashed #000;
+          body {
+            font-family: 'Courier New', Courier, monospace;
+            color: #000;
+            background: #fff;
+            margin: 0 auto;
             padding: 8px;
-            margin-top: 10px;
+            width: 100%;
+            max-width: 80mm;
             font-size: 12px;
+            line-height: 1.3;
+          }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .title { font-size: 18px; font-weight: 900; margin: 4px 0; text-transform: uppercase; }
+          .meta { font-size: 12px; margin: 2px 0; }
+          .divider { border-top: 1px dashed #000; margin: 6px 0; }
+          .double-divider { border-top: 2px dashed #000; margin: 6px 0; }
+          .notes-box {
+            background: #e8e8e8;
+            border: 2px solid #000;
+            padding: 6px 8px;
+            margin: 8px 0;
+            font-size: 14px;
+            font-weight: 900;
+          }
+          table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+          .flex-between { display: flex; justify-content: space-between; margin: 3px 0; }
+          .grand-total { font-size: 16px; font-weight: 900; padding: 4px 0; }
+          @media print {
+            body { padding: 3mm 1mm; width: 76mm; }
+            .no-print { display: none !important; }
           }
         </style>
       </head>
       <body>
-        <div class="kot-box">
-          <div class="header text-center">
-            <h2>KITCHEN ORDER TICKET (KOT)</h2>
-            <p class="bold" style="font-size: 14px; margin: 4px 0 2px 0;">${cafeName}</p>
-            <p class="bold" style="font-size: 12px; margin: 0 0 4px 0;">${displayBranchName}</p>
-            <p style="font-size: 9px; color: #555; margin: 2px 0;">${displayAddress}</p>
-            ${displayContact ? `<p style="font-size: 9px; color: #555; margin: 2px 0;">Contact: ${displayContact}</p>` : ''}
-            ${logoUrl ? `<div style="margin-top: 6px;"><img src="${logoUrl}" style="max-height: 35px; border-radius: 50%; object-fit: cover;" /></div>` : ''}
+        <div class="center">
+          <div class="title">KITCHEN ORDER TICKET (KOT)</div>
+          <div class="bold" style="font-size: 14px;">${cafeName}</div>
+          ${displayBranchName ? `<div class="meta bold">${displayBranchName}</div>` : ''}
+          ${displayAddress ? `<div class="meta">${displayAddress}</div>` : ''}
+        </div>
+
+        <div class="double-divider"></div>
+
+        <div>
+          <div class="flex-between">
+            <span class="bold" style="font-size: 14px;">KOT No:   ${order.kotId || 'KOT-' + String(order._id || '').slice(-6).toUpperCase()}</span>
+            <span class="bold" style="font-size: 14px;">Table No: ${order.tableNumber || 'N/A'}</span>
           </div>
+          <div class="meta">Date/Time: ${new Date(order.createdAt || Date.now()).toLocaleDateString()}, ${new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          <div class="meta">Customer:  ${order.customerName || 'Guest Customer'}</div>
+          ${specialNotes ? `<div class="notes-box">⚠️ Notes: ${specialNotes}</div>` : ''}
+        </div>
 
-          <table class="meta-table">
-            <tr>
-              <td class="bold">KOT No:</td>
-              <td>${(order.kotId || ('KOT-' + order._id.slice(-6))).toUpperCase()}</td>
-            </tr>
-            <tr>
-              <td class="bold">Table No:</td>
-              <td class="bold" style="font-size: 15px;">Table ${order.tableNumber}</td>
-            </tr>
-            <tr>
-              <td class="bold">Date/Time:</td>
-              <td>${new Date(order.createdAt).toLocaleDateString()} ${new Date(order.createdAt).toLocaleTimeString()}</td>
-            </tr>
-            <tr>
-              <td class="bold">Customer:</td>
-              <td>${order.customerName || 'Walk-in'}</td>
-            </tr>
-          </table>
+        <div class="divider"></div>
 
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th style="text-align: left;">Item Name</th>
-                <th>Qty</th>
-                <th style="text-align: right;">Price</th>
-                <th style="text-align: right;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-              <tr>
-                <td colspan="3" style="border-top: 1px dashed #000; padding: 6px 0; font-weight: bold;">GRAND TOTAL:</td>
-                <td style="border-top: 1px dashed #000; padding: 6px 0; text-align: right; font-weight: bold; font-family: monospace; font-size: 16px;">₹${(order.totalAmount || order.grandTotal || 0).toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
+        <table>
+          <thead>
+            <tr style="border-bottom: 2px solid #000;">
+              <th style="text-align: left; padding-bottom: 4px; font-size: 13px;">ITEM</th>
+              <th style="text-align: center; padding-bottom: 4px; font-size: 13px;">QTY</th>
+              <th style="text-align: right; padding-bottom: 4px; font-size: 13px;">PRICE</th>
+              <th style="text-align: right; padding-bottom: 4px; font-size: 13px;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
 
-          ${(order.specialInstructions || order.notes || order.note || order.instructions) ? `
-          <div class="instructions-box">
-            <div class="bold">⚠️ Special Instructions:</div>
-            <div style="font-weight: bold; margin-top: 4px; font-size: 13px;">${(order.specialInstructions || order.notes || order.note || order.instructions)}</div>
-          </div>
-          ` : ''}
+        <div class="double-divider"></div>
 
-          <div style="text-align: center; margin-top: 15px; font-size: 10px; border-top: 1px solid #000; padding-top: 6px;">
-            Printed By: ${user?.name || 'System Staff'}
-          </div>
+        <div class="flex-between grand-total">
+          <span>GRAND TOTAL:</span>
+          <span>${(order.totalAmount || order.grandTotal || 0).toFixed(2)}</span>
+        </div>
+
+        <div class="double-divider"></div>
+
+        <div class="center" style="margin-top: 10px; font-weight: bold;">
+          For Kitchen Use Only
         </div>
       </body>
     </html>
-  `);
+  `;
+
+  // Synchronously execute print
+  let iframe = document.getElementById('kot-print-iframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'kot-print-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '300px';
+    iframe.style.height = '300px';
+    iframe.style.opacity = '0.01';
+    iframe.style.pointerEvents = 'none';
+    iframe.style.zIndex = '-999';
+    document.body.appendChild(iframe);
+  }
+
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(kotHtml);
   iframeDoc.close();
 
   setTimeout(() => {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-  }, 300);
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (e) {
+      console.error('KOT print execution error:', e);
+    }
+  }, 200);
 };
-
