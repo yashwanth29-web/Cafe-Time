@@ -908,6 +908,7 @@ const OwnerDashboard = () =>{
  });
   const [reviewsFilterRating, setReviewsFilterRating] = useState('');
   const [isMenuSubmitting, setIsMenuSubmitting] = useState(false);
+  const [isInventorySubmitting, setIsInventorySubmitting] = useState(false);
    // Search and filter states
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedMenuCategory, setSelectedMenuCategory] = useState('all');
