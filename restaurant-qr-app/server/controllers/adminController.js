@@ -1960,7 +1960,7 @@ const getDashboardStats = async (req, res) => {
         { $group: { _id: '$orderSource', count: { $sum: 1 } } }
       ]),
       Order.aggregate([
-        { $match: { ...revenueMatch, createdAt: { $gte: startOfMonth } } },
+        { $match: { ...revenueMatch, createdAt: { $gte: startOfToday } } },
         { $unwind: '$items' },
         { 
           $group: {
@@ -2058,7 +2058,7 @@ const getDashboardStats = async (req, res) => {
       else orderSourceData.Counter += stat.count;
     });
     
-    // Strictly use sales that occurred THIS month (no fallback to past months)
+    // Strictly use sales that occurred TODAY
     const salesMap = {};
     (allSalesItems || []).forEach(item => {
       salesMap[item._id] = {
@@ -2068,10 +2068,10 @@ const getDashboardStats = async (req, res) => {
       };
     });
 
-    // Top Selling: only items with sales > 0 this month, top 5
+    // Top Selling: only items with sales > 0 today, top 10
     const formattedTopSelling = (allSalesItems || [])
       .filter(item => item.quantity > 0)
-      .slice(0, 5)
+      .slice(0, 10)
       .map(item => ({
         name: item._id,
         quantity: item.quantity,
@@ -2095,7 +2095,7 @@ const getDashboardStats = async (req, res) => {
 
     // Sort ascending: 0 sold first, then 1, 2...
     slowSellingList.sort((a, b) => a.quantity - b.quantity);
-    const formattedSlowSelling = slowSellingList.slice(0, 5);
+    const formattedSlowSelling = slowSellingList.slice(0, 10);
     
     const inventoryValue = inventoryValueAgg.length > 0 ? inventoryValueAgg[0].totalValue : 0;
     

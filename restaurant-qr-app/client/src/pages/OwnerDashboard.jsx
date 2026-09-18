@@ -2550,7 +2550,7 @@ const exportStaffToCSV = () => {
       };
     }
     const itemCounts = {};
-    (monthlyOrders || []).forEach(order => {
+    (todayOrders || []).forEach(order => {
       if (order.items && order.items.length > 0) {
         order.items.forEach(item => {
           const name = item.name || 'Unknown Item';
@@ -2566,7 +2566,7 @@ const exportStaffToCSV = () => {
     });
 
     const soldList = Object.values(itemCounts).filter(i => i.quantity > 0).sort((a, b) => b.quantity - a.quantity);
-    const topSelling = soldList.slice(0, 5);
+    const topSelling = soldList.slice(0, 10);
 
     const allMenuMap = {};
     (menuItems || []).forEach(m => {
@@ -2585,10 +2585,10 @@ const exportStaffToCSV = () => {
 
     const slowSelling = combinedList
       .sort((a, b) => a.quantity - b.quantity)
-      .slice(0, 5);
+      .slice(0, 10);
 
     return { topSelling, slowSelling };
-  }, [monthlyOrders, menuItems, statsData]);
+  }, [todayOrders, menuItems, statsData]);
 
   const { topSelling, slowSelling } = rankedItems;
 
@@ -3584,9 +3584,12 @@ const exportStaffToCSV = () => {
  {/* Best / Worst Selling items */}
 <div className="owner-double-deck" style={{ marginTop: '24px' }}>
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-  <TrendingUp size={20} color="#2ecc71" />
-  <h4 style={{ color: '#2ecc71', margin: 0, fontSize: '1.1rem' }}>Top Selling Items</h4>
+<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <TrendingUp size={20} color="#2ecc71" />
+    <h4 style={{ color: '#2ecc71', margin: 0, fontSize: '1.1rem' }}>Top Selling Items</h4>
+  </div>
+  <span className="modern-metric-pill modern-pill-neutral" style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>Today</span>
 </div>
 <div className="ranked-list-container">
   {topSelling.length > 0 ? (
@@ -3600,14 +3603,17 @@ const exportStaffToCSV = () => {
       </div>
     ))
   ) : (
-    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>No sales recorded yet this month</div>
+    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>No sales recorded yet today</div>
   )}
 </div>
 </div>
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-  <TrendingDown size={20} color="#e74c3c" />
-  <h4 style={{ color: '#e74c3c', margin: 0, fontSize: '1.1rem' }}>Slow Selling Items</h4>
+<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <TrendingDown size={20} color="#e74c3c" />
+    <h4 style={{ color: '#e74c3c', margin: 0, fontSize: '1.1rem' }}>Slow Selling Items</h4>
+  </div>
+  <span className="modern-metric-pill modern-pill-neutral" style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>Today</span>
 </div>
 <div className="ranked-list-container">
   {slowSelling.length > 0 ? (
@@ -3621,7 +3627,7 @@ const exportStaffToCSV = () => {
       </div>
     ))
   ) : (
-    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>All dishes are selling actively!</div>
+    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>All dishes are selling actively today!</div>
   )}
 </div>
 </div>
