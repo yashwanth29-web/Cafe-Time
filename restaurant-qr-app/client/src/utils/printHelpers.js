@@ -5,12 +5,11 @@ import API, { getAssetUrl } from '../services/api';
  * Tries localhost, tablet IP, and cafe counter laptop IP.
  */
 export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null, branch = null) => {
+  const savedUrl = localStorage.getItem('printerBridgeUrl');
   const candidateUrls = [
-    localStorage.getItem('printerBridgeUrl'),
+    savedUrl,
     'http://127.0.0.1:8090/print',
-    'http://localhost:8090/print',
-    'http://192.168.0.103:8090/print',
-    'http://192.168.0.106:8090/print'
+    'http://localhost:8090/print'
   ].filter(Boolean);
 
   const payload = {
@@ -28,7 +27,7 @@ export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null
   for (const url of candidateUrls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 350);
 
       const res = await fetch(url, {
         method: 'POST',
@@ -43,13 +42,12 @@ export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null
         const data = await res.json();
         if (data.success) {
           console.log(`[PRINT] Direct thermal print (${type}) succeeded via bridge: ${url}`);
-          // Remember the working bridge URL
           localStorage.setItem('printerBridgeUrl', url);
           return true;
         }
       }
     } catch (e) {
-      // Try next candidate
+      // Continue to next candidate or fallback
     }
   }
 
@@ -57,24 +55,18 @@ export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null
 };
 
 export const printPOSReceipt = async (order, user = null, cafe = null, branch = null) => {
+  // Fire server notification in background for cloud listeners
+  if (order._id) {
+    API.post(`/orders/${order._id}/print`, { type: 'POS' }).catch(() => {});
+  }
+
   // 1. Try direct local Printer Bridge on Wi-Fi (Instant 0.1s silent print)
   const bridgeSuccess = await sendDirectToPrinterBridge(order, 'POS', cafe, branch);
   if (bridgeSuccess) {
     return;
   }
 
-  // 2. Try Server-side direct network printer (if running locally)
-  try {
-    const response = await API.post(`/orders/${order._id}/print`, { type: 'POS' });
-    if (response.data?.success) {
-      console.log('[PRINT] POS receipt sent to network printer via server successfully.');
-      return;
-    }
-  } catch (err) {
-    console.warn('[PRINT] Server-side print failed, falling back to browser print:', err.message);
-  }
-
-  // 3. Fallback: Browser Print Dialog
+  // 2. Direct Tablet / Phone Browser System Print Dialog (80mm Thermal Receipt)
   let iframe = document.getElementById('receipt-print-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');
@@ -237,24 +229,18 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
 };
 
 export const printKOT = async (order, user = null, cafe = null, branch = null) => {
+  // Fire server notification in background for cloud listeners
+  if (order._id) {
+    API.post(`/orders/${order._id}/print`, { type: 'KOT' }).catch(() => {});
+  }
+
   // 1. Try direct local Printer Bridge on Wi-Fi (Instant 0.1s silent print)
   const bridgeSuccess = await sendDirectToPrinterBridge(order, 'KOT', cafe, branch);
   if (bridgeSuccess) {
     return;
   }
 
-  // 2. Try Server-side direct network printer (if running locally)
-  try {
-    const response = await API.post(`/orders/${order._id}/print`, { type: 'KOT' });
-    if (response.data?.success) {
-      console.log('[PRINT] KOT sent to network printer via server successfully.');
-      return;
-    }
-  } catch (err) {
-    console.warn('[PRINT] Server-side print failed, falling back to browser print:', err.message);
-  }
-
-  // 3. Fallback: Browser Print Dialog
+  // 2. Direct Tablet / Phone Browser System Print Dialog (80mm KOT Ticket)
   let iframe = document.getElementById('kot-print-iframe');
   if (!iframe) {
     iframe = document.createElement('iframe');

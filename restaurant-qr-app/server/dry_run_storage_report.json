@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-17T16:55:13.581Z",
+  "timestamp": "2026-09-18T01:19:19.411Z",
   "dryRun": true,
   "expiredWorkReports": [
     {
@@ -25,6 +25,20 @@
         "6a57708746a3e0c92b0a4255"
       ],
       "gridFsFileId": "6a57708746a3e0c92b0a4255"
+    },
+    {
+      "reportId": "6aab00a6df3c7671823d459f",
+      "staffName": "staff",
+      "createdAt": "2026-09-16T20:48:38.649Z",
+      "photos": [
+        "/uploads/report-1789591714106-151840082.jpg",
+        "/uploads/report-1789591714498-610067372.jpg"
+      ],
+      "gridFsFileIds": [
+        "6aab00a3df3c7671823d4598",
+        "6aab00a5df3c7671823d459c"
+      ],
+      "gridFsFileId": "6aab00a3df3c7671823d4598"
     }
   ]
 }

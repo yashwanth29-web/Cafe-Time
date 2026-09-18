@@ -209,6 +209,28 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+// In-memory de-duplication cache to prevent printing 2 duplicate bills
+const recentlyPrinted = new Map();
+function shouldPrint(orderId, type) {
+  if (!orderId) return true;
+  const key = `${String(orderId)}_${type}`;
+  const now = Date.now();
+  if (recentlyPrinted.has(key)) {
+    const lastTime = recentlyPrinted.get(key);
+    if (now - lastTime < 4000) {
+      console.log(`[BRIDGE] ⚠️ Ignored duplicate print trigger for order ${orderId} (${type}) within 4s`);
+      return false;
+    }
+  }
+  recentlyPrinted.set(key, now);
+  if (recentlyPrinted.size > 200) {
+    for (const [k, time] of recentlyPrinted.entries()) {
+      if (now - time > 60000) recentlyPrinted.delete(k);
+    }
+  }
+  return true;
+}
+
   if (req.url === '/print' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -217,8 +239,14 @@ const server = http.createServer(async (req, res) => {
         const payload = JSON.parse(body || '{}');
         const orderData = payload.order || payload;
         const type = payload.type || 'POS';
+        const orderId = orderData._id || orderData.id || orderData.invoiceId || '';
 
-        console.log(`[BRIDGE] Received local HTTP print job (${type}) for order ${orderData._id || 'N/A'}`);
+        if (!shouldPrint(orderId, type)) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ success: true, message: 'Duplicate suppressed' }));
+        }
+
+        console.log(`[BRIDGE] Received local HTTP print job (${type}) for order ${orderId || 'N/A'}`);
         const buffer = compileReceiptBuffer(orderData, type);
         await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
         console.log(`[BRIDGE] Successfully printed (${type}) on ${PRINTER_IP}:${PRINTER_PORT}`);
@@ -260,13 +288,21 @@ if (ioClient) {
     socket.on('connect', () => {
       console.log(`[CLOUD TUNNEL] ✅ Connected to Render Cloud! Tunnel Socket ID: ${socket.id}`);
       socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'default' });
+      socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'CP007-B1' });
+      socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'all' });
     });
 
     socket.on('print:job', async (data) => {
       try {
         const orderData = data.order || data;
         const type = data.type || 'POS';
-        console.log(`[CLOUD TUNNEL] ⚡ Received cloud print job (${type}) for order ${orderData._id || 'N/A'}`);
+        const orderId = orderData._id || orderData.id || orderData.invoiceId || '';
+
+        if (!shouldPrint(orderId, type)) {
+          return;
+        }
+
+        console.log(`[CLOUD TUNNEL] ⚡ Received cloud print job (${type}) for order ${orderId || 'N/A'}`);
         const buffer = compileReceiptBuffer(orderData, type);
         await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
         console.log(`[CLOUD TUNNEL] ✅ Printed successfully to RETSOL RTP-81!`);
