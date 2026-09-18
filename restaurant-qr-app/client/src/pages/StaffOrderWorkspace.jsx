@@ -570,7 +570,14 @@ const StaffOrderWorkspace = () => {
 
   const handleToggleAvailability = async (item) => {
     const targetId = item._id || item.id;
-    const newStatus = !item.available;
+    const willBeAvailable = !item.available;
+    const confirmMessage = willBeAvailable
+      ? `Are you sure you want to mark "${item.name}" as IN STOCK?`
+      : `Are you sure you want to mark "${item.name}" as OUT OF STOCK?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    const newStatus = willBeAvailable;
     // Instant optimistic UI update
     setMenuItems((prev) =>
       prev.map((m) => (String(m._id || m.id) === String(targetId) ? { ...m, available: newStatus } : m))
@@ -1191,63 +1198,91 @@ const StaffOrderWorkspace = () => {
     }
   };
 
-  // Record Stock Purchase
+  // Record Stock Purchase (Optimistic & Instant)
   const handleRecordPurchase = async (e) => {
     e.preventDefault();
-    if (!selectedInventoryItem || inventoryActionLoading) return;
+    if (!selectedInventoryItem) return;
     const qty = parseFloat(purchaseForm.quantityAdded);
     if (!qty || qty <= 0) {
       alert('Please enter a valid quantity.');
       return;
     }
-    setInventoryActionLoading(true);
+
+    const targetId = selectedInventoryItem._id;
+    const costPriceNum = parseFloat(purchaseForm.costPrice) || 0;
+
+    // Instant optimistic update
+    setInventory((prev) => prev.map(item => {
+      if (item._id === targetId) {
+        const cur = Number(item.quantity !== undefined ? item.quantity : (item.stock || 0));
+        const newQty = Number((cur + qty).toFixed(3));
+        return { ...item, quantity: newQty, stock: newQty, costPrice: costPriceNum || item.costPrice };
+      }
+      return item;
+    }));
+
+    setShowPurchaseModal(false);
+    setSelectedInventoryItem(null);
+    setPurchaseForm({ quantityAdded: '', totalCost: '', costPrice: '', supplier: '', notes: '' });
+
     try {
       const res = await recordPurchase({
-        itemId: selectedInventoryItem._id,
+        itemId: targetId,
         quantityAdded: qty,
-        costPrice: parseFloat(purchaseForm.costPrice) || 0,
+        costPrice: costPriceNum,
         supplier: purchaseForm.supplier || selectedInventoryItem.supplier || '',
         notes: purchaseForm.notes || ''
       });
       if (res && res.success) {
-        alert('Purchase entry recorded successfully.');
-        setShowPurchaseModal(false);
-        setSelectedInventoryItem(null);
-        setPurchaseForm({ quantityAdded: '', totalCost: '', costPrice: '', supplier: '', notes: '' });
-        fetchInventory();
+        fetchInventory(); // background sync
       }
     } catch (err) {
       console.error('Error recording purchase:', err);
-      alert(err.response?.data?.message || 'Failed to record purchase.');
-    } finally {
-      setInventoryActionLoading(false);
+      alert(err.response?.data?.message || 'Failed to record purchase. Reverting...');
+      fetchInventory();
     }
   };
 
-  // Record Stock Wastage
+  // Record Stock Wastage / Adjustment (Optimistic & Instant)
   const handleRecordWastage = async (e) => {
     e.preventDefault();
-    if (!selectedInventoryItem || inventoryActionLoading) return;
-    setInventoryActionLoading(true);
+    if (!selectedInventoryItem) return;
+    const qty = parseFloat(wastageForm.quantityWasted);
+    if (!qty || qty <= 0) {
+      alert('Please enter a valid quantity to reduce.');
+      return;
+    }
+
+    const targetId = selectedInventoryItem._id;
+
+    // Instant optimistic update
+    setInventory((prev) => prev.map(item => {
+      if (item._id === targetId) {
+        const cur = Number(item.quantity !== undefined ? item.quantity : (item.stock || 0));
+        const newQty = Number(Math.max(0, cur - qty).toFixed(3));
+        return { ...item, quantity: newQty, stock: newQty };
+      }
+      return item;
+    }));
+
+    setShowWastageModal(false);
+    setSelectedInventoryItem(null);
+    setWastageForm({ quantityWasted: '', type: 'Adjustment', reason: '' });
+
     try {
       const res = await recordWastage({
-        itemId: selectedInventoryItem._id,
-        quantityWasted: parseFloat(wastageForm.quantityWasted),
-        type: wastageForm.type || 'spoiled',
-        reason: wastageForm.reason || ''
+        itemId: targetId,
+        quantityWasted: qty,
+        type: wastageForm.type || 'Adjustment',
+        reason: wastageForm.reason || 'Manual stock correction'
       });
       if (res && res.success) {
-        alert('Wastage logged successfully.');
-        setShowWastageModal(false);
-        setSelectedInventoryItem(null);
-        setWastageForm({ quantityWasted: '', type: 'spoiled', reason: '' });
-        fetchInventory();
+        fetchInventory(); // background sync
       }
     } catch (err) {
-      console.error('Error recording wastage:', err);
-      alert(err.response?.data?.message || 'Failed to record wastage.');
-    } finally {
-      setInventoryActionLoading(false);
+      console.error('Error recording stock reduction:', err);
+      alert(err.response?.data?.message || 'Failed to reduce stock. Reverting...');
+      fetchInventory();
     }
   };
 
@@ -2871,26 +2906,26 @@ const StaffOrderWorkspace = () => {
                                 setShowPurchaseModal(true);
                               }}
                               style={{
-                                background: 'rgba(39, 174, 96, 0.15)', color: '#27ae60', border: '1px solid #27ae60',
-                                padding: '4px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer'
+                                background: '#27AE60', color: '#FFFFFF', border: 'none',
+                                padding: '5px 9px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, cursor: 'pointer'
                               }}
-                              title="Purchase and add to stock"
+                              title="Add incoming stock"
                             >
-                              + Purchase
+                              + Add Stock
                             </button>
                             <button
                               onClick={() => {
                                 setSelectedInventoryItem(inv);
-                                setWastageForm({ quantityWasted: '', type: 'spoiled', reason: '' });
+                                setWastageForm({ quantityWasted: '', type: 'Adjustment', reason: '' });
                                 setShowWastageModal(true);
                               }}
                               style={{
-                                background: 'rgba(231, 76, 60, 0.15)', color: '#e74c3c', border: '1px solid #e74c3c',
-                                padding: '4px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer'
+                                background: '#E74C3C', color: '#FFFFFF', border: 'none',
+                                padding: '5px 9px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, cursor: 'pointer'
                               }}
-                              title="Record spoiled or wasted stock"
+                              title="Reduce or adjust stock count"
                             >
-                              ⚠️ Wastage
+                              - Reduce Stock
                             </button>
                             <button
                               onClick={() => {
@@ -2902,9 +2937,9 @@ const StaffOrderWorkspace = () => {
                                   name: inv.name,
                                   unit: inv.unit || 'kg',
                                   quantity: qty,
-                                  reorderLevel: inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock || 5),
                                   costPrice: unitCost,
                                   totalCost: totalCost,
+                                  reorderLevel: inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock || 0),
                                   category: inv.category || 'General',
                                   supplier: inv.supplier || '',
                                   supplierPhone: inv.supplierPhone || ''
@@ -2912,12 +2947,22 @@ const StaffOrderWorkspace = () => {
                                 setShowEditInventoryModal(true);
                               }}
                               style={{
-                                background: 'rgba(52, 152, 219, 0.15)', color: '#2980b9', border: '1px solid #2980b9',
-                                padding: '4px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 'bold', cursor: 'pointer'
+                                background: 'rgba(0,0,0,0.06)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)',
+                                padding: '5px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer'
                               }}
-                              title="Edit all fields of ingredient"
+                              title="Edit item details"
                             >
                               ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteInventoryItem(inv._id)}
+                              style={{
+                                background: 'rgba(231, 76, 60, 0.06)', color: '#e74c3c', border: '1px solid #e74c3c',
+                                padding: '5px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer'
+                              }}
+                              title="Delete item"
+                            >
+                              🗑️
                             </button>
                           </div>
                         </td>
@@ -3943,21 +3988,24 @@ const StaffOrderWorkspace = () => {
         </div>
       )}
 
-      {/* ======================= MODAL: PURCHASE STOCK ======================= */}
+      {/* ======================= MODAL: + ADD INCOMING STOCK ======================= */}
       {showPurchaseModal && selectedInventoryItem && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1100,
+          backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', zIndex: 1100,
           display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px'
         }}>
           <div style={{
-            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
-            width: '100%', maxWidth: '440px', boxShadow: 'var(--shadow-lg)'
+            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)',
+            width: '100%', maxWidth: '480px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
-                Record Purchase Entry
-              </h3>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                  + Add Incoming Stock
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Record incoming purchase and update stock balance</p>
+              </div>
               <button
                 onClick={() => { setShowPurchaseModal(false); setSelectedInventoryItem(null); }}
                 style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
@@ -3967,23 +4015,32 @@ const StaffOrderWorkspace = () => {
             </div>
 
             <form onSubmit={handleRecordPurchase} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                  Ingredient: <strong style={{ color: 'var(--color-text-primary)' }}>{selectedInventoryItem.name}</strong> {selectedInventoryItem.unit ? `(${selectedInventoryItem.unit})` : ''}
-                </label>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Ingredient</span>
+                  <div style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '14px' }}>
+                    {selectedInventoryItem.name} {selectedInventoryItem.unit ? `(${selectedInventoryItem.unit})` : ''}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Current Stock</span>
+                  <div style={{ color: 'var(--color-primary)', fontWeight: 800, fontSize: '14px' }}>
+                    {selectedInventoryItem.quantity ?? selectedInventoryItem.stock ?? 0} {selectedInventoryItem.unit || 'units'}
+                  </div>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
-                    Quantity Purchased {selectedInventoryItem.unit ? `(${selectedInventoryItem.unit})` : ''} *
+                    Quantity to Add (+) {selectedInventoryItem.unit ? `(${selectedInventoryItem.unit})` : ''} *
                   </label>
                   <input
                     type="number"
                     step="any"
                     required
                     min="0.001"
-                    placeholder="e.g. 10"
+                    placeholder="e.g. 5"
                     value={purchaseForm.quantityAdded}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -4007,13 +4064,13 @@ const StaffOrderWorkspace = () => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
-                    Total Bill Amount (₹) <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(Optional)</span>
+                    Total Bill (₹) <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(Optional)</span>
                   </label>
                   <input
                     type="number"
                     step="any"
                     min="0"
-                    placeholder="e.g. 150"
+                    placeholder="e.g. 200"
                     value={purchaseForm.totalCost}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -4037,16 +4094,13 @@ const StaffOrderWorkspace = () => {
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
                   Cost Price per {selectedInventoryItem.unit || 'Unit'} (₹) *
-                  <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', fontWeight: 'normal', marginLeft: '6px' }}>
-                    (Auto-calculated from ingredient / total bill)
-                  </span>
                 </label>
                 <input
                   type="number"
                   step="any"
                   required
                   min="0"
-                  placeholder="e.g. 1.50"
+                  placeholder="e.g. 40.00"
                   value={purchaseForm.costPrice}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -4067,24 +4121,26 @@ const StaffOrderWorkspace = () => {
               </div>
 
               {/* Auto Calculation Preview Banner */}
-              {Number(purchaseForm.quantityAdded) > 0 && Number(purchaseForm.costPrice) >= 0 && (
+              {Number(purchaseForm.quantityAdded) > 0 && (
                 <div style={{
                   background: 'rgba(46, 204, 113, 0.12)',
                   border: '1px solid rgba(46, 204, 113, 0.3)',
                   borderRadius: '8px',
                   padding: '10px 14px',
-                  fontSize: '13px',
+                  fontSize: '12.5px',
                   color: '#27ae60',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '6px'
+                  flexDirection: 'column',
+                  gap: '4px'
                 }}>
-                  <span>✓ <strong>Total Bill:</strong> ₹{(Number(purchaseForm.quantityAdded) * Number(purchaseForm.costPrice)).toFixed(2)}</span>
-                  <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                    ₹{Number(purchaseForm.costPrice).toFixed(2)} per {selectedInventoryItem.unit || 'unit'}
-                  </span>
+                  <div style={{ fontWeight: 800 }}>
+                    🟢 New Total Stock will be: {Number(selectedInventoryItem.quantity || selectedInventoryItem.stock || 0)} + {Number(purchaseForm.quantityAdded || 0)} = <strong>{(Number(selectedInventoryItem.quantity || selectedInventoryItem.stock || 0) + Number(purchaseForm.quantityAdded || 0)).toFixed(2)} {selectedInventoryItem.unit || 'units'}</strong>
+                  </div>
+                  {Number(purchaseForm.costPrice) >= 0 && (
+                    <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
+                      Total Bill: ₹{(Number(purchaseForm.quantityAdded) * Number(purchaseForm.costPrice || 0)).toFixed(2)} (₹{Number(purchaseForm.costPrice || 0).toFixed(2)} / {selectedInventoryItem.unit || 'unit'})
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -4125,9 +4181,9 @@ const StaffOrderWorkspace = () => {
                 <button
                   type="submit"
                   disabled={inventoryActionLoading}
-                  style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: 'var(--color-primary)', color: 'white', cursor: inventoryActionLoading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px' }}
+                  style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: '#27AE60', color: 'white', cursor: inventoryActionLoading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: '13px' }}
                 >
-                  {inventoryActionLoading ? 'Saving...' : 'Save Entry'}
+                  {inventoryActionLoading ? 'Saving...' : '+ Add Stock'}
                 </button>
               </div>
             </form>
@@ -4135,27 +4191,51 @@ const StaffOrderWorkspace = () => {
         </div>
       )}
 
-      {/* ======================= MODAL: LOG WASTAGE ======================= */}
+      {/* ======================= MODAL: - REDUCE / ADJUST STOCK ======================= */}
       {showWastageModal && selectedInventoryItem && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', zIndex: 1100,
           display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '15px'
         }}>
           <div style={{
-            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px',
-            width: '100%', maxWidth: '400px', boxShadow: 'var(--shadow-lg)'
+            background: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--color-border)',
+            width: '100%', maxWidth: '440px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
           }}>
-            <h3 style={{ margin: '0 0 8px 0', color: '#e74c3c', fontSize: '1.15rem', fontWeight: 700 }}>
-              ⚠️ Record Stock Wastage
-            </h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-              Logging wasted quantity for: <strong>{selectedInventoryItem.name}</strong>
-            </p>
-            <form onSubmit={handleRecordWastage} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
+                  - Reduce Stock
+                </h3>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Correct stock balance (Does NOT affect sales profit)</p>
+              </div>
+              <button
+                onClick={() => { setShowWastageModal(false); setSelectedInventoryItem(null); }}
+                style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordWastage} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Ingredient</span>
+                  <div style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '14px' }}>
+                    {selectedInventoryItem.name} {selectedInventoryItem.unit ? `(${selectedInventoryItem.unit})` : ''}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>Current Stock</span>
+                  <div style={{ color: '#e74c3c', fontWeight: 800, fontSize: '14px' }}>
+                    {selectedInventoryItem.quantity ?? selectedInventoryItem.stock ?? 0} {selectedInventoryItem.unit || 'units'}
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Quantity Wasted ({selectedInventoryItem.unit}) *
+                  Quantity to Reduce (-) ({selectedInventoryItem.unit}) *
                 </label>
                 <input
                   required
@@ -4163,40 +4243,60 @@ const StaffOrderWorkspace = () => {
                   type="number"
                   step="any"
                   min="0.001"
-                  placeholder="e.g. 1.5"
+                  placeholder="e.g. 0.5"
                   value={wastageForm.quantityWasted}
                   onChange={(e) => setWastageForm({ ...wastageForm, quantityWasted: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Wastage Type
+                  Reason Category
                 </label>
                 <select
                   value={wastageForm.type}
                   onChange={(e) => setWastageForm({ ...wastageForm, type: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
                 >
-                  <option value="spoiled">Spoiled / Expired</option>
-                  <option value="spill">Spilled / Dropped</option>
-                  <option value="burn">Burnt / Preparation Error</option>
-                  <option value="damage">Damaged Packaging</option>
-                  <option value="other">Other</option>
+                  <option value="Adjustment">Manual Stock Correction (Count check)</option>
+                  <option value="Damaged">Damaged / Dropped / Spill</option>
+                  <option value="Wastage">Expired / Spoiled</option>
                 </select>
               </div>
 
+              {/* Live Preview Banner */}
+              {Number(wastageForm.quantityWasted) > 0 && (
+                <div style={{
+                  background: 'rgba(231, 76, 60, 0.12)',
+                  border: '1px solid rgba(231, 76, 60, 0.3)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  fontSize: '12.5px',
+                  color: '#e74c3c',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}>
+                  <div style={{ fontWeight: 800 }}>
+                    🔴 New Total Stock will be: {Number(selectedInventoryItem.quantity || selectedInventoryItem.stock || 0)} - {Number(wastageForm.quantityWasted || 0)} = <strong>{Math.max(0, Number(selectedInventoryItem.quantity || selectedInventoryItem.stock || 0) - Number(wastageForm.quantityWasted || 0)).toFixed(2)} {selectedInventoryItem.unit || 'units'}</strong>
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
+                    ℹ️ Manual reductions do not deduct from your cafe sales profit.
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                  Reason / Explanation
+                  Adjustment Reason / Notes
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Milk turned sour in fridge"
+                  placeholder="e.g. Corrected 1kg to 500g after kitchen count"
                   value={wastageForm.reason}
                   onChange={(e) => setWastageForm({ ...wastageForm, reason: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
                 />
               </div>
 
@@ -4211,9 +4311,9 @@ const StaffOrderWorkspace = () => {
                 <button
                   type="submit"
                   disabled={inventoryActionLoading}
-                  style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#e74c3c', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '12.5px' }}
+                  style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#e74c3c', color: 'white', cursor: 'pointer', fontWeight: 800, fontSize: '12.5px' }}
                 >
-                  {inventoryActionLoading ? 'Saving...' : 'Record Wastage'}
+                  {inventoryActionLoading ? 'Saving...' : '- Reduce Stock'}
                 </button>
               </div>
             </form>

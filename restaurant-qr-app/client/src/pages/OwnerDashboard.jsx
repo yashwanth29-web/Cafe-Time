@@ -218,12 +218,12 @@ const InvMobileCard = React.memo(({ item, onPurchase, onWastage, onEdit, onDelet
       <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid rgba(0, 0, 0,0.06)', paddingTop: '10px' }}>
         <button
           onClick={() => onPurchase(item)}
-          style={{ flex: 1, background: 'rgba(46,204,113,0.1)', color: '#2ECC71', border: '1px solid #2ECC71', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
-          Purchase</button>
+          style={{ flex: 1, background: '#27AE60', color: '#FFFFFF', border: 'none', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 800, fontFamily: 'inherit' }}>
+          + Add Stock</button>
         <button
           onClick={() => onWastage(item)}
-          style={{ flex: 1, background: 'rgba(231,76,60,0.1)', color: '#E74C3C', border: '1px solid #E74C3C', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
-          Wastage</button>
+          style={{ flex: 1, background: '#E74C3C', color: '#FFFFFF', border: 'none', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 800, fontFamily: 'inherit' }}>
+          - Reduce Stock</button>
         <button
           onClick={() => onEdit(item)}
           style={{ flex: 1, background: 'rgba(0, 0, 0,0.06)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '6px 4px', borderRadius: '7px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'inherit' }}>
@@ -271,8 +271,8 @@ const InvTableRow = React.memo(({ item, onPurchase, onWastage, onEdit, onDelete 
       <td style={{ padding: '10px 8px', textAlign: 'center' }}>{reorderVal} {item.unit}</td>
       <td style={{ padding: '10px 8px', textAlign: 'center' }}>
         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-          <button onClick={() => onPurchase(item)} style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Purchase</button>
-          <button onClick={() => onWastage(item)} style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>Wastage</button>
+          <button onClick={() => onPurchase(item)} style={{ background: '#27AE60', color: '#FFFFFF', border: 'none', padding: '5px 9px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', fontWeight: 800 }}>+ Add Stock</button>
+          <button onClick={() => onWastage(item)} style={{ background: '#E74C3C', color: '#FFFFFF', border: 'none', padding: '5px 9px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', fontWeight: 800 }}>- Reduce Stock</button>
           <button onClick={() => onEdit(item)} style={{ background: 'transparent', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>✏️ Edit</button>
           <button onClick={() => onDelete(item._id)} style={{ background: 'transparent', color: '#E74C3C', border: '1px solid #E74C3C', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>🗑️</button>
         </div>
@@ -371,10 +371,12 @@ const OwnerDashboard = () =>{
 
   const handlePurchaseInventoryCallback = useCallback((item) => {
     const costPriceVal = item.costPrice !== undefined ? item.costPrice : (item.cost !== undefined ? item.cost : '');
+    const currentQty = item.quantity !== undefined ? item.quantity : (item.stock || 0);
     setPurchaseForm({
       itemId: item._id,
       itemName: item.name,
       unit: item.unit || 'units',
+      currentStock: currentQty,
       quantityAdded: '',
       costPrice: costPriceVal,
       totalCost: '',
@@ -386,14 +388,16 @@ const OwnerDashboard = () =>{
 
   const handleWastageInventoryCallback = useCallback((item) => {
     const costPriceVal = item.costPrice !== undefined ? item.costPrice : (item.cost !== undefined ? item.cost : 0);
+    const currentQty = item.quantity !== undefined ? item.quantity : (item.stock || 0);
     setWastageForm({
       itemId: item._id,
       itemName: item.name,
       unit: item.unit || 'units',
+      currentStock: currentQty,
       costPrice: costPriceVal,
       quantityWasted: '',
-      type: 'Wastage',
-      reason: ''
+      type: 'Adjustment',
+      reason: 'Manual stock correction'
     });
     setShowWastageModal(true);
   }, []);
@@ -878,41 +882,49 @@ const OwnerDashboard = () =>{
  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
  const [showWastageModal, setShowWastageModal] = useState(false);
  const [purchaseForm, setPurchaseForm] = useState({
- itemId: '',
- itemName: '',
- unit: '',
- quantityAdded: '',
- costPrice: '',
- totalCost: '',
- supplier: '',
- notes: ''
- });
- const [wastageForm, setWastageForm] = useState({
- itemId: '',
- itemName: '',
- unit: '',
- costPrice: '',
- quantityWasted: '',
- type: 'Wastage',
- reason: ''
- });
+    itemId: '',
+    itemName: '',
+    unit: '',
+    currentStock: 0,
+    quantityAdded: '',
+    costPrice: '',
+    totalCost: '',
+    supplier: '',
+    notes: ''
+  });
+  const [wastageForm, setWastageForm] = useState({
+    itemId: '',
+    itemName: '',
+    unit: '',
+    currentStock: 0,
+    costPrice: '',
+    quantityWasted: '',
+    type: 'Adjustment',
+    reason: 'Manual stock correction'
+  });
 
- // Customer Reviews States
- const [reviews, setReviews] = useState([]);
- const [reviewsLoading, setReviewsLoading] = useState(false);
- const [reviewsError, setReviewsError] = useState('');
- const [reviewsSummary, setReviewsSummary] = useState({
- totalReviews: 0,
- averageRating: 0,
- distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
- });
+  // Customer Reviews States
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState('');
+  const [reviewsSummary, setReviewsSummary] = useState({
+    totalReviews: 0,
+    averageRating: 0,
+    distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+  });
   const [reviewsFilterRating, setReviewsFilterRating] = useState('');
   const [isMenuSubmitting, setIsMenuSubmitting] = useState(false);
   const [isInventorySubmitting, setIsInventorySubmitting] = useState(false);
-   // Search and filter states
+  
+  // Search and filter states
   const [menuSearch, setMenuSearch] = useState('');
   const [selectedMenuCategory, setSelectedMenuCategory] = useState('all');
   const [inventorySearch, setInventorySearch] = useState('');
+  const [movementDayFilter, setMovementDayFilter] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+  const [movementSearch, setMovementSearch] = useState('');
 
   const menuCategoriesWithCounts = useMemo(() => {
     const rawCategories = categories.length > 0
@@ -976,6 +988,63 @@ const OwnerDashboard = () =>{
       (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
     );
   }, [inventoryList, inventorySearch]);
+
+  const past7Days = useMemo(() => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      let label = '';
+      if (i === 0) label = 'Today';
+      else if (i === 1) label = 'Yesterday';
+      else label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+      days.push({ key: dateStr, label, isRelative: i < 2 });
+    }
+    return days;
+  }, []);
+
+  const filteredMovementLogs = useMemo(() => {
+    return (inventoryLogs || []).filter((log) => {
+      // STRICT FILTER: Only show manual "+ Add Stock" and "- Reduce Stock" (Never customer order / recipe auto-deductions)
+      const isAutoDeduction = 
+        log.type === 'Deduction' || 
+        !!log.orderId || 
+        (typeof log.reason === 'string' && (
+          log.reason.toLowerCase().startsWith('sold') || 
+          log.reason.toLowerCase().includes('order deduction') ||
+          log.reason.toLowerCase().includes('auto-deduct')
+        )) ||
+        (typeof log.userEmail === 'string' && log.userEmail.includes('auto-deduct')) ||
+        (typeof log.performedBy === 'string' && log.performedBy.includes('auto-deduct'));
+
+      if (isAutoDeduction) return false;
+
+      const qtyChanged = Number(log.quantityChanged) || 0;
+      const isAddStock = log.type === 'Purchase' || log.type === 'Initial' || qtyChanged > 0;
+      const isReduceStock = log.type === 'Adjustment' || log.type === 'Wastage' || log.type === 'Damaged' || qtyChanged < 0;
+      
+      if (!isAddStock && !isReduceStock) return false;
+
+      if (!log.createdAt) return true;
+      const logDate = new Date(log.createdAt);
+      const logDateStr = `${logDate.getFullYear()}-${String(logDate.getMonth() + 1).padStart(2, '0')}-${String(logDate.getDate()).padStart(2, '0')}`;
+      
+      if (movementDayFilter !== 'all' && logDateStr !== movementDayFilter) {
+        return false;
+      }
+      
+      if (movementSearch.trim()) {
+        const q = movementSearch.toLowerCase().trim();
+        const matchName = (log.itemName || '').toLowerCase().includes(q);
+        const matchReason = (log.reason || '').toLowerCase().includes(q);
+        const matchType = (log.type || '').toLowerCase().includes(q);
+        const matchUser = (log.performedBy || log.userEmail || '').toLowerCase().includes(q);
+        if (!matchName && !matchReason && !matchType && !matchUser) return false;
+      }
+      return true;
+    });
+  }, [inventoryLogs, movementDayFilter, movementSearch]);
 
  const [imageUploading, setImageUploading] = useState(false);
 
@@ -1999,10 +2068,17 @@ const exportStaffToCSV = () => {
  }
  };
 
- // Menu toggles
+  // Menu toggles
   const handleToggleAvailability = async (item) =>{
     const targetId = item._id || item.id;
-    const updatedStatus = !item.available;
+    const willBeAvailable = !item.available;
+    const confirmMessage = willBeAvailable
+      ? `Are you sure you want to mark "${item.name}" as IN STOCK?`
+      : `Are you sure you want to mark "${item.name}" as OUT OF STOCK?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    const updatedStatus = willBeAvailable;
     // Optimistic UI update
     setMenuItems((prevItems) =>
       prevItems.map((m) => (String(m._id || m.id) === String(targetId)) ? { ...m, available: updatedStatus } : m)
@@ -2317,7 +2393,7 @@ const exportStaffToCSV = () => {
     }
   };
 
-  const handleRecordPurchase = async (e) =>{
+  const handleRecordPurchase = async (e) => {
     e.preventDefault();
     const qty = Number(purchaseForm.quantityAdded);
     if (!qty || qty <= 0) {
@@ -2329,6 +2405,38 @@ const exportStaffToCSV = () => {
       alert('Please enter a valid cost price per unit.');
       return;
     }
+    
+    // Close modal immediately for instant (<100ms) UI response
+    setShowPurchaseModal(false);
+
+    // Optimistic UI state update
+    const currentItem = inventoryList.find(i => String(i._id || i.id) === String(purchaseForm.itemId));
+    const oldQty = currentItem ? Number(currentItem.quantity || currentItem.stock || 0) : Number(purchaseForm.currentStock || 0);
+    const newQty = Number((oldQty + qty).toFixed(3));
+
+    setInventoryList((prev) => prev.map(item => {
+      if (String(item._id || item.id) === String(purchaseForm.itemId)) {
+        return { ...item, quantity: newQty, stock: newQty, costPrice: cost || item.costPrice, cost: cost || item.cost };
+      }
+      return item;
+    }));
+
+    const optimisticLog = {
+      _id: 'temp-' + Date.now(),
+      itemId: purchaseForm.itemId,
+      itemName: purchaseForm.itemName,
+      type: 'Purchase',
+      quantityChanged: qty,
+      oldQuantity: oldQty,
+      remainingQuantity: newQty,
+      cost: cost * qty,
+      reason: purchaseForm.notes || 'Incoming stock added',
+      performedBy: user?.name || user?.email || 'Owner',
+      userEmail: user?.email || 'owner@cafe.com',
+      createdAt: new Date().toISOString()
+    };
+    setInventoryLogs((prev) => [optimisticLog, ...prev]);
+
     try {
       const response = await recordPurchase({
         itemId: purchaseForm.itemId,
@@ -2337,39 +2445,71 @@ const exportStaffToCSV = () => {
         supplier: purchaseForm.supplier,
         notes: purchaseForm.notes
       });
-      if (response.success) {
-        alert('Purchase recorded successfully.');
-        setShowPurchaseModal(false);
-        fetchInventoryList(); // reload all stats & logs
+      if (response && response.success) {
+        // Silently sync from backend in background
+        fetchInventoryList(true);
       }
     } catch (error) {
       console.error('Error recording purchase:', error);
-      alert(error.response?.data?.message || 'Error recording purchase');
+      alert(error.response?.data?.message || 'Error recording purchase. Reverting changes.');
+      fetchInventoryList(true);
     }
   };
 
-  const handleRecordWastage = async (e) =>{
+  const handleRecordWastage = async (e) => {
     e.preventDefault();
     const qty = Number(wastageForm.quantityWasted);
     if (!qty || qty <= 0) {
-      alert('Please enter a valid quantity wasted (greater than 0).');
+      alert('Please enter a valid quantity to reduce (greater than 0).');
       return;
     }
+
+    // Close modal immediately for instant (<100ms) UI response
+    setShowWastageModal(false);
+
+    // Optimistic UI state update
+    const currentItem = inventoryList.find(i => String(i._id || i.id) === String(wastageForm.itemId));
+    const oldQty = currentItem ? Number(currentItem.quantity || currentItem.stock || 0) : Number(wastageForm.currentStock || 0);
+    const newQty = Number(Math.max(0, oldQty - qty).toFixed(3));
+
+    setInventoryList((prev) => prev.map(item => {
+      if (String(item._id || item.id) === String(wastageForm.itemId)) {
+        return { ...item, quantity: newQty, stock: newQty };
+      }
+      return item;
+    }));
+
+    const optimisticLog = {
+      _id: 'temp-' + Date.now(),
+      itemId: wastageForm.itemId,
+      itemName: wastageForm.itemName,
+      type: 'Adjustment',
+      quantityChanged: -qty,
+      oldQuantity: oldQty,
+      remainingQuantity: newQty,
+      cost: 0,
+      reason: wastageForm.reason || 'Manual stock correction',
+      performedBy: user?.name || user?.email || 'Owner',
+      userEmail: user?.email || 'owner@cafe.com',
+      createdAt: new Date().toISOString()
+    };
+    setInventoryLogs((prev) => [optimisticLog, ...prev]);
+
     try {
       const response = await recordWastage({
         itemId: wastageForm.itemId,
         quantityWasted: qty,
-        type: wastageForm.type,
+        type: wastageForm.type || 'Adjustment',
         reason: wastageForm.reason
       });
-      if (response.success) {
-        alert('Wastage recorded successfully.');
-        setShowWastageModal(false);
-        fetchInventoryList(); // reload all stats & logs
+      if (response && response.success) {
+        // Silently sync from backend in background
+        fetchInventoryList(true);
       }
     } catch (error) {
-      console.error('Error recording wastage:', error);
-      alert(error.response?.data?.message || 'Error recording wastage');
+      console.error('Error recording stock reduction:', error);
+      alert(error.response?.data?.message || 'Error reducing stock. Reverting changes.');
+      fetchInventoryList(true);
     }
   };
 
@@ -5333,12 +5473,76 @@ const exportStaffToCSV = () => {
 </button>
 </div>
 
- {/* Sub-tab bar */}
+  {/* Sub-tab bar */}
 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px', overflowX: 'auto' }} className="custom-scrollbar">
-<button onClick={() =>setInventorySubTab('levels')} style={{ background: inventorySubTab === 'levels' ? '#6F4E37' : 'transparent', color: 'var(--color-text-primary)', border: inventorySubTab === 'levels' ? 'none' : '1px solid #432E22', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Stock Directory</button>
-<button onClick={() =>setInventorySubTab('movements')} style={{ background: inventorySubTab === 'movements' ? '#6F4E37' : 'transparent', color: 'var(--color-text-primary)', border: inventorySubTab === 'movements' ? 'none' : '1px solid #432E22', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Movement Ledger</button>
-<button onClick={() =>setInventorySubTab('wastage')} style={{ background: inventorySubTab === 'wastage' ? '#6F4E37' : 'transparent', color: 'var(--color-text-primary)', border: inventorySubTab === 'wastage' ? 'none' : '1px solid #432E22', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Wastage Reports</button>
-<button onClick={() =>setInventorySubTab('suppliers')} style={{ background: inventorySubTab === 'suppliers' ? '#6F4E37' : 'transparent', color: 'var(--color-text-primary)', border: inventorySubTab === 'suppliers' ? 'none' : '1px solid #432E22', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>Supplier Registry</button>
+  <button 
+    onClick={() => setInventorySubTab('levels')} 
+    style={{ 
+      background: inventorySubTab === 'levels' ? '#6F4E37' : 'var(--bg-secondary)', 
+      color: inventorySubTab === 'levels' ? '#FFFFFF' : 'var(--color-text-primary)', 
+      border: inventorySubTab === 'levels' ? 'none' : '1px solid var(--color-border)', 
+      padding: '8px 18px', 
+      borderRadius: '8px', 
+      cursor: 'pointer', 
+      fontWeight: inventorySubTab === 'levels' ? 800 : 600, 
+      fontSize: '13px',
+      boxShadow: inventorySubTab === 'levels' ? '0 2px 8px rgba(111,78,55,0.35)' : 'none',
+      transition: 'all 0.2s ease'
+    }}
+  >
+    Stock Directory
+  </button>
+  <button 
+    onClick={() => setInventorySubTab('movements')} 
+    style={{ 
+      background: inventorySubTab === 'movements' ? '#6F4E37' : 'var(--bg-secondary)', 
+      color: inventorySubTab === 'movements' ? '#FFFFFF' : 'var(--color-text-primary)', 
+      border: inventorySubTab === 'movements' ? 'none' : '1px solid var(--color-border)', 
+      padding: '8px 18px', 
+      borderRadius: '8px', 
+      cursor: 'pointer', 
+      fontWeight: inventorySubTab === 'movements' ? 800 : 600, 
+      fontSize: '13px',
+      boxShadow: inventorySubTab === 'movements' ? '0 2px 8px rgba(111,78,55,0.35)' : 'none',
+      transition: 'all 0.2s ease'
+    }}
+  >
+    Movement Ledger
+  </button>
+  <button 
+    onClick={() => setInventorySubTab('wastage')} 
+    style={{ 
+      background: inventorySubTab === 'wastage' ? '#6F4E37' : 'var(--bg-secondary)', 
+      color: inventorySubTab === 'wastage' ? '#FFFFFF' : 'var(--color-text-primary)', 
+      border: inventorySubTab === 'wastage' ? 'none' : '1px solid var(--color-border)', 
+      padding: '8px 18px', 
+      borderRadius: '8px', 
+      cursor: 'pointer', 
+      fontWeight: inventorySubTab === 'wastage' ? 800 : 600, 
+      fontSize: '13px',
+      boxShadow: inventorySubTab === 'wastage' ? '0 2px 8px rgba(111,78,55,0.35)' : 'none',
+      transition: 'all 0.2s ease'
+    }}
+  >
+    Wastage Reports
+  </button>
+  <button 
+    onClick={() => setInventorySubTab('suppliers')} 
+    style={{ 
+      background: inventorySubTab === 'suppliers' ? '#6F4E37' : 'var(--bg-secondary)', 
+      color: inventorySubTab === 'suppliers' ? '#FFFFFF' : 'var(--color-text-primary)', 
+      border: inventorySubTab === 'suppliers' ? 'none' : '1px solid var(--color-border)', 
+      padding: '8px 18px', 
+      borderRadius: '8px', 
+      cursor: 'pointer', 
+      fontWeight: inventorySubTab === 'suppliers' ? 800 : 600, 
+      fontSize: '13px',
+      boxShadow: inventorySubTab === 'suppliers' ? '0 2px 8px rgba(111,78,55,0.35)' : 'none',
+      transition: 'all 0.2s ease'
+    }}
+  >
+    Supplier Registry
+  </button>
 </div>
 
  {inventoryError &&
@@ -5425,57 +5629,158 @@ const exportStaffToCSV = () => {
 </div>
  }
 
- {/* SUBTAB 2: Movement Logs */}
+ {/* SUBTAB 2: Movement Logs Overhaul (7-Day Filter & Search) */}
  {inventorySubTab === 'movements' &&
-<div style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }} className="custom-scrollbar">
-<table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', whiteSpace: 'nowrap' }}>
-<th style={{ padding: '8px' }}>Timestamp</th>
-<th style={{ padding: '8px' }}>Ingredient</th>
-<th style={{ padding: '8px', textAlign: 'center' }}>Type</th>
-<th style={{ padding: '8px', textAlign: 'center' }}>Stock Adjustment</th>
-<th style={{ padding: '8px', textAlign: 'right' }}>Calculated Cost</th>
-<th style={{ padding: '8px' }}>Reason / Context</th>
-<th style={{ padding: '8px' }}>Operator</th>
-</tr>
-</thead>
-<tbody>
- {inventoryLogs.map((log) =>{
- const isPositive = log.quantityChanged >0;
- const typeColor = log.type === 'Purchase' || log.type === 'Initial' ? '#2ECC71' : log.type === 'Wastage' || log.type === 'Damaged' ? '#E74C3C' : '#F39C12';
- return (
-<tr key={log._id} style={{ borderBottom: '1px solid #432E22' }}>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>
- {new Date(log.createdAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-</td>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{log.itemName}</td>
-<td style={{ padding: '10px 8px', textAlign: 'center' }}>
-<span style={{
- backgroundColor: `${typeColor}1A`,
- border: `1px solid ${typeColor}`,
- color: typeColor,
- padding: '2px 6px',
- borderRadius: '4px',
- fontSize: '10px',
- fontWeight: 'bold'
- }}>
- {log.type}
-</span>
-</td>
-<td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: isPositive ? '#2ECC71' : '#E74C3C' }}>
- {isPositive ? `+${log.quantityChanged}` : log.quantityChanged}
-</td>
-<td style={{ padding: '10px 8px', textAlign: 'right', color: 'var(--color-text-primary)' }}>
- ₹{(log.cost || 0).toFixed(2)}
-</td>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{log.reason}</td>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{log.userEmail || 'system'}</td>
-</tr>);
+<div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+  {/* 7-Day Day Selector Bar */}
+  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '14px 16px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+      <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        📅 Select Day (Past 7 Days):
+      </div>
+      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+        Showing <strong>{filteredMovementLogs.length}</strong> movements
+      </div>
+    </div>
+    
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+      {past7Days.map((day) => {
+        const isSelected = movementDayFilter === day.key;
+        return (
+          <button
+            key={day.key}
+            type="button"
+            onClick={() => setMovementDayFilter(day.key)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+              background: isSelected ? 'var(--color-primary)' : 'var(--bg-card)',
+              color: isSelected ? '#FFFFFF' : 'var(--color-text-primary)',
+              fontSize: '12.5px',
+              fontWeight: isSelected ? 800 : 500,
+              cursor: 'pointer',
+              boxShadow: isSelected ? '0 2px 6px rgba(0,0,0,0.15)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            {day.label}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => setMovementDayFilter('all')}
+        style={{
+          padding: '6px 14px',
+          borderRadius: '20px',
+          border: movementDayFilter === 'all' ? '1px solid #6F4E37' : '1px solid var(--color-border)',
+          background: movementDayFilter === 'all' ? '#6F4E37' : 'var(--bg-card)',
+          color: movementDayFilter === 'all' ? '#FFFFFF' : 'var(--color-text-primary)',
+          fontSize: '12.5px',
+          fontWeight: movementDayFilter === 'all' ? 800 : 500,
+          cursor: 'pointer',
+          boxShadow: movementDayFilter === 'all' ? '0 2px 6px rgba(0,0,0,0.15)' : 'none',
+          transition: 'all 0.15s ease'
+        }}
+      >
+        All 7 Days
+      </button>
+    </div>
+  </div>
 
- })}
-</tbody>
-</table>
+  {/* Search Bar for Movement Ledger */}
+  <div>
+    <input
+      type="text"
+      placeholder="🔍 Search movement records by item name, type (+ / -), or reason..."
+      value={movementSearch}
+      onChange={(e) => setMovementSearch(e.target.value)}
+      style={{
+        width: '100%', padding: '10px 14px',
+        borderRadius: '10px', border: '1px solid var(--color-border)',
+        background: 'var(--bg-secondary)', color: 'var(--color-text-primary)',
+        fontSize: '14px', outline: 'none', fontFamily: 'inherit',
+        boxSizing: 'border-box'
+      }}
+    />
+  </div>
+
+  {/* Movement Ledger Table */}
+  <div style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', WebkitOverflowScrolling: 'touch', borderRadius: '8px', border: '1px solid var(--color-border)' }} className="custom-scrollbar">
+    <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+      <thead>
+        <tr style={{ background: 'var(--bg-secondary)', borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', whiteSpace: 'nowrap' }}>
+          <th style={{ padding: '10px 12px' }}>Date & Time</th>
+          <th style={{ padding: '10px 12px' }}>Ingredient</th>
+          <th style={{ padding: '10px 12px', textAlign: 'center' }}>Action / Type</th>
+          <th style={{ padding: '10px 12px', textAlign: 'center' }}>Stock Change</th>
+          <th style={{ padding: '10px 12px', textAlign: 'center' }}>Resulting Stock</th>
+          <th style={{ padding: '10px 12px', textAlign: 'right' }}>Cost / Value</th>
+          <th style={{ padding: '10px 12px' }}>Reason / Context</th>
+          <th style={{ padding: '10px 12px' }}>Operator</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filteredMovementLogs.map((log) => {
+          const qtyChangedNum = Number(log.quantityChanged) || 0;
+          const isPositive = log.type === 'Purchase' || log.type === 'Initial' || qtyChangedNum > 0;
+          const typeLabel = isPositive ? '+ Add Stock' : '- Reduce Stock';
+          const typeBg = isPositive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)';
+          const typeColor = isPositive ? '#2ECC71' : '#E74C3C';
+
+          const costNum = Math.abs(Number(log.cost) || 0);
+          const displayCost = (costNum > 0 && isPositive) ? `₹${costNum.toFixed(2)}` : '—';
+
+          return (
+            <tr key={log._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+              <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>
+                {new Date(log.createdAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </td>
+              <td style={{ padding: '10px 12px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>
+                {log.itemName}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                <span style={{
+                  backgroundColor: typeBg,
+                  border: `1px solid ${typeColor}`,
+                  color: typeColor,
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 'bold'
+                }}>
+                  {typeLabel}
+                </span>
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 'bold', color: isPositive ? '#2ECC71' : '#E74C3C', fontSize: '13px' }}>
+                {isPositive ? `+${Math.abs(qtyChangedNum)}` : `-${Math.abs(qtyChangedNum)}`}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                {log.remainingQuantity !== undefined && log.remainingQuantity !== null ? log.remainingQuantity : '—'}
+              </td>
+              <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--color-text-primary)' }}>
+                {displayCost}
+              </td>
+              <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {log.reason || '—'}
+              </td>
+              <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>
+                {log.performedBy || log.userEmail || 'system'}
+              </td>
+            </tr>
+          );
+        })}
+        {filteredMovementLogs.length === 0 && (
+          <tr>
+            <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-secondary)' }}>
+              No stock movements found for the selected day/filter.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
 </div>
  }
 
@@ -7044,219 +7349,267 @@ const exportStaffToCSV = () => {
 </div>
  }
 
- {/* MODAL: RECORD PURCHASE */}
- {showPurchaseModal &&
-<div className="modal-overlay">
-<div className="modal-container">
-<div className="modal-header">
-<h3 className="modal-title">Record Purchase Entry</h3>
-<button onClick={() =>setShowPurchaseModal(false)} className="modal-close">&times;</button>
+  {/* MODAL: + ADD INCOMING STOCK */}
+  {showPurchaseModal &&
+<div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+<div className="modal-container" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', maxWidth: '520px', width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+<div className="modal-header" style={{ padding: '18px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+  <div>
+    <h3 className="modal-title" style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>+ Add Incoming Stock</h3>
+    <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Record incoming stock purchase & update live inventory</p>
+  </div>
+  <button onClick={() => setShowPurchaseModal(false)} className="modal-close" style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
 </div>
 <form onSubmit={handleRecordPurchase}>
-<div className="modal-body">
-<div className="form-group">
-<label className="form-label">Ingredient: <strong>{purchaseForm.itemName}</strong> {purchaseForm.unit ? `(${purchaseForm.unit})` : ''}</label>
-</div>
-<div className="form-row">
-<div className="form-group">
-<label className="form-label">Quantity Purchased {purchaseForm.unit ? `(${purchaseForm.unit})` : ''} *</label>
-<input 
-  type="number" 
-  step="any"
-  required 
-  min="0.001" 
-  placeholder="e.g. 10"
-  value={purchaseForm.quantityAdded} 
-  onChange={(e) => {
-    const val = e.target.value;
-    const qty = parseFloat(val);
-    const unitCost = parseFloat(purchaseForm.costPrice);
-    let newTotal = purchaseForm.totalCost;
-    if (!isNaN(qty) && qty > 0 && !isNaN(unitCost) && unitCost >= 0) {
-      newTotal = Number((qty * unitCost).toFixed(2));
-    } else if (val === '') {
-      newTotal = '';
-    }
-    setPurchaseForm(prev => ({ 
-      ...prev, 
-      quantityAdded: val,
-      totalCost: newTotal 
-    }));
-  }} 
-  className="form-input" 
-/>
-</div>
-<div className="form-group">
-<label className="form-label">Total Bill Amount (₹) <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(Optional)</span></label>
-<input 
-  type="number" 
-  step="any" 
-  min="0" 
-  placeholder="e.g. 150" 
-  value={purchaseForm.totalCost} 
-  onChange={(e) => {
-    const val = e.target.value;
-    const total = parseFloat(val);
-    const qty = parseFloat(purchaseForm.quantityAdded);
-    let newUnitCost = purchaseForm.costPrice;
-    if (!isNaN(total) && !isNaN(qty) && qty > 0) {
-      newUnitCost = Number((total / qty).toFixed(4));
-    }
-    setPurchaseForm(prev => ({ 
-      ...prev, 
-      totalCost: val,
-      costPrice: newUnitCost 
-    }));
-  }} 
-  className="form-input" 
-/>
-</div>
-</div>
-<div className="form-group">
-<label className="form-label">
-  Cost Price per {purchaseForm.unit || 'Unit'} (₹) * 
-  <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', fontWeight: 'normal', marginLeft: '6px' }}>
-    (Auto-calculated from ingredient / total bill)
-  </span>
-</label>
-<input 
-  type="number" 
-  step="any" 
-  required 
-  min="0" 
-  placeholder="e.g. 1.50" 
-  value={purchaseForm.costPrice} 
-  onChange={(e) => {
-    const val = e.target.value;
-    const unitCost = parseFloat(val);
-    const qty = parseFloat(purchaseForm.quantityAdded);
-    let newTotal = purchaseForm.totalCost;
-    if (!isNaN(unitCost) && !isNaN(qty) && qty > 0) {
-      newTotal = Number((qty * unitCost).toFixed(2));
-    }
-    setPurchaseForm(prev => ({ 
-      ...prev, 
-      costPrice: val,
-      totalCost: newTotal 
-    }));
-  }} 
-  className="form-input" 
-/>
-</div>
-
-{/* Auto Calculation Preview Banner */}
-{Number(purchaseForm.quantityAdded) > 0 && Number(purchaseForm.costPrice) >= 0 && (
-  <div style={{ 
-    background: 'rgba(46, 204, 113, 0.12)', 
-    border: '1px solid rgba(46, 204, 113, 0.3)', 
-    borderRadius: '8px', 
-    padding: '10px 14px', 
-    marginBottom: '14px', 
-    fontSize: '13px', 
-    color: '#27ae60', 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '6px'
-  }}>
-    <span>✓ <strong>Total Bill:</strong> ₹{(Number(purchaseForm.quantityAdded) * Number(purchaseForm.costPrice)).toFixed(2)}</span>
-    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-      ₹{Number(purchaseForm.costPrice).toFixed(2)} per {purchaseForm.unit || 'unit'}
-    </span>
+<div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+  
+  {/* Item Info Header */}
+  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+    <div>
+      <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ingredient</span>
+      <div style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>
+        {purchaseForm.itemName} {purchaseForm.unit ? `(${purchaseForm.unit})` : ''}
+      </div>
+    </div>
+    <div style={{ textAlign: 'right' }}>
+      <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Stock</span>
+      <div style={{ color: 'var(--color-primary)', fontWeight: 800, fontSize: '15px' }}>
+        {purchaseForm.currentStock ?? 0} {purchaseForm.unit || 'units'}
+      </div>
+    </div>
   </div>
-)}
 
-<div className="form-group">
-<label className="form-label">Supplier</label>
-<input type="text" value={purchaseForm.supplier} onChange={(e) =>setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
+  <div className="form-row">
+    <div className="form-group" style={{ flex: 1 }}>
+      <label className="form-label" style={{ fontWeight: 700 }}>
+        Quantity to Add (+) {purchaseForm.unit ? `(${purchaseForm.unit})` : ''} *
+      </label>
+      <input 
+        type="number" 
+        step="any"
+        required 
+        min="0.001" 
+        placeholder="e.g. 5"
+        value={purchaseForm.quantityAdded} 
+        onChange={(e) => {
+          const val = e.target.value;
+          const qty = parseFloat(val);
+          const unitCost = parseFloat(purchaseForm.costPrice);
+          let newTotal = purchaseForm.totalCost;
+          if (!isNaN(qty) && qty > 0 && !isNaN(unitCost) && unitCost >= 0) {
+            newTotal = Number((qty * unitCost).toFixed(2));
+          } else if (val === '') {
+            newTotal = '';
+          }
+          setPurchaseForm(prev => ({ 
+            ...prev, 
+            quantityAdded: val,
+            totalCost: newTotal 
+          }));
+        }} 
+        className="form-input" 
+      />
+    </div>
+    <div className="form-group" style={{ flex: 1 }}>
+      <label className="form-label" style={{ fontWeight: 700 }}>
+        Total Bill Paid (₹) <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>(Optional)</span>
+      </label>
+      <input 
+        type="number" 
+        step="any" 
+        min="0" 
+        placeholder="e.g. 200" 
+        value={purchaseForm.totalCost} 
+        onChange={(e) => {
+          const val = e.target.value;
+          const total = parseFloat(val);
+          const qty = parseFloat(purchaseForm.quantityAdded);
+          let newUnitCost = purchaseForm.costPrice;
+          if (!isNaN(total) && !isNaN(qty) && qty > 0) {
+            newUnitCost = Number((total / qty).toFixed(4));
+          }
+          setPurchaseForm(prev => ({ 
+            ...prev, 
+            totalCost: val,
+            costPrice: newUnitCost 
+          }));
+        }} 
+        className="form-input" 
+      />
+    </div>
+  </div>
+
+  <div className="form-group">
+    <label className="form-label" style={{ fontWeight: 700 }}>
+      Cost Price per {purchaseForm.unit || 'Unit'} (₹) * 
+      <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', fontWeight: 'normal', marginLeft: '6px' }}>
+        (Auto-calculated from total bill / quantity)
+      </span>
+    </label>
+    <input 
+      type="number" 
+      step="any" 
+      required 
+      min="0" 
+      placeholder="e.g. 40.00" 
+      value={purchaseForm.costPrice} 
+      onChange={(e) => {
+        const val = e.target.value;
+        const unitCost = parseFloat(val);
+        const qty = parseFloat(purchaseForm.quantityAdded);
+        let newTotal = purchaseForm.totalCost;
+        if (!isNaN(unitCost) && !isNaN(qty) && qty > 0) {
+          newTotal = Number((qty * unitCost).toFixed(2));
+        }
+        setPurchaseForm(prev => ({ 
+          ...prev, 
+          costPrice: val,
+          totalCost: newTotal 
+        }));
+      }} 
+      className="form-input" 
+    />
+  </div>
+
+  {/* Live Calculation Preview Banner */}
+  {Number(purchaseForm.quantityAdded) > 0 && (
+    <div style={{ 
+      background: 'rgba(46, 204, 113, 0.12)', 
+      border: '1px solid rgba(46, 204, 113, 0.35)', 
+      borderRadius: '10px', 
+      padding: '12px 16px', 
+      display: 'flex', 
+      flexDirection: 'column',
+      gap: '4px'
+    }}>
+      <div style={{ color: '#27ae60', fontWeight: 800, fontSize: '13.5px' }}>
+        🟢 New Total Stock will be: {Number(purchaseForm.currentStock || 0)} + {Number(purchaseForm.quantityAdded || 0)} = <strong>{(Number(purchaseForm.currentStock || 0) + Number(purchaseForm.quantityAdded || 0)).toFixed(2)} {purchaseForm.unit || 'units'}</strong>
+      </div>
+      {Number(purchaseForm.costPrice) >= 0 && (
+        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+          Total bill: ₹{(Number(purchaseForm.quantityAdded) * Number(purchaseForm.costPrice || 0)).toFixed(2)} (₹{Number(purchaseForm.costPrice || 0).toFixed(2)} / {purchaseForm.unit || 'unit'})
+        </div>
+      )}
+    </div>
+  )}
+
+  <div className="form-group">
+    <label className="form-label">Supplier Name</label>
+    <input type="text" value={purchaseForm.supplier} onChange={(e) => setPurchaseForm({ ...purchaseForm, supplier: e.target.value })} className="form-input" placeholder="e.g. Metro Cash & Carry (Optional)" />
+  </div>
+  <div className="form-group">
+    <label className="form-label">Notes</label>
+    <textarea value={purchaseForm.notes} onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })} className="form-input" rows="2" placeholder="e.g. Weekly restocking, invoice #412"></textarea>
+  </div>
 </div>
-<div className="form-group">
-<label className="form-label">Notes</label>
-<textarea value={purchaseForm.notes} onChange={(e) =>setPurchaseForm({ ...purchaseForm, notes: e.target.value })} className="form-input" rows="2" placeholder="e.g. Weekly restocking"></textarea>
-</div>
-</div>
-<div className="modal-footer">
-<button type="button" onClick={() =>setShowPurchaseModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Entry</button>
+<div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+  <button type="button" onClick={() => setShowPurchaseModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
+  <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px', background: '#27AE60', borderColor: '#27AE60', color: '#FFFFFF', fontWeight: 800 }}>+ Add Stock</button>
 </div>
 </form>
 </div>
 </div>
- }
+  }
 
- {/* MODAL: RECORD WASTAGE */}
- {showWastageModal &&
-<div className="modal-overlay">
-<div className="modal-container">
-<div className="modal-header">
-<h3 className="modal-title">Record Wastage / Spoilage</h3>
-<button onClick={() =>setShowWastageModal(false)} className="modal-close">&times;</button>
+  {/* MODAL: - REDUCE / ADJUST STOCK */}
+  {showWastageModal &&
+<div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+<div className="modal-container" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '16px', maxWidth: '520px', width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+<div className="modal-header" style={{ padding: '18px 24px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+  <div>
+    <h3 className="modal-title" style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>- Reduce Stock</h3>
+    <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Manually adjust or correct stock count (Does NOT cut from sales profit)</p>
+  </div>
+  <button onClick={() => setShowWastageModal(false)} className="modal-close" style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
 </div>
 <form onSubmit={handleRecordWastage}>
-<div className="modal-body">
-<div className="form-group">
-<label className="form-label">Ingredient: <strong>{wastageForm.itemName}</strong> {wastageForm.unit ? `(${wastageForm.unit})` : ''}</label>
-</div>
-<div className="form-row">
-<div className="form-group">
-<label className="form-label">Quantity Wasted {wastageForm.unit ? `(${wastageForm.unit})` : ''} *</label>
-<input 
-  type="number" 
-  step="any"
-  required 
-  min="0.001" 
-  placeholder="e.g. 5"
-  value={wastageForm.quantityWasted} 
-  onChange={(e) =>setWastageForm({ ...wastageForm, quantityWasted: e.target.value })} 
-  className="form-input" 
-/>
-</div>
-<div className="form-group">
-<label className="form-label">Wastage Type *</label>
-<select value={wastageForm.type} onChange={(e) =>setWastageForm({ ...wastageForm, type: e.target.value })} className="form-input">
-<option value="Wastage">Spoiled / Expired (Wastage)</option>
-<option value="Damaged">Damaged / Dropped (Damaged)</option>
-</select>
-</div>
-</div>
-
-{/* Live Estimated Financial Loss Preview */}
-{Number(wastageForm.quantityWasted) > 0 && Number(wastageForm.costPrice || 0) > 0 && (
-  <div style={{ 
-    background: 'rgba(231, 76, 60, 0.12)', 
-    border: '1px solid rgba(231, 76, 60, 0.3)', 
-    borderRadius: '8px', 
-    padding: '10px 14px', 
-    marginBottom: '14px', 
-    fontSize: '13px', 
-    color: '#e74c3c', 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '6px'
-  }}>
-    <span>⚠ <strong>Estimated Loss:</strong> ₹{(Number(wastageForm.quantityWasted) * Number(wastageForm.costPrice)).toFixed(2)}</span>
-    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-      (₹{Number(wastageForm.costPrice).toFixed(2)} per {wastageForm.unit || 'unit'})
-    </span>
+<div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+  
+  {/* Item Info Header */}
+  <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+    <div>
+      <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ingredient</span>
+      <div style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>
+        {wastageForm.itemName} {wastageForm.unit ? `(${wastageForm.unit})` : ''}
+      </div>
+    </div>
+    <div style={{ textAlign: 'right' }}>
+      <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Current Stock</span>
+      <div style={{ color: '#E74C3C', fontWeight: 800, fontSize: '15px' }}>
+        {wastageForm.currentStock ?? 0} {wastageForm.unit || 'units'}
+      </div>
+    </div>
   </div>
-)}
 
-<div className="form-group">
-<label className="form-label">Reason / Notes *</label>
-<input type="text" required value={wastageForm.reason} onChange={(e) =>setWastageForm({ ...wastageForm, reason: e.target.value })} className="form-input" placeholder="e.g. Power outage defrosted, dropped tray" />
+  <div className="form-row">
+    <div className="form-group" style={{ flex: 1 }}>
+      <label className="form-label" style={{ fontWeight: 700 }}>
+        Quantity to Reduce (-) {wastageForm.unit ? `(${wastageForm.unit})` : ''} *
+      </label>
+      <input 
+        type="number" 
+        step="any"
+        required 
+        min="0.001" 
+        placeholder="e.g. 0.5"
+        value={wastageForm.quantityWasted} 
+        onChange={(e) => setWastageForm({ ...wastageForm, quantityWasted: e.target.value })} 
+        className="form-input" 
+      />
+    </div>
+    <div className="form-group" style={{ flex: 1 }}>
+      <label className="form-label" style={{ fontWeight: 700 }}>Reason Category *</label>
+      <select 
+        value={wastageForm.type} 
+        onChange={(e) => setWastageForm({ ...wastageForm, type: e.target.value })} 
+        className="form-input"
+      >
+        <option value="Adjustment">Manual Stock Correction (Count check)</option>
+        <option value="Damaged">Damaged / Dropped / Spill</option>
+        <option value="Wastage">Expired / Spoiled</option>
+      </select>
+    </div>
+  </div>
+
+  {/* Live Calculation Preview Banner */}
+  {Number(wastageForm.quantityWasted) > 0 && (
+    <div style={{ 
+      background: 'rgba(231, 76, 60, 0.12)', 
+      border: '1px solid rgba(231, 76, 60, 0.35)', 
+      borderRadius: '10px', 
+      padding: '12px 16px', 
+      display: 'flex', 
+      flexDirection: 'column',
+      gap: '4px'
+    }}>
+      <div style={{ color: '#e74c3c', fontWeight: 800, fontSize: '13.5px' }}>
+        🔴 New Total Stock will be: {Number(wastageForm.currentStock || 0)} - {Number(wastageForm.quantityWasted || 0)} = <strong>{Math.max(0, Number(wastageForm.currentStock || 0) - Number(wastageForm.quantityWasted || 0)).toFixed(2)} {wastageForm.unit || 'units'}</strong>
+      </div>
+      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+        ℹ️ Manual reductions correct inventory balance and do NOT deduct from your cafe sales profit.
+      </div>
+    </div>
+  )}
+
+  <div className="form-group">
+    <label className="form-label">Adjustment Reason / Notes</label>
+    <input 
+      type="text" 
+      value={wastageForm.reason} 
+      onChange={(e) => setWastageForm({ ...wastageForm, reason: e.target.value })} 
+      className="form-input" 
+      placeholder="e.g. Corrected 1kg sugar to 500g after kitchen count" 
+    />
+  </div>
 </div>
-</div>
-<div className="modal-footer">
-<button type="button" onClick={() =>setShowWastageModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
-<button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px' }}>Save Entry</button>
+<div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+  <button type="button" onClick={() => setShowWastageModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
+  <button type="submit" className="btn btn-primary" style={{ width: 'auto', padding: '10px 24px', background: '#E74C3C', borderColor: '#E74C3C', color: '#FFFFFF', fontWeight: 800 }}>- Reduce Stock</button>
 </div>
 </form>
 </div>
 </div>
- }
+  }
 
  {/* MODAL 3: EDIT STAFF MEMBER */}
  {showEditStaffModal && editingStaff &&

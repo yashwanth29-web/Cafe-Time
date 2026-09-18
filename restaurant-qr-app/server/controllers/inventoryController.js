@@ -296,8 +296,11 @@ const updateInventoryItem = async (req, res, next) => {
         itemName: savedItem.name,
         type: 'Adjustment',
         quantityChanged: difference,
-        cost: savedItem.costPrice * difference,
-        reason: 'Manual quantity adjustment',
+        oldQuantity: oldQuantity,
+        remainingQuantity: savedItem.quantity,
+        cost: difference > 0 ? Number(((savedItem.costPrice || 0) * difference).toFixed(2)) : 0,
+        reason: difference > 0 ? 'Manual quantity added' : 'Manual quantity reduced',
+        performedBy: req.user?.name || req.user?.email || 'Owner/Manager',
         userEmail: req.user?.email || 'admin@cafe.com'
       });
     }
@@ -375,11 +378,18 @@ const getInventoryLogs = async (req, res, next) => {
     const query = { cafeId };
     if (isStaff && req.user?.assignedBranch) {
       query.branchId = req.user.assignedBranch;
-    } else if (queryBranch) {
+    } else if (queryBranch && queryBranch !== 'all') {
       query.branchId = queryBranch;
     }
 
-    const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).limit(200).lean();
+    if (req.query.date) {
+      const targetDate = new Date(req.query.date);
+      const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+      query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+    }
+
+    const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).limit(1000).lean();
     return res.status(200).json({ success: true, count: logs.length, data: logs });
   } catch (error) {
     error.controllerName = 'inventoryController';
@@ -406,8 +416,9 @@ const recordPurchase = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
 
-    item.quantity += Number(quantityAdded);
-    if (costPrice !== undefined) {
+    const oldQty = Number(item.quantity || 0);
+    item.quantity = Number((oldQty + Number(quantityAdded)).toFixed(3));
+    if (costPrice !== undefined && costPrice !== '') {
       item.costPrice = Number(costPrice);
     }
     if (supplier) {
@@ -423,8 +434,11 @@ const recordPurchase = async (req, res, next) => {
       itemName: item.name,
       type: 'Purchase',
       quantityChanged: Number(quantityAdded),
-      cost: Number(costPrice || item.costPrice) * Number(quantityAdded),
-      reason: notes || 'Purchase entry added by manager',
+      oldQuantity: oldQty,
+      remainingQuantity: item.quantity,
+      cost: Number(costPrice || item.costPrice || 0) * Number(quantityAdded),
+      reason: notes || 'Incoming stock added',
+      performedBy: req.user.name || req.user.email || 'Owner/Manager',
       userEmail: req.user.email || 'manager@cafe.com'
     });
 
@@ -439,7 +453,7 @@ const recordPurchase = async (req, res, next) => {
   }
 };
 
-// @desc    Record Wastage / Damaged items (Decrements stock & records log)
+// @desc    Record Stock Reduction / Wastage / Adjustment (Decrements stock & records log)
 // @route   POST /api/inventory/wastage
 // @access  Protected (Owner, Manager)
 const recordWastage = async (req, res, next) => {
@@ -448,8 +462,8 @@ const recordWastage = async (req, res, next) => {
     const branchId = req.branchId || 'default';
     const { itemId, quantityWasted, type, reason } = req.body;
 
-    if (!itemId || !quantityWasted || quantityWasted <= 0 || !type) {
-      return res.status(400).json({ success: false, message: 'Item ID, valid Quantity Wasted, and Type (Wastage/Damaged) are required' });
+    if (!itemId || !quantityWasted || Number(quantityWasted) <= 0) {
+      return res.status(400).json({ success: false, message: 'Item ID and valid Quantity to reduce are required' });
     }
 
     const item = await Inventory.findOne({ _id: itemId, cafeId }, null, { bypassBranchFilter: true });
@@ -457,30 +471,39 @@ const recordWastage = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
 
-    if (item.quantity < quantityWasted) {
-      return res.status(400).json({ success: false, message: `Insufficient stock. Current stock is ${item.quantity}` });
+    const oldQty = Number(item.quantity || 0);
+    const reduceQty = Number(quantityWasted);
+    if (oldQty < reduceQty) {
+      return res.status(400).json({ success: false, message: `Insufficient stock. Current stock is ${oldQty} ${item.unit || 'units'}` });
     }
 
-    item.quantity -= Number(quantityWasted);
+    item.quantity = Number(Math.max(0, oldQty - reduceQty).toFixed(3));
     await item.save();
     emitInventoryUpdated(cafeId, item.branch || 'Main', item);
+
+    const logType = (type === 'Damaged' || type === 'Wastage') ? type : 'Adjustment';
+    // Manual adjustments carry 0 loss cost to guarantee zero impact on sales profit
+    const logCost = logType === 'Adjustment' ? 0 : Number((Number(item.costPrice || 0) * reduceQty).toFixed(2));
 
     const newLog = await InventoryLog.create({
       cafeId,
       branchId,
       itemId: item._id,
       itemName: item.name,
-      type: type === 'Damaged' ? 'Damaged' : 'Wastage',
-      quantityChanged: -Number(quantityWasted),
-      cost: item.costPrice * Number(quantityWasted),
-      reason: reason || `${type} recorded by manager`,
+      type: logType,
+      quantityChanged: -reduceQty,
+      oldQuantity: oldQty,
+      remainingQuantity: item.quantity,
+      cost: logCost,
+      reason: reason || (logType === 'Adjustment' ? 'Manual stock correction' : `${logType} recorded`),
+      performedBy: req.user.name || req.user.email || 'Owner/Manager',
       userEmail: req.user.email || 'manager@cafe.com'
     });
 
     // Auto-update menu availability
     await updateMenuItemAvailabilityFromInventory(cafeId, null, branchId);
 
-    return res.status(200).json({ success: true, message: 'Wastage recorded successfully', data: item, log: newLog });
+    return res.status(200).json({ success: true, message: 'Stock reduction recorded successfully', data: item, log: newLog });
   } catch (error) {
     error.controllerName = 'inventoryController';
     error.serviceName = 'recordWastage';
@@ -619,50 +642,79 @@ const RECIPES = {
   ]
 };
 
+const convertUnitsHelper = (quantity, fromUnit, toUnit) => {
+  if (!fromUnit || !toUnit) return quantity;
+  const f = fromUnit.toLowerCase().trim();
+  const t = toUnit.toLowerCase().trim();
+  if (f === t) return quantity;
+
+  // Mass (kg <-> g)
+  if ((f === 'kg' || f === 'kilogram') && (t === 'g' || t === 'gram' || t === 'gm')) return quantity * 1000;
+  if ((f === 'g' || f === 'gram' || f === 'gm') && (t === 'kg' || t === 'kilogram')) return quantity / 1000;
+
+  // Volume (litre <-> ml)
+  if ((f === 'l' || f === 'litre' || f === 'liter') && (t === 'ml' || t === 'milliliter')) return quantity * 1000;
+  if ((f === 'ml' || f === 'milliliter') && (t === 'l' || t === 'litre' || t === 'liter')) return quantity / 1000;
+
+  return quantity;
+};
+
+const normalizeIngName = (str) => {
+  return String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+};
+
 const updateMenuItemAvailabilityFromInventory = async (cafeId, itemId = null, branchId = 'default') => {
   try {
     const MenuItem = require('../models/MenuItem');
-    const query = itemId ? { _id: itemId, cafeId } : { cafeId, branchId };
+    const query = { cafeId };
+    if (itemId) query._id = itemId;
+    else if (branchId && branchId !== 'all') query.branchId = branchId;
+
     const menuItems = await MenuItem.find(query);
     if (menuItems.length === 0) return;
 
-    const ingredientNamesSet = new Set();
-    for (const item of menuItems) {
-      if (item.recipe && item.recipe.length > 0) {
-        for (const ing of item.recipe) {
-          if (ing.name) {
-            ingredientNamesSet.add(ing.name);
-          }
-        }
-      }
-    }
-
-    if (ingredientNamesSet.size === 0) return;
-
-    const relevantInventory = await Inventory.find({
-      cafeId,
-      branchId,
-      name: { $in: Array.from(ingredientNamesSet) }
-    }).lean();
-
-    const invMap = {};
-    for (const inv of relevantInventory) {
-      const key = `${inv.branchId || inv.branch || 'default'}_${inv.name.toLowerCase()}`;
-      invMap[key] = inv.quantity !== undefined ? inv.quantity : inv.stock;
-    }
+    // Fetch ALL inventory for this cafe so branch, casing, and aliases match properly
+    const allInventory = await Inventory.find({ cafeId }).lean();
+    if (allInventory.length === 0) return;
 
     const updatePromises = [];
     for (const item of menuItems) {
-      const activeBId = item.branchId || branchId || 'default';
       if (item.recipe && item.recipe.length > 0) {
         let shouldBeAvailable = true;
+        const itemBranch = item.branchId || branchId || 'default';
+
         for (const ing of item.recipe) {
-          const key = `${activeBId}_${ing.name.toLowerCase()}`;
-          const currentQty = invMap[key] || 0;
-          if (currentQty < ing.quantity) {
-            shouldBeAvailable = false;
-            break;
+          if (!ing.name) continue;
+          const targetNorm = normalizeIngName(ing.name);
+          if (!targetNorm) continue;
+
+          // Find best matching inventory item:
+          // 1. Match by branch & normalized name
+          // 2. Fallback to any inventory item with matching normalized name in cafe
+          const branchMatches = allInventory.filter(inv => {
+            const invBranch = inv.branchId || inv.branch || 'default';
+            return (invBranch === itemBranch || invBranch === 'all' || itemBranch === 'all') &&
+                   normalizeIngName(inv.name) === targetNorm;
+          });
+
+          const invItem = branchMatches.length > 0 
+            ? branchMatches[0] 
+            : allInventory.find(inv => normalizeIngName(inv.name) === targetNorm);
+
+          // If ingredient is tracked in inventory, check if stock is depleted
+          if (invItem) {
+            const currentStock = Math.max(Number(invItem.quantity ?? 0), Number(invItem.stock ?? 0));
+            let requiredQty = Number(ing.quantity || 0);
+            if (ing.unit && invItem.unit) {
+              requiredQty = convertUnitsHelper(requiredQty, ing.unit, invItem.unit);
+            }
+
+            if (currentStock <= 0 || (requiredQty > 0 && currentStock < requiredQty)) {
+              shouldBeAvailable = false;
+              break;
+            }
           }
+          // Note: If an ingredient in a recipe is not in inventory, do NOT falsely mark dish out of stock
         }
         
         if (item.available !== shouldBeAvailable) {

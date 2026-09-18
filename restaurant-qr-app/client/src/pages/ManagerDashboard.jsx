@@ -96,15 +96,22 @@ const ManagerDashboard = () =>{
  };
 
  const handleToggleAvailability = async (item) =>{
- try {
- const response = await updateMenuItem(item.id, { available: !item.available });
- if (response.success) {
- setMenuItems((prev) =>prev.map((m) =>m.id === item.id ? response.data : m));
- }
- } catch (err) {
- console.error('Error toggling availability:', err);
- alert('Error updating availability.');
- }
+   const willBeAvailable = !item.available;
+   const confirmMessage = willBeAvailable
+     ? `Are you sure you want to mark "${item.name}" as IN STOCK?`
+     : `Are you sure you want to mark "${item.name}" as OUT OF STOCK?`;
+
+   if (!window.confirm(confirmMessage)) return;
+
+   try {
+   const response = await updateMenuItem(item.id, { available: willBeAvailable });
+   if (response.success) {
+   setMenuItems((prev) =>prev.map((m) =>m.id === item.id ? response.data : m));
+   }
+   } catch (err) {
+   console.error('Error toggling availability:', err);
+   alert('Error updating availability.');
+   }
  };
 
  const handleUpdatePrice = async (e) =>{
@@ -628,8 +635,7 @@ const ManagerDashboard = () =>{
  setStockForm({ quantity: qtyVal });
  setShowUpdateStockModal(true);
  }}
- style={{ background: '#6F4E37', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
- 
+ style={{ background: '#6F4E37', color: '#FFFFFF', border: 'none', padding: '5px 8px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
   Stock Qty
 </button>
 <button
@@ -645,21 +651,21 @@ const ManagerDashboard = () =>{
   });
   setShowPurchaseModal(true);
   }}
-  style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
-  Purchase
+  style={{ background: '#27AE60', color: '#FFFFFF', border: 'none', padding: '5px 8px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+  + Add Stock
 </button>
 <button
   onClick={() =>{
   setSelectedItem(item);
   setWastageForm({
   quantityWasted: '',
-  type: 'Wastage',
+  type: 'Adjustment',
   reason: ''
   });
   setShowWastageModal(true);
   }}
-  style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
-  Wastage
+  style={{ background: '#E74C3C', color: '#FFFFFF', border: 'none', padding: '5px 8px', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+  - Reduce Stock
 </button>
 </div>
 </td>
@@ -713,8 +719,7 @@ const ManagerDashboard = () =>{
  setStockForm({ quantity: qtyVal });
  setShowUpdateStockModal(true);
  }}
- style={{ background: '#6F4E37', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
- 
+ style={{ background: '#6F4E37', color: '#FFFFFF', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
   Stock
 </button>
 <button
@@ -730,21 +735,21 @@ const ManagerDashboard = () =>{
   });
   setShowPurchaseModal(true);
   }}
-  style={{ background: '#27AE60', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
-  Purchase
+  style={{ background: '#27AE60', color: '#FFFFFF', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
+  + Add Stock
 </button>
 <button
   onClick={() =>{
   setSelectedItem(item);
   setWastageForm({
   quantityWasted: '',
-  type: 'Wastage',
+  type: 'Adjustment',
   reason: ''
   });
   setShowWastageModal(true);
   }}
-  style={{ background: '#E74C3C', color: 'var(--color-text-primary)', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
-  Wastage
+  style={{ background: '#E74C3C', color: '#FFFFFF', border: 'none', padding: '8px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', minHeight: '44px' }}>
+  - Reduce Stock
 </button>
 </div>
 </div>);
@@ -874,7 +879,7 @@ const ManagerDashboard = () =>{
  setNewPrice(item.price);
  setShowPriceModal(true);
  }}
- style={{ background: '#6F4E37', color: 'var(--color-text-primary)', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+ style={{ background: '#6F4E37', color: '#FFFFFF', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
  
  ₹ Price
 </button>
