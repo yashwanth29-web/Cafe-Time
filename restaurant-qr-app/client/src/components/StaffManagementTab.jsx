@@ -11,7 +11,7 @@ const StaffManagementTab = () => {
   const [resetModalStaff, setResetModalStaff] = useState(null);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [form, setForm] = useState({ 
-    name: '', username: '', password: '', phone: '', email: '', staffRole: 'waiter', isActive: true,
+    name: '', username: '', password: '', phone: '', email: '', staffRole: 'staff', isActive: true,
     salaryType: 'DAILY', dailyRate: 0, hourlyRate: 0, weeklyRate: 0, monthlyRate: 0,
     weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE'
   });
@@ -43,7 +43,7 @@ const StaffManagementTab = () => {
 
   const handleOpenAdd = () => {
     setForm({ 
-      name: '', username: '', password: '', phone: '', email: '', staffRole: 'waiter', isActive: true,
+      name: '', username: '', password: '', phone: '', email: '', staffRole: 'staff', isActive: true,
       salaryType: 'DAILY', dailyRate: 0, hourlyRate: 0, weeklyRate: 0, monthlyRate: 0,
       weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE'
     });
@@ -297,13 +297,8 @@ const StaffManagementTab = () => {
 
               <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>Role *</label>
-                <select value={form.staffRole} onChange={fld('staffRole')} style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}>
-                  <option value="waiter">Waiter (Floor service)</option>
-                  <option value="chef">Chef / Kitchen</option>
-                  <option value="cashier">Cashier (Billing POS)</option>
-                  <option value="waiter_cashier">Waiter &amp; Cashier</option>
-                  <option value="manager">Manager</option>
-                  <option value="staff">General Staff</option>
+                <select value={form.staffRole || 'staff'} onChange={fld('staffRole')} style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}>
+                  <option value="staff">Staff</option>
                 </select>
               </div>
 

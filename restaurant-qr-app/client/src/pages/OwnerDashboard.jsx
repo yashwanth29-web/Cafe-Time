@@ -712,7 +712,7 @@ const OwnerDashboard = () =>{
     password: '',
     email: '',
     phone: '',
-    staffRole: 'waiter',
+    staffRole: 'staff',
     assignedBranch: '',
     dailyRate: 0
   });
@@ -1677,7 +1677,7 @@ const OwnerDashboard = () =>{
       });
       if (response.success) {
         alert(response.message || `Staff member "${newStaff.name}" registered successfully.`);
-        setNewStaff({ name: '', username: '', password: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });
+        setNewStaff({ name: '', username: '', password: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0 });
         setShowAddStaffModal(false);
         fetchStaffList();
       }
@@ -4175,7 +4175,7 @@ const exportStaffToCSV = () => {
  {/* ─── Add Staff Modal ─── */}
  {showAddStaffModal &&
 <div
- onClick={(e) =>{if (e.target === e.currentTarget) {setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });}}}
+ onClick={(e) =>{if (e.target === e.currentTarget) {setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0 });}}}
  style={{
  position: 'fixed', inset: 0, zIndex: 3000,
  background: 'rgba(0,0,0,0.75)',
@@ -4202,7 +4202,7 @@ const exportStaffToCSV = () => {
 <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Register a new team member to the roster</p>
 </div>
 <button
- onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });}}
+ onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0 });}}
  style={{
  background: 'rgba(0, 0, 0,0.06)', border: '1px solid rgba(0, 0, 0,0.08)',
  borderRadius: '50%', width: '36px', height: '36px',
@@ -4246,12 +4246,8 @@ const exportStaffToCSV = () => {
 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
 <label htmlFor="roster-staff-role" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Staff Role *</label>
-<select id="roster-staff-role" name="roster-staff-role" className="form-input" value={newStaff.staffRole ? newStaff.staffRole.toLowerCase() : 'waiter'} onChange={(e) =>setNewStaff({ ...newStaff, staffRole: e.target.value })} required>
-<option value="waiter">Waiter / Cashier (Floor &amp; Billing)</option>
-<option value="chef">Chef / Kitchen</option>
-<option value="barista">Barista</option>
-<option value="manager">Manager</option>
-<option value="staff">General Staff</option>
+<select id="roster-staff-role" name="roster-staff-role" className="form-input" value={newStaff.staffRole ? newStaff.staffRole.toLowerCase() : 'staff'} onChange={(e) =>setNewStaff({ ...newStaff, staffRole: e.target.value })} required>
+<option value="staff">Staff</option>
 </select>
 </div>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -4267,7 +4263,7 @@ const exportStaffToCSV = () => {
 <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
 <button
  type="button"
- onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'waiter', assignedBranch: '', dailyRate: 0 });}}
+ onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0 });}}
  style={{
  flex: 1, padding: '12px', borderRadius: '10px',
  border: '1px solid var(--color-border)', background: 'transparent',
@@ -7318,12 +7314,8 @@ const exportStaffToCSV = () => {
 <div className="form-row">
 <div className="form-group">
 <label className="form-label">Staff Role *</label>
-<select value={editingStaff.staffRole ? editingStaff.staffRole.toLowerCase() : ''} onChange={(e) =>setEditingStaff({ ...editingStaff, staffRole: e.target.value })} className="form-input">
-<option value="waiter">Waiter / Cashier (Floor &amp; Billing)</option>
-<option value="chef">Chef / Kitchen</option>
-<option value="barista">Barista</option>
-<option value="manager">Manager</option>
-<option value="staff">General Staff</option>
+<select value={editingStaff.staffRole ? editingStaff.staffRole.toLowerCase() : 'staff'} onChange={(e) =>setEditingStaff({ ...editingStaff, staffRole: e.target.value })} className="form-input">
+<option value="staff">Staff</option>
 </select>
 </div>
 <div className="form-group">
