@@ -169,11 +169,11 @@ const CashierDashboard = () =>{
 
   const pollingInterval = setInterval(() =>{
   fetchOrders();
-  setRefreshCountdown(5);
-  }, 5000);
+  setRefreshCountdown(3);
+  }, 3000);
 
   const countdownInterval = setInterval(() =>{
-  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 5);
+  setRefreshCountdown((prev) =>prev >1 ? prev - 1 : 3);
   }, 1000);
 
   return () =>{

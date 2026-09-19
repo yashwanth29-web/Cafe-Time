@@ -52,6 +52,7 @@ const StaffOrderWorkspace = () => {
   
   const seenOrderIdsRef = useRef(new Set());
   const seenPaidOrderIdsRef = useRef(new Set());
+  const isInitialLoadRef = useRef(true);
   
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') || 'orders';
@@ -242,39 +243,59 @@ const StaffOrderWorkspace = () => {
     }
   }, []);
 
-  const userCafeId = user?.cafeId;
-
-  // Fetch initial orders
-  const fetchWorkspaceOrders = useCallback(async () => {
-    if (!userCafeId || !activeBranchId) return;
+  // Fetch initial & live orders
+  const fetchWorkspaceOrders = useCallback(async (isSilent = false) => {
+    if (!userCafeId) return;
     try {
-      setErrorMsg('');
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const response = await getOrders({ active: true, cafeId: userCafeId, branchId: activeBranchId, date: todayStr });
-      if (response.success) {
-        setOrders(response.data);
+      if (!isSilent) setErrorMsg('');
+      const params = { active: 'true', cafeId: userCafeId };
+      if (activeBranchId && activeBranchId !== 'all') {
+        params.branchId = activeBranchId;
+      }
+      const response = await getOrders(params);
+      if (response && response.success) {
+        const fetchedOrders = response.data || [];
         
-        // Track seen orders to avoid chime alerts for existing orders on load
-        const activeOrders = response.data.filter(o => o.status === 'Placed' || o.status === 'Preparing');
-        const paidOrders = response.data.filter(o => o.paymentStatus === 'Paid');
-        
-        if (seenOrderIdsRef.current.size === 0) {
-          activeOrders.forEach(o => seenOrderIdsRef.current.add(o._id));
-        }
-        if (seenPaidOrderIdsRef.current.size === 0) {
+        // Track newly arrived orders to trigger sound/voice/auto-print
+        if (!isInitialLoadRef.current) {
+          fetchedOrders.forEach((newOrder) => {
+            if (!seenOrderIdsRef.current.has(newOrder._id)) {
+              seenOrderIdsRef.current.add(newOrder._id);
+              if (newOrder.status === 'Placed' || newOrder.status === 'Preparing') {
+                playNotificationSound();
+                const tableMsg = newOrder.tableNumber && newOrder.tableNumber !== 'Takeaway' && newOrder.tableNumber !== 'Walk-in'
+                  ? `for Table ${newOrder.tableNumber}`
+                  : 'for Takeaway';
+                speakText(`New order received ${tableMsg}.`);
+                if (autoPrintKOTRef.current) {
+                  try {
+                    printKOT(newOrder, user, cafeInfo, currentBranch);
+                  } catch (kotErr) {
+                    console.warn('Auto print KOT failed:', kotErr);
+                  }
+                }
+              }
+            }
+          });
+        } else {
+          // On initial load, mark existing orders as seen
+          fetchedOrders.forEach(o => seenOrderIdsRef.current.add(o._id));
+          const paidOrders = fetchedOrders.filter(o => o.paymentStatus === 'Paid');
           paidOrders.forEach(o => seenPaidOrderIdsRef.current.add(o._id));
         }
+
+        setOrders(fetchedOrders);
       } else {
-        setErrorMsg('Failed to refresh order queue.');
+        if (!isSilent) setErrorMsg('Failed to refresh order queue.');
       }
     } catch (err) {
       console.error('Error fetching orders:', err);
-      setErrorMsg('Cannot connect to order service feed.');
+      if (!isSilent) setErrorMsg('Cannot connect to order service feed.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
+      isInitialLoadRef.current = false;
     }
-  }, [userCafeId, activeBranchId]);
+  }, [userCafeId, activeBranchId, playNotificationSound, speakText, user, cafeInfo, currentBranch]);
 
   // Load inventory list
   const fetchInventory = useCallback(async () => {
@@ -685,35 +706,49 @@ const StaffOrderWorkspace = () => {
     }
   }, [tabParam, fetchInventory, fetchMenu, activeBranchId]);
 
+  // Fast 3-second fail-safe auto-refresh for Live Queue
+  useEffect(() => {
+    if (tabParam !== 'orders') return;
+    const liveQueueInterval = setInterval(() => {
+      fetchWorkspaceOrders(true);
+    }, 3000);
+    return () => clearInterval(liveQueueInterval);
+  }, [tabParam, fetchWorkspaceOrders]);
+
   // Connect socket and register listeners
   useEffect(() => {
     setOrders([]);
     setLoading(true);
     fetchWorkspaceOrders();
 
-    if (userCafeId && activeBranchId) {
-      connectSocket(userCafeId, activeBranchId);
+    if (userCafeId) {
+      connectSocket(userCafeId, activeBranchId || null);
+
+      const isOrderForCurrentBranch = (order) => {
+        if (!order) return false;
+        if (!activeBranchId || activeBranchId === 'all') return true;
+        if (!order.branchId || order.branchId === 'default' || activeBranchId === 'default') return true;
+        if (order.branchId === activeBranchId) return true;
+        if (!branches || branches.length === 0) return true;
+
+        const activeBranchDoc = branches.find(b => b.branchId === activeBranchId || String(b._id) === String(activeBranchId));
+        const orderBranchDoc = branches.find(b => b.branchId === order.branchId || String(b._id) === String(order.branchId));
+        
+        const activeCode = activeBranchDoc?.branchId || activeBranchId;
+        const orderCode = orderBranchDoc?.branchId || order.branchId;
+        const activeObjId = activeBranchDoc ? String(activeBranchDoc._id) : '';
+        const orderObjId = orderBranchDoc ? String(orderBranchDoc._id) : '';
+
+        return (activeCode === orderCode) ||
+               (activeObjId && orderObjId && activeObjId === orderObjId) ||
+               (activeObjId && activeObjId === String(order.branchId)) ||
+               (orderObjId && orderObjId === String(activeBranchId));
+      };
 
       const handleOrderCreated = (newOrder) => {
-        // Only accept real-time order creation if it matches the current branch context
-        if (activeBranchId && activeBranchId !== 'all') {
-          const activeBranchDoc = (branches || []).find(b => b.branchId === activeBranchId || String(b._id) === String(activeBranchId));
-          const orderBranchDoc = (branches || []).find(b => b.branchId === newOrder.branchId || String(b._id) === String(newOrder.branchId));
-          
-          const activeCode = activeBranchDoc?.branchId || activeBranchId;
-          const orderCode = orderBranchDoc?.branchId || newOrder.branchId;
-          const activeObjId = activeBranchDoc ? String(activeBranchDoc._id) : '';
-          const orderObjId = orderBranchDoc ? String(orderBranchDoc._id) : '';
-
-          const isMatching = (activeCode === orderCode) ||
-                             (activeCode === 'default' || orderCode === 'default') ||
-                             (activeObjId && orderObjId && activeObjId === orderObjId) ||
-                             (activeObjId && activeObjId === String(newOrder.branchId)) ||
-                             (orderObjId && orderObjId === String(activeBranchId));
-
-          if (!isMatching) {
-            return; // Ignore order from another branch
-          }
+        if (!newOrder) return;
+        if (!isOrderForCurrentBranch(newOrder)) {
+          return; // Ignore order from another explicit branch
         }
 
         setOrders((prev) => {
@@ -745,24 +780,9 @@ const StaffOrderWorkspace = () => {
       };
 
       const handleOrderUpdated = (updatedOrder) => {
-        if (activeBranchId && activeBranchId !== 'all') {
-          const activeBranchDoc = (branches || []).find(b => b.branchId === activeBranchId || String(b._id) === String(activeBranchId));
-          const orderBranchDoc = (branches || []).find(b => b.branchId === updatedOrder.branchId || String(b._id) === String(updatedOrder.branchId));
-          
-          const activeCode = activeBranchDoc?.branchId || activeBranchId;
-          const orderCode = orderBranchDoc?.branchId || updatedOrder.branchId;
-          const activeObjId = activeBranchDoc ? String(activeBranchDoc._id) : '';
-          const orderObjId = orderBranchDoc ? String(orderBranchDoc._id) : '';
-
-          const isMatching = (activeCode === orderCode) ||
-                             (activeCode === 'default' || orderCode === 'default') ||
-                             (activeObjId && orderObjId && activeObjId === orderObjId) ||
-                             (activeObjId && activeObjId === String(updatedOrder.branchId)) ||
-                             (orderObjId && orderObjId === String(activeBranchId));
-
-          if (!isMatching) {
-            return; // Ignore update from another branch
-          }
+        if (!updatedOrder) return;
+        if (!isOrderForCurrentBranch(updatedOrder)) {
+          return; // Ignore update from another branch
         }
 
         setOrders((prev) => {
@@ -828,7 +848,7 @@ const StaffOrderWorkspace = () => {
 
       const handleRealtimeSync = (payload) => {
         if (payload && payload.model === 'Order') {
-          fetchWorkspaceOrders();
+          fetchWorkspaceOrders(true);
         }
       };
 
@@ -842,13 +862,6 @@ const StaffOrderWorkspace = () => {
       socket.on('orderCancelled', handleOrderCancelled);
       socket.on('dashboard_realtime_sync', handleRealtimeSync);
 
-      // Graceful poll if socket goes down
-      const pollTimer = setInterval(() => {
-        if (socket && !socket.connected) {
-          fetchWorkspaceOrders();
-        }
-      }, 5000);
-
       return () => {
         socket.off('order_created', handleOrderCreated);
         socket.off('orderCreated', handleOrderCreated);
@@ -859,10 +872,9 @@ const StaffOrderWorkspace = () => {
         socket.off('order_cancelled', handleOrderCancelled);
         socket.off('orderCancelled', handleOrderCancelled);
         socket.off('dashboard_realtime_sync', handleRealtimeSync);
-        clearInterval(pollTimer);
       };
     }
-  }, [userCafeId, activeBranchId, fetchWorkspaceOrders, playNotificationSound, speakText]);
+  }, [userCafeId, activeBranchId, branches, fetchWorkspaceOrders, playNotificationSound, speakText]);
 
   // Delete order handler (calls deleteOrder which deletes order and restores deducted inventory)
   const handleDeleteOrder = async (orderId) => {

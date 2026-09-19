@@ -431,6 +431,11 @@ export const getInventoryLogs = async () => {
   return response.data;
 };
 
+export const revertInventoryLog = async (id) => {
+  const response = await API.delete(`/inventory/logs/${id}`);
+  return response.data;
+};
+
 export const recordPurchase = async (purchaseData) => {
   const response = await API.post('/inventory/purchase', purchaseData);
   return response.data;

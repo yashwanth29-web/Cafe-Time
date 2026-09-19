@@ -1,7 +1,31 @@
 {
-  "timestamp": "2026-09-18T19:29:38.002Z",
+  "timestamp": "2026-09-19T01:58:54.578Z",
   "dryRun": true,
   "expiredWorkReports": [
+    {
+      "reportId": "6a5657e852ffec6dcb9491a3",
+      "staffName": "kumar",
+      "createdAt": "2026-07-14T15:38:16.934Z",
+      "photos": [
+        "/uploads/report-1784043494385-728902523.jpeg"
+      ],
+      "gridFsFileIds": [
+        "6a5657e752ffec6dcb9491a1"
+      ],
+      "gridFsFileId": "6a5657e752ffec6dcb9491a1"
+    },
+    {
+      "reportId": "6a57708946a3e0c92b0a4257",
+      "staffName": "kumar",
+      "createdAt": "2026-07-15T11:35:37.011Z",
+      "photos": [
+        "/uploads/report-1784115334579-118591619.png"
+      ],
+      "gridFsFileIds": [
+        "6a57708746a3e0c92b0a4255"
+      ],
+      "gridFsFileId": "6a57708746a3e0c92b0a4255"
+    },
     {
       "reportId": "6aab00a6df3c7671823d459f",
       "staffName": "staff",

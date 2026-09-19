@@ -610,6 +610,71 @@ const getConsumptionReport = async (req, res, next) => {
   }
 };
 
+// @desc    Revert an inventory movement (restores prior stock quantity and deletes movement log)
+// @route   DELETE /api/inventory/logs/:id  OR  POST /api/inventory/logs/:id/revert
+// @access  Protected (Staff / Owner)
+const revertInventoryLog = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const cafeId = req.user?.cafeId || 'CD001';
+
+    let log = null;
+    if (mongoose.isValidObjectId(id)) {
+      log = await InventoryLog.findById(id).setOptions({ bypassBranchFilter: true });
+    }
+    
+    if (!log) {
+      return res.status(404).json({ success: false, message: 'Movement record not found' });
+    }
+
+    const qtyDelta = Number(log.quantityChanged) || 0;
+    let updatedItem = null;
+
+    // Find the item by itemId, or fallback to itemName + cafeId
+    let item = null;
+    if (log.itemId && mongoose.isValidObjectId(log.itemId)) {
+      item = await Inventory.findById(log.itemId).setOptions({ bypassBranchFilter: true });
+    }
+    if (!item && log.itemName) {
+      item = await Inventory.findOne({ 
+        cafeId, 
+        name: { $regex: new RegExp(`^${log.itemName.trim()}$`, 'i') } 
+      }).setOptions({ bypassBranchFilter: true });
+    }
+
+    if (item) {
+      const currentQty = Number(item.quantity !== undefined ? item.quantity : (item.stock || 0));
+      // Revert: subtract what was changed. E.g.: if added 10, current is 11, new is 11 - 10 = 1.
+      // If reduced 5, qtyDelta was -5, new is 1 - (-5) = 6.
+      const newQty = Number(Math.max(0, currentQty - qtyDelta).toFixed(3));
+      item.quantity = newQty;
+      item.stock = newQty;
+      const reorder = Number(item.reorderLevel !== undefined ? item.reorderLevel : (item.minStock || 0));
+      item.status = newQty <= 0 ? 'OUT_OF_STOCK' : (newQty <= reorder ? 'LOW_STOCK' : 'IN_STOCK');
+      
+      await item.save();
+      updatedItem = item;
+
+      emitInventoryUpdated(cafeId, item.branch || item.branchId || 'default', item);
+      await updateMenuItemAvailabilityFromInventory(cafeId, null, item.branchId || item.branch || 'default');
+    }
+
+    // Delete the inventory log record so it never shows again in the ledger
+    await InventoryLog.deleteOne({ _id: log._id }).setOptions({ bypassBranchFilter: true });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Stock movement reverted successfully',
+      data: updatedItem,
+      revertedLogId: id
+    });
+  } catch (error) {
+    error.controllerName = 'inventoryController';
+    error.serviceName = 'revertInventoryLog';
+    next(error);
+  }
+};
+
 // Recipe Mapping configurations for Auto-Deductions
 const RECIPES = {
   'burger': [
@@ -1156,6 +1221,7 @@ module.exports = {
   reportShortage,
   getWastageReport,
   getConsumptionReport,
+  revertInventoryLog,
   deductInventoryForOrder,
   restoreInventoryForOrder,
   updateMenuItemAvailabilityFromInventory,

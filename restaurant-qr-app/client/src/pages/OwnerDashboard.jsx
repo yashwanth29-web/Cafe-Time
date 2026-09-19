@@ -21,6 +21,7 @@ import {
  updateInventoryItem,
  deleteInventoryItem,
  getInventoryLogs,
+ revertInventoryLog,
  getWastageReport,
  getConsumptionReport,
  recordPurchase,
@@ -2509,6 +2510,52 @@ const exportStaffToCSV = () => {
     } catch (error) {
       console.error('Error recording stock reduction:', error);
       alert(error.response?.data?.message || 'Error reducing stock. Reverting changes.');
+      fetchInventoryList(true);
+    }
+  };
+
+  const handleRevertMovement = async (log) => {
+    if (!log) return;
+    const qtyChange = Number(log.quantityChanged) || 0;
+    const isAdd = qtyChange > 0 || log.type === 'Purchase' || log.type === 'Initial';
+    const actionDesc = isAdd ? `subtract ${Math.abs(qtyChange)}` : `add back ${Math.abs(qtyChange)}`;
+
+    const confirmMsg = `Revert this movement for "${log.itemName}"?\nThis will ${actionDesc} to restore the previous stock level and remove this record from the ledger.`;
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    // 1. Optimistically update local inventory list
+    const logItemId = String(log.itemId || '');
+    setInventoryList((prev) => prev.map((item) => {
+      if (String(item._id || item.id) === logItemId || (item.name && item.name.toLowerCase() === (log.itemName || '').toLowerCase())) {
+        const currentQty = Number(item.quantity !== undefined ? item.quantity : (item.stock || 0));
+        const newQty = Number(Math.max(0, currentQty - qtyChange).toFixed(3));
+        const reorder = Number(item.reorderLevel !== undefined ? item.reorderLevel : (item.minStock || 0));
+        const status = newQty <= 0 ? 'OUT_OF_STOCK' : (newQty <= reorder ? 'LOW_STOCK' : 'IN_STOCK');
+        return {
+          ...item,
+          quantity: newQty,
+          stock: newQty,
+          status
+        };
+      }
+      return item;
+    }));
+
+    // 2. Optimistically remove log from local movement list
+    setInventoryLogs((prev) => prev.filter((l) => String(l._id) !== String(log._id)));
+
+    // 3. Call backend API to persist stock restore and delete log
+    try {
+      const res = await revertInventoryLog(log._id);
+      if (res && res.success) {
+        // Silently sync from backend to guarantee fresh state
+        fetchInventoryList(true);
+      }
+    } catch (err) {
+      console.error('Error reverting inventory movement:', err);
+      alert(err.response?.data?.message || 'Failed to revert movement. Refreshing...');
       fetchInventoryList(true);
     }
   };
@@ -5510,23 +5557,6 @@ const exportStaffToCSV = () => {
     Movement Ledger
   </button>
   <button 
-    onClick={() => setInventorySubTab('wastage')} 
-    style={{ 
-      background: inventorySubTab === 'wastage' ? '#6F4E37' : 'var(--bg-secondary)', 
-      color: inventorySubTab === 'wastage' ? '#FFFFFF' : 'var(--color-text-primary)', 
-      border: inventorySubTab === 'wastage' ? 'none' : '1px solid var(--color-border)', 
-      padding: '8px 18px', 
-      borderRadius: '8px', 
-      cursor: 'pointer', 
-      fontWeight: inventorySubTab === 'wastage' ? 800 : 600, 
-      fontSize: '13px',
-      boxShadow: inventorySubTab === 'wastage' ? '0 2px 8px rgba(111,78,55,0.35)' : 'none',
-      transition: 'all 0.2s ease'
-    }}
-  >
-    Wastage Reports
-  </button>
-  <button 
     onClick={() => setInventorySubTab('suppliers')} 
     style={{ 
       background: inventorySubTab === 'suppliers' ? '#6F4E37' : 'var(--bg-secondary)', 
@@ -5708,17 +5738,15 @@ const exportStaffToCSV = () => {
 
   {/* Movement Ledger Table */}
   <div style={{ overflowX: 'auto', width: '100%', maxWidth: '100%', WebkitOverflowScrolling: 'touch', borderRadius: '8px', border: '1px solid var(--color-border)' }} className="custom-scrollbar">
-    <table style={{ width: '100%', minWidth: '850px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+    <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
       <thead>
         <tr style={{ background: 'var(--bg-secondary)', borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', whiteSpace: 'nowrap' }}>
           <th style={{ padding: '10px 12px' }}>Date & Time</th>
           <th style={{ padding: '10px 12px' }}>Ingredient</th>
           <th style={{ padding: '10px 12px', textAlign: 'center' }}>Action / Type</th>
           <th style={{ padding: '10px 12px', textAlign: 'center' }}>Stock Change</th>
-          <th style={{ padding: '10px 12px', textAlign: 'center' }}>Resulting Stock</th>
           <th style={{ padding: '10px 12px', textAlign: 'right' }}>Cost / Value</th>
-          <th style={{ padding: '10px 12px' }}>Reason / Context</th>
-          <th style={{ padding: '10px 12px' }}>Operator</th>
+          <th style={{ padding: '10px 12px', textAlign: 'center' }}>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -5756,24 +5784,38 @@ const exportStaffToCSV = () => {
               <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 'bold', color: isPositive ? '#2ECC71' : '#E74C3C', fontSize: '13px' }}>
                 {isPositive ? `+${Math.abs(qtyChangedNum)}` : `-${Math.abs(qtyChangedNum)}`}
               </td>
-              <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                {log.remainingQuantity !== undefined && log.remainingQuantity !== null ? log.remainingQuantity : '—'}
-              </td>
               <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--color-text-primary)' }}>
                 {displayCost}
               </td>
-              <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {log.reason || '—'}
-              </td>
-              <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>
-                {log.performedBy || log.userEmail || 'system'}
+              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => handleRevertMovement(log)}
+                  style={{
+                    background: 'rgba(231, 76, 60, 0.12)',
+                    color: '#E74C3C',
+                    border: '1px solid #E74C3C',
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Revert this stock change and remove from ledger"
+                >
+                  ↩️ Back
+                </button>
               </td>
             </tr>
           );
         })}
         {filteredMovementLogs.length === 0 && (
           <tr>
-            <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-secondary)' }}>
+            <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-secondary)' }}>
               No stock movements found for the selected day/filter.
             </td>
           </tr>
@@ -5784,59 +5826,7 @@ const exportStaffToCSV = () => {
 </div>
  }
 
- {/* SUBTAB 3: Wastage Reports */}
- {inventorySubTab === 'wastage' &&
-<div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-<div className="analytics-grid">
-<div className="analytics-card" style={{ background: '#1F140E' }}>
-<h4>Total Wastage Events</h4>
-<span className="val" style={{ color: '#e74c3c' }}>{wastageReport.count}</span>
-</div>
-<div className="analytics-card" style={{ background: '#1F140E' }}>
-<h4>Aggregate Cost of Wastage</h4>
-<span className="val" style={{ color: '#e74c3c' }}>₹{(wastageReport.totalCost || 0).toFixed(2)}</span>
-</div>
-<div className="analytics-card" style={{ background: '#1F140E' }}>
-<h4>Total Recipe Deductions Cost</h4>
-<span className="val" style={{ color: '#16a085' }}>₹{(consumptionReport.totalCost || 0).toFixed(2)}</span>
-</div>
-</div>
-
-<h4 style={{ color: 'var(--color-text-primary)', margin: '10px 0 0 0' }}>Detailed Wastage & Spoilage Log</h4>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
-<th style={{ padding: '8px' }}>Date</th>
-<th style={{ padding: '8px' }}>Ingredient</th>
-<th style={{ padding: '8px', textAlign: 'center' }}>Type</th>
-<th style={{ padding: '8px', textAlign: 'center' }}>Quantity Lost</th>
-<th style={{ padding: '8px', textAlign: 'right' }}>Wasted Cost</th>
-<th style={{ padding: '8px' }}>Wastage Reason</th>
-</tr>
-</thead>
-<tbody>
- {inventoryLogs.filter((log) =>log.type === 'Wastage' || log.type === 'Damaged').map((log) =>
-<tr key={log._id} style={{ borderBottom: '1px solid #432E22' }}>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>
- {new Date(log.createdAt).toLocaleDateString()}
-</td>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{log.itemName}</td>
-<td style={{ padding: '10px 8px', textAlign: 'center' }}>{log.type}</td>
-<td style={{ padding: '10px 8px', textAlign: 'center', color: '#E74C3C', fontWeight: 'bold' }}>
- {Math.abs(log.quantityChanged)}
-</td>
-<td style={{ padding: '10px 8px', textAlign: 'right', color: '#E74C3C', fontWeight: 'bold' }}>
- ₹{log.cost.toFixed(2)}
-</td>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{log.reason}</td>
-</tr>
-)}
-</tbody>
-</table>
-</div>
- }
-
- {/* SUBTAB 4: Suppliers */}
+ {/* SUBTAB 3: Suppliers */}
  {inventorySubTab === 'suppliers' &&
 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
  {Array.from(new Set(inventoryList.map((item) =>item.supplier || 'Unassigned Supplier'))).map((sup) =>{

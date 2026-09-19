@@ -222,7 +222,7 @@ const KitchenDashboard = () =>{
 
     const pollInterval = setInterval(() => {
       fetchOrders();
-    }, 5000);
+    }, 3000);
 
     if (user && user.cafeId) {
       connectSocket(user.cafeId, activeBranchId === 'all' ? null : activeBranchId);

@@ -536,7 +536,7 @@ const getOrders = async (req, res, next) => {
       filterQuery.status = req.query.status;
     }
 
-    if (req.query.date) {
+    if (req.query.date && req.query.active !== 'true') {
       const parts = req.query.date.split('-');
       if (parts.length === 3) {
         const year = parseInt(parts[0], 10);
