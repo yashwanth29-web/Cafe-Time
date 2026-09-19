@@ -38,6 +38,12 @@ const StaffOrderWorkspace = () => {
   const { user } = useAuth();
   const { activeBranchId, branches } = useBranch();
   const userRole = user?.role?.toLowerCase() || '';
+  const userCafeId = user?.cafeId;
+
+  // Active branch context
+  const currentBranch = useMemo(() => {
+    return branches?.find((b) => b.branchId === activeBranchId) || null;
+  }, [branches, activeBranchId]);
   
   const [cafeInfo, setCafeInfo] = useState(null);
   const [configuredTables, setConfiguredTables] = useState([]);
@@ -1318,11 +1324,6 @@ const StaffOrderWorkspace = () => {
     };
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
-
-  // Active branch context
-  const currentBranch = useMemo(() => {
-    return branches?.find((b) => b.branchId === activeBranchId) || null;
-  }, [branches, activeBranchId]);
 
   const isUnifiedMode = currentBranch ? !!currentBranch.unifiedStaffMode : false;
 
