@@ -114,7 +114,7 @@ exports.getCashRegister = async (req, res) => {
         date: targetDate,
         yesterdayCash: yesterdayCashAmount,
         todayCash: todayCashAmount,
-        bankBalance: bankBalanceAmount > 0 ? bankBalanceAmount : todayOnlineAmount,
+        bankBalance: 0,
         purchasesAmount: 0,
         purchasesNote: '',
         netCashInHand: (yesterdayCashAmount + todayCashAmount),

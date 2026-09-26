@@ -553,7 +553,7 @@ const OwnerDashboard = () =>{
   const [cashRegisterForm, setCashRegisterForm] = useState({
     yesterdayCash: '',
     todayCash: '',
-    bankBalance: '',
+    bankBalance: 0,
     purchasesAmount: '',
     purchasesNote: '',
     notes: ''
@@ -3049,9 +3049,9 @@ const exportStaffToCSV = () => {
           ? yesterdayCashSales
           : ((record.yesterdayCash !== undefined && record.yesterdayCash !== 0) ? record.yesterdayCash : (record.yesterdayCash === 0 && !record.isNew ? (isTargetDateToday && yesterdayCashSales > 0 ? yesterdayCashSales : 0) : ''));
 
-        const defaultBankBalance = (record.isNew && (!record.bankBalance || record.bankBalance === 0) && todayOnlineSales > 0)
-          ? todayOnlineSales
-          : ((record.bankBalance !== undefined && record.bankBalance !== 0) ? record.bankBalance : (isTargetDateToday && todayOnlineSales > 0 ? todayOnlineSales : ''));
+        const defaultBankBalance = (!record.isNew && record.bankBalance !== undefined && record.bankBalance !== null)
+          ? record.bankBalance
+          : 0;
 
         setCashRegisterForm({
           yesterdayCash: defaultYesterdayCash,
