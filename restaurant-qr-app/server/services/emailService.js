@@ -1,8 +1,16 @@
 const { Resend } = require('resend');
 
-// Initialize Resend with the API key from either the new RESEND_API_KEY env or the old SMTP_APP_PASSWORD env
-const resendApiKey = process.env.RESEND_API_KEY || process.env.SMTP_APP_PASSWORD;
-const resend = new Resend(resendApiKey);
+let resendClient = null;
+const getResendClient = () => {
+  const apiKey = process.env.RESEND_API_KEY || process.env.SMTP_APP_PASSWORD;
+  if (!apiKey || !apiKey.startsWith('re_')) {
+    return null;
+  }
+  if (!resendClient) {
+    resendClient = new Resend(apiKey);
+  }
+  return resendClient;
+};
 
 /**
  * Send an OTP code to a user's email
@@ -17,13 +25,13 @@ const sendOTP = async (email, otp) => {
     console.log(`OTP Code: ${otp}`);
     console.log(`======================================================\n`);
 
-    // Check if we have a valid Resend API key (they start with 're_')
-    if (!resendApiKey || !resendApiKey.startsWith('re_')) {
-      console.log(`[Info] Skipping Resend delivery because a valid Resend API key was not found. Valid keys start with 're_'.`);
+    const client = getResendClient();
+    if (!client) {
+      console.log(`[Info] Skipping Resend delivery because a valid Resend API key (starting with 're_') was not found. OTP printed to console.`);
       return { success: true, messageId: 'simulated-id-dev-mode' };
     }
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await client.emails.send({
       from: 'Dr. Chai Cafe\'s Café <onboarding@resend.dev>', // Free tier domain
       to: email,
       subject: 'Your Cafe Access Verification Code',
@@ -71,7 +79,7 @@ const sendOTP = async (email, otp) => {
  * @param {string} role - Account role ('admin' | 'staff')
  * @param {object} details - Additional details (cafeName, cafeId, staffRole)
  */
-const sendWelcomeEmail = async (email, name, role, details) => {
+const sendWelcomeEmail = async (email, name, role, details = {}) => {
   const roleDisplay = role === 'admin' ? 'Cafe Owner' : `Staff (${details.staffRole || 'Member'})`;
   const cafeInfo = details.cafeName 
     ? `<p style="margin: 8px 0; color: #5C4D4D;"><strong>Cafe Name:</strong> ${details.cafeName}</p>` 
@@ -80,49 +88,58 @@ const sendWelcomeEmail = async (email, name, role, details) => {
     ? `<p style="margin: 8px 0; color: #5C4D4D;"><strong>Cafe ID:</strong> ${details.cafeId}</p>` 
     : '';
 
-  const mailOptions = {
-    from: `"Dr. Chai Cafe" <${process.env.SMTP_EMAIL}>`,
-    to: email,
-    subject: 'Welcome to Dr. Chai Cafe\'s Café - Account Registered',
-    html: `
-      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background-color: #FAF6F0; border-radius: 12px; border: 1px solid #E6D5C3; color: #4A3E3D;">
-        <div style="text-align: center; margin-bottom: 25px;">
-          <h2 style="color: #6F4E37; margin: 0; font-size: 28px; font-weight: 700;">Dr. Chai Cafe</h2>
-          <p style="color: #A0826C; margin: 5px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;">Account Registered</p>
-        </div>
-        
-        <div style="background-color: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(111, 78, 55, 0.05); border: 1px solid #F0E6DC;">
-          <h3 style="color: #6F4E37; margin-top: 0; font-size: 20px;">Hello ${name},</h3>
-          <p style="font-size: 15px; line-height: 1.6; color: #5C4D4D; margin-bottom: 20px;">Your portal account has been successfully registered by your system administrator. Here are your details:</p>
-          
-          <div style="background-color: #FDFBF7; padding: 15px; border-radius: 6px; border-left: 4px solid #6F4E37; margin-bottom: 20px;">
-            <p style="margin: 8px 0; color: #5C4D4D;"><strong>Role:</strong> ${roleDisplay}</p>
-            <p style="margin: 8px 0; color: #5C4D4D;"><strong>Email:</strong> ${email}</p>
-            ${cafeInfo}
-            ${cafeIdInfo}
-          </div>
-          
-          <p style="font-size: 15px; line-height: 1.6; color: #5C4D4D; margin-bottom: 20px;">You can now log in using your email address. We use passwordless email-OTP verification for security—no password required.</p>
-          
-          <div style="text-align: center; margin-top: 25px;">
-            <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/login" style="background-color: #6F4E37; color: #ffffff; text-decoration: none; padding: 12px 30px; font-weight: bold; border-radius: 6px; display: inline-block; box-shadow: 0 3px 6px rgba(111, 78, 55, 0.2);">Go to Login Portal</a>
-          </div>
-        </div>
-        
-        <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #A0826C;">
-          <p style="margin: 0;">&copy; ${new Date().getFullYear()} Dr. Chai Cafe. All rights reserved.</p>
-        </div>
-      </div>
-    `
-  };
+  const client = getResendClient();
+  if (!client) {
+    console.log(`[Info] Skipping Welcome email delivery because a valid Resend API key was not found.`);
+    return { success: true, messageId: 'simulated-welcome-dev' };
+  }
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Welcome email sent to ${email}. Message ID: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+    const { data, error } = await client.emails.send({
+      from: 'Dr. Chai Cafe\'s Café <onboarding@resend.dev>',
+      to: email,
+      subject: 'Welcome to Dr. Chai Cafe - Account Registered',
+      html: `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background-color: #FAF6F0; border-radius: 12px; border: 1px solid #E6D5C3; color: #4A3E3D;">
+          <div style="text-align: center; margin-bottom: 25px;">
+            <h2 style="color: #6F4E37; margin: 0; font-size: 28px; font-weight: 700;">Dr. Chai Cafe</h2>
+            <p style="color: #A0826C; margin: 5px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1.5px;">Account Registered</p>
+          </div>
+          
+          <div style="background-color: #ffffff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(111, 78, 55, 0.05); border: 1px solid #F0E6DC;">
+            <h3 style="color: #6F4E37; margin-top: 0; font-size: 20px;">Hello ${name},</h3>
+            <p style="font-size: 15px; line-height: 1.6; color: #5C4D4D; margin-bottom: 20px;">Your portal account has been successfully registered by your system administrator. Here are your details:</p>
+            
+            <div style="background-color: #FDFBF7; padding: 15px; border-radius: 6px; border-left: 4px solid #6F4E37; margin-bottom: 20px;">
+              <p style="margin: 8px 0; color: #5C4D4D;"><strong>Role:</strong> ${roleDisplay}</p>
+              <p style="margin: 8px 0; color: #5C4D4D;"><strong>Email:</strong> ${email}</p>
+              ${cafeInfo}
+              ${cafeIdInfo}
+            </div>
+            
+            <p style="font-size: 15px; line-height: 1.6; color: #5C4D4D; margin-bottom: 20px;">You can now log in using your email address. We use passwordless email-OTP verification for security—no password required.</p>
+            
+            <div style="text-align: center; margin-top: 25px;">
+              <a href="${process.env.CLIENT_URL || 'http://localhost:5173'}/login" style="background-color: #6F4E37; color: #ffffff; text-decoration: none; padding: 12px 30px; font-weight: bold; border-radius: 6px; display: inline-block; box-shadow: 0 3px 6px rgba(111, 78, 55, 0.2);">Go to Login Portal</a>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #A0826C;">
+            <p style="margin: 0;">&copy; ${new Date().getFullYear()} Dr. Chai Cafe. All rights reserved.</p>
+          </div>
+        </div>
+      `
+    });
+
+    if (error) {
+      console.error(`Error sending welcome email via Resend to ${email}:`, error);
+      return { success: false, error: error.message };
+    }
+
+    console.log(`Welcome email sent to ${email} via Resend. Message ID: ${data.id}`);
+    return { success: true, messageId: data.id };
   } catch (error) {
     console.error(`Error sending welcome email to ${email}:`, error);
-    // Log error but don't fail the registration request completely
     return { success: false, error: error.message };
   }
 };

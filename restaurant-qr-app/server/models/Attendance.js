@@ -97,6 +97,42 @@ const AttendanceSchema = new mongoose.Schema({
   extraWorkEndTime: {
     type: Date
   },
+  dailyWageRate: {
+    type: Number,
+    default: 0
+  },
+  dailyWageEarned: {
+    type: Number,
+    default: 0
+  },
+  overtimePay: {
+    type: Number,
+    default: 0
+  },
+  shiftStartTime: {
+    type: String,
+    default: '09:00'
+  },
+  shiftEndTime: {
+    type: String,
+    default: '18:00'
+  },
+  leanTimeMinutes: {
+    type: Number,
+    default: 30
+  },
+  autoCheckedOut: {
+    type: Boolean,
+    default: false
+  },
+  notes: {
+    type: String,
+    default: ''
+  },
+  isWageFinalized: {
+    type: Boolean,
+    default: false
+  },
   createdAt: {
     type: Date,
     default: Date.now

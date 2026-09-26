@@ -13,7 +13,8 @@ const StaffManagementTab = () => {
   const [form, setForm] = useState({ 
     name: '', username: '', password: '', phone: '', email: '', staffRole: 'staff', isActive: true,
     salaryType: 'DAILY', dailyRate: 0, hourlyRate: 0, weeklyRate: 0, monthlyRate: 0,
-    weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE'
+    weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE',
+    attendancePin: ''
   });
   const [editingId, setEditingId] = useState(null);
 
@@ -45,7 +46,8 @@ const StaffManagementTab = () => {
     setForm({ 
       name: '', username: '', password: '', phone: '', email: '', staffRole: 'staff', isActive: true,
       salaryType: 'DAILY', dailyRate: 0, hourlyRate: 0, weeklyRate: 0, monthlyRate: 0,
-      weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE'
+      weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE',
+      attendancePin: ''
     });
     setEditingId(null);
     setActiveModal('form');
@@ -67,7 +69,8 @@ const StaffManagementTab = () => {
       monthlyRate: staff.monthlyRate || 0,
       weeklyOff: staff.weeklyOff || 'Sunday',
       joiningDate: staff.joiningDate ? new Date(staff.joiningDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      salaryStatus: staff.salaryStatus || 'ACTIVE'
+      salaryStatus: staff.salaryStatus || 'ACTIVE',
+      attendancePin: staff.attendancePin || ''
     });
     setEditingId(staff._id);
     setActiveModal('form');
@@ -306,9 +309,15 @@ const StaffManagementTab = () => {
               <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', marginTop: '12px', marginBottom: '14px' }}>
                 <h4 style={{ margin: '0 0 10px 0', color: 'var(--color-primary, #D47F46)', fontSize: '0.9rem' }}>Salary & Wage Configuration</h4>
                 
-                <div style={{ marginBottom: '10px' }}>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Daily Wage (₹) *</label>
-                  <input type="number" required min="0" value={form.dailyRate} onChange={fld('dailyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Daily Wage (₹) *</label>
+                    <input type="number" required min="0" value={form.dailyRate} onChange={fld('dailyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>4-Digit Attendance PIN</label>
+                    <input type="text" maxLength={4} pattern="[0-9]{4}" value={form.attendancePin || ''} onChange={(e) => setForm({ ...form, attendancePin: e.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder="e.g. 1234" style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '10px' }}>

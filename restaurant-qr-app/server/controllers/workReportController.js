@@ -35,16 +35,72 @@ const createReport = async (req, res) => {
     const staffId = req.user._id;
     const { notes } = req.body;
 
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ success: false, message: 'At least one photo upload is required.' });
+    // Support both multipart file uploads and base64 payloads
+    let photos = [];
+    const gridFsFileIds = [];
+    const gridFsFilenames = [];
+
+    if (req.files && req.files.length > 0) {
+      if (req.files.length > 15) {
+        req.files.forEach(f => {
+          try { fs.unlinkSync(f.path); } catch (e) {}
+        });
+        return res.status(400).json({ success: false, message: 'You can upload a maximum of 15 photos per report.' });
+      }
+      photos = req.files.map(file => `/uploads/${file.filename}`);
+      try {
+        const { syncToGridFS } = require('../utils/gridfs');
+        for (const file of req.files) {
+          const gfsFile = await syncToGridFS(file);
+          if (gfsFile) {
+            gridFsFileIds.push(gfsFile._id);
+            gridFsFilenames.push(gfsFile.filename);
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing work report photos to GridFS:', err);
+      }
+    } else if (req.body.photos && Array.isArray(req.body.photos) && req.body.photos.length > 0) {
+      if (req.body.photos.length > 15) {
+        return res.status(400).json({ success: false, message: 'You can upload a maximum of 15 photos per report.' });
+      }
+      const uploadDir = path.join(__dirname, '../public/uploads');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const { syncToGridFS } = require('../utils/gridfs');
+
+      for (let i = 0; i < req.body.photos.length; i++) {
+        const item = req.body.photos[i];
+        if (typeof item === 'string' && item.startsWith('data:image')) {
+          const base64Data = item.replace(/^data:image\/\w+;base64,/, '');
+          const buffer = Buffer.from(base64Data, 'base64');
+          const filename = `cafe-cam-${Date.now()}-${i}-${Math.round(Math.random() * 1E9)}.jpg`;
+          const filePath = path.join(uploadDir, filename);
+          fs.writeFileSync(filePath, buffer);
+
+          photos.push(`/uploads/${filename}`);
+
+          const fileObj = {
+            path: filePath,
+            filename: filename,
+            originalname: filename,
+            mimetype: 'image/jpeg',
+            size: buffer.length
+          };
+          const gfsFile = await syncToGridFS(fileObj);
+          if (gfsFile) {
+            gridFsFileIds.push(gfsFile._id);
+            gridFsFilenames.push(gfsFile.filename);
+          }
+        } else if (typeof item === 'string') {
+          photos.push(item);
+        }
+      }
     }
 
-    if (req.files.length > 10) {
-      // Cleanup uploaded files immediately before returning
-      req.files.forEach(f => {
-        try { fs.unlinkSync(f.path); } catch (e) {}
-      });
-      return res.status(400).json({ success: false, message: 'You can upload a maximum of 10 photos per report.' });
+    if (photos.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one photo upload is required.' });
     }
 
     // 1. Verify user details
@@ -65,25 +121,6 @@ const createReport = async (req, res) => {
       if (!branch) {
         return res.status(404).json({ success: false, message: 'Assigned branch details not found.' });
       }
-    }
-
-    // 3. Construct relative image URLs
-    const photos = req.files.map(file => `/uploads/${file.filename}`);
-
-    // Sync to GridFS
-    const gridFsFileIds = [];
-    const gridFsFilenames = [];
-    try {
-      const { syncToGridFS } = require('../utils/gridfs');
-      for (const file of req.files) {
-        const gfsFile = await syncToGridFS(file);
-        if (gfsFile) {
-          gridFsFileIds.push(gfsFile._id);
-          gridFsFilenames.push(gfsFile.filename);
-        }
-      }
-    } catch (err) {
-      console.error('Error syncing work report photos to GridFS:', err);
     }
 
     const gridFsFileId = gridFsFileIds.length > 0 ? gridFsFileIds[0] : null;
@@ -127,9 +164,6 @@ const createReport = async (req, res) => {
  */
 const getReports = async (req, res) => {
   try {
-    // Proactively trigger cleanup
-    runAutoCleanup();
-
     const cafeId = req.user.cafeId;
     const { date, range, staffId, branchId } = req.query;
 
@@ -137,11 +171,19 @@ const getReports = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Your user profile does not have a cafe assignment.' });
     }
 
-    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || 'default';
-    const query = { cafeId, branchId: activeBranch };
+    const query = { cafeId };
+    
+    // Branch filter: only apply if specific branch requested
+    const requestedBranch = branchId || req.headers['x-branch-id'];
+    if (requestedBranch && requestedBranch !== 'all') {
+      query.$or = [
+        { branchId: requestedBranch },
+        { branchName: requestedBranch }
+      ];
+    }
 
     // Staff filter
-    if (staffId) {
+    if (staffId && staffId !== 'all') {
       query.staffId = staffId;
     }
 
@@ -156,8 +198,11 @@ const getReports = async (req, res) => {
       query.createdAt = { $gte: sevenDaysAgo };
     }
 
-    console.log('WorkReport Query:', query);
-    const reports = await WorkReport.find(query).sort({ createdAt: -1 });
+    const reports = await WorkReport.find(query)
+      .populate('staffId', 'name staffRole employeeId username avatar')
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
 
     return res.status(200).json({
       success: true,

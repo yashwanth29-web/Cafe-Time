@@ -1,44 +1,51 @@
 {
-  "timestamp": "2026-09-19T01:58:54.578Z",
+  "timestamp": "2026-09-26T04:30:30.786Z",
   "dryRun": true,
   "expiredWorkReports": [
-    {
-      "reportId": "6a5657e852ffec6dcb9491a3",
-      "staffName": "kumar",
-      "createdAt": "2026-07-14T15:38:16.934Z",
-      "photos": [
-        "/uploads/report-1784043494385-728902523.jpeg"
-      ],
-      "gridFsFileIds": [
-        "6a5657e752ffec6dcb9491a1"
-      ],
-      "gridFsFileId": "6a5657e752ffec6dcb9491a1"
-    },
-    {
-      "reportId": "6a57708946a3e0c92b0a4257",
-      "staffName": "kumar",
-      "createdAt": "2026-07-15T11:35:37.011Z",
-      "photos": [
-        "/uploads/report-1784115334579-118591619.png"
-      ],
-      "gridFsFileIds": [
-        "6a57708746a3e0c92b0a4255"
-      ],
-      "gridFsFileId": "6a57708746a3e0c92b0a4255"
-    },
     {
       "reportId": "6aab00a6df3c7671823d459f",
       "staffName": "staff",
       "createdAt": "2026-09-16T20:48:38.649Z",
-      "photos": [
-        "/uploads/report-1789591714106-151840082.jpg",
-        "/uploads/report-1789591714498-610067372.jpg"
-      ],
+      "photos": [],
       "gridFsFileIds": [
         "6aab00a3df3c7671823d4598",
         "6aab00a5df3c7671823d459c"
       ],
       "gridFsFileId": "6aab00a3df3c7671823d4598"
+    },
+    {
+      "reportId": "6aafec7706f09198bc7f5f9a",
+      "staffName": "nnn",
+      "createdAt": "2026-09-20T14:23:51.533Z",
+      "photos": [],
+      "gridFsFileIds": [
+        "6aafec7206f09198bc7f5f7f",
+        "6aafec7306f09198bc7f5f83",
+        "6aafec7506f09198bc7f5f8d",
+        "6aafec7506f09198bc7f5f91",
+        "6aafec7606f09198bc7f5f95"
+      ],
+      "gridFsFileId": "6aafec7206f09198bc7f5f7f"
+    },
+    {
+      "reportId": "6ab094af7122e9bc5dec6f35",
+      "staffName": "jam",
+      "createdAt": "2026-09-21T02:21:35.358Z",
+      "photos": [],
+      "gridFsFileIds": [
+        "6ab094ad7122e9bc5dec6f31"
+      ],
+      "gridFsFileId": "6ab094ad7122e9bc5dec6f31"
+    },
+    {
+      "reportId": "6ab557526bc0e76b1f7942c9",
+      "staffName": "king",
+      "createdAt": "2026-09-24T17:01:06.981Z",
+      "photos": [],
+      "gridFsFileIds": [
+        "6ab5574a6bc0e76b1f7942c7"
+      ],
+      "gridFsFileId": "6ab5574a6bc0e76b1f7942c7"
     }
   ]
 }

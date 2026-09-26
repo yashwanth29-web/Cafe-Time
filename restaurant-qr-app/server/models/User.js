@@ -55,6 +55,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  attendancePin: {
+    type: String,
+    default: '',
+    trim: true
+  },
   cafeId: {
     type: String,
     default: ''
@@ -75,6 +80,22 @@ const UserSchema = new mongoose.Schema({
   requiredHours: {
     type: Number,
     default: 8
+  },
+  shiftStartTime: {
+    type: String,
+    default: '09:00'
+  },
+  shiftEndTime: {
+    type: String,
+    default: '18:00'
+  },
+  leanTimeMinutes: {
+    type: Number,
+    default: 30
+  },
+  workDaysPerWeek: {
+    type: Number,
+    default: 6
   },
   hourlyRate: {
     type: Number,
@@ -117,6 +138,18 @@ const UserSchema = new mongoose.Schema({
     default: 0
   },
   salaryEarnedThisMonth: {
+    type: Number,
+    default: 0
+  },
+  totalEarnedAllTime: {
+    type: Number,
+    default: 0
+  },
+  totalPaidAllTime: {
+    type: Number,
+    default: 0
+  },
+  remainingSalaryBalance: {
     type: Number,
     default: 0
   },

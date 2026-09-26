@@ -151,24 +151,16 @@ const getInventory = async (req, res, next) => {
     }
     // No branch filter when reqBranchId is 'all' or missing — return all cafe inventory
     
-    // Auto-seeding ONLY applies to the original CD001 demo cafe.
-    // Real cafes (CP007, etc.) must start with an empty inventory — never auto-populate.
-    // This prevents deleted items from re-appearing after the owner removes them.
-    const isDemoCafe = cafeId === 'CD001';
-    if (isDemoCafe) {
-      const totalItemsCount = await Inventory.countDocuments(query);
-      const hasOldDemoItems = await Inventory.exists({ cafeId, name: { $in: ['Burger Buns', 'Chicken Patties', 'Coffee Beans'] } });
+    // Fast indexed fetch directly without redundant countDocuments and exists roundtrips
+    let rawItems = await Inventory.find(query).sort({ name: 1 }).lean();
+    
+    // Auto-seeding ONLY applies if CD001 demo cafe has 0 items
+    if (rawItems.length === 0 && cafeId === 'CD001') {
       const seedBranch = reqBranchId || (isStaff ? req.user.assignedBranch : 'default');
-
-      if (totalItemsCount === 0 || hasOldDemoItems) {
-        console.log(`[SEED] Clearing old demo inventory and seeding Dr. Chai defaults for branch: ${seedBranch}...`);
-        await Inventory.deleteMany({ cafeId, branchId: seedBranch });
-        await seedDefaultInventory(cafeId, seedBranch);
-      }
+      console.log(`[SEED] Seeding Dr. Chai defaults for branch: ${seedBranch}...`);
+      await seedDefaultInventory(cafeId, seedBranch);
+      rawItems = await Inventory.find(query).sort({ name: 1 }).lean();
     }
-
-    // Return items sorted alphabetically, deduplicated by _id as a safety net
-    const rawItems = await Inventory.find(query).sort({ name: 1 }).lean();
     const seen = new Set();
     const items = rawItems.filter(item => {
       const key = String(item._id);
@@ -570,7 +562,7 @@ const getWastageReport = async (req, res, next) => {
       query.branchId = queryBranch;
     }
 
-    const logs = await InventoryLog.find(query).sort({ createdAt: -1 });
+    const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).limit(1000).lean();
     const totalCost = logs.reduce((sum, log) => sum + (log.cost || 0), 0);
     const count = logs.length;
 
@@ -598,7 +590,7 @@ const getConsumptionReport = async (req, res, next) => {
       query.branchId = queryBranch;
     }
 
-    const logs = await InventoryLog.find(query).sort({ createdAt: -1 });
+    const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).limit(1000).lean();
     const totalCost = logs.reduce((sum, log) => sum + (log.cost || 0), 0);
     const count = logs.length;
 

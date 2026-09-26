@@ -1,10 +1,25 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+// In-memory 60s user profile cache to prevent repetitive DB queries on every concurrent API call
+const userAuthCache = new Map();
+
+/**
+ * Invalidate cached user if updated (e.g. role/password changed)
+ */
+const invalidateUserCache = (userId) => {
+  if (userId) userAuthCache.delete(String(userId));
+};
+
 /**
  * Protect middleware to verify JWT session and load user profile
  */
 const protect = async (req, res, next) => {
+  // Fast-path: If user was already decoded and attached by prior middleware
+  if (req.user && req.user._id) {
+    return next();
+  }
+
   let token;
 
   // 1. Get token from cookies or authorization header
@@ -22,9 +37,23 @@ const protect = async (req, res, next) => {
   try {
     // 2. Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_cafe_key_12345');
+    const nowMs = Date.now();
 
-    // 3. Find user in database
-    const user = await User.findById(decoded.id);
+    // 3. Fast memory cache check (60s TTL)
+    let cached = userAuthCache.get(decoded.id);
+    let user;
+    if (cached && cached.expiresAt > nowMs) {
+      user = cached.user;
+    } else {
+      user = await User.findById(decoded.id);
+      if (user) {
+        userAuthCache.set(decoded.id, {
+          user,
+          expiresAt: nowMs + 60000 // 60 seconds
+        });
+      }
+    }
+
     if (!user) {
       return res.status(401).json({ success: false, message: 'User account no longer exists' });
     }
@@ -34,20 +63,11 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Account deactivated. Contact system admin.' });
     }
 
-    // Check if associated cafe is soft-deleted
-    if (user.cafeId) {
-      const Cafe = require('../models/Cafe');
-      const cafe = await Cafe.findOne({ cafeId: user.cafeId });
-      if (cafe && cafe.isDeleted) {
-        return res.status(401).json({ success: false, message: 'This cafe has been deleted. Access denied.' });
-      }
-    }
-
-    // 4. Update lastSeen with throttling (only write to DB if lastSeen is older than 2 minutes)
+    // 4. Update lastSeen in background without blocking response
     const now = new Date();
     if (!user.lastSeen || (now - user.lastSeen) > 2 * 60 * 1000) {
       user.lastSeen = now;
-      await user.save();
+      User.updateOne({ _id: user._id }, { $set: { lastSeen: now } }).catch(() => {});
     }
 
     // Attach user profile to request object
@@ -78,5 +98,7 @@ const restrictTo = (...roles) => {
 
 module.exports = {
   protect,
-  restrictTo
+  restrictTo,
+  userAuthCache,
+  invalidateUserCache
 };

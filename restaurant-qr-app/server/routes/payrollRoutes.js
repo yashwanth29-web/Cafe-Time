@@ -7,6 +7,7 @@ const {
   getCurrentEmployeePayroll,
   updatePayroll,
   payPayroll,
+  recordStaffPayment,
   deletePayroll,
   getPayrollHistory,
   getPayrollReport,
@@ -19,6 +20,7 @@ const { protect, restrictTo } = require('../middleware/authMiddleware');
 router.use(protect);
 
 router.post('/generate', restrictTo('admin', 'owner'), generatePayroll);
+router.post('/record-payment', restrictTo('admin', 'owner'), recordStaffPayment);
 router.get('/', restrictTo('admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier', 'waiter_cashier'), listPayroll);
 router.get('/current', restrictTo('admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier', 'waiter_cashier'), getCurrentEmployeePayroll);
 router.get('/history', restrictTo('admin', 'owner', 'manager', 'staff', 'chef', 'waiter', 'cashier', 'waiter_cashier'), getPayrollHistory);

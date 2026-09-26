@@ -41,7 +41,8 @@ const parseCoords = (locationStr) => {
 const createStaff = async (req, res) => {
   const { 
     name, username, password, email, phone, staffRole, assignedBranch, isActive,
-    salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
+    salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus,
+    shiftStartTime, shiftEndTime, leanTimeMinutes, workDaysPerWeek, attendancePin
   } = req.body;
   const cafeId = req.user.cafeId;
 
@@ -129,12 +130,17 @@ const createStaff = async (req, res) => {
       salaryType: salaryType || 'DAILY',
       dailyRate: dailyRate !== undefined ? Number(dailyRate) : 0,
       requiredHours: requiredHours !== undefined ? Number(requiredHours) : 8,
+      shiftStartTime: shiftStartTime || '09:00',
+      shiftEndTime: shiftEndTime || '18:00',
+      leanTimeMinutes: leanTimeMinutes !== undefined ? Number(leanTimeMinutes) : 30,
+      workDaysPerWeek: workDaysPerWeek !== undefined ? Number(workDaysPerWeek) : 6,
       hourlyRate: dailyRate !== undefined ? Number((Number(dailyRate) / (requiredHours !== undefined ? Number(requiredHours) : 8)).toFixed(2)) : 0,
-      weeklyRate: dailyRate !== undefined ? Number((Number(dailyRate) * 6).toFixed(2)) : 0,
+      weeklyRate: dailyRate !== undefined ? Number((Number(dailyRate) * (workDaysPerWeek !== undefined ? Number(workDaysPerWeek) : 6)).toFixed(2)) : 0,
       monthlyRate: dailyRate !== undefined ? Number((Number(dailyRate) * 26).toFixed(2)) : 0,
       weeklyOff: weeklyOff || 'Sunday',
       joiningDate: joiningDate ? new Date(joiningDate) : new Date(),
-      salaryStatus: salaryStatus || 'ACTIVE'
+      salaryStatus: salaryStatus || 'ACTIVE',
+      attendancePin: attendancePin ? String(attendancePin).trim() : ''
     });
 
     if (cleanEmail) {
@@ -262,58 +268,69 @@ const getStaff = async (req, res) => {
     const Attendance = require('../models/Attendance');
     const Payroll = require('../models/Payroll');
 
-    const cafe = await Cafe.findOne({ cafeId });
-    const branchDoc = await Branch.findOne({ branchId: activeBranch, cafeId });
+    const SalaryHistory = require('../models/SalaryHistory');
+    const staffIds = staff.map(s => String(s._id));
+
+    // Execute all supporting queries concurrently with Promise.all for high performance
+    const [
+      cafe,
+      branchDoc,
+      ordersCounts,
+      payrollList,
+      attendances,
+      paidHistories,
+      allTimeAttendances
+    ] = await Promise.all([
+      Cafe.findOne({ cafeId }).lean(),
+      Branch.findOne({ branchId: activeBranch, cafeId }).lean(),
+      Order.aggregate([
+        {
+          $match: {
+            cafeId,
+            staffId: { $in: staffIds },
+            source: 'STAFF',
+            createdAt: { $gte: todayStart }
+          }
+        },
+        {
+          $group: {
+            _id: '$staffId',
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+      Payroll.find({
+        employeeId: { $in: staffIds },
+        $or: [
+          { weekStart, weekEnd },
+          { weekStart: { $gte: monthStart, $lte: monthEnd } }
+        ]
+      }).lean(),
+      Attendance.find({
+        staffId: { $in: staffIds },
+        cafeId,
+        branchId: activeBranch,
+        date: { $gte: monthStart, $lte: monthEnd }
+      }).lean(),
+      SalaryHistory.find({ employeeId: { $in: staffIds }, paymentStatus: 'Paid' }).lean(),
+      Attendance.find({ staffId: { $in: staffIds }, cafeId }).lean()
+    ]);
+
     const cafeName = cafe ? cafe.name : cafeId;
     const branchName = branchDoc ? branchDoc.branchName : activeBranch;
 
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-    // Batched DB queries to avoid N+1 query performance bottleneck
-    const staffIds = staff.map(s => String(s._id));
-    
-    // 1. Batch ordersCount
-    const ordersCounts = await Order.aggregate([
-      {
-        $match: {
-          cafeId,
-          staffId: { $in: staffIds },
-          source: 'STAFF',
-          createdAt: { $gte: todayStart }
-        }
-      },
-      {
-        $group: {
-          _id: '$staffId',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
     const ordersMap = {};
     ordersCounts.forEach(o => {
       ordersMap[String(o._id)] = o.count;
     });
 
-    // 2. Batch Payrolls (Check current month or active week)
-    const payrollList = await Payroll.find({
-      employeeId: { $in: staffIds },
-      $or: [
-        { weekStart, weekEnd },
-        { weekStart: { $gte: monthStart, $lte: monthEnd } }
-      ]
-    }).lean();
     const payrollMap = {};
     payrollList.forEach(p => {
       payrollMap[String(p.employeeId)] = p;
     });
 
-    // 3. Batch Attendances for the current month
-    const attendances = await Attendance.find({
-      staffId: { $in: staffIds },
-      cafeId,
-      branchId: activeBranch,
-      date: { $gte: monthStart, $lte: monthEnd }
-    }).lean();
     const attendanceMap = {};
     attendances.forEach(att => {
       const sId = String(att.staffId);
@@ -321,6 +338,33 @@ const getStaff = async (req, res) => {
         attendanceMap[sId] = [];
       }
       attendanceMap[sId].push(att);
+    });
+
+    const paidMap = {};
+    paidHistories.forEach(ph => {
+      const eId = String(ph.employeeId);
+      paidMap[eId] = (paidMap[eId] || 0) + (ph.finalSalary || 0);
+    });
+    const allTimeEarnedMap = {};
+    allTimeAttendances.forEach(att => {
+      const eId = String(att.staffId);
+      const staffMember = staff.find(x => String(x._id) === eId);
+      const userRate = staffMember ? (staffMember.dailyRate || 0) : 0;
+      const userReqH = staffMember ? (staffMember.requiredHours || 8) : 8;
+      let earned = 0;
+      if (att.dailyWageEarned !== undefined && att.dailyWageEarned !== null && att.dailyWageEarned > 0) {
+        earned = att.dailyWageEarned;
+      } else {
+        const rate = att.dailyWageRate || userRate;
+        let base = 0;
+        if (att.status === 'Half Day') base = rate * 0.5;
+        else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) base = rate;
+        else if (att.status === 'Absent') base = 0;
+        else base = (rate * (att.workingHours || 0)) / userReqH;
+        const ot = (rate / userReqH) * (att.overtimeHours || 0);
+        earned = base + ot;
+      }
+      allTimeEarnedMap[eId] = (allTimeEarnedMap[eId] || 0) + earned;
     });
 
     const staffWithOrders = staff.map(s => {
@@ -356,23 +400,29 @@ const getStaff = async (req, res) => {
         totalOtHours += oh;
 
         let regularSalary = 0;
-        if (att.status === 'Half Day') {
-          halfCount += 1;
-          regularSalary = baseDailyRate * 0.5;
-        } else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) {
-          presentCount += 1;
-          // When attendance is marked, they get their full day's salary!
-          regularSalary = baseDailyRate;
-        } else if (att.status === 'Absent') {
-          absentCount += 1;
-          regularSalary = 0;
+        if (att.dailyWageEarned !== undefined && att.dailyWageEarned !== null && att.dailyWageEarned > 0) {
+          regularSalary = att.dailyWageEarned;
+          if (att.status === 'Half Day') halfCount += 1;
+          else if (att.status === 'Absent') absentCount += 1;
+          else presentCount += 1;
         } else {
-          regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+          if (att.status === 'Half Day') {
+            halfCount += 1;
+            regularSalary = baseDailyRate * 0.5;
+          } else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) {
+            presentCount += 1;
+            regularSalary = baseDailyRate;
+          } else if (att.status === 'Absent') {
+            absentCount += 1;
+            regularSalary = 0;
+          } else {
+            regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+          }
+          const overtimeSalary = (baseDailyRate * oh) / reqHours;
+          regularSalary += overtimeSalary;
         }
 
-        const overtimeSalary = (baseDailyRate * oh) / reqHours;
-        const daySalary = Number((regularSalary + overtimeSalary).toFixed(2));
-
+        const daySalary = Number(regularSalary.toFixed(2));
         monthEarned += daySalary;
 
         // Populate weekly breakdown if within current week
@@ -388,6 +438,10 @@ const getStaff = async (req, res) => {
       const workingDays = presentCount + halfCount * 0.5;
       const actualHoursWorked = Number((totalWorkHours + totalOtHours).toFixed(2));
 
+      const totalEarnedAllTime = Number((allTimeEarnedMap[sIdStr] || monthEarned || 0).toFixed(2));
+      const totalPaidAllTime = Number((paidMap[sIdStr] || 0).toFixed(2));
+      const remainingSalaryBalance = Math.max(0, Number((totalEarnedAllTime - totalPaidAllTime).toFixed(2)));
+
       const formattedAttendances = rawAttendances.map(att => {
         let durationMin = att.totalDuration || 0;
         if (!att.checkOutTime && att.checkInTime) {
@@ -395,29 +449,57 @@ const getStaff = async (req, res) => {
         }
         const wh = Number((durationMin / 60).toFixed(2));
         const oh = att.overtimeHours || 0;
-        let regularSalary = 0;
-        if (att.status === 'Half Day') {
-          regularSalary = baseDailyRate * 0.5;
-        } else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) {
-          regularSalary = baseDailyRate;
-        } else if (att.status === 'Absent') {
-          regularSalary = 0;
-        } else {
-          regularSalary = wh >= reqHours ? baseDailyRate : (baseDailyRate * wh) / reqHours;
+        let dayWage = att.dailyWageEarned;
+        if (dayWage === undefined || dayWage === null) {
+          let reg = 0;
+          if (att.status === 'Half Day') reg = baseDailyRate * 0.5;
+          else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) reg = baseDailyRate;
+          else if (att.status === 'Absent') reg = 0;
+          else reg = (baseDailyRate * wh) / reqHours;
+          const ot = (baseDailyRate * oh) / reqHours;
+          dayWage = reg + ot;
         }
-        const overtimeSalary = (baseDailyRate * oh) / reqHours;
         return {
+          _id: att._id,
           date: att.date || new Date(att.createdAt).toISOString().split('T')[0],
           checkInTime: att.checkInTime,
           checkOutTime: att.checkOutTime,
           status: att.status,
+          image: att.image,
           workingHours: Number((wh + oh).toFixed(2)),
-          dailySalary: Number((regularSalary + overtimeSalary).toFixed(2))
+          shiftStartTime: att.shiftStartTime || s.shiftStartTime || '09:00',
+          shiftEndTime: att.shiftEndTime || s.shiftEndTime || '18:00',
+          leanTimeMinutes: att.leanTimeMinutes !== undefined ? att.leanTimeMinutes : (s.leanTimeMinutes !== undefined ? s.leanTimeMinutes : 30),
+          autoCheckedOut: att.autoCheckedOut || false,
+          notes: att.notes || '',
+          overtimeHours: att.overtimeHours || 0,
+          overtimePay: att.overtimePay || 0,
+          dailyWageRate: att.dailyWageRate || baseDailyRate,
+          dailySalary: Number(Number(dayWage).toFixed(2))
         };
       });
 
+      const staffPaymentHistory = paidHistories
+        .filter(ph => String(ph.employeeId) === sIdStr)
+        .map(ph => ({
+          _id: ph._id,
+          amount: ph.finalSalary || ph.paidAmount || ph.amountPaid || 0,
+          paymentMethod: ph.paymentMethod || 'Cash',
+          paymentDate: ph.paymentDate || ph.paidAt || ph.createdAt,
+          notes: ph.notes || 'Salary Disbursement',
+          status: ph.paymentStatus || 'Paid'
+        }));
+
+      const staffPhotos = (allTimeAttendances || [])
+        .filter(a => String(a.staffId) === sIdStr && a.image)
+        .sort((a, b) => new Date(b.createdAt || b.date || b.checkInTime) - new Date(a.createdAt || a.date || a.checkInTime));
+      const latestSelfie = staffPhotos.length > 0 ? staffPhotos[0].image : (s.avatar || s.image || '');
+
       return {
         ...s,
+        avatar: s.avatar || latestSelfie || '',
+        latestSelfie: latestSelfie || '',
+        image: latestSelfie || s.image || s.avatar || '',
         ordersHandledToday: ordersCount,
         weeklyBreakdown,
         workingDays,
@@ -426,13 +508,17 @@ const getStaff = async (req, res) => {
         currentMonthSalary,
         currentWeekSalary,
         currentSalary: currentMonthSalary,
+        totalEarnedAllTime,
+        totalPaidAllTime,
+        remainingSalaryBalance,
         monthName,
         monthStart,
         monthEnd,
         payrollStatus: pr ? (pr.paymentStatus || 'Pending') : 'Pending',
         cafeName,
         branchName,
-        attendances: formattedAttendances
+        attendances: formattedAttendances,
+        paymentHistory: staffPaymentHistory
       };
     });
     
@@ -450,7 +536,8 @@ const updateStaff = async (req, res) => {
   const { id } = req.params;
   const { 
     name, email, phone, staffRole, assignedBranch, isActive,
-    salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus
+    salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus,
+    shiftStartTime, shiftEndTime, leanTimeMinutes, workDaysPerWeek, attendancePin
   } = req.body;
   const cafeId = req.user.cafeId;
 
@@ -530,17 +617,33 @@ const updateStaff = async (req, res) => {
     if (requiredHours !== undefined) {
       staffMember.requiredHours = Number(requiredHours);
     }
-    if (dailyRate !== undefined || requiredHours !== undefined) {
+    if (shiftStartTime !== undefined) {
+      staffMember.shiftStartTime = shiftStartTime;
+    }
+    if (shiftEndTime !== undefined) {
+      staffMember.shiftEndTime = shiftEndTime;
+    }
+    if (leanTimeMinutes !== undefined) {
+      staffMember.leanTimeMinutes = Number(leanTimeMinutes);
+    }
+    if (workDaysPerWeek !== undefined) {
+      staffMember.workDaysPerWeek = Number(workDaysPerWeek);
+    }
+    if (dailyRate !== undefined || requiredHours !== undefined || workDaysPerWeek !== undefined) {
       const baseDailyRate = dailyRate !== undefined ? Number(dailyRate) : staffMember.dailyRate;
       const reqHours = staffMember.requiredHours || 8;
+      const daysPerWk = staffMember.workDaysPerWeek || 6;
       staffMember.dailyRate = baseDailyRate;
       staffMember.hourlyRate = Number((baseDailyRate / reqHours).toFixed(2));
-      staffMember.weeklyRate = Number((baseDailyRate * 6).toFixed(2));
+      staffMember.weeklyRate = Number((baseDailyRate * daysPerWk).toFixed(2));
       staffMember.monthlyRate = Number((baseDailyRate * 26).toFixed(2));
     }
     if (weeklyOff) staffMember.weeklyOff = weeklyOff;
     if (joiningDate) staffMember.joiningDate = new Date(joiningDate);
     if (salaryStatus) staffMember.salaryStatus = salaryStatus;
+    if (attendancePin !== undefined) {
+      staffMember.attendancePin = String(attendancePin || '').trim();
+    }
 
     await staffMember.save();
 
@@ -552,6 +655,73 @@ const updateStaff = async (req, res) => {
   } catch (error) {
     console.error('updateStaff error:', error);
     return res.status(500).json({ success: false, message: 'Server error updating staff member' });
+  }
+};
+
+/**
+ * Record a Manual Offline Salary Payment for a Staff Member
+ */
+const recordStaffPayment = async (req, res) => {
+  const { id } = req.params;
+  const { amount, paymentMethod, paymentDate, notes } = req.body;
+  const cafeId = req.user.cafeId;
+
+  if (!amount || Number(amount) <= 0) {
+    return res.status(400).json({ success: false, message: 'Valid payment amount is required' });
+  }
+
+  try {
+    const staff = await User.findOne({ _id: id, cafeId });
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found or does not belong to your cafe' });
+    }
+
+    const payDate = paymentDate ? new Date(paymentDate) : new Date();
+    const dateStr = payDate.toISOString().split('T')[0];
+    const numAmount = Number(amount);
+
+    const SalaryHistory = require('../models/SalaryHistory');
+    const paymentRecord = await SalaryHistory.create({
+      payrollId: new mongoose.Types.ObjectId(),
+      employeeId: staff._id,
+      employeeName: staff.name,
+      cafeId: staff.cafeId,
+      branchId: staff.assignedBranch || 'default',
+      branchName: staff.assignedBranch || 'Main Branch',
+      payrollWeek: `Disbursement on ${dateStr}`,
+      weekStart: dateStr,
+      weekEnd: dateStr,
+      workedDays: 0,
+      workedHours: 0,
+      grossSalary: numAmount,
+      deductions: 0,
+      finalSalary: numAmount,
+      paidAmount: numAmount,
+      paymentMethod: paymentMethod || 'Cash',
+      paymentStatus: 'Paid',
+      paymentDate: payDate,
+      paidAt: payDate,
+      notes: notes || 'Manual offline salary disbursement',
+      payoutId: `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`
+    });
+
+    let balanceInfo = null;
+    try {
+      const { recalculateStaffSalary } = require('../services/payrollService');
+      balanceInfo = await recalculateStaffSalary(staff._id);
+    } catch (calcErr) {
+      console.warn('recalculateStaffSalary non-fatal error:', calcErr);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Recorded payment of ₹${numAmount} for ${staff.name} successfully.`,
+      payment: paymentRecord,
+      balance: balanceInfo
+    });
+  } catch (error) {
+    console.error('recordStaffPayment error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Server error recording staff payment' });
   }
 };
 
@@ -898,9 +1068,18 @@ const updateOwnerProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, message: 'Owner user not found' });
     }
-    if (name) user.name = name.trim();
-    if (phone) user.phone = phone.trim();
+    if (name) {
+      const cleanName = name.trim();
+      user.name = cleanName;
+      user.displayName = cleanName;
+    }
+    if (phone !== undefined) user.phone = String(phone).trim();
     await user.save();
+
+    if (user.cafeId && name) {
+      await Cafe.updateOne({ cafeId: user.cafeId }, { $set: { ownerName: name.trim() } });
+    }
+
     invalidateAdminCache(req.user.cafeId);
     return res.status(200).json({ success: true, user });
   } catch (error) {
@@ -1922,7 +2101,8 @@ const getDashboardStats = async (req, res) => {
       paymentStats,
       weeklySalesAgg,
       recentOrders,
-      allBranches
+      allBranches,
+      allMenuItems
     ] = await Promise.all([
       Order.aggregate([
         { $match: revenueMatch },
@@ -1935,6 +2115,22 @@ const getDashboardStats = async (req, res) => {
                 $cond: [ { $gte: ['$createdAt', startOfToday] }, '$totalAmount', 0 ] 
               } 
             },
+            todayCashRevenue: {
+              $sum: {
+                $cond: [
+                  { $and: [ { $gte: ['$createdAt', startOfToday] }, { $in: ['$paymentMethod', ['Cash', 'cash']] } ] },
+                  '$totalAmount', 0
+                ]
+              }
+            },
+            todayOnlineRevenue: {
+              $sum: {
+                $cond: [
+                  { $and: [ { $gte: ['$createdAt', startOfToday] }, { $in: ['$paymentMethod', ['Online', 'UPI', 'Card', 'online', 'upi', 'card']] } ] },
+                  '$totalAmount', 0
+                ]
+              }
+            },
             weeklyRevenue: { 
               $sum: { 
                 $cond: [ { $gte: ['$createdAt', startOfWeek] }, '$totalAmount', 0 ] 
@@ -1944,6 +2140,22 @@ const getDashboardStats = async (req, res) => {
               $sum: { 
                 $cond: [ { $gte: ['$createdAt', startOfMonth] }, '$totalAmount', 0 ] 
               } 
+            },
+            monthlyCashRevenue: {
+              $sum: {
+                $cond: [
+                  { $and: [ { $gte: ['$createdAt', startOfMonth] }, { $in: ['$paymentMethod', ['Cash', 'cash']] } ] },
+                  '$totalAmount', 0
+                ]
+              }
+            },
+            monthlyOnlineRevenue: {
+              $sum: {
+                $cond: [
+                  { $and: [ { $gte: ['$createdAt', startOfMonth] }, { $in: ['$paymentMethod', ['Online', 'UPI', 'Card', 'online', 'upi', 'card']] } ] },
+                  '$totalAmount', 0
+                ]
+              }
             },
             yearlyRevenue: { 
               $sum: { 
@@ -2039,15 +2251,20 @@ const getDashboardStats = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(5)
         .lean(),
-      Branch.find({ cafeId }).lean()
+      Branch.find({ cafeId }).lean(),
+      MenuItem.find({ cafeId }).select('_id name category price makingCost isHidden').lean()
     ]);
-    
+
     const revenueData = revenueStats.length > 0 ? revenueStats[0] : { 
       totalRevenueAllTime: 0, 
-      todayRevenue: 0, 
+      todayRevenue: 0,
+      todayCashRevenue: 0,
+      todayOnlineRevenue: 0,
       weeklyRevenue: 0,
-      monthlyRevenue: 0, 
-      yearlyRevenue: 0,
+      monthlyRevenue: 0,
+      monthlyCashRevenue: 0,
+      monthlyOnlineRevenue: 0,
+      yearlyRevenue: 0, 
       completedOrdersCount: 0 
     };
     
@@ -2078,23 +2295,17 @@ const getDashboardStats = async (req, res) => {
         revenue: item.revenue
       }));
 
-    // Fetch menu items once for both slow selling calculation and profit margins
-    const allMenuItems = await MenuItem.find({ cafeId }).select('_id name category price makingCost isHidden').lean();
-    
-    // Slow Selling: includes all cafe dishes (unsold / 0 sold items first, then least sold)
-    const activeMenuItems = allMenuItems.filter(m => m.isHidden !== true);
-    const slowSellingList = activeMenuItems.map(m => {
-      const sold = salesMap[m.name] || { quantity: 0, revenue: 0 };
-      return {
+    // Slow Selling: only dishes not sold even one time today (0 sales)
+    const activeMenuItems = (allMenuItems || []).filter(m => m.isHidden !== true);
+    const slowSellingList = activeMenuItems
+      .filter(m => !salesMap[m.name] || (salesMap[m.name]?.quantity || 0) === 0)
+      .map(m => ({
         name: m.name,
-        quantity: sold.quantity,
-        revenue: sold.revenue,
+        quantity: 0,
+        revenue: 0,
         category: m.category
-      };
-    });
+      }));
 
-    // Sort ascending: 0 sold first, then 1, 2...
-    slowSellingList.sort((a, b) => a.quantity - b.quantity);
     const formattedSlowSelling = slowSellingList.slice(0, 10);
     
     const inventoryValue = inventoryValueAgg.length > 0 ? inventoryValueAgg[0].totalValue : 0;
@@ -2193,10 +2404,14 @@ const getDashboardStats = async (req, res) => {
 
     const statsPayload = {
       todayRevenue: revenueData.todayRevenue,
+      todayCashRevenue: revenueData.todayCashRevenue || 0,
+      todayOnlineRevenue: revenueData.todayOnlineRevenue || 0,
       todayProfit: Number(todayGrossProfit.toFixed(2)),
       todayMargin,
       weeklyRevenue: revenueData.weeklyRevenue,
       monthlyRevenue: revenueData.monthlyRevenue,
+      monthlyCashRevenue: revenueData.monthlyCashRevenue || 0,
+      monthlyOnlineRevenue: revenueData.monthlyOnlineRevenue || 0,
       monthlyProfit: Number(monthlyGrossProfit.toFixed(2)),
       monthlyMargin,
       yearlyRevenue: revenueData.yearlyRevenue,
@@ -2685,5 +2900,6 @@ module.exports = {
   updateCafeTheme,
   getReports,
   initializeTenantAssets,
-  resetStaffPassword
+  resetStaffPassword,
+  recordStaffPayment
 };

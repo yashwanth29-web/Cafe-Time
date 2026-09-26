@@ -80,7 +80,10 @@ const InventoryLogSchema = new mongoose.Schema({
 });
 
 
-// Optimize queries bounded by branch
+// Optimize queries bounded by branch, type, and date
 InventoryLogSchema.index({ cafeId: 1, branchId: 1 });
+InventoryLogSchema.index({ cafeId: 1, type: 1, createdAt: -1 });
+InventoryLogSchema.index({ cafeId: 1, branchId: 1, type: 1, createdAt: -1 });
+InventoryLogSchema.index({ cafeId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('InventoryLog', InventoryLogSchema);

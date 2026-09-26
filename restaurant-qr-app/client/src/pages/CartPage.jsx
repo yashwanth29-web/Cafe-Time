@@ -357,9 +357,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         }
 
         if (isStaff) {
-          setTimeout(() => {
-            window.location.href = '/staff/workspace';
-          }, 600);
+          navigate('/staff/workspace');
           return;
         }
 

@@ -9,7 +9,8 @@ const {
   getOwnerReports,
   startExtraWork,
   stopExtraWork,
-  editAttendance
+  editAttendance,
+  getKioskStaffList
 } = require('../controllers/attendanceController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -53,6 +54,7 @@ const upload = multer({
 router.use(protect);
 
 // Staff Attendance Endpoints
+router.get('/kiosk/staff-list', getKioskStaffList);
 router.post('/check-in', upload.single('image'), checkIn);
 router.post('/check-out', checkOut);
 router.get('/today', getTodayStatus);

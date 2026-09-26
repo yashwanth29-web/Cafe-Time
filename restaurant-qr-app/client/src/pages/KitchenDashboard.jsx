@@ -368,7 +368,7 @@ const KitchenDashboard = () =>{
  {order.source === 'STAFF' && <span style={{ background: '#3498db', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>STAFF</span>}
 </span>
 <h3 style={{ margin: '4px 0 0 0', color: 'var(--color-text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>
- Order #{order._id.substring(order._id.length - 6).toUpperCase()}
+  Order #{String(order?._id || order?.id || '').slice(-6).toUpperCase() || 'N/A'}
 </h3>
 </div>
 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
@@ -507,7 +507,7 @@ const KitchenDashboard = () =>{
 </button>
 </div>
 <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
- Order #{order._id.substring(order._id.length - 4).toUpperCase()}
+  Order #{String(order?._id || order?.id || '').slice(-4).toUpperCase() || 'N/A'}
 </div>
 </div>
 )}

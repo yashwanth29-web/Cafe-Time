@@ -16,8 +16,8 @@ const getCookieOptions = () => ({
  */
 const formatUserPayload = (user, setupCompleted = true) => ({
   id: user._id,
-  name: user.displayName || user.name || user.username,
-  displayName: user.displayName || user.name || user.username,
+  name: user.name || user.displayName || user.username,
+  displayName: user.name || user.displayName || user.username,
   username: user.username,
   email: user.email || '',
   phone: user.phone || '',

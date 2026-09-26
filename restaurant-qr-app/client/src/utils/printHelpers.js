@@ -20,7 +20,7 @@ export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null
     type,
     order: {
       ...order,
-      cafeName: order.cafeName || cafe?.name || 'DR.CAFE CHAI',
+      cafeName: order.cafeName || cafe?.name || 'DR . Chai Cafe',
       branchName: order.branchName || branch?.branchName || 'CP007-B1',
       branchAddress: order.branchAddress || branch?.address || cafe?.address || 'mangalagiri, Andhra Pradesh',
       cafeSupportNumber: order.cafeSupportNumber || cafe?.phone || cafe?.contact || '',

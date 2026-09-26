@@ -47,13 +47,22 @@ import {
  updatePayroll,
  payPayroll,
  approvePayroll,
- getSalaryHistory } from
-'../services/api';
+  getSalaryHistory,
+  getExpenses,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+  getCashRegister,
+  saveCashRegister,
+  deleteCashRegister,
+  recordStaffPayment
+} from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import socket from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
-import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3, FileSpreadsheet } from 'lucide-react';
+import RecipeMapper from '../components/RecipeMapper';
+import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3, FileSpreadsheet, Receipt, Wallet, Plus, Trash2, Edit2, Banknote, Smartphone } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const PRESET_CATEGORIES = [
@@ -162,6 +171,24 @@ const AdminMenuCard = React.memo(({ item, onEdit, onDelete, onToggle }) => {
   );
 });
 
+const formatLastSavedTime = (dateStr) => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  if (isToday) {
+    return `Today, ${timeStr}`;
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) {
+    return `Yesterday, ${timeStr}`;
+  }
+  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${timeStr}`;
+};
+
 const InvMobileCard = React.memo(({ item, onPurchase, onWastage, onEdit, onDelete }) => {
   const qtyVal = item.quantity !== undefined ? item.quantity : item.stock;
   const reorderVal = item.reorderLevel !== undefined ? item.reorderLevel : item.minStock;
@@ -184,7 +211,7 @@ const InvMobileCard = React.memo(({ item, onPurchase, onWastage, onEdit, onDelet
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ color: 'var(--color-text-primary)', fontWeight: 700, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
-          <div style={{ color: 'var(--color-text-secondary)', fontSize: '11px', marginTop: '2px' }}>{item.category || 'Ingredients'}</div>
+          <div style={{ color: 'var(--color-text-secondary)', fontSize: '11px', marginTop: '2px' }}>🕒 Last Saved: {formatLastSavedTime(item.updatedAt || item.createdAt)}</div>
         </div>
         <span style={{
           background: `${statusColor}18`, border: `1px solid ${statusColor}`,
@@ -249,7 +276,6 @@ const InvTableRow = React.memo(({ item, onPurchase, onWastage, onEdit, onDelete 
   return (
     <tr style={{ borderBottom: '1px solid #432E22' }}>
       <td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{item.name}</td>
-      <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{item.category || 'Ingredients'}</td>
       <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: isLow ? '#E74C3C' : 'var(--color-text-primary)' }}>{qtyVal} {item.unit}</td>
       <td style={{ padding: '10px 8px', textAlign: 'center' }}>
         <span style={{ backgroundColor: `${statusColor}1A`, border: `1px solid ${statusColor}`, color: statusColor, padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
@@ -268,7 +294,9 @@ const InvTableRow = React.memo(({ item, onPurchase, onWastage, onEdit, onDelete 
           </div>
         )}
       </td>
-      <td style={{ padding: '10px 8px' }}>{item.branch || 'Main'}</td>
+      <td style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '12px', fontWeight: 600 }}>
+        {formatLastSavedTime(item.updatedAt || item.createdAt)}
+      </td>
       <td style={{ padding: '10px 8px', textAlign: 'center' }}>{reorderVal} {item.unit}</td>
       <td style={{ padding: '10px 8px', textAlign: 'center' }}>
         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
@@ -348,7 +376,7 @@ const OwnerDashboard = () =>{
     const tab = tabParam || location.state?.activeTab || 'analytics';
     if (tab === 'reviews') return 'menu';
     if (tab === 'attendance') return 'staff';
-    if (tab === 'reports' || tab === 'financial_reports') return 'reports';
+    if (tab === 'reports' || tab === 'financial_reports') return 'analytics';
     if (tab === 'settings' || tab === 'config') return 'analytics'; // will redirect in useEffect
     return tab;
   });
@@ -427,7 +455,8 @@ const OwnerDashboard = () =>{
     if (subParam === 'reports') return 'reports';
     if (tabParam === 'attendance') return 'attendance';
     if (subParam === 'salary') return 'salary';
-    return 'roster';
+    if (subParam === 'roster') return 'roster';
+    return 'all'; // Default to unified combined view of all 4 parts
   });
 
   const [salaryHistoryList, setSalaryHistoryList] = useState([]);
@@ -500,8 +529,39 @@ const OwnerDashboard = () =>{
   });
   const [statsError, setStatsError] = useState('');
 
+  // ── Other Expenses State ──
+  const [expenses, setExpenses] = useState([]);
+  const [expensesLoading, setExpensesLoading] = useState(false);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expenseSubmitting, setExpenseSubmitting] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [expenseDateFilter, setExpenseDateFilter] = useState('all');
+  const [newExpenseForm, setNewExpenseForm] = useState({
+    title: '',
+    amount: '',
+    category: 'Miscellaneous',
+    paymentMode: 'Cash',
+    date: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+
+  // ── Purchases & Daily Cash Register State ──
+  const [showPurchaseRegisterModal, setShowPurchaseRegisterModal] = useState(false);
+  const [cashRegisterLoading, setCashRegisterLoading] = useState(false);
+  const [cashRegisterSubmitting, setCashRegisterSubmitting] = useState(false);
+  const [cashRegisterDate, setCashRegisterDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [cashRegisterForm, setCashRegisterForm] = useState({
+    yesterdayCash: '',
+    todayCash: '',
+    bankBalance: '',
+    purchasesAmount: '',
+    purchasesNote: '',
+    notes: ''
+  });
+  const [cashRegisterHistory, setCashRegisterHistory] = useState([]);
+
   const loadReportData = async (isSilent = false) => {
-    if (!isSilent) if (!isSilent) setReportLoading(true);
+    if (!isSilent) setReportLoading(true);
     setReportError('');
     try {
       let start = reportStartDate;
@@ -541,9 +601,10 @@ const OwnerDashboard = () =>{
         const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
         start = startOfLastMonth.toISOString().split('T')[0];
         end = endOfLastMonth.toISOString().split('T')[0];
-      } else if (reportDateRange === 'this_year') {
-        const startOfYear = new Date(today.getFullYear(), 0, 1);
-        start = startOfYear.toISOString().split('T')[0];
+      } else if (reportDateRange === 'last_2_months') {
+        const sixtyDaysAgo = new Date(today);
+        sixtyDaysAgo.setDate(today.getDate() - 60);
+        start = sixtyDaysAgo.toISOString().split('T')[0];
         end = today.toISOString().split('T')[0];
       }
 
@@ -681,6 +742,11 @@ const OwnerDashboard = () =>{
     const activeId = localStorage.getItem('activeBranchId') || 'all';
     return getBranchCache(activeId).workReports;
   });
+  const todayWorkReportsCount = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return (workReports || []).filter(r => new Date(r.createdAt || r.date) >= startOfToday).length;
+  }, [workReports]);
   const [reportsLoading, setReportsLoading] = useState(() => {
     const activeId = localStorage.getItem('activeBranchId') || 'all';
     return !getBranchCache(activeId).hasLoaded.workReports;
@@ -690,6 +756,8 @@ const OwnerDashboard = () =>{
  const [reportsFilterStaff, setReportsFilterStaff] = useState('');
  const [reportsFilterBranch, setReportsFilterBranch] = useState('');
  const [selectedReport, setSelectedReport] = useState(null);
+ const [previewPhotoReport, setPreviewPhotoReport] = useState(null);
+ const [previewPhotoIndex, setPreviewPhotoIndex] = useState(0);
  const [salarySearchQuery, setSalarySearchQuery] = useState('');
  const [salaryRoleFilter, setSalaryRoleFilter] = useState('');
 
@@ -707,6 +775,12 @@ const OwnerDashboard = () =>{
   const [expandedStaffId, setExpandedStaffId] = useState(null);
   const [selectedSalaryStaff, setSelectedSalaryStaff] = useState(null);
   const [showSalaryDetailModal, setShowSalaryDetailModal] = useState(false);
+  const [showDisburseModal, setShowDisburseModal] = useState(false);
+  const [disburseStaff, setDisburseStaff] = useState(null);
+  const [disbursePaymentMethod, setDisbursePaymentMethod] = useState('UPI');
+  const [disburseRemarks, setDisburseRemarks] = useState('');
+  const [disburseAmount, setDisburseAmount] = useState(0);
+  const [disburseLoading, setDisburseLoading] = useState(false);
   const [editingWageId, setEditingWageId] = useState(null);
   const [tempWage, setTempWage] = useState(0);
 
@@ -719,8 +793,23 @@ const OwnerDashboard = () =>{
     phone: '',
     staffRole: 'staff',
     assignedBranch: '',
-    dailyRate: 0
+    dailyRate: 0,
+    shiftStartTime: '09:00',
+    shiftEndTime: '18:00',
+    leanTimeMinutes: 30,
+    workDaysPerWeek: 6,
+    attendancePin: ''
   });
+
+  // Salary payment modal states
+  const [paymentModalStaff, setPaymentModalStaff] = useState(null);
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    paymentMethod: 'Cash',
+    paymentDate: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
 
  // New menu item input state
  // Dynamic Category States
@@ -962,6 +1051,7 @@ const OwnerDashboard = () =>{
     const seenIds = new Set();
     const uniqueItems = [];
     for (const item of (menuItems || [])) {
+      if (!item) continue;
       const cleanId = String(item._id || item.id || '');
       if (cleanId && !seenIds.has(cleanId)) {
         seenIds.add(cleanId);
@@ -971,23 +1061,29 @@ const OwnerDashboard = () =>{
       }
     }
     return uniqueItems.filter((item) => {
-      const matchesSearch =
-        item.name.toLowerCase().includes(menuSearch.toLowerCase()) ||
-        (item.category || '').toLowerCase().includes(menuSearch.toLowerCase());
+      if (!item) return false;
+      const itemName = String(item.name || '').toLowerCase();
+      const itemCat = String(item.category || '').toLowerCase();
+      const searchTarget = String(menuSearch || '').toLowerCase();
+
+      const matchesSearch = itemName.includes(searchTarget) || itemCat.includes(searchTarget);
 
       const matchesCategory =
         selectedMenuCategory === 'all' ||
-        (item.category || '').toLowerCase().trim() === selectedMenuCategory.toLowerCase().trim();
+        itemCat.trim() === String(selectedMenuCategory || '').toLowerCase().trim();
 
       return matchesSearch && matchesCategory;
     });
   }, [menuItems, menuSearch, selectedMenuCategory]);
 
   const filteredInventoryList = useMemo(() => {
-    return inventoryList.filter((item) =>
-      item.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-      (item.category || '').toLowerCase().includes(inventorySearch.toLowerCase())
-    );
+    return (inventoryList || []).filter((item) => {
+      if (!item) return false;
+      const invName = String(item.name || '').toLowerCase();
+      const invCat = String(item.category || '').toLowerCase();
+      const searchTarget = String(inventorySearch || '').toLowerCase();
+      return invName.includes(searchTarget) || invCat.includes(searchTarget);
+    });
   }, [inventoryList, inventorySearch]);
 
   const past7Days = useMemo(() => {
@@ -1007,19 +1103,29 @@ const OwnerDashboard = () =>{
 
   const filteredMovementLogs = useMemo(() => {
     return (inventoryLogs || []).filter((log) => {
-      // STRICT FILTER: Only show manual "+ Add Stock" and "- Reduce Stock" (Never customer order / recipe auto-deductions)
-      const isAutoDeduction = 
+      const reasonLower = (log.reason || '').toLowerCase();
+      const userLower = (log.userEmail || '').toLowerCase();
+      const perfLower = (log.performedBy || '').toLowerCase();
+
+      // STRICT FILTER: Only show genuine manual inventory actions (purchases & manual adjustments)
+      // Hide all automatic recipe sales deductions AND order cancellation / deletion restorations
+      const isSystemOrOrderRelated = 
         log.type === 'Deduction' || 
         !!log.orderId || 
-        (typeof log.reason === 'string' && (
-          log.reason.toLowerCase().startsWith('sold') || 
-          log.reason.toLowerCase().includes('order deduction') ||
-          log.reason.toLowerCase().includes('auto-deduct')
-        )) ||
-        (typeof log.userEmail === 'string' && log.userEmail.includes('auto-deduct')) ||
-        (typeof log.performedBy === 'string' && log.performedBy.includes('auto-deduct'));
+        reasonLower.startsWith('sold') || 
+        reasonLower.includes('order deduction') ||
+        reasonLower.includes('auto-deduct') ||
+        reasonLower.includes('restored from') ||
+        reasonLower.includes('deleted/cancelled order') ||
+        reasonLower.includes('cancelled order') ||
+        reasonLower.includes('deleted order') ||
+        reasonLower.includes('restored from deleted') ||
+        reasonLower.includes('order #') ||
+        userLower.includes('auto-deduct') ||
+        perfLower.includes('auto-deduct') ||
+        (perfLower === 'system' && (reasonLower.includes('restored') || reasonLower.includes('order')));
 
-      if (isAutoDeduction) return false;
+      if (isSystemOrOrderRelated) return false;
 
       const qtyChanged = Number(log.quantityChanged) || 0;
       const isAddStock = log.type === 'Purchase' || log.type === 'Initial' || qtyChanged > 0;
@@ -1574,50 +1680,18 @@ const OwnerDashboard = () =>{
       const weekStart = monday.toISOString().split('T')[0];
       const weekEnd = sunday.toISOString().split('T')[0];
 
-      const prRes = await getPayrollList({ employeeId: staffId, weekStart, weekEnd });
+      let prRes = await getPayrollList({ employeeId: staffId, weekStart, weekEnd });
+      if (!prRes.success || !prRes.data || prRes.data.length === 0) {
+        // Auto-generate weekly payroll
+        await generatePayroll(weekStart, weekEnd);
+        prRes = await getPayrollList({ employeeId: staffId, weekStart, weekEnd });
+      }
+
       if (prRes.success && prRes.data && prRes.data.length > 0) {
         const payrollId = prRes.data[0]._id;
         const approveRes = await approvePayroll(payrollId);
         if (approveRes.success) {
           alert('Payroll approved successfully.');
-          fetchStaffList();
-        }
-      } else {
-        alert('Weekly payroll has not been generated for this staff member yet. Please click "Generate Payroll" first.');
-      }
-    } catch (err) {
-      console.error('Error approving payroll:', err);
-      alert('Error approving payroll: ' + (err.response?.data?.message || err.message));
-    }
-  };
-
-  const handlePayPayroll = async (staffId) => {
-    const method = prompt('Enter payment method (e.g. Cash, Bank Transfer, UPI):', 'UPI');
-    if (!method) return;
-    const remarks = prompt('Enter payment remarks (optional):', 'Paid');
-
-    try {
-      const getISTDate = (date = new Date()) => {
-        const tzOffset = 5.5 * 60 * 60 * 1000;
-        const istTime = new Date(date.getTime() + tzOffset);
-        return istTime.toISOString().split('T')[0];
-      };
-      const todayStr = getISTDate();
-      const current = new Date(todayStr);
-      const day = current.getUTCDay();
-      const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(current.setUTCDate(diff));
-      const sunday = new Date(monday);
-      sunday.setUTCDate(monday.getUTCDate() + 6);
-      const weekStart = monday.toISOString().split('T')[0];
-      const weekEnd = sunday.toISOString().split('T')[0];
-
-      const prRes = await getPayrollList({ employeeId: staffId, weekStart, weekEnd });
-      if (prRes.success && prRes.data && prRes.data.length > 0) {
-        const payrollId = prRes.data[0]._id;
-        const payRes = await payPayroll(payrollId, { paymentMethod: method, remarks });
-        if (payRes.success) {
-          alert('Payroll marked as Paid successfully.');
           fetchStaffList();
           fetchSalaryHistory();
         }
@@ -1625,8 +1699,54 @@ const OwnerDashboard = () =>{
         alert('Weekly payroll has not been generated for this staff member yet.');
       }
     } catch (err) {
-      console.error('Error paying payroll:', err);
-      alert('Error paying payroll: ' + (err.response?.data?.message || err.message));
+      console.error('Error approving payroll:', err);
+      alert('Error approving payroll: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const openDisburseModal = (staffMember) => {
+    setDisburseStaff(staffMember);
+    setDisbursePaymentMethod('UPI');
+    setDisburseRemarks('Salary payout');
+    const bal = staffMember.remainingSalaryBalance !== undefined 
+      ? staffMember.remainingSalaryBalance 
+      : (staffMember.currentMonthSalary || staffMember.dailyRate || 0);
+    setDisburseAmount(bal > 0 ? bal : (staffMember.currentMonthSalary || staffMember.dailyRate || 0));
+    setShowDisburseModal(true);
+  };
+
+  const handleConfirmDisbursement = async () => {
+    if (!disburseStaff) return;
+    const amountVal = Number(disburseAmount);
+    if (!amountVal || amountVal <= 0) {
+      alert('Please enter a valid salary amount greater than 0.');
+      return;
+    }
+
+    setDisburseLoading(true);
+
+    try {
+      const res = await recordStaffPayment({
+        employeeId: disburseStaff._id,
+        amount: amountVal,
+        paymentMethod: disbursePaymentMethod || 'UPI',
+        remarks: disburseRemarks || 'Salary Payment'
+      });
+
+      if (res.success) {
+        setShowDisburseModal(false);
+        setDisburseStaff(null);
+        alert(`✓ Salary payment of ₹${amountVal} for ${disburseStaff.name} recorded and added to Salary History Ledger successfully!`);
+        fetchStaffList();
+        fetchSalaryHistory();
+      } else {
+        alert(res.message || 'Payment could not be recorded.');
+      }
+    } catch (err) {
+      console.error('Error paying salary:', err);
+      alert('Error recording payment: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setDisburseLoading(false);
     }
   };
 
@@ -1674,15 +1794,15 @@ const OwnerDashboard = () =>{
     }
   };
 
-  const fetchWorkReports = async (isSilent = false, targetBranchId = activeBranchId) =>{
+  const fetchWorkReports = async (isSilent = false, targetBranchId = activeBranchId, overrideStaffId = null) =>{
     const cache = getBranchCache(targetBranchId);
     if (!isSilent && !cache.hasLoaded.workReports) setReportsLoading(true);
     setReportsError('');
     try {
       const params = {};
-      if (reportsFilterRange) params.range = reportsFilterRange;
-      if (reportsFilterStaff) params.staffId = reportsFilterStaff;
-      if (reportsFilterBranch) params.branchId = reportsFilterBranch;
+      const staffParam = overrideStaffId !== null ? overrideStaffId : reportsFilterStaff;
+      if (staffParam && staffParam !== 'all') params.staffId = staffParam;
+      if (reportsFilterBranch && reportsFilterBranch !== 'all') params.branchId = reportsFilterBranch;
 
       const res = await getWorkReports(params);
       if (targetBranchId !== activeBranchIdRef.current) return;
@@ -1743,11 +1863,21 @@ const OwnerDashboard = () =>{
         ...newStaff,
         username: newStaff.username ? newStaff.username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '') : undefined,
         password: newStaff.password ? newStaff.password.trim() : undefined,
-        dailyRate: Number(newStaff.dailyRate || 0)
+        dailyRate: Number(newStaff.dailyRate || 0),
+        shiftStartTime: newStaff.shiftStartTime || '09:00',
+        shiftEndTime: newStaff.shiftEndTime || '18:00',
+        leanTimeMinutes: Number(newStaff.leanTimeMinutes !== undefined ? newStaff.leanTimeMinutes : 30),
+        workDaysPerWeek: Number(newStaff.workDaysPerWeek !== undefined ? newStaff.workDaysPerWeek : 6),
+        attendancePin: newStaff.attendancePin ? String(newStaff.attendancePin).trim() : ''
       });
       if (response.success) {
         alert(response.message || `Staff member "${newStaff.name}" registered successfully.`);
-        setNewStaff({ name: '', username: '', password: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0 });
+        setNewStaff({
+          name: '', username: '', password: '', email: '', phone: '',
+          staffRole: 'staff', assignedBranch: '', dailyRate: 0,
+          shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6,
+          attendancePin: ''
+        });
         setShowAddStaffModal(false);
         fetchStaffList();
       }
@@ -1776,7 +1906,12 @@ const OwnerDashboard = () =>{
         staffRole: editingStaff.staffRole,
         assignedBranch: editingStaff.assignedBranch,
         isActive: editingStaff.isActive,
-        dailyRate: Number(editingStaff.dailyRate || 0)
+        dailyRate: Number(editingStaff.dailyRate || 0),
+        shiftStartTime: editingStaff.shiftStartTime || '09:00',
+        shiftEndTime: editingStaff.shiftEndTime || '18:00',
+        leanTimeMinutes: Number(editingStaff.leanTimeMinutes !== undefined ? editingStaff.leanTimeMinutes : 30),
+        workDaysPerWeek: Number(editingStaff.workDaysPerWeek !== undefined ? editingStaff.workDaysPerWeek : 6),
+        attendancePin: editingStaff.attendancePin !== undefined ? String(editingStaff.attendancePin).trim() : undefined
       };
       if (editingStaff.newPassword && editingStaff.newPassword.trim()) {
         payload.password = editingStaff.newPassword.trim();
@@ -1793,6 +1928,42 @@ const OwnerDashboard = () =>{
       alert(error.response?.data?.message || 'Failed to update staff member.');
     } finally {
       setStaffLoading(false);
+    }
+  };
+
+  // Record Manual Offline Salary Payment
+  const handleRecordPaymentSubmit = async (e) => {
+    e.preventDefault();
+    if (!paymentModalStaff || !paymentForm.amount || Number(paymentForm.amount) <= 0) {
+      alert('Please enter a valid payment amount.');
+      return;
+    }
+    try {
+      setPaymentSubmitting(true);
+      const res = await recordStaffPayment(paymentModalStaff._id, {
+        amount: Number(paymentForm.amount),
+        paymentMethod: paymentForm.paymentMethod,
+        paymentDate: paymentForm.paymentDate,
+        notes: paymentForm.notes
+      });
+      if (res.success) {
+        alert(res.message || `Payment of ₹${paymentForm.amount} recorded successfully.`);
+        setPaymentModalStaff(null);
+        setPaymentForm({
+          amount: '',
+          paymentMethod: 'Cash',
+          paymentDate: new Date().toISOString().split('T')[0],
+          notes: ''
+        });
+        fetchStaffList();
+      } else {
+        alert(res.message || 'Failed to record payment.');
+      }
+    } catch (err) {
+      console.error('Error recording payment:', err);
+      alert(err.response?.data?.message || 'Failed to record staff payment.');
+    } finally {
+      setPaymentSubmitting(false);
     }
   };
 
@@ -2626,6 +2797,55 @@ const exportStaffToCSV = () => {
       : todayOrders.reduce((acc, o) => acc + o.totalAmount, 0);
   }, [statsData, todayOrders]);
 
+  // Use server-side payment breakdown (accurate, IST-timezone-aware)
+  const todayCashSales = useMemo(() => {
+    if (statsData && statsData.todayCashRevenue !== undefined) return statsData.todayCashRevenue;
+    return todayOrders
+      .filter((o) => {
+        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
+        return method === 'cash';
+      })
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+  }, [statsData, todayOrders]);
+
+  const todayOnlineSales = useMemo(() => {
+    if (statsData && statsData.todayOnlineRevenue !== undefined) return statsData.todayOnlineRevenue;
+    return todayOrders
+      .filter((o) => {
+        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
+        return method === 'online' || method === 'upi' || method === 'card';
+      })
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+  }, [statsData, todayOrders]);
+
+  const yesterdayOrders = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    return completedOrders.filter((o) => {
+      const d = new Date(o.createdAt);
+      return d >= startOfYesterday && d < startOfToday;
+    });
+  }, [completedOrders]);
+
+  const yesterdayCashSales = useMemo(() => {
+    return yesterdayOrders
+      .filter((o) => {
+        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
+        return method === 'cash';
+      })
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+  }, [yesterdayOrders]);
+
+  const yesterdayOnlineSales = useMemo(() => {
+    return yesterdayOrders
+      .filter((o) => {
+        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
+        return method === 'online' || method === 'upi' || method === 'card';
+      })
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+  }, [yesterdayOrders]);
+
   const monthlyOrders = useMemo(() => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -2637,6 +2857,27 @@ const exportStaffToCSV = () => {
       ? statsData.monthlyRevenue 
       : monthlyOrders.reduce((acc, o) => acc + o.totalAmount, 0);
   }, [statsData, monthlyOrders]);
+
+  const monthlyCashSales = useMemo(() => {
+    if (statsData && statsData.monthlyCashRevenue !== undefined) return statsData.monthlyCashRevenue;
+    return monthlyOrders
+      .filter((o) => {
+        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
+        return method === 'cash';
+      })
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+  }, [statsData, monthlyOrders]);
+
+  const monthlyOnlineSales = useMemo(() => {
+    if (statsData && statsData.monthlyOnlineRevenue !== undefined) return statsData.monthlyOnlineRevenue;
+    return monthlyOrders
+      .filter((o) => {
+        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
+        return method === 'online' || method === 'upi' || method === 'card';
+      })
+      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+  }, [statsData, monthlyOrders]);
+
 
   // Fast memoized lookup map for menu item makingCost
   const menuCostMap = useMemo(() => {
@@ -2666,40 +2907,288 @@ const exportStaffToCSV = () => {
     }, 0);
   }, [menuCostMap]);
 
-  const todayProfit = useMemo(() => {
-    if (statsData && statsData.todayProfit !== undefined) {
-      return statsData.todayProfit;
+  // ── Other Expenses Handlers ──
+  const fetchExpensesList = useCallback(async (isSilent = false) => {
+    if (!user?.cafeId) return;
+    if (!isSilent) setExpensesLoading(true);
+    try {
+      const params = { cafeId: user.cafeId };
+      if (activeBranchId && activeBranchId !== 'all') {
+        params.branchId = activeBranchId;
+      }
+      const res = await getExpenses(params);
+      if (res && res.success) {
+        setExpenses(res.data || []);
+      }
+    } catch (err) {
+      console.warn('Error fetching expenses:', err);
+    } finally {
+      if (!isSilent) setExpensesLoading(false);
     }
-    return computeOrdersProfit(todayOrders);
-  }, [statsData, todayOrders, computeOrdersProfit]);
+  }, [user?.cafeId, activeBranchId]);
+
+  const handleAddExpense = async (e) => {
+    e.preventDefault();
+    if (!newExpenseForm.title?.trim()) {
+      alert('Please enter an expense title/description.');
+      return;
+    }
+    const amt = Number(newExpenseForm.amount);
+    if (isNaN(amt) || amt <= 0) {
+      alert('Please enter a valid expense amount greater than 0.');
+      return;
+    }
+
+    setExpenseSubmitting(true);
+    try {
+      const payload = {
+        cafeId: user?.cafeId,
+        branchId: activeBranchId || 'default',
+        title: newExpenseForm.title.trim(),
+        amount: amt,
+        category: newExpenseForm.category || 'Miscellaneous',
+        paymentMode: newExpenseForm.paymentMode || 'Cash',
+        date: newExpenseForm.date ? new Date(newExpenseForm.date) : new Date(),
+        notes: newExpenseForm.notes || ''
+      };
+
+      const res = await createExpense(payload);
+      if (res && res.success) {
+        setExpenses((prev) => [res.data, ...prev]);
+        setNewExpenseForm({
+          title: '',
+          amount: '',
+          category: 'Miscellaneous',
+          paymentMode: 'Cash',
+          date: new Date().toISOString().split('T')[0],
+          notes: ''
+        });
+        alert('Expense recorded successfully!');
+      } else {
+        alert(res.message || 'Failed to record expense.');
+      }
+    } catch (err) {
+      console.error('Error adding expense:', err);
+      alert(err.response?.data?.message || 'Error recording expense.');
+    } finally {
+      setExpenseSubmitting(false);
+    }
+  };
+
+  const handleUpdateExpense = async (e) => {
+    e.preventDefault();
+    if (!editingExpense || !editingExpense._id) return;
+    if (!editingExpense.title?.trim()) {
+      alert('Please enter an expense title.');
+      return;
+    }
+    const amt = Number(editingExpense.amount);
+    if (isNaN(amt) || amt <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+
+    setExpenseSubmitting(true);
+    try {
+      const res = await updateExpense(editingExpense._id, {
+        title: editingExpense.title.trim(),
+        amount: amt,
+        category: editingExpense.category,
+        paymentMode: editingExpense.paymentMode,
+        date: editingExpense.date,
+        notes: editingExpense.notes
+      });
+      if (res && res.success) {
+        setExpenses((prev) => prev.map((item) => item._id === editingExpense._id ? res.data : item));
+        setEditingExpense(null);
+        alert('Expense updated successfully!');
+      } else {
+        alert(res.message || 'Failed to update expense.');
+      }
+    } catch (err) {
+      console.error('Error updating expense:', err);
+      alert(err.response?.data?.message || 'Error updating expense.');
+    } finally {
+      setExpenseSubmitting(false);
+    }
+  };
+
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this expense record?')) return;
+    try {
+      const res = await deleteExpense(id);
+      if (res && res.success) {
+        setExpenses((prev) => prev.filter((item) => item._id !== id));
+      } else {
+        alert(res.message || 'Failed to delete expense.');
+      }
+    } catch (err) {
+      console.error('Error deleting expense:', err);
+      alert(err.response?.data?.message || 'Error deleting expense.');
+    }
+  };
+
+  // ── Purchases & Daily Cash Register Handlers ──
+  const fetchCashRegisterData = useCallback(async (targetDate) => {
+    if (!user?.cafeId) return;
+    setCashRegisterLoading(true);
+    try {
+      const dateToFetch = targetDate || cashRegisterDate;
+      const params = { cafeId: user.cafeId, date: dateToFetch };
+      if (activeBranchId && activeBranchId !== 'all') {
+        params.branchId = activeBranchId;
+      }
+      const res = await getCashRegister(params);
+      if (res && res.success) {
+        const record = res.data || {};
+        const isTargetDateToday = dateToFetch === new Date().toISOString().split('T')[0];
+
+        const defaultTodayCash = (record.isNew && (!record.todayCash || record.todayCash === 0) && todayCashSales > 0)
+          ? todayCashSales
+          : (record.todayCash ? record.todayCash : (isTargetDateToday && todayCashSales > 0 ? todayCashSales : ''));
+
+        const defaultYesterdayCash = (record.isNew && (!record.yesterdayCash || record.yesterdayCash === 0) && yesterdayCashSales > 0)
+          ? yesterdayCashSales
+          : ((record.yesterdayCash !== undefined && record.yesterdayCash !== 0) ? record.yesterdayCash : (record.yesterdayCash === 0 && !record.isNew ? (isTargetDateToday && yesterdayCashSales > 0 ? yesterdayCashSales : 0) : ''));
+
+        const defaultBankBalance = (record.isNew && (!record.bankBalance || record.bankBalance === 0) && todayOnlineSales > 0)
+          ? todayOnlineSales
+          : ((record.bankBalance !== undefined && record.bankBalance !== 0) ? record.bankBalance : (isTargetDateToday && todayOnlineSales > 0 ? todayOnlineSales : ''));
+
+        setCashRegisterForm({
+          yesterdayCash: defaultYesterdayCash,
+          todayCash: defaultTodayCash,
+          bankBalance: defaultBankBalance,
+          purchasesAmount: (record.purchasesAmount !== undefined && record.purchasesAmount !== 0) ? record.purchasesAmount : '',
+          purchasesNote: record.purchasesNote || '',
+          notes: record.notes || ''
+        });
+        setCashRegisterHistory(res.history || []);
+      }
+    } catch (err) {
+      console.warn('Error fetching cash register:', err);
+    } finally {
+      setCashRegisterLoading(false);
+    }
+  }, [user?.cafeId, activeBranchId, cashRegisterDate, todayCashSales, yesterdayCashSales, todayOnlineSales]);
+
+  const handleSaveCashRegister = async (e) => {
+    e.preventDefault();
+    setCashRegisterSubmitting(true);
+    try {
+      const yesterdayVal = Number(cashRegisterForm.yesterdayCash) || 0;
+      const todayVal = Number(cashRegisterForm.todayCash) || 0;
+      const purchasesVal = Number(cashRegisterForm.purchasesAmount) || 0;
+      const netCalculated = (yesterdayVal + todayVal) - purchasesVal;
+
+      const payload = {
+        cafeId: user?.cafeId,
+        branchId: activeBranchId || 'default',
+        date: cashRegisterDate,
+        yesterdayCash: yesterdayVal,
+        todayCash: todayVal,
+        bankBalance: Number(cashRegisterForm.bankBalance) || 0,
+        purchasesAmount: purchasesVal,
+        purchasesNote: cashRegisterForm.purchasesNote || '',
+        notes: cashRegisterForm.notes || ''
+      };
+
+      // Optimistic update in history list
+      setCashRegisterHistory((prev) => {
+        const filtered = prev.filter((item) => item.date !== cashRegisterDate);
+        return [{ ...payload, netCashInHand: netCalculated, _id: 'temp_' + Date.now() }, ...filtered];
+      });
+
+      const res = await saveCashRegister(payload);
+      if (res && res.success) {
+        if (res.data) {
+          setCashRegisterHistory((prev) => [res.data, ...prev.filter((item) => item.date !== cashRegisterDate && !item._id.startsWith('temp_'))]);
+        }
+      } else {
+        alert(res?.message || 'Failed to save cash register.');
+      }
+    } catch (err) {
+      console.error('Error saving cash register:', err);
+      alert(err.response?.data?.message || 'Error saving cash register.');
+    } finally {
+      setCashRegisterSubmitting(false);
+    }
+  };
+
+  const handleDeleteCashRegister = async (id, dateStr) => {
+    if (!window.confirm(`Are you sure you want to delete the daily register record for ${dateStr || 'this date'}?`)) return;
+    try {
+      const res = await deleteCashRegister(id);
+      if (res && res.success) {
+        setCashRegisterHistory((prev) => prev.filter((item) => item._id !== id));
+        if (dateStr === cashRegisterDate) {
+          fetchCashRegisterData(cashRegisterDate);
+        }
+      } else {
+        alert(res.message || 'Failed to delete register record.');
+      }
+    } catch (err) {
+      console.error('Error deleting register record:', err);
+      alert(err.response?.data?.message || 'Error deleting register record.');
+    }
+  };
+
+  // Expenses calculations
+  const todayExpensesTotal = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return (expenses || []).filter((e) => {
+      const expDate = new Date(e.date || e.createdAt);
+      return expDate >= startOfToday;
+    }).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  }, [expenses]);
+
+  const monthlyExpensesTotal = useMemo(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return (expenses || []).filter((e) => {
+      const expDate = new Date(e.date || e.createdAt);
+      return expDate >= startOfMonth;
+    }).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  }, [expenses]);
+
+  const todayProfit = useMemo(() => {
+    const baseProfit = (statsData && statsData.todayProfit !== undefined)
+      ? statsData.todayProfit
+      : computeOrdersProfit(todayOrders);
+    return baseProfit - todayExpensesTotal;
+  }, [statsData, todayOrders, computeOrdersProfit, todayExpensesTotal]);
 
   const todayMargin = useMemo(() => {
-    if (statsData && statsData.todayMargin !== undefined) {
+    if (statsData && statsData.todayMargin !== undefined && todayExpensesTotal === 0) {
       return statsData.todayMargin;
     }
     return todayRevenue > 0 ? Number(((todayProfit / todayRevenue) * 100).toFixed(1)) : 0;
-  }, [statsData, todayRevenue, todayProfit]);
+  }, [statsData, todayRevenue, todayProfit, todayExpensesTotal]);
 
   const monthlyProfit = useMemo(() => {
-    if (statsData && statsData.monthlyProfit !== undefined) {
-      return statsData.monthlyProfit;
-    }
-    return computeOrdersProfit(monthlyOrders);
-  }, [statsData, monthlyOrders, computeOrdersProfit]);
+    const baseProfit = (statsData && statsData.monthlyProfit !== undefined)
+      ? statsData.monthlyProfit
+      : computeOrdersProfit(monthlyOrders);
+    return baseProfit - monthlyExpensesTotal;
+  }, [statsData, monthlyOrders, computeOrdersProfit, monthlyExpensesTotal]);
 
   const monthlyMargin = useMemo(() => {
-    if (statsData && statsData.monthlyMargin !== undefined) {
+    if (statsData && statsData.monthlyMargin !== undefined && monthlyExpensesTotal === 0) {
       return statsData.monthlyMargin;
     }
     return monthlyRevenue > 0 ? Number(((monthlyProfit / monthlyRevenue) * 100).toFixed(1)) : 0;
-  }, [statsData, monthlyRevenue, monthlyProfit]);
+  }, [statsData, monthlyRevenue, monthlyProfit, monthlyExpensesTotal]);
 
   const totalInventoryValue = useMemo(() => {
+    if (statsData?.inventory?.value !== undefined) {
+      return statsData.inventory.value;
+    }
     return inventoryList.reduce((acc, item) => 
       acc + (item.quantity !== undefined ? item.quantity : item.stock) * (item.costPrice !== undefined ? item.costPrice : item.cost), 
       0
     );
-  }, [inventoryList]);
+  }, [inventoryList, statsData]);
 
   const purchaseLogs = useMemo(() => {
     return inventoryLogs.filter((log) => log.type === 'Purchase' || log.type === 'Initial');
@@ -2720,6 +3209,9 @@ const exportStaffToCSV = () => {
   }, [inventoryLogs]);
 
   const totalInventoryConsumption = useMemo(() => {
+    if (statsData?.inventory?.consumption !== undefined) {
+      return statsData.inventory.consumption;
+    }
     if (statsData && statsData.totalInventoryConsumption !== undefined) {
       return statsData.totalInventoryConsumption;
     }
@@ -2733,7 +3225,7 @@ const exportStaffToCSV = () => {
     if (statsData && statsData.topSellingItems !== undefined) {
       return {
         topSelling: statsData.topSellingItems || [],
-        slowSelling: statsData.slowSellingItems || []
+        slowSelling: (statsData.slowSellingItems || []).filter(item => (item.quantity || 0) === 0)
       };
     }
     const itemCounts = {};
@@ -2757,7 +3249,7 @@ const exportStaffToCSV = () => {
 
     const allMenuMap = {};
     (menuItems || []).forEach(m => {
-      if (m.name) {
+      if (m.name && m.isHidden !== true) {
         allMenuMap[m.name] = {
           name: m.name,
           quantity: itemCounts[m.name]?.quantity || 0,
@@ -2770,8 +3262,9 @@ const exportStaffToCSV = () => {
       ? Object.values(allMenuMap) 
       : Object.values(itemCounts);
 
+    // Strictly items that were not sold even one time (0 sales)
     const slowSelling = combinedList
-      .sort((a, b) => a.quantity - b.quantity)
+      .filter(i => (i.quantity || 0) === 0)
       .slice(0, 10);
 
     return { topSelling, slowSelling };
@@ -2783,78 +3276,185 @@ const exportStaffToCSV = () => {
     try {
       const now = new Date();
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      const currentMonth = monthNames[now.getMonth()];
-      const currentYear = now.getFullYear();
+      
+      // Target is Previous Full Calendar Month (e.g. In September, export August 1-31)
+      const targetDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const targetMonthIndex = targetDate.getMonth();
+      const targetYear = targetDate.getFullYear();
+      const targetMonthName = monthNames[targetMonthIndex];
+
+      const startOfPrevMonth = new Date(targetYear, targetMonthIndex, 1, 0, 0, 0, 0);
+      const endOfPrevMonth = new Date(targetYear, targetMonthIndex + 1, 0, 23, 59, 59, 999);
+
       const branchLabel = activeBranch?.branchName ? `${activeBranch.branchName} (${activeBranch.branchId})` : (activeBranchId === 'all' ? 'All Branches' : 'Main Branch');
+
+      // 1. Filter completed orders for the target month
+      const prevMonthOrders = (orders || []).filter(o => {
+        if (!o.createdAt) return false;
+        const d = new Date(o.createdAt);
+        const inDateRange = d >= startOfPrevMonth && d <= endOfPrevMonth;
+        const isCompleted = ['Ready', 'Delivered', 'Completed'].includes(o.status);
+        return inDateRange && isCompleted;
+      });
+
+      // Calculate financials for target month
+      let prevMonthRevenue = 0;
+      let prevMonthMakingCost = 0;
+      let qrOrderCount = 0;
+      let posOrderCount = 0;
+      const dishSalesMap = {};
+
+      prevMonthOrders.forEach(order => {
+        const orderTotal = Number(order.grandTotal !== undefined ? order.grandTotal : (order.totalAmount || 0));
+        prevMonthRevenue += orderTotal;
+
+        if (order.source === 'STAFF' || order.orderSource === 'POS') {
+          posOrderCount += 1;
+        } else {
+          qrOrderCount += 1;
+        }
+
+        // Tally items
+        (order.items || []).forEach(item => {
+          const itemName = item.name || 'Item';
+          const qty = Number(item.quantity) || 1;
+          const price = Number(item.price) || 0;
+          const cost = Number(item.makingCost) || 0;
+          const lineRevenue = qty * price;
+          const lineCost = qty * cost;
+
+          prevMonthMakingCost += lineCost;
+
+          if (!dishSalesMap[itemName]) {
+            dishSalesMap[itemName] = {
+              name: itemName,
+              category: item.category || 'General',
+              quantity: 0,
+              revenue: 0
+            };
+          }
+          dishSalesMap[itemName].quantity += qty;
+          dishSalesMap[itemName].revenue += lineRevenue;
+        });
+      });
+
+      // If no archived orders in memory for prev month, provide best estimate from stats or zeros
+      const finalRevenue = prevMonthRevenue > 0 ? prevMonthRevenue : (Number(monthlyRevenue) || 0);
+      const finalGrossProfit = prevMonthRevenue > 0 ? (prevMonthRevenue - prevMonthMakingCost) : (Number(monthlyProfit) || 0);
+      const finalMargin = finalRevenue > 0 ? ((finalGrossProfit / finalRevenue) * 100).toFixed(1) : 0;
+
+      // Filter Inventory purchases & consumption in target month
+      const prevMonthPurchases = (inventoryLogs || []).filter(log => {
+        if (!log.createdAt && !log.timestamp) return false;
+        const d = new Date(log.createdAt || log.timestamp);
+        return d >= startOfPrevMonth && d <= endOfPrevMonth && (log.type === 'Purchase' || log.type === 'Initial');
+      });
+      const prevMonthDeductions = (inventoryLogs || []).filter(log => {
+        if (!log.createdAt && !log.timestamp) return false;
+        const d = new Date(log.createdAt || log.timestamp);
+        return d >= startOfPrevMonth && d <= endOfPrevMonth && log.type === 'Deduction';
+      });
+
+      const targetPurchasesCost = prevMonthPurchases.reduce((acc, l) => acc + (Number(l.totalCost) || (Number(l.unitCost || 0) * Math.abs(Number(l.quantityChanged || 0)))), 0);
+      const targetConsumptionCost = prevMonthDeductions.reduce((acc, l) => acc + (Number(l.totalCost) || (Number(l.unitCost || 0) * Math.abs(Number(l.quantityChanged || 0)))), 0);
+
+      // Rank Top Selling and Unsold dishes
+      const allDishes = Object.values(dishSalesMap);
+      const targetTopSelling = [...allDishes].filter(a => (a.quantity || 0) > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 15);
+      const targetSlowSelling = [...allDishes].filter(a => (a.quantity || 0) === 0).slice(0, 15);
 
       const wb = XLSX.utils.book_new();
 
-      // 1. Sheet 1: Executive Summary / 8 Cards
+      // ==================== SHEET 1: EXECUTIVE FINANCIAL SUMMARY ====================
       const summaryData = [
-        { "Metric / KPI": "Report Period", "Value": `${currentMonth} ${currentYear}` },
+        { "Metric / KPI": "Report Period (Previous Month)", "Value": `${targetMonthName} ${targetYear} (Full Month)` },
         { "Metric / KPI": "Branch", "Value": branchLabel },
-        { "Metric / KPI": "Report Generated At", "Value": now.toLocaleString() },
+        { "Metric / KPI": "Report Generated At", "Value": now.toLocaleString('en-IN') },
         { "Metric / KPI": "---", "Value": "---" },
-        { "Metric / KPI": "Today's Revenue (₹)", "Value": Number(todayRevenue.toFixed(2)) },
-        { "Metric / KPI": "Today's Gross Profit (₹)", "Value": Number(todayProfit.toFixed(2)) },
-        { "Metric / KPI": "Today's Profit Margin (%)", "Value": `${todayMargin}%` },
-        { "Metric / KPI": "Monthly Revenue (₹)", "Value": Number(monthlyRevenue.toFixed(2)) },
-        { "Metric / KPI": "Monthly Gross Profit (₹)", "Value": Number(monthlyProfit.toFixed(2)) },
-        { "Metric / KPI": "Monthly Profit Margin (%)", "Value": `${monthlyMargin}%` },
-        { "Metric / KPI": "Inventory Value (Real-Time Worth) (₹)", "Value": Number(totalInventoryValue.toFixed(2)) },
-        { "Metric / KPI": "Total Inventory Cost (Purchases This Month) (₹)", "Value": Number(totalInventoryCost.toFixed(2)) },
-        { "Metric / KPI": "Inventory Consumption (Consumed This Month) (₹)", "Value": Number(totalInventoryConsumption.toFixed(2)) },
-        { "Metric / KPI": "QR Menu Orders (Count)", "Value": statsData?.orderSourceData ? statsData.orderSourceData.QR : orders.filter(o => o.source !== 'STAFF').length },
-        { "Metric / KPI": "Staff POS Orders (Count)", "Value": statsData?.orderSourceData ? (statsData.orderSourceData.POS + statsData.orderSourceData.Counter) : orders.filter(o => o.source === 'STAFF').length }
+        { "Metric / KPI": "Total Monthly Revenue (₹)", "Value": Number(finalRevenue.toFixed(2)) },
+        { "Metric / KPI": "Total Gross Profit (₹)", "Value": Number(finalGrossProfit.toFixed(2)) },
+        { "Metric / KPI": "Gross Profit Margin (%)", "Value": `${finalMargin}%` },
+        { "Metric / KPI": "Total Completed Orders (Count)", "Value": prevMonthOrders.length },
+        { "Metric / KPI": "QR Menu Orders (Count)", "Value": qrOrderCount },
+        { "Metric / KPI": "Staff POS Counter Orders (Count)", "Value": posOrderCount },
+        { "Metric / KPI": "Inventory Stock Purchased This Month (₹)", "Value": Number(targetPurchasesCost.toFixed(2)) },
+        { "Metric / KPI": "Inventory Consumed in Kitchen (₹)", "Value": Number(targetConsumptionCost.toFixed(2)) },
+        { "Metric / KPI": "Current Inventory Asset Value (₹)", "Value": Number(totalInventoryValue.toFixed(2)) }
       ];
       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, wsSummary, "Monthly Overview");
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Monthly Financial Overview");
 
-      // 2. Sheet 2: Top Selling Items (This Month)
-      const topSellingData = topSelling.length > 0 ? topSelling.map((item, idx) => ({
+      // ==================== SHEET 2: TOP SELLING DISHES ====================
+      const topSellingData = targetTopSelling.length > 0 ? targetTopSelling.map((item, idx) => ({
         "Rank": idx + 1,
         "Item Name": item.name,
+        "Category": item.category,
         "Quantity Sold": item.quantity,
         "Total Revenue (₹)": Number((item.revenue || 0).toFixed(2))
-      })) : [{ "Rank": "-", "Item Name": "No sales recorded this month", "Quantity Sold": 0, "Total Revenue (₹)": 0 }];
-      const wsTopSelling = XLSX.utils.json_to_sheet(topSellingData);
-      XLSX.utils.book_append_sheet(wb, wsTopSelling, "Top Selling Items");
-
-      // 3. Sheet 3: Slow & Unsold Items (This Month)
-      const slowSellingData = slowSelling.length > 0 ? slowSelling.map((item, idx) => ({
+      })) : (topSelling.length > 0 ? topSelling.map((item, idx) => ({
         "Rank": idx + 1,
         "Item Name": item.name,
+        "Category": item.category || 'General',
         "Quantity Sold": item.quantity,
-        "Total Revenue (₹)": Number((item.revenue || 0).toFixed(2)),
-        "Category": item.category || "General"
-      })) : [{ "Rank": "-", "Item Name": "No dishes found", "Quantity Sold": 0, "Total Revenue (₹)": 0, "Category": "-" }];
-      const wsSlowSelling = XLSX.utils.json_to_sheet(slowSellingData);
-      XLSX.utils.book_append_sheet(wb, wsSlowSelling, "Slow & Unsold Items");
+        "Total Revenue (₹)": Number((item.revenue || 0).toFixed(2))
+      })) : [{ "Rank": "-", "Item Name": "No sales recorded in period", "Category": "-", "Quantity Sold": 0, "Total Revenue (₹)": 0 }]);
+      const wsTopSelling = XLSX.utils.json_to_sheet(topSellingData);
+      XLSX.utils.book_append_sheet(wb, wsTopSelling, "Top Selling Dishes");
 
-      // 4. Sheet 4: Staff Roster & Team Directory
-      const staffData = (staff || []).length > 0 ? staff.map((s, idx) => ({
+      // ==================== SHEET 3: SLOW & LOW-SELLING DISHES ====================
+      const slowSellingData = targetSlowSelling.length > 0 ? targetSlowSelling.map((item, idx) => ({
+        "Rank": idx + 1,
+        "Item Name": item.name,
+        "Category": item.category,
+        "Quantity Sold": item.quantity,
+        "Total Revenue (₹)": Number((item.revenue || 0).toFixed(2))
+      })) : (slowSelling.length > 0 ? slowSelling.map((item, idx) => ({
+        "Rank": idx + 1,
+        "Item Name": item.name,
+        "Category": item.category || "General",
+        "Quantity Sold": item.quantity,
+        "Total Revenue (₹)": Number((item.revenue || 0).toFixed(2))
+      })) : [{ "Rank": "-", "Item Name": "No dishes found", "Category": "-", "Quantity Sold": 0, "Total Revenue (₹)": 0 }]);
+      const wsSlowSelling = XLSX.utils.json_to_sheet(slowSellingData);
+      XLSX.utils.book_append_sheet(wb, wsSlowSelling, "Slow & Low-Selling Dishes");
+
+      // ==================== SHEET 4: INVENTORY & COST BREAKDOWN ====================
+      const inventorySheetData = (inventoryList || []).length > 0 ? (inventoryList || []).map((inv, idx) => ({
         "S.No": idx + 1,
+        "Ingredient Name": inv.name,
+        "Category": inv.category || "Stock",
+        "Current Stock": `${inv.quantity !== undefined ? inv.quantity : (inv.stock || 0)} ${inv.unit || 'unit'}`,
+        "Unit Cost (₹)": Number(inv.unitPrice || inv.costPerUnit || 0).toFixed(2),
+        "Stock Valuation (₹)": Number(((inv.quantity !== undefined ? inv.quantity : (inv.stock || 0)) * (inv.unitPrice || inv.costPerUnit || 0)).toFixed(2)),
+        "Safety Reorder Level": `${inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock || 0)} ${inv.unit || 'unit'}`
+      })) : [{ "S.No": "-", "Ingredient Name": "No inventory registered", "Category": "-", "Current Stock": "-", "Unit Cost (₹)": 0, "Stock Valuation (₹)": 0, "Safety Reorder Level": "-" }];
+      const wsInventory = XLSX.utils.json_to_sheet(inventorySheetData);
+      XLSX.utils.book_append_sheet(wb, wsInventory, "Inventory Breakdown");
+
+      // ==================== SHEET 5: STAFF & WAGE SUMMARY ====================
+      const staffSheetData = (staff || []).length > 0 ? staff.map((s, idx) => ({
+        "S.No": idx + 1,
+        "Employee ID": s.employeeId || `EMP-${String(s._id || '').slice(-6).toUpperCase()}`,
         "Staff Name": s.name || "N/A",
         "Role": s.staffRole || s.role || "Staff",
         "Assigned Branch": s.assignedBranch || s.branch || "Main",
         "Phone": s.phone || "N/A",
-        "Email": s.email || "N/A",
-        "Daily Rate / Salary (₹)": s.dailyRate || s.salary || 0,
-        "Shift": s.shift || "Regular",
+        "Daily Wage Rate (₹)": s.dailyRate || s.salary || 0,
+        "Shift Timings": `${s.shiftStartTime || '09:00'} - ${s.shiftEndTime || '18:00'}`,
         "Status": s.isActive === false ? "Inactive" : "Active"
-      })) : [{ "S.No": "-", "Staff Name": "No staff members registered", "Role": "-", "Assigned Branch": "-", "Phone": "-", "Email": "-", "Daily Rate / Salary (₹)": 0, "Shift": "-", "Status": "-" }];
-      const wsStaff = XLSX.utils.json_to_sheet(staffData);
-      XLSX.utils.book_append_sheet(wb, wsStaff, "Staff Roster");
+      })) : [{ "S.No": "-", "Employee ID": "-", "Staff Name": "No staff registered", "Role": "-", "Assigned Branch": "-", "Phone": "-", "Daily Wage Rate (₹)": 0, "Shift Timings": "-", "Status": "-" }];
+      const wsStaff = XLSX.utils.json_to_sheet(staffSheetData);
+      XLSX.utils.book_append_sheet(wb, wsStaff, "Staff & Payroll Summary");
 
       // Write and download
       const cleanBranchName = (activeBranch?.branchName || 'AllBranches').replace(/[^a-zA-Z0-9]/g, '_');
-      const filename = `Cafe_Monthly_Report_${cleanBranchName}_${currentMonth}_${currentYear}.xlsx`;
+      const filename = `Cafe_Monthly_Report_${cleanBranchName}_${targetMonthName}_${targetYear}.xlsx`;
       XLSX.writeFile(wb, filename);
     } catch (err) {
       console.error('Error generating Excel report:', err);
       alert('Failed to generate Excel report. Please try again.');
     }
-  }, [activeBranch, activeBranchId, todayRevenue, todayProfit, todayMargin, monthlyRevenue, monthlyProfit, monthlyMargin, totalInventoryValue, totalInventoryCost, totalInventoryConsumption, statsData, orders, topSelling, slowSelling, staff]);
+  }, [activeBranch, activeBranchId, orders, monthlyRevenue, monthlyProfit, totalInventoryValue, inventoryLogs, inventoryList, topSelling, slowSelling, staff]);
 
  const getTopConsumedIngredients = () =>{
  const consumptionMap = {};
@@ -2886,8 +3486,8 @@ const exportStaffToCSV = () => {
         setActiveTab('menu');
         setMenuSubTab('reviews');
       } else if (tabParam === 'reports' || tabParam === 'financial_reports') {
-        setActiveTab('reports');
-        if (tabParam === 'financial_reports') setReportType('revenue');
+        setActiveTab('analytics');
+        navigate('/owner/dashboard', { replace: true });
       } else if (tabParam === 'attendance') {
         setActiveTab('staff');
         setStaffSubTab('attendance');
@@ -2931,17 +3531,22 @@ const exportStaffToCSV = () => {
   }, [activeTab, menuSubTab, reviewsFilterRating]);
 
   useEffect(() => {
-    if (activeTab === 'staff' && staffSubTab === 'attendance') {
-      fetchAttendanceReportsData();
+    if (activeTab === 'staff' && (staffSubTab === 'attendance' || staffSubTab === 'all')) {
+      fetchAttendanceReportsData(false, activeBranchId);
     }
-  }, [reportRange, reportBranch, activeTab, staffSubTab]);
+  }, [reportRange, reportBranch, activeTab, staffSubTab, activeBranchId]);
 
   useEffect(() => {
-    if (activeTab === 'staff' && staffSubTab === 'reports') {
-      fetchWorkReports();
-      fetchStaffList();
+    if (activeTab === 'staff' && (staffSubTab === 'reports' || staffSubTab === 'photos' || staffSubTab === 'all')) {
+      fetchWorkReports(false, activeBranchId);
     }
-  }, [reportsFilterRange, reportsFilterStaff, reportsFilterBranch, activeTab, staffSubTab]);
+  }, [reportsFilterRange, reportsFilterStaff, reportsFilterBranch, activeTab, staffSubTab, activeBranchId]);
+
+  useEffect(() => {
+    if (activeTab === 'staff' && (staffSubTab === 'salary' || staffSubTab === 'all') && salaryRunTab === 'history') {
+      fetchSalaryHistory(activeBranchId);
+    }
+  }, [salaryHistoryPeriod, salaryRunTab, activeTab, staffSubTab, activeBranchId]);
 
   useEffect(() => {
     if (!user || !user.cafeId) return;
@@ -2954,12 +3559,7 @@ const exportStaffToCSV = () => {
     const refreshData = async () => {
       if (activeTab === 'analytics') {
         const silent = !!cache.hasLoaded.statsData;
-        await Promise.all([
-          fetchDashboardStats(silent, targetBranch),
-          fetchInventoryList(silent, targetBranch),
-          fetchCategories(silent, targetBranch),
-          fetchInventoryCategories(silent, targetBranch)
-        ]);
+        await fetchDashboardStats(silent, targetBranch);
       } else if (activeTab === 'orders') {
         const silent = !!cache.hasLoaded.orders;
         await fetchOrders(silent, targetBranch);
@@ -2972,12 +3572,13 @@ const exportStaffToCSV = () => {
         ]);
       } else if (activeTab === 'staff') {
         const silent = !!cache.hasLoaded.staff;
-        await fetchStaffList(silent, targetBranch);
-        if (staffSubTab === 'attendance') {
-          await fetchAttendanceToday(silent, targetBranch);
-        } else if (staffSubTab === 'reports') {
-          await fetchWorkReports(silent, targetBranch);
-        }
+        await Promise.all([
+          fetchStaffList(silent, targetBranch),
+          fetchAttendanceToday(silent, targetBranch),
+          fetchWorkReports(silent, targetBranch),
+          fetchAttendanceReportsData(true, targetBranch),
+          fetchSalaryHistory(targetBranch)
+        ]);
       } else if (activeTab === 'inventory') {
         const silent = !!cache.hasLoaded.inventoryList;
         await Promise.all([
@@ -3302,7 +3903,8 @@ const exportStaffToCSV = () => {
             fetchDashboardStats(true, newBranchId),
             fetchInventoryList(true, newBranchId),
             fetchCategories(true, newBranchId),
-            fetchInventoryCategories(true, newBranchId)
+            fetchInventoryCategories(true, newBranchId),
+            fetchExpensesList(true)
           ]);
         } else if (activeTab === 'orders') {
           await fetchOrders(true, newBranchId);
@@ -3324,7 +3926,8 @@ const exportStaffToCSV = () => {
         } else if (activeTab === 'inventory') {
           await Promise.all([
             fetchInventoryList(true, newBranchId),
-            fetchInventoryCategories(true, newBranchId)
+            fetchInventoryCategories(true, newBranchId),
+            fetchCashRegisterData()
           ]);
         } else if (activeTab === 'reports') {
           loadReportData(true);
@@ -3333,7 +3936,15 @@ const exportStaffToCSV = () => {
       refreshBranchData();
     });
     return unsubscribe;
-  }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab, salaryRunTab]);
+  }, [onBranchSwitch, activeTab, menuSubTab, staffSubTab, salaryRunTab, fetchExpensesList, fetchCashRegisterData]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') {
+      fetchExpensesList(true);
+    } else if (activeTab === 'inventory') {
+      fetchCashRegisterData();
+    }
+  }, [activeTab, activeBranchId, fetchExpensesList, fetchCashRegisterData]);
 
   useEffect(() => {
     if (activeTab === 'staff' && staffSubTab === 'salary' && salaryRunTab === 'history') {
@@ -3634,13 +4245,28 @@ const exportStaffToCSV = () => {
        <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Business Overview & Analytics</h3>
        <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', margin: '4px 0 0 0' }}>Real-time revenue, gross profit, inventory sync, and operational performance.</p>
      </div>
-     <button 
-       onClick={handleExportMonthlyReportExcel} 
-       className="btn btn-primary" 
-       style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', width: 'auto', borderRadius: '10px', fontWeight: 700, fontSize: '13px' }}
-     >
-       <FileSpreadsheet size={16} /> Export Monthly Report (Excel)
-     </button>
+     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+       <button 
+          onClick={handleExportMonthlyReportExcel} 
+          className="btn btn-primary" 
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px', width: 'auto', borderRadius: '10px', fontWeight: 700, fontSize: '12px' }}
+          title="Download complete business report for the previous full calendar month"
+        >
+          <FileSpreadsheet size={15} /> Export {(() => {
+            const mNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const pDate = new Date();
+            pDate.setMonth(pDate.getMonth() - 1);
+            return `${mNames[pDate.getMonth()]} ${pDate.getFullYear()}`;
+          })()} Report (Excel)
+        </button>
+       <button 
+         onClick={() => { setShowExpenseModal(true); fetchExpensesList(); }} 
+         className="btn btn-secondary" 
+         style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px', width: 'auto', borderRadius: '10px', fontWeight: 700, fontSize: '12px', background: 'rgba(231, 76, 60, 0.12)', color: '#e74c3c', border: '1px solid rgba(231, 76, 60, 0.35)' }}
+       >
+         <Receipt size={15} /> Other Expenses {todayExpensesTotal > 0 && <span style={{ background: '#e74c3c', color: '#fff', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', marginLeft: '2px' }}>-₹{todayExpensesTotal.toFixed(0)}</span>}
+       </button>
+     </div>
    </div>
 
    {/* Financial Performance Cards (Row 1) */}
@@ -3703,8 +4329,27 @@ const exportStaffToCSV = () => {
       </div>
     </div>
 
-    {/* Operational & Inventory Analytics Cards (Row 2) */}
-    <div className="analytics-grid-4" style={{ marginTop: '14px' }}>
+    {/* Payment & Inventory Analytics Cards (Row 2) */}
+    <div className="analytics-grid-row-2">
+      {/* Cash & Online Paid — Combined Card */}
+      <div className="modern-metric-card">
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Cash &amp; Online Paid</h4>
+          <div className="modern-metric-icon-wrapper" style={{ background: 'rgba(39, 174, 96, 0.12)' }}>
+            <Banknote size={15} color="#27ae60" />
+          </div>
+        </div>
+        <p className="modern-metric-value" style={{ color: '#27ae60' }}>₹{(todayCashSales + todayOnlineSales).toFixed(2)}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+          <span className="modern-metric-pill modern-pill-success" style={{ justifyContent: 'flex-start' }}>
+            💵 Cash: ₹{todayCashSales.toFixed(2)} today · ₹{monthlyCashSales.toFixed(2)} month
+          </span>
+          <span className="modern-metric-pill" style={{ background: 'rgba(52, 152, 219, 0.12)', color: '#2980b9', justifyContent: 'flex-start' }}>
+            📱 Online: ₹{todayOnlineSales.toFixed(2)} today · ₹{monthlyOnlineSales.toFixed(2)} month
+          </span>
+        </div>
+      </div>
+
       {/* Inventory Value */}
       <div className="modern-metric-card">
         <div className="modern-metric-header">
@@ -3717,54 +4362,18 @@ const exportStaffToCSV = () => {
         <span className="modern-metric-pill modern-pill-warning">Current Real-Time Value</span>
       </div>
 
-      {/* Total Inventory Cost (This Month) */}
+      {/* Inventory Consumed This Month */}
       <div className="modern-metric-card">
         <div className="modern-metric-header">
-          <h4 className="modern-metric-title">Total Inventory Cost</h4>
-          <div className="modern-metric-icon-wrapper">
+          <h4 className="modern-metric-title">Inventory Consumed</h4>
+          <div className="modern-metric-icon-wrapper" style={{ background: 'rgba(155, 89, 182, 0.12)' }}>
             <IndianRupee size={15} color="#9b59b6" />
           </div>
         </div>
-        <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</p>
-        <span className="modern-metric-pill modern-pill-neutral">Purchases this month</span>
-      </div>
-
-      {/* Inventory Consumption (This Month) */}
-      <div className="modern-metric-card">
-        <div className="modern-metric-header">
-          <h4 className="modern-metric-title">Inventory Consumption</h4>
-          <div className="modern-metric-icon-wrapper">
-            <IndianRupee size={15} color="#16a085" />
-          </div>
-        </div>
-        <p className="modern-metric-value" style={{ color: '#16a085' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
-        <span className="modern-metric-pill modern-pill-neutral">Consumed this month</span>
-      </div>
-
-      {/* Order Source (This Month) */}
-      <div className="modern-metric-card">
-        <div className="modern-metric-header">
-          <h4 className="modern-metric-title">Order Source</h4>
-          <div className="modern-metric-icon-wrapper">
-            <BarChart3 size={15} color="#3498db" />
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'baseline', marginTop: '2px', marginBottom: '6px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span className="modern-metric-value" style={{ fontSize: '1.25rem', margin: 0 }}>
-              {statsData?.orderSourceData ? statsData.orderSourceData.QR : orders.filter(o => o.source !== 'STAFF').length}
-            </span>
-            <span style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>QR Orders</span>
-          </div>
-          <div style={{ width: '1px', height: '24px', background: 'var(--color-border)', alignSelf: 'center' }}></div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span className="modern-metric-value" style={{ fontSize: '1.25rem', color: '#3498db', margin: 0 }}>
-              {statsData?.orderSourceData ? (statsData.orderSourceData.POS + statsData.orderSourceData.Counter) : orders.filter(o => o.source === 'STAFF').length}
-            </span>
-            <span style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Staff POS</span>
-          </div>
-        </div>
-        <span className="modern-metric-pill modern-pill-neutral">This month</span>
+        <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
+        <span className="modern-metric-pill modern-pill-neutral">
+          Kitchen usage this month
+        </span>
       </div>
     </div>
 
@@ -4201,1323 +4810,2000 @@ const exportStaffToCSV = () => {
 </div>:
 
 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
- {reviews.map((r) =>
-<div key={r._id} style={{
- background: 'rgba(0, 0, 0,0.02)',
- border: '1px solid var(--color-border)',
- padding: '14px',
- borderRadius: '12px',
- display: 'flex',
- flexDirection: 'column',
- gap: '8px',
- transition: 'border-color 0.2s'
- }}>
- {/* Review Header */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-<div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-<span style={{
- width: '34px', height: '34px', flexShrink: 0,
- borderRadius: '50%',
- background: 'linear-gradient(135deg, #8FA89B 0%, #4d6b5e 100%)',
- color: 'var(--color-text-primary)',
- display: 'flex', alignItems: 'center', justifyContent: 'center',
- fontWeight: 800, fontSize: '14px'
- }}>
- {(r.customerName || 'A')[0].toUpperCase()}
-</span>
-<div style={{ minWidth: 0 }}>
-<div style={{ color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customerName}</div>
-<div style={{ color: '#ff9800', fontSize: '12px', letterSpacing: '1px', marginTop: '1px' }}>
- {''.repeat(r.rating)}{''.repeat(5 - r.rating)}
-</div>
-</div>
-</div>
- {r.createdAt &&
-<span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap', flexShrink: 0 }}>
- {new Date(r.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-</span>
- }
-</div>
- 
- {/* Review Text */}
- {r.reviewText ?
-<p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '13px', lineHeight: '1.5', borderLeft: '2px solid var(--color-primary)', paddingLeft: '10px' }}>
- {r.reviewText}
-</p>:
-
-<p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '12px', fontStyle: 'italic' }}>No comment provided.</p>
- }
-
- {/* Ordered Items */}
- {r.orderedItems && r.orderedItems.length >0 &&
-<div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '2px' }}>
- {r.orderedItems.map((item, idx) =>
-<span key={idx} style={{
- background: 'rgba(143, 168, 155, 0.1)',
- border: '1px solid rgba(143, 168, 155, 0.2)',
- color: 'var(--color-primary)',
- padding: '2px 7px',
- borderRadius: '4px',
- fontSize: '11px',
- fontWeight: 600
- }}>
- {item.quantity}x {item.name}
-</span>
-)}
-</div>
- }
-</div>
-)}
-</div>
- }
-</div>
-</div>
- }
-</div>
- }
-
- {/* TAB 3: STAFF ROSTER */}
- {activeTab === 'staff' &&
-<div className="fade-in">
- {/* Sub-tab Switcher for Staff, Reports & Attendance */}
-<div style={{
- display: 'flex',
- gap: '8px',
- background: 'rgba(0, 0, 0, 0.02)',
- padding: '6px',
- borderRadius: '12px',
- border: '1px solid var(--color-border)',
- marginBottom: '24px',
- maxWidth: '100%',
- overflowX: 'auto',
- whiteSpace: 'nowrap'
- }} className="no-scrollbar">
-<button
- onClick={() =>setStaffSubTab('roster')}
- style={{
- padding: '8px 16px',
- borderRadius: '8px',
- border: 'none',
- background: staffSubTab === 'roster' ? 'var(--color-primary)' : 'transparent',
- color: staffSubTab === 'roster' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
- fontSize: '13.5px',
- fontWeight: 700,
- cursor: 'pointer',
- transition: 'all 0.2s',
- fontFamily: 'inherit'
- }}>
- 
- Staff Roster
-</button>
-<button
- onClick={() =>setStaffSubTab('reports')}
- style={{
- padding: '8px 16px',
- borderRadius: '8px',
- border: 'none',
- background: staffSubTab === 'reports' ? 'var(--color-primary)' : 'transparent',
- color: staffSubTab === 'reports' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
- fontSize: '13.5px',
- fontWeight: 700,
- cursor: 'pointer',
- transition: 'all 0.2s',
- fontFamily: 'inherit'
- }}>
- 
- Daily Work Reports
-</button>
-<button
- onClick={() =>setStaffSubTab('attendance')}
- style={{
- padding: '8px 16px',
- borderRadius: '8px',
- border: 'none',
- background: staffSubTab === 'attendance' ? 'var(--color-primary)' : 'transparent',
- color: staffSubTab === 'attendance' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
- fontSize: '13.5px',
- fontWeight: 700,
- cursor: 'pointer',
- transition: 'all 0.2s',
- fontFamily: 'inherit'
- }}>
- 
- Attendance Logs
-</button>
-<button
- onClick={() =>setStaffSubTab('salary')}
- style={{
- padding: '8px 16px',
- borderRadius: '8px',
- border: 'none',
- background: staffSubTab === 'salary' ? 'var(--color-primary)' : 'transparent',
- color: staffSubTab === 'salary' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
- fontSize: '13.5px',
- fontWeight: 700,
- cursor: 'pointer',
- transition: 'all 0.2s',
- fontFamily: 'inherit'
- }}>
- 
- Staff Salaries
-</button>
-</div>
-
- {staffSubTab === 'roster' &&
-<div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
-
- {/* ─── Add Staff Modal ─── */}
- {showAddStaffModal &&
-<div
- onClick={(e) =>{if (e.target === e.currentTarget) {setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0 });}}}
- style={{
- position: 'fixed', inset: 0, zIndex: 3000,
- background: 'rgba(0,0,0,0.75)',
- backdropFilter: 'blur(10px)',
- display: 'flex', alignItems: 'center', justifyContent: 'center',
- padding: '16px',
- animation: 'fadeIn 0.2s ease'
- }}>
- 
-<div style={{
- background: 'var(--bg-card)',
- border: '1px solid var(--color-border)',
- borderRadius: '20px',
- padding: '28px 24px',
- width: '100%',
- maxWidth: '440px',
- boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
- animation: 'slideUp 0.25s ease'
- }}>
- {/* Modal Header */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-<div>
-<h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Add New Staff</h3>
-<p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Register a new team member to the roster</p>
-</div>
-<button
- onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0 });}}
- style={{
- background: 'rgba(0, 0, 0,0.06)', border: '1px solid rgba(0, 0, 0,0.08)',
- borderRadius: '50%', width: '36px', height: '36px',
- color: 'var(--color-text-primary)', fontSize: '18px', cursor: 'pointer',
- display: 'flex', alignItems: 'center', justifyContent: 'center',
- flexShrink: 0
- }}>
- ×</button>
-</div>
-
- {/* Form */}
-<form onSubmit={handleAddStaff} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-    <label htmlFor="roster-full-name" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Name *</label>
-    <input type="text" id="roster-full-name" name="roster-full-name" className="form-input" placeholder="e.g. Ravi Kumar" value={newStaff.name} onChange={(e) =>setNewStaff({ ...newStaff, name: e.target.value })} required />
-  </div>
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-    <label htmlFor="roster-username" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Username *</label>
-    <input type="text" id="roster-username" name="roster-username" className="form-input" placeholder="e.g. ravikumar" value={newStaff.username || ''} onChange={(e) =>setNewStaff({ ...newStaff, username: e.target.value })} required />
-  </div>
-</div>
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-    <label htmlFor="roster-password" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Initial Password *</label>
-    <input type="text" id="roster-password" name="roster-password" className="form-input" placeholder="e.g. Cafe@12345" value={newStaff.password || ''} onChange={(e) =>setNewStaff({ ...newStaff, password: e.target.value })} required />
-  </div>
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-    <label htmlFor="roster-phone-number" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Phone Number *</label>
-    <input type="text" id="roster-phone-number" name="roster-phone-number" className="form-input" placeholder="e.g. 9876543210" value={newStaff.phone} onChange={(e) =>setNewStaff({ ...newStaff, phone: e.target.value })} required />
-  </div>
-</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="roster-email-address" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email Address <span style={{ opacity: 0.5 }}>(Optional)</span></label>
-<input type="email" id="roster-email-address" name="roster-email-address" className="form-input" placeholder="staff@cafe.com" value={newStaff.email} onChange={(e) =>setNewStaff({ ...newStaff, email: e.target.value })} />
-</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="roster-daily-wage" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Daily Wage (₹) *</label>
-<input type="number" min="0" id="roster-daily-wage" name="roster-daily-wage" className="form-input" placeholder="e.g. 500" value={newStaff.dailyRate || ''} onChange={(e) =>setNewStaff({ ...newStaff, dailyRate: Number(e.target.value) })} required />
-</div>
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="roster-staff-role" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Staff Role *</label>
-<select id="roster-staff-role" name="roster-staff-role" className="form-input" value={newStaff.staffRole ? newStaff.staffRole.toLowerCase() : 'staff'} onChange={(e) =>setNewStaff({ ...newStaff, staffRole: e.target.value })} required>
-<option value="staff">Staff</option>
-</select>
-</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-<label htmlFor="roster-assigned-branch" className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Branch Code *</label>
-<select id="roster-assigned-branch" name="roster-assigned-branch" className="form-input" value={newStaff.assignedBranch} onChange={(e) =>setNewStaff({ ...newStaff, assignedBranch: e.target.value })} required>
-<option value="">-- Select --</option>
- {branches.map((b) =>
-<option key={b.branchId} value={b.branchId}>{b.branchId} ({b.branchName})</option>
-)}
-</select>
-</div>
-</div>
-<div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-<button
- type="button"
- onClick={() =>{setShowAddStaffModal(false);setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0 });}}
- style={{
- flex: 1, padding: '12px', borderRadius: '10px',
- border: '1px solid var(--color-border)', background: 'transparent',
- color: 'var(--color-text-secondary)', fontSize: '14px', fontWeight: 600,
- cursor: 'pointer', fontFamily: 'inherit'
- }}>
- Cancel</button>
-<button
- type="submit"
- className="btn btn-primary"
- style={{ flex: 2, padding: '12px', borderRadius: '10px', fontSize: '14px' }}
- disabled={staffLoading}>
- {staffLoading ? ' Adding...' : ' Add Staff Member'}
-</button>
-</div>
-</form>
-</div>
-</div>
- }
-
-  {/* Staff Roster List Card */}
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-<h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Staff Roster List</h4>
-<div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-<button
- onClick={exportStaffToCSV}
- style={{
- display: 'flex', alignItems: 'center', gap: '8px',
- background: '#2ecc71', color: 'white',
- border: 'none', borderRadius: '10px',
- padding: '8px 16px', fontSize: '13px', fontWeight: 700,
- cursor: 'pointer', fontFamily: 'inherit',
- boxShadow: '0 4px 16px rgba(46, 204, 113, 0.4)',
- transition: 'all 0.2s ease'
- }}
- onMouseEnter={(e) =>{e.currentTarget.style.transform = 'translateY(-1px)';e.currentTarget.style.boxShadow = '0 6px 20px rgba(46, 204, 113, 0.5)';}}
- onMouseLeave={(e) =>{e.currentTarget.style.transform = 'translateY(0)';e.currentTarget.style.boxShadow = '0 4px 16px rgba(46, 204, 113, 0.4)';}}>
- <span style={{ fontSize: '16px' }}>📥</span>
- <span>Export CSV</span>
-</button>
-<button
- onClick={() =>setShowAddStaffModal(true)}
- style={{
- display: 'flex', alignItems: 'center', gap: '8px',
- background: 'var(--color-primary)', color: 'var(--color-text-primary)',
- border: 'none', borderRadius: '10px',
- padding: '8px 16px', fontSize: '13px', fontWeight: 700,
- cursor: 'pointer', fontFamily: 'inherit',
- boxShadow: '0 4px 16px rgba(143,168,155,0.4)',
- transition: 'all 0.2s ease'
- }}
- onMouseEnter={(e) =>{e.currentTarget.style.transform = 'translateY(-1px)';e.currentTarget.style.boxShadow = '0 6px 20px rgba(143,168,155,0.5)';}}
- onMouseLeave={(e) =>{e.currentTarget.style.transform = 'translateY(0)';e.currentTarget.style.boxShadow = '0 4px 16px rgba(143,168,155,0.4)';}}>
- 
-<span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
-<span>Add Staff</span>
-</button>
-</div>
-</div>
- {staffLoading && staff.length === 0 ?
-<div style={{ textAlign: 'center', padding: '40px 0' }}>
-<div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading staff roster...</p>
-</div>:
-
-<>
-<div className="desktop-tablet-staff custom-scrollbar" style={{ display: 'none', width: '100%', maxWidth: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '8px' }}>
-<table style={{ width: '100%', minWidth: '1080px', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700, whiteSpace: 'nowrap' }}>
-<th style={{ padding: '10px' }}>Emp ID</th>
-<th style={{ padding: '10px' }}>Name</th>
-<th style={{ padding: '10px' }}>Contact</th>
-<th style={{ padding: '10px' }}>Role</th>
-<th style={{ padding: '10px' }}>Branch</th>
-<th style={{ padding: '10px' }}>Daily Wage</th>
-<th style={{ padding: '10px' }}>Req. Hours</th>
-<th style={{ padding: '10px' }}>Current Month Salary</th>
-<th style={{ padding: '10px' }}>Last Login</th>
-<th style={{ padding: '10px' }}>Orders (Today)</th>
-<th style={{ padding: '10px' }}>Joined Date</th>
-<th style={{ padding: '10px', textAlign: 'center' }}>Status</th>
-<th style={{ padding: '10px', textAlign: 'center' }}>Actions</th>
-</tr>
-</thead>
-<tbody>
- {staff.map((member) => (
-   <React.Fragment key={member._id}>
-<tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-<td style={{ padding: '12px 10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</td>
-<td style={{ padding: '12px 10px' }}>
-  <div style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</div>
-  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-    <span style={{ fontSize: '11px', fontWeight: 700, color: '#D47F46', background: 'rgba(212, 127, 70, 0.12)', padding: '1px 6px', borderRadius: '4px' }}>
-      @{member.username || member.name.toLowerCase().replace(/\s+/g, '')}
-    </span>
-  </div>
-</td>
-<td style={{ padding: '12px 10px' }}>
-  <div style={{ fontSize: '13px' }}>{member.phone}</div>
-  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{member.email || 'N/A'}</div>
-</td>
-<td style={{ padding: '12px 10px' }}>
-<span className="admin-menu-badge" style={{ textTransform: 'capitalize' }}>{member.staffRole}</span>
-</td>
-<td style={{ padding: '12px 10px' }}>
- {member.assignedBranch || 'Unassigned'}
-</td>
-<td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
- ₹{member.dailyRate || 0}
-</td>
-<td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)' }}>
- {member.requiredHours || 8} hrs
-</td>
-<td 
-  style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)', cursor: 'pointer', userSelect: 'none' }}
-  onClick={() => setExpandedStaffId(expandedStaffId === member._id ? null : member._id)}
-  title="Click to view monthly & daily breakdown"
->
-  ₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0} <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{expandedStaffId === member._id ? '▲' : '▼'}</span>
-</td>
-<td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
- {formatLastSeen(member.lastSeen || member.lastLogin)}
-</td>
-<td style={{ padding: '12px 10px', fontSize: '13px', fontWeight: 'bold', color: 'var(--color-primary)' }}>
- {member.ordersHandledToday || 0}
-</td>
-<td style={{ padding: '12px 10px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
- {new Date(member.createdAt).toLocaleDateString()}
-</td>
-<td style={{ padding: '12px 10px', textAlign: 'center' }}>
-<span style={{
- backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
- color: member.isActive ? '#2ecc71' : '#e74c3c',
- padding: '3px 8px',
- borderRadius: '12px',
- fontSize: '11px',
- fontWeight: 'bold'
- }}>
- {member.isActive ? 'Active' : 'Inactive'}
-</span>
-</td>
-<td style={{ padding: '12px 10px', textAlign: 'center' }}>
-<div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-<button onClick={() =>{setEditingStaff({ ...member, newPassword: '' });setShowEditStaffModal(true);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto' }}>Edit</button>
-<button onClick={() =>{setResetModalStaff(member);setNewStaffPasswordInput('');setShowStaffPassToggle(false);}} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: '#D47F46', color: '#D47F46', fontWeight: 600 }} title="Reset Staff Password">🔑 Pass</button>
-<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>Delete</button>
-</div>
-</td>
-</tr>
-{expandedStaffId === member._id && (
-  <tr style={{ background: 'rgba(0,0,0,0.15)' }}>
-    <td colSpan={13} style={{ padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <span style={{ fontWeight: 'bold', color: 'var(--color-primary)', fontSize: '13px' }}>
-              Monthly Salary & Daily Breakdown ({member.monthName || 'Current Month'}):
-            </span>
-            <span style={{ marginLeft: '10px', fontSize: '11px', background: 'rgba(46, 204, 113, 0.15)', color: '#2ecc71', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
-              ✓ Attendance Marked: Full Day Salary Credited
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              Days Attended: <strong style={{ color: 'var(--color-text-primary)' }}>{member.workingDays || 0} days</strong>
-            </span>
-            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>•</span>
-            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              Daily Wage: <strong style={{ color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}/day</strong>
-            </span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
-            <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--color-border)', minWidth: '85px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>{day}</span>
-              <span style={{ fontWeight: 'bold', color: (member.weeklyBreakdown?.[day] || 0) > 0 ? '#10B981' : 'var(--color-text-primary)', marginTop: '2px', fontSize: '13px' }}>
-                ₹{member.weeklyBreakdown?.[day] || 0}
-              </span>
+  {reviews.map((r) => (
+    <div key={r._id} style={{
+      background: 'rgba(0, 0, 0,0.02)',
+      border: '1px solid var(--color-border)',
+      padding: '14px',
+      borderRadius: '12px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+      transition: 'border-color 0.2s'
+    }}>
+      {/* Review Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+          <span style={{
+            width: '34px', height: '34px', flexShrink: 0,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #8FA89B 0%, #4d6b5e 100%)',
+            color: 'var(--color-text-primary)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 800, fontSize: '14px'
+          }}>
+            {(r.customerName || 'A')[0].toUpperCase()}
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customerName}</div>
+            <div style={{ color: '#ff9800', fontSize: '12px', letterSpacing: '1px', marginTop: '1px' }}>
+              {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
             </div>
-          ))}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(143,168,155,0.1)', padding: '6px 14px', borderRadius: '8px', border: '1px solid var(--color-primary)' }}>
-            <span style={{ fontSize: '10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>Week Total</span>
-            <span style={{ fontWeight: 800, color: 'var(--color-primary)', fontSize: '14px', marginTop: '2px' }}>₹{member.currentWeekSalary || 0}</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(46, 204, 113, 0.15)', padding: '6px 16px', borderRadius: '8px', border: '1px solid #2ecc71' }}>
-            <span style={{ fontSize: '10px', color: '#2ecc71', fontWeight: 'bold' }}>Current Month Total</span>
-            <span style={{ fontWeight: 800, color: '#2ecc71', fontSize: '16px', marginTop: '2px' }}>₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0}</span>
           </div>
         </div>
+        {r.createdAt && (
+          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {new Date(r.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+          </span>
+        )}
       </div>
-    </td>
-  </tr>
-)}
-  </React.Fragment>
-))}
-</tbody>
-</table>
-</div>
-
-<div className="mobile-only-staff" style={{ display: 'none' }}>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
- {staff.map((member) => (
-<div key={member._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '16px', borderRadius: '12px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-<div>
-  <div style={{ color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 'bold' }}>{member.name}</div>
-  <span style={{ fontSize: '11px', fontWeight: 700, color: '#D47F46', background: 'rgba(212, 127, 70, 0.12)', padding: '1px 6px', borderRadius: '4px' }}>
-    @{member.username || member.name.toLowerCase().replace(/\s+/g, '')}
-  </span>
-</div>
-<span className="admin-menu-badge" style={{ textTransform: 'capitalize', background: 'rgba(255, 107, 8, 0.15)', color: '#FF6B08', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>{member.staffRole}</span>
-</div>
-<div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px', lineHeight: '1.6' }}>
-<div>🆔 ID:<span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.employeeId || 'N/A'}</span></div>
-<div>{member.email || 'No Email'}</div>
-<div>{member.phone}</div>
-<div>Branch Code:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{member.assignedBranch || 'Unassigned'}</span></div>
-<div>Daily Wage:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> ₹{member.dailyRate || 0}</span></div>
-<div>Required Hours:<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}> {member.requiredHours || 8} hrs</span></div>
-<div>Current Month Salary:<span style={{ color: '#2ecc71', fontWeight: 'bold' }}> ₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0}</span></div>
-<div>Orders Today: <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>{member.ordersHandledToday || 0}</span></div>
-<div>Joined: {new Date(member.createdAt).toLocaleDateString()}</div>
-<div style={{ marginTop: '4px' }}>Login: {formatLastSeen(member.lastSeen || member.lastLogin)}</div>
-
-{/* Mobile Weekly Breakdown */}
-<div style={{ 
-  marginTop: '12px', 
-  padding: '10px', 
-  background: 'rgba(0,0,0,0.15)', 
-  borderRadius: '8px',
-  display: 'grid',
-  gridTemplateColumns: 'repeat(4, 1fr)',
-  gap: '8px',
-  fontSize: '11px',
-  border: '1px solid var(--color-border)'
-}}>
-  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
-    <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <span style={{ color: 'var(--color-text-secondary)', fontSize: '9px', fontWeight: 600 }}>{day.slice(0, 3)}</span>
-      <span style={{ fontWeight: 'bold', color: (member.weeklyBreakdown?.[day] || 0) > 0 ? '#10B981' : 'var(--color-text-primary)' }}>₹{member.weeklyBreakdown?.[day] || 0}</span>
-    </div>
-  ))}
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gridColumn: 'span 1', background: 'rgba(46, 204, 113, 0.15)', borderRadius: '4px' }}>
-    <span style={{ color: '#2ecc71', fontWeight: 'bold', fontSize: '9px' }}>Month Total</span>
-    <span style={{ fontWeight: 'bold', color: '#2ecc71' }}>₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0}</span>
-  </div>
-</div>
-
-</div>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--color-border)' }}>
-<span style={{
- backgroundColor: member.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
- color: member.isActive ? '#2ecc71' : '#e74c3c',
- padding: '4px 10px',
- borderRadius: '12px',
- fontSize: '12px',
- fontWeight: 'bold'
- }}>
- {member.isActive ? 'Active' : 'Inactive'}
-</span>
-<div style={{ display: 'flex', gap: '8px' }}>
-<button onClick={() =>{setEditingStaff({ ...member, newPassword: '' });setShowEditStaffModal(true);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px' }}>Edit</button>
-<button onClick={() =>{setResetModalStaff(member);setNewStaffPasswordInput('');setShowStaffPassToggle(false);}} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: '#D47F46', color: '#D47F46', fontWeight: 600 }}>🔑 Pass</button>
-<button onClick={() =>handleDeleteStaff(member._id)} className="btn btn-secondary touch-btn" style={{ padding: '8px 12px', fontSize: '13px', minHeight: '44px', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>Delete</button>
-</div>
-</div>
-</div>
-))}
-</div>
-</div>
-</>
- }
-</div>
-</div>
- }
-
- {staffSubTab === 'attendance' &&
-<div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
- {/* Overview cards */}
-<div className="analytics-grid">
-<div className="analytics-card" style={{ background: '#1a130f' }}>
-<h4>Total Active Staff</h4>
-<span className="val">{attendanceSummary.totalStaff || 0}</span>
-
-</div>
-<div className="analytics-card" style={{ background: '#0e1a12' }}>
-<h4>Present Today</h4>
-<span className="val" style={{ color: '#2ecc71' }}>{attendanceSummary.present || 0}</span>
-
-</div>
-<div className="analytics-card" style={{ background: '#1c100e' }}>
-<h4>Absent Today</h4>
-<span className="val" style={{ color: '#e74c3c' }}>{attendanceSummary.absent || 0}</span>
-
-</div>
-<div className="analytics-card" style={{ background: '#1c1c0e' }}>
-<h4> Late Arrivals</h4>
-<span className="val" style={{ color: '#f1c40f' }}>{attendanceSummary.late || 0}</span>
-
-</div>
-<div className="analytics-card" style={{ background: '#160e1a' }}>
-<h4>Currently Working</h4>
-<span className="val" style={{ color: '#3498db' }}>{attendanceSummary.currentlyWorking || 0}</span>
-
-</div>
-<div className="analytics-card" style={{ background: '#13191f' }}>
-<h4>Checked Out</h4>
-<span className="val" style={{ color: '#9b59b6' }}>{attendanceSummary.checkedOut || 0}</span>
-
-</div>
-</div>
-
- {/* Today's Live Records Table */}
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
-<h3 style={{ color: 'var(--color-text-primary)', margin: '0 0 20px 0', fontSize: '1.20rem', fontWeight: 700 }}>Today's Attendance Log</h3>
- {attendanceLoading ?
-<div style={{ textAlign: 'center', padding: '20px 0' }}>
-<div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
-<p style={{ color: 'var(--color-text-secondary)' }}>Loading today's logs...</p>
-</div>:
- attendanceRecords.length === 0 ?
-<div style={{ padding: '30px 20px', textAlign: 'center', background: 'var(--bg-secondary)', border: '1px dashed var(--color-border)', borderRadius: '8px', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
- No check-in logs recorded today yet.
-</div>:
-
-<div style={{ overflowX: 'auto' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
-<th style={{ padding: '10px' }}>Staff Name</th>
-<th style={{ padding: '10px' }}>Branch</th>
-<th style={{ padding: '10px' }}>Check In</th>
-<th style={{ padding: '10px' }}>Check Out</th>
-<th style={{ padding: '10px' }}>Duration</th>
-<th style={{ padding: '10px' }}>Status</th>
-<th style={{ padding: '10px' }}>Verification Distance</th>
-<th style={{ padding: '10px' }}>Device</th>
-</tr>
-</thead>
-<tbody>
- {attendanceRecords.map((rec) =>{
- const durationHrs = rec.totalDuration ? `${Math.floor(rec.totalDuration / 60)}h ${rec.totalDuration % 60}m` : 'Active';
- const statusColor = rec.status === 'Late' ? '#f1c40f' : '#2ecc71';
- return (
-<tr key={rec._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-<td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{rec.staffName}</td>
-<td style={{ padding: '12px 10px' }}>{rec.branchName}</td>
-<td style={{ padding: '12px 10px' }}>{rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-<td style={{ padding: '12px 10px' }}>{rec.checkOutTime ? new Date(rec.checkOutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-<td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{durationHrs}</td>
-<td style={{ padding: '12px 10px' }}>
-<span style={{
- backgroundColor: `${statusColor}22`,
- border: `1px solid ${statusColor}`,
- color: statusColor,
- padding: '2px 6px',
- borderRadius: '4px',
- fontSize: '11px',
- fontWeight: 'bold'
- }}>
- {rec.status}
-</span>
-</td>
-<td style={{ padding: '12px 10px' }}>
-<span style={{ color: rec.distanceFromCafe<= 30 ? '#2ecc71' : '#e67e22' }}>
- {rec.distanceFromCafe} meters
-</span>
-</td>
-<td style={{ padding: '12px 10px', fontSize: '11px', color: 'var(--color-text-secondary)' }}>{rec.deviceInfo}</td>
-</tr>);
-
- })}
-</tbody>
-</table>
-</div>
- }
-</div>
-
- {/* Attendance Analytics & Reports */}
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
-<div>
-<h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.20rem', fontWeight: 700 }}>Historical Attendance Reports</h3>
-<p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px' }}></p>
-</div>
-<div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-<select className="form-input" style={{ width: '130px', margin: 0 }} value={reportRange} onChange={(e) =>setReportRange(e.target.value)}>
-<option value="daily">Past 24 Hours</option>
-<option value="weekly">Past 7 Days</option>
-<option value="monthly">Past 30 Days</option>
-</select>
-<select className="form-input" style={{ width: '180px', margin: 0 }} value={reportBranch} onChange={(e) =>setReportBranch(e.target.value)}>
-<option value="">All Branches</option>
- {branches.map((b) =>
-<option key={b.branchId} value={b.branchId}>{b.branchId} ({b.branchName})</option>
-)}
-</select>
-</div>
-</div>
-
- {attendanceReports && !Array.isArray(attendanceReports) && attendanceReports.summary &&
-<div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-<div className="analytics-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: 0 }}>
-<div className="analytics-card" style={{ background: 'rgba(0, 0, 0,0.01)' }}>
-<h4>Attendance Percentage (%)</h4>
-<span className="val" style={{ color: 'var(--color-primary)' }}>{attendanceReports.summary.attendancePercentage || 0}%</span>
-
-</div>
-<div className="analytics-card" style={{ background: 'rgba(0, 0, 0,0.01)' }}>
-<h4>Cumulative Working Hours</h4>
-<span className="val" style={{ color: '#2ecc71' }}>{attendanceReports.summary.totalHours || 0} hrs</span>
-
-</div>
-<div className="analytics-card" style={{ background: 'rgba(0, 0, 0,0.01)' }}>
-<h4>Late Arrival Incidents</h4>
-<span className="val" style={{ color: '#f1c40f' }}>{attendanceReports.summary.lateArrivals || 0} times</span>
-
-</div>
-</div>
-
- {/* Branch wise performance */}
- {attendanceReports.branchReports && attendanceReports.branchReports.length > 0 &&
-<div style={{ marginTop: '10px' }}>
-<h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Branch Attendance Performance Breakdown</h4>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead>
-<tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
-<th style={{ padding: '8px' }}>Branch Code</th>
-<th style={{ padding: '8px', textAlign: 'center' }}>Total Check-ins</th>
-<th style={{ padding: '8px', textAlign: 'right' }}>Total Hours Logged</th>
-</tr>
-</thead>
-<tbody>
- {attendanceReports.branchReports.map((br, idx) =>
-<tr key={idx} style={{ borderBottom: '1px solid rgba(0, 0, 0,0.03)' }}>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{br.branchName || 'Unknown Branch'}</td>
-<td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold' }}>{br.presentCount}</td>
-<td style={{ padding: '10px 8px', textAlign: 'right', color: '#2ecc71', fontWeight: 'bold' }}>{br.workingHours} hrs</td>
-</tr>
-)}
-</tbody>
-</table>
-</div>
- }
-
- {/* Filtered records detail log */}
-<div style={{ marginTop: '10px' }}>
-<h4 style={{ color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '10px' }}>Detailed History Records ({attendanceReports.records?.length || 0})</h4>
-<div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
-<table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-<thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 1 }}>
-<tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
-<th style={{ padding: '10px' }}>Date</th>
-<th style={{ padding: '10px' }}>Staff Name</th>
-<th style={{ padding: '10px' }}>Branch Code</th>
-<th style={{ padding: '10px' }}>Check In</th>
-<th style={{ padding: '10px' }}>Check Out</th>
-<th style={{ padding: '10px' }}>Status</th>
-</tr>
-</thead>
-<tbody>
- {attendanceReports.records && attendanceReports.records.map((r) =>
-<tr key={r._id} style={{ borderBottom: '1px solid rgba(0, 0, 0,0.03)' }}>
-<td style={{ padding: '10px', color: 'var(--color-text-primary)' }}>{new Date(r.checkInTime).toLocaleDateString()}</td>
-<td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{r.staffName}</td>
-<td style={{ padding: '10px' }}>{r.branchName}</td>
-<td style={{ padding: '10px' }}>{r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-<td style={{ padding: '10px' }}>{r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Active'}</td>
-<td style={{ padding: '10px' }}>
-<span style={{
- color: r.status === 'Late' ? '#f1c40f' : '#2ecc71',
- fontWeight: 'bold'
- }}>
- {r.status}
-</span>
-</td>
-</tr>
-)}
-</tbody>
-</table>
-</div>
-</div>
-</div>
- }
-</div>
-</div>
- }
-
- {staffSubTab === 'reports' &&
-<div>
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-<div>
-<h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Staff Daily Work Reports</h3>
-
-</div>
-</div>
-
- {/* Filters Panel */}
-<div style={{
- display: 'flex',
- flexWrap: 'wrap',
- gap: '15px',
- background: 'rgba(0, 0, 0,0.02)',
- padding: '16px',
- borderRadius: '12px',
- border: '1px solid var(--color-border)',
- marginBottom: '24px'
- }}>
- {/* Filter 1: Range */}
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '150px' }}>
-<label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Time Range</label>
-<select
- value={reportsFilterRange}
- onChange={(e) =>setReportsFilterRange(e.target.value)}
- style={{
- backgroundColor: 'rgba(0,0,0,0.2)',
- border: '1px solid var(--color-border)',
- borderRadius: '8px',
- padding: '8px 12px',
- color: 'var(--color-text-primary)',
- fontSize: '0.85rem',
- outline: 'none'
- }}>
- 
-<option value="today">Today</option>
-<option value="this_week">This Week (Last 7 Days)</option>
-<option value="all">All Available</option>
-</select>
-</div>
-
- {/* Filter 2: Staff */}
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
-<label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Staff Member</label>
-<select
- value={reportsFilterStaff}
- onChange={(e) =>setReportsFilterStaff(e.target.value)}
- style={{
- backgroundColor: 'rgba(0,0,0,0.2)',
- border: '1px solid var(--color-border)',
- borderRadius: '8px',
- padding: '8px 12px',
- color: 'var(--color-text-primary)',
- fontSize: '0.85rem',
- outline: 'none'
- }}>
- 
-<option value="">All Staff</option>
- {staff.map((member) =>
-<option key={member._id} value={member._id}>
- {member.name} ({member.staffRole || member.role})
-</option>
-)}
-</select>
-</div>
-
- {/* Filter 3: Branch */}
-<div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
-<label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Branch</label>
-<select
- value={reportsFilterBranch}
- onChange={(e) =>setReportsFilterBranch(e.target.value)}
- style={{
- backgroundColor: 'rgba(0,0,0,0.2)',
- border: '1px solid var(--color-border)',
- borderRadius: '8px',
- padding: '8px 12px',
- color: 'var(--color-text-primary)',
- fontSize: '0.85rem',
- outline: 'none'
- }}>
- 
-<option value="">All Branches</option>
- {branches.map((b) =>
-<option key={b._id} value={b.branchId}>
- {b.branchName}
-</option>
-)}
-</select>
-</div>
-
- {/* Clear button if active filters */}
- {(reportsFilterStaff || reportsFilterBranch || reportsFilterRange !== 'today') &&
-<div style={{ display: 'flex', alignItems: 'flex-end' }}>
-<button
- onClick={() =>{
- setReportsFilterRange('today');
- setReportsFilterStaff('');
- setReportsFilterBranch('');
- }}
- style={{
- backgroundColor: 'transparent',
- border: '1px solid #ff4d4d',
- borderRadius: '8px',
- padding: '8px 16px',
- color: '#ff4d4d',
- fontSize: '0.85rem',
- fontWeight: 'bold',
- cursor: 'pointer',
- transition: 'all 0.2s'
- }}>
- 
- Clear Filters
-</button>
-</div>
- }
-</div>
-
- {/* Reports List/Grid */}
- {reportsLoading ?
-<div style={{ textAlign: 'center', padding: '50px 0' }}>
-<div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
-<p style={{ color: 'var(--color-text-secondary)' }}>Loading daily work reports...</p>
-</div>:
- reportsError ?
-<div style={{ color: '#ff4d4d', padding: '10px 0', fontSize: '0.9rem' }}> {reportsError}</div>:
- workReports.length === 0 ?
-<div style={{
- padding: '50px 20px',
- textAlign: 'center',
- background: 'rgba(0, 0, 0,0.01)',
- borderRadius: '12px',
- border: '1px dashed var(--color-border)',
- color: 'var(--color-text-secondary)',
- fontStyle: 'italic'
- }}>
- No work reports found matching the selected filters.
-</div>:
-
-<div style={{
- display: 'grid',
- gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
- gap: '20px'
- }}>
- {workReports.map((report) =>
-<div
- key={report._id}
- onClick={() =>setSelectedReport(report)}
- style={{
- background: 'rgba(0, 0, 0,0.01)',
- border: '1px solid var(--color-border)',
- borderRadius: '12px',
- padding: '16px',
- cursor: 'pointer',
- transition: 'transform 0.15s, border-color 0.15s',
- display: 'flex',
- flexDirection: 'column',
- justifyContent: 'space-between',
- minHeight: '220px'
- }}
- onMouseEnter={(e) =>{
- e.currentTarget.style.borderColor = 'var(--color-primary)';
- e.currentTarget.style.transform = 'translateY(-2px)';
- }}
- onMouseLeave={(e) =>{
- e.currentTarget.style.borderColor = 'var(--color-border)';
- e.currentTarget.style.transform = 'translateY(0)';
- }}>
- 
-<div>
- {/* Header details */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-<div>
-<strong style={{ color: 'var(--color-text-primary)', fontSize: '0.95rem', display: 'block' }}>{report.staffName}</strong>
-<span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>Branch Code: {report.branchName}</span>
-</div>
-<span style={{
- backgroundColor: 'rgba(255, 107, 8, 0.1)',
- border: '1px solid var(--color-primary)',
- color: 'var(--color-primary)',
- padding: '2px 6px',
- borderRadius: '4px',
- fontSize: '0.75rem',
- fontWeight: 'bold'
- }}>
- {report.photos.length} {report.photos.length === 1 ? 'photo' : 'photos'}
-</span>
-</div>
-
- {/* Thumbnail of first photo */}
-<div style={{
- width: '100%',
- height: '110px',
- borderRadius: '8px',
- overflow: 'hidden',
- marginBottom: '10px',
- border: '1px solid var(--color-border)',
- background: '#000'
- }}>
-<img
- src={getAssetUrl(report.photos[0])}
- alt="Work Proof"
- style={{ width: '100%', height: '100%', objectFit: 'cover' }}
- loading="lazy" />
- 
-</div>
-
- {/* Note excerpt */}
- {report.notes &&
-<p style={{
- margin: 0,
- fontSize: '0.8rem',
- color: 'var(--color-text-secondary)',
- lineHeight: '1.4',
- overflow: 'hidden',
- textOverflow: 'ellipsis',
- whiteSpace: 'nowrap'
- }}>
- {report.notes}
-</p>
- }
-</div>
-
- {/* Footer time */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '0.75rem', color: 'var(--color-text-secondary)', borderTop: '1px solid rgba(0, 0, 0,0.04)', paddingTop: '8px' }}>
-<span>{new Date(report.createdAt).toLocaleDateString([], { day: '2-digit', month: 'short' })}</span>
-<span> {new Date(report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
-</div>
-</div>
-)}
-</div>
- }
-</div>
-</div>
- }
-
- {staffSubTab === 'salary' && (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
-      {/* Tab Switcher for Weekly Run vs Salary History */}
-      <div style={{ display: 'flex', gap: '10px', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
-        <button 
-          onClick={() => setSalaryRunTab('run')} 
-          style={{ 
-            background: salaryRunTab === 'run' ? 'var(--color-primary)' : 'transparent', 
-            color: salaryRunTab === 'run' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', 
-            border: 'none', 
-            padding: '8px 16px', 
-            borderRadius: '8px', 
-            cursor: 'pointer', 
-            fontWeight: 'bold', 
-            fontSize: '13px' 
-          }}
-        >
-          Weekly Run
-        </button>
-        <button 
-          onClick={() => { setSalaryRunTab('history'); fetchSalaryHistory(); }} 
-          style={{ 
-            background: salaryRunTab === 'history' ? 'var(--color-primary)' : 'transparent', 
-            color: salaryRunTab === 'history' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)', 
-            border: 'none', 
-            padding: '8px 16px', 
-            borderRadius: '8px', 
-            cursor: 'pointer', 
-            fontWeight: 'bold', 
-            fontSize: '13px' 
-          }}
-        >
-          Salary History Ledger
-        </button>
-      </div>
-
-      {salaryRunTab === 'run' ? (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-            <div>
-              <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Weekly Run Calculator</h4>
-              <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>Calculate and disburse salaries based on attendance.</p>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <input 
-                type="text" 
-                placeholder="Search Employee..." 
-                value={salarySearchQuery} 
-                onChange={e => setSalarySearchQuery(e.target.value)} 
-                className="form-input" 
-                style={{ width: '160px', height: '40px', padding: '0 12px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
-              />
-              <button 
-                onClick={handleGeneratePayroll}
-                className="btn btn-secondary"
-                style={{ height: '40px', padding: '0 16px', fontSize: '13px', width: 'auto', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
-              >
-                Generate Run
-              </button>
-              <button 
-                onClick={() => { fetchStaffList(); alert('Salaries refreshed successfully.'); }} 
-                className="btn btn-primary" 
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px', height: '40px', width: 'auto' }}
-              >
-                Refresh
-              </button>
-            </div>
-          </div>
-
-          {staffLoading && staff.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Loading salary calculations...</p>
-            </div>
-          ) : (
-            <div style={{ width: '100%', overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
-                    <th style={{ padding: '12px 10px' }}>Staff Name</th>
-                    <th style={{ padding: '12px 10px' }}>Employee ID</th>
-                    <th style={{ padding: '12px 10px' }}>Cafe</th>
-                    <th style={{ padding: '12px 10px' }}>Branch Code</th>
-                    <th style={{ padding: '12px 10px' }}>Daily Wage</th>
-                    <th style={{ padding: '12px 10px' }}>Req. Hours</th>
-                    <th style={{ padding: '12px 10px' }}>Worked This Month</th>
-                    <th style={{ padding: '12px 10px' }}>Present Days</th>
-                    <th style={{ padding: '12px 10px' }}>Absent Days</th>
-                    <th style={{ padding: '12px 10px' }}>Current Month Salary</th>
-                    <th style={{ padding: '12px 10px' }}>Payroll Status</th>
-                    <th style={{ padding: '12px 10px', textAlign: 'center' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {staff
-                    .filter(s => {
-                      const matchesSearch = s.name.toLowerCase().includes(salarySearchQuery.toLowerCase());
-                      const matchesRole = !salaryRoleFilter || (s.staffRole || s.role || '').toLowerCase() === salaryRoleFilter.toLowerCase();
-                      return matchesSearch && matchesRole;
-                    })
-                    .map(member => {
-                      let statusBg = 'rgba(230,126,34,0.15)';
-                      let statusColor = '#e67e22';
-                      if (member.payrollStatus === 'Approved') {
-                        statusBg = 'rgba(52,152,219,0.15)';
-                        statusColor = '#3498db';
-                      } else if (member.payrollStatus === 'Paid') {
-                        statusBg = 'rgba(46,204,113,0.15)';
-                        statusColor = '#2ecc71';
-                      }
-
-                      return (
-                        <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                          <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{member.name}</td>
-                          <td style={{ padding: '12px 10px', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>{member.employeeId || '—'}</td>
-                          <td style={{ padding: '12px 10px' }}>{member.cafeName || '—'}</td>
-                          <td style={{ padding: '12px 10px' }}>{member.assignedBranch || '—'}</td>
-                          <td style={{ padding: '12px 10px', fontWeight: 600, color: 'var(--color-text-primary)' }}>₹{member.dailyRate || 0}</td>
-                          <td style={{ padding: '12px 10px' }}>{member.requiredHours || 8} hrs</td>
-                          <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{member.actualHoursWorked || 0} hrs</td>
-                          <td style={{ padding: '12px 10px', color: '#2ecc71', fontWeight: 'bold' }}>{member.workingDays || 0} days</td>
-                          <td style={{ padding: '12px 10px', color: '#e74c3c', fontWeight: 'bold' }}>{member.absentDays || 0} days</td>
-                          <td style={{ padding: '12px 10px', fontWeight: 'bold', color: '#2ecc71' }}>₹{member.currentMonthSalary ?? member.currentWeekSalary ?? 0}</td>
-                          <td style={{ padding: '12px 10px' }}>
-                            <span style={{ backgroundColor: statusBg, color: statusColor, padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', border: `1px solid ${statusColor}` }}>
-                              {member.payrollStatus || 'Pending'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px 10px', display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                            <button 
-                              onClick={() => { setSelectedSalaryStaff(member); setShowSalaryDetailModal(true); }} 
-                              className="btn btn-secondary" 
-                              style={{ padding: '4px 8px', fontSize: '11px', width: 'auto', minHeight: 'auto' }}
-                            >
-                              Shift Logs
-                            </button>
-                            {member.payrollStatus === 'Pending' && (
-                              <button 
-                                onClick={() => handleApprovePayroll(member._id)} 
-                                className="btn btn-secondary" 
-                                style={{ padding: '4px 8px', fontSize: '11px', width: 'auto', minHeight: 'auto', backgroundColor: '#3498db', color: '#fff', border: 'none' }}
-                              >
-                                Approve
-                              </button>
-                            )}
-                            {member.payrollStatus === 'Approved' && (
-                              <button 
-                                onClick={() => handlePayPayroll(member._id)} 
-                                className="btn btn-primary" 
-                                style={{ padding: '4px 8px', fontSize: '11px', width: 'auto', minHeight: 'auto' }}
-                              >
-                                Disburse
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+      
+      {/* Review Text */}
+      {r.reviewText ? (
+        <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '13px', lineHeight: '1.5', borderLeft: '2px solid var(--color-primary)', paddingLeft: '10px' }}>
+          {r.reviewText}
+        </p>
       ) : (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-            <div>
-              <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Permanent Salary History Ledger</h4>
-              <p style={{ margin: '4px 0 0 0', color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>Auditable permanent records of disbursed payroll cycles.</p>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <select 
-                value={salaryHistoryPeriod} 
-                onChange={e => { setSalaryHistoryPeriod(e.target.value); }} 
-                className="form-input" 
-                style={{ width: '180px', height: '40px', padding: '0 10px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
-              >
-                <option value="current_week">Current Week</option>
-                <option value="previous_week">Previous Week</option>
-                <option value="previous_month">Previous Month</option>
-                <option value="previous_year">Previous Year</option>
-              </select>
-              <button 
-                onClick={() => fetchSalaryHistory()} 
-                className="btn btn-primary" 
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px', height: '40px', width: 'auto' }}
-              >
-                Sync Ledger
-              </button>
-            </div>
-          </div>
+        <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '12px', fontStyle: 'italic' }}>No comment provided.</p>
+      )}
 
-          {salaryHistoryLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Retrieving ledger records...</p>
-            </div>
-          ) : salaryHistoryList.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}>
-              No disbursed salary records found for this period.
-            </div>
-          ) : (
-            <div style={{ width: '100%', overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
-                    <th style={{ padding: '12px 10px' }}>Payroll Week</th>
-                    <th style={{ padding: '12px 10px' }}>Staff Name</th>
-                    <th style={{ padding: '12px 10px' }}>Cafe</th>
-                    <th style={{ padding: '12px 10px' }}>Branch Code</th>
-                    <th style={{ padding: '12px 10px' }}>Worked Days</th>
-                    <th style={{ padding: '12px 10px' }}>Worked Hours</th>
-                    <th style={{ padding: '12px 10px' }}>Gross Salary</th>
-                    <th style={{ padding: '12px 10px' }}>Deductions</th>
-                    <th style={{ padding: '12px 10px' }}>Final Salary</th>
-                    <th style={{ padding: '12px 10px' }}>Status</th>
-                    <th style={{ padding: '12px 10px' }}>Disbursement Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {salaryHistoryList.map(record => (
-                    <tr key={record._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 700 }}>{record.payrollWeek}</td>
-                      <td style={{ padding: '12px 10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{record.employeeName}</td>
-                      <td style={{ padding: '12px 10px' }}>{record.cafeId}</td>
-                      <td style={{ padding: '12px 10px' }}>{record.branchId}</td>
-                      <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{record.workedDays} days</td>
-                      <td style={{ padding: '12px 10px', fontWeight: 'bold' }}>{record.workedHours} hrs</td>
-                      <td style={{ padding: '12px 10px', fontWeight: 600 }}>₹{record.grossSalary}</td>
-                      <td style={{ padding: '12px 10px', color: '#e74c3c' }}>₹{record.deductions}</td>
-                      <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--color-primary)' }}>₹{record.finalSalary}</td>
-                      <td style={{ padding: '12px 10px' }}>
-                        <span style={{ backgroundColor: 'rgba(46,204,113,0.15)', color: '#2ecc71', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', border: '1px solid #2ecc71' }}>
-                          {record.paymentStatus}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 10px' }}>
-                        {record.paymentDate ? new Date(record.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {/* Ordered Items */}
+      {r.orderedItems && r.orderedItems.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '2px' }}>
+          {r.orderedItems.map((item, idx) => (
+            <span key={idx} style={{
+              background: 'rgba(143, 168, 155, 0.1)',
+              border: '1px solid rgba(143, 168, 155, 0.2)',
+              color: 'var(--color-primary)',
+              padding: '2px 7px',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: 600
+            }}>
+              {item.quantity}x {item.name}
+            </span>
+          ))}
         </div>
       )}
     </div>
-  )}
+  ))}
+</div>
+}
+</div>
+</div>
+}
+</div>
+}
 
-  {/* Employee Detail View Modal */}
-  {showSalaryDetailModal && selectedSalaryStaff && (
-    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-      <div className="modal-container" style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '20px', padding: '28px 24px', width: '100%', maxWidth: '600px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
-        <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div>
-            <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Employee Salary Details</h3>
-            <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.85rem' }}>{selectedSalaryStaff.name} ({selectedSalaryStaff.staffRole || selectedSalaryStaff.role})</p>
-          </div>
-          <button onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }} className="modal-close" style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
+{/* TAB 3: STAFF DIRECTORY & PAYROLL */}
+{activeTab === 'staff' && (
+  <div style={{ animation: 'fadeIn 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    {/* ── Sub-tab Switcher for Staff Management ── */}
+    <div style={{
+      display: 'flex',
+      gap: '8px',
+      background: 'rgba(0, 0, 0, 0.02)',
+      padding: '6px',
+      borderRadius: '12px',
+      border: '1px solid var(--color-border)',
+      marginBottom: '4px',
+      maxWidth: '100%',
+      overflowX: 'auto',
+      whiteSpace: 'nowrap'
+    }} className="no-scrollbar">
+      <button
+        type="button"
+        onClick={() => setStaffSubTab('roster')}
+        style={{
+          padding: '8px 16px',
+          borderRadius: '8px',
+          border: 'none',
+          background: (staffSubTab === 'roster' || staffSubTab === 'all') ? 'var(--color-primary)' : 'transparent',
+          color: (staffSubTab === 'roster' || staffSubTab === 'all') ? '#fff' : 'var(--color-text-secondary)',
+          fontSize: '13px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        <span>👥</span> Staff Directory & Payroll
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setStaffSubTab('photos');
+          fetchWorkReports(false, activeBranchId);
+        }}
+        style={{
+          padding: '8px 16px',
+          borderRadius: '8px',
+          border: 'none',
+          background: (staffSubTab === 'photos' || staffSubTab === 'reports') ? 'var(--color-primary)' : 'transparent',
+          color: (staffSubTab === 'photos' || staffSubTab === 'reports') ? '#fff' : 'var(--color-text-secondary)',
+          fontSize: '13px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        <span>📸</span> Daily Cafe & Work Photos
+        {todayWorkReportsCount > 0 && (
+          <span style={{
+            fontSize: '11px',
+            padding: '1px 7px',
+            borderRadius: '10px',
+            background: (staffSubTab === 'photos' || staffSubTab === 'reports') ? 'rgba(255,255,255,0.3)' : 'rgba(212,127,70,0.18)',
+            color: (staffSubTab === 'photos' || staffSubTab === 'reports') ? '#fff' : 'var(--color-primary)',
+            fontWeight: 800
+          }}>
+            {todayWorkReportsCount}
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setStaffSubTab('attendance');
+          fetchAttendanceReportsData(false, activeBranchId);
+        }}
+        style={{
+          padding: '8px 16px',
+          borderRadius: '8px',
+          border: 'none',
+          background: staffSubTab === 'attendance' ? 'var(--color-primary)' : 'transparent',
+          color: staffSubTab === 'attendance' ? '#fff' : 'var(--color-text-secondary)',
+          fontSize: '13px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        <span>🕒</span> Shift & Attendance Logs
+      </button>
+    </div>
+
+    {/* ── SUB-TAB 1: STAFF DIRECTORY & PAYROLL ── */}
+    {(staffSubTab === 'roster' || staffSubTab === 'all') && (
+      <>
+    {/* ── Top Header & KPI Overview Strip ── */}
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--color-border)',
+      borderRadius: '14px',
+      padding: '12px 14px',
+      boxShadow: 'var(--shadow-sm)'
+    }}>
+      {/* Title + Global Action Buttons in one responsive flex row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+        <div>
+          <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>👥</span> Staff Directory & Payroll
+          </h3>
+          <p style={{ color: 'var(--color-text-secondary)', margin: '2px 0 0 0', fontSize: '0.78rem' }}>
+            Live shift punch records, attendance summary, and salary ledger
+          </p>
         </div>
-        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,0.1)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
-            <div>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Daily Wage:</span>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>₹{selectedSalaryStaff.dailyRate || 0}</div>
-            </div>
-            <div>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Required Hours:</span>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{selectedSalaryStaff.requiredHours || 8} hrs</div>
-            </div>
-            <div>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>Month Total:</span>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: '#2ecc71' }}>₹{selectedSalaryStaff.currentMonthSalary ?? selectedSalaryStaff.currentWeekSalary ?? 0}</div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Search Input */}
+          <div style={{ position: 'relative', minWidth: '150px', flexGrow: 1 }}>
+            <input
+              type="text"
+              placeholder="🔍 Search name or ID..."
+              value={salarySearchQuery}
+              onChange={(e) => setSalarySearchQuery(e.target.value)}
+              className="form-input"
+              style={{
+                padding: '6px 10px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-primary)',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* Export CSV Button */}
+          <button
+            type="button"
+            onClick={exportStaffToCSV}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'rgba(46, 204, 113, 0.15)',
+              color: '#27ae60',
+              border: '1px solid rgba(46, 204, 113, 0.4)',
+              borderRadius: '8px',
+              padding: '6px 10px',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <span>📥</span> Export CSV
+          </button>
+
+          {/* Add Staff Button */}
+          <button
+            type="button"
+            onClick={() => setShowAddStaffModal(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'var(--color-primary)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 3px 10px rgba(255, 107, 8, 0.3)',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <span style={{ fontSize: '14px', lineHeight: 1 }}>+</span> Add Staff
+          </button>
+        </div>
+      </div>
+
+      {/* 4 Ultra-Compact Metric Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))',
+        gap: '6px'
+      }}>
+        {/* Total Staff */}
+        <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <span style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            👥 Total Staff
+          </span>
+          <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--color-text-primary)', marginTop: '1px', lineHeight: 1.2 }}>
+            {staff.length}
+          </div>
+        </div>
+
+        {/* Present Today */}
+        <div style={{ background: 'rgba(46, 204, 113, 0.08)', border: '1px solid rgba(46, 204, 113, 0.25)', borderRadius: '8px', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <span style={{ fontSize: '9.5px', color: '#27ae60', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            🟢 Present Today
+          </span>
+          <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#2ecc71', marginTop: '1px', lineHeight: 1.2 }}>
+            {attendanceSummary?.present || staff.filter(s => (s.attendances && s.attendances.some(a => a.date === new Date().toISOString().split('T')[0]))).length || 0}
+          </div>
+        </div>
+
+        {/* Late Arrivals */}
+        <div style={{ background: 'rgba(243, 156, 18, 0.08)', border: '1px solid rgba(243, 156, 18, 0.25)', borderRadius: '8px', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <span style={{ fontSize: '9.5px', color: '#d35400', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            ⚠️ Late Arrivals
+          </span>
+          <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f39c12', marginTop: '1px', lineHeight: 1.2 }}>
+            {attendanceSummary?.late || 0}
+          </div>
+        </div>
+
+        {/* Unpaid Balance */}
+        <div style={{ background: 'rgba(230, 126, 34, 0.08)', border: '1.5px solid #e67e22', borderRadius: '8px', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <span style={{ fontSize: '9.5px', color: '#e67e22', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.3px', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            💰 Total Unpaid
+          </span>
+          <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#e67e22', marginTop: '1px', lineHeight: 1.2 }}>
+            ₹{staff.reduce((sum, s) => {
+              const bal = s.remainingSalaryBalance !== undefined ? s.remainingSalaryBalance : Math.max(0, (s.totalEarnedAllTime || s.currentMonthSalary || 0) - (s.totalPaidAllTime || 0));
+              return sum + (Number(bal) || 0);
+            }, 0).toLocaleString('en-IN')}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* ── Main Staff Roster & Payroll Card ── */}
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '14px', padding: '14px 16px', boxShadow: 'var(--shadow-sm)' }}>
+      
+      {staffLoading && staff.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>Loading staff roster...</p>
+        </div>
+      ) : staff.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-secondary)' }}>
+          <div style={{ fontSize: '32px', marginBottom: '8px' }}>👥</div>
+          <h4 style={{ color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>No Staff Registered Yet</h4>
+          <p style={{ margin: 0, fontSize: '0.82rem' }}>Click "+ Add Staff" above to register team members.</p>
+        </div>
+      ) : (
+        <>
+          {/* 1. Desktop & Tablet Master Table */}
+          <div className="desktop-tablet-staff custom-scrollbar" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', minWidth: '920px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                  <th style={{ padding: '10px 8px' }}>Employee & ID</th>
+                  <th style={{ padding: '10px 8px' }}>Shift Timing</th>
+                  <th style={{ padding: '10px 8px' }}>Today's Activity</th>
+                  <th style={{ padding: '10px 8px' }}>Wage Rate & Days</th>
+                  <th style={{ padding: '10px 8px' }}>Earned vs Unpaid Balance</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'center' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {staff
+                  .filter(s => {
+                    const matchesSearch = !salarySearchQuery || s.name.toLowerCase().includes(salarySearchQuery.toLowerCase()) || (s.username || '').toLowerCase().includes(salarySearchQuery.toLowerCase()) || (s.employeeId || '').toLowerCase().includes(salarySearchQuery.toLowerCase());
+                    return matchesSearch;
+                  })
+                  .map(member => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const todayPunch = member.attendances?.find(a => a.date === todayStr) || 
+                      (attendanceRecords || []).find(r => String(r.user?._id || r.user || r.userId) === String(member._id) || String(r.staffId) === String(member._id));
+
+                    const remBalance = member.remainingSalaryBalance !== undefined 
+                      ? member.remainingSalaryBalance 
+                      : Math.max(0, (member.totalEarnedAllTime || member.currentMonthSalary || 0) - (member.totalPaidAllTime || 0));
+
+                    const grossEarned = member.totalEarnedAllTime ?? member.currentMonthSalary ?? ((member.workingDays || 0) * (member.dailyRate || 0));
+
+                    const checkInStr = todayPunch?.checkInTime ? new Date(todayPunch.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+                    const checkOutStr = todayPunch?.checkOutTime ? new Date(todayPunch.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+                    const isCompleted = Boolean(todayPunch?.checkOutTime);
+
+                    return (
+                      <tr key={member._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        
+                        {/* 1. Employee & ID */}
+                        <td style={{ padding: '10px 8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div
+                              style={{
+                                width: '34px',
+                                height: '34px',
+                                borderRadius: '9px',
+                                background: 'linear-gradient(135deg, var(--color-primary), #d47f46)',
+                                color: '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.95rem',
+                                fontWeight: 800,
+                                flexShrink: 0
+                              }}
+                            >
+                              {member.name?.charAt(0)?.toUpperCase() || 'S'}
+                            </div>
+                            <div>
+                              <div style={{ color: 'var(--color-text-primary)', fontWeight: 700, fontSize: '13px' }}>
+                                {member.name}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 700, color: '#D47F46', background: 'rgba(212, 127, 70, 0.12)', padding: '1px 5px', borderRadius: '4px' }}>
+                                  @{member.username || member.name.toLowerCase().replace(/\s+/g, '')}
+                                </span>
+                                <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                                  {member.employeeId || 'STAFF'}
+                                </span>
+                                {member.attendancePin ? (
+                                  <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#8e44ad', background: 'rgba(142, 68, 173, 0.12)', padding: '1px 5px', borderRadius: '4px' }}>
+                                    PIN: {member.attendancePin}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)', background: 'rgba(0,0,0,0.05)', padding: '1px 5px', borderRadius: '4px' }}>
+                                    PIN: Not set
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. Shift Timing */}
+                        <td style={{ padding: '10px 8px' }}>
+                          <div style={{ color: 'var(--color-text-primary)', fontWeight: 600, fontSize: '12px' }}>
+                            ⏰ {member.shiftStartTime || '09:00'} - {member.shiftEndTime || '18:00'}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                            Grace: {member.leanTimeMinutes !== undefined ? member.leanTimeMinutes : 30}m
+                          </div>
+                        </td>
+
+                        {/* 3. Today's Activity */}
+                        <td style={{ padding: '10px 8px' }}>
+                          {todayPunch ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              {isCompleted ? (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  color: '#27ae60',
+                                  background: 'rgba(46, 204, 113, 0.12)',
+                                  padding: '2px 6px',
+                                  borderRadius: '5px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  width: 'fit-content'
+                                }}>
+                                  🏁 Out: {checkOutStr} (In: {checkInStr} • {todayPunch.workingHours || 0}h)
+                                </span>
+                              ) : (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  color: todayPunch.status === 'Late' ? '#f39c12' : '#2ecc71',
+                                  background: todayPunch.status === 'Late' ? 'rgba(243, 156, 18, 0.12)' : 'rgba(46, 204, 113, 0.12)',
+                                  padding: '2px 6px',
+                                  borderRadius: '5px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  width: 'fit-content'
+                                }}>
+                                  {todayPunch.status === 'Late' ? '⚠️ Late In: ' : '🟢 In: '} {checkInStr}
+                                </span>
+                              )}
+                              <span style={{ fontSize: '9.5px', color: 'var(--color-text-secondary)' }}>
+                                {todayPunch.status === 'Late' ? 'Late Check-in' : 'On Time ✅'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{
+                              fontSize: '10.5px',
+                              fontWeight: 600,
+                              color: 'var(--color-text-secondary)',
+                              background: 'rgba(0, 0, 0, 0.05)',
+                              padding: '2px 6px',
+                              borderRadius: '5px',
+                              display: 'inline-block'
+                            }}>
+                              ⚪ Absent Today
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 4. Wage Rate & Days */}
+                        <td style={{ padding: '10px 8px' }}>
+                          <div style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '12.5px' }}>
+                            ₹{member.dailyRate || 0} <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/day</span>
+                          </div>
+                          <div style={{ fontSize: '10.5px', color: '#27ae60', fontWeight: 700, marginTop: '1px' }}>
+                            📅 {member.workingDays || 0} days worked
+                          </div>
+                        </td>
+
+                        {/* 5. Earned vs Unpaid Balance */}
+                        <td style={{ padding: '10px 8px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                              Gross: <strong style={{ color: '#2ecc71' }}>₹{grossEarned}</strong>
+                            </div>
+                            <div>
+                              <span style={{
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                color: remBalance > 0 ? '#e67e22' : '#2ecc71',
+                                background: remBalance > 0 ? 'rgba(230, 126, 34, 0.12)' : 'rgba(46, 204, 113, 0.12)',
+                                padding: '1px 6px',
+                                borderRadius: '5px',
+                                border: `1px solid ${remBalance > 0 ? '#e67e22' : '#2ecc71'}`
+                              }}>
+                                ₹{remBalance} Unpaid
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 6. Quick Actions */}
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => openDisburseModal(member)}
+                              style={{
+                                background: '#27ae60',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '5px 9px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                boxShadow: '0 2px 8px rgba(39, 174, 96, 0.25)'
+                              }}
+                            >
+                              💸 Pay Salary
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedSalaryStaff(member); setShowSalaryDetailModal(true); }}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 7px', fontSize: '11px', fontWeight: 600 }}
+                              title="View History & Punch Logs"
+                            >
+                              📋 Details
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingStaff({ ...member, staffRole: member.staffRole || member.role || 'staff' });
+                                setShowEditStaffModal(true);
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 6px', fontSize: '11px' }}
+                              title="Edit Staff"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResetModalStaff(member);
+                                setNewStaffPasswordInput('');
+                                setShowStaffPassToggle(false);
+                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 6px', fontSize: '11px', color: '#D47F46', borderColor: '#D47F46' }}
+                              title="Reset Password"
+                            >
+                              🔑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStaff(member._id, member.name)}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 6px', fontSize: '11px', color: '#e74c3c' }}
+                              title="Delete"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 2. Mobile Responsive Card View (Ultra Compact) */}
+          <div className="mobile-only-staff">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {staff
+                .filter(s => {
+                  const matchesSearch = !salarySearchQuery || s.name.toLowerCase().includes(salarySearchQuery.toLowerCase()) || (s.username || '').toLowerCase().includes(salarySearchQuery.toLowerCase()) || (s.employeeId || '').toLowerCase().includes(salarySearchQuery.toLowerCase());
+                  return matchesSearch;
+                })
+                .map(member => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const todayPunch = member.attendances?.find(a => a.date === todayStr) || 
+                    (attendanceRecords || []).find(r => String(r.user?._id || r.user || r.userId) === String(member._id) || String(r.staffId) === String(member._id));
+
+                  const remBalance = member.remainingSalaryBalance !== undefined 
+                    ? member.remainingSalaryBalance 
+                    : Math.max(0, (member.totalEarnedAllTime || member.currentMonthSalary || 0) - (member.totalPaidAllTime || 0));
+
+                  const grossEarned = member.totalEarnedAllTime ?? member.currentMonthSalary ?? ((member.workingDays || 0) * (member.dailyRate || 0));
+
+                  const checkInStr = todayPunch?.checkInTime ? new Date(todayPunch.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+                  const checkOutStr = todayPunch?.checkOutTime ? new Date(todayPunch.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+                  const isCompleted = Boolean(todayPunch?.checkOutTime);
+
+                  return (
+                    <div
+                      key={member._id}
+                      style={{
+                        background: 'var(--bg-primary)',
+                        border: remBalance > 0 ? '1.5px solid #e67e22' : '1px solid var(--color-border)',
+                        borderRadius: '10px',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        boxShadow: 'var(--shadow-sm)'
+                      }}
+                    >
+                      {/* Top Header: Avatar + Name + ID + Status */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              background: 'linear-gradient(135deg, var(--color-primary), #d47f46)',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.9rem',
+                              fontWeight: 800,
+                              flexShrink: 0
+                            }}
+                          >
+                            {member.name?.charAt(0)?.toUpperCase() || 'S'}
+                          </div>
+                          <div>
+                            <div style={{ color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: 800 }}>
+                              {member.name}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: '#D47F46', background: 'rgba(212, 127, 70, 0.12)', padding: '0px 4px', borderRadius: '4px' }}>
+                                @{member.username || member.name.toLowerCase().replace(/\s+/g, '')}
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                                {member.employeeId || 'STAFF'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status badge */}
+                        {todayPunch ? (
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            color: isCompleted ? '#27ae60' : (todayPunch.status === 'Late' ? '#f39c12' : '#2ecc71'),
+                            background: isCompleted ? 'rgba(46, 204, 113, 0.15)' : (todayPunch.status === 'Late' ? 'rgba(243, 156, 18, 0.15)' : 'rgba(46, 204, 113, 0.15)'),
+                            padding: '2px 6px',
+                            borderRadius: '5px',
+                            border: `1px solid ${isCompleted ? '#27ae60' : (todayPunch.status === 'Late' ? '#f39c12' : '#2ecc71')}`
+                          }}>
+                            {isCompleted ? `🏁 Out: ${checkOutStr}` : `🟢 In: ${checkInStr}`}
+                          </span>
+                        ) : (
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: 'var(--color-text-secondary)',
+                            background: 'rgba(0,0,0,0.06)',
+                            padding: '2px 6px',
+                            borderRadius: '5px'
+                          }}>
+                            ⚪ Absent
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Shift & Rate Info */}
+                      <div style={{ background: 'rgba(0,0,0,0.03)', padding: '5px 8px', borderRadius: '6px', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>
+                          ⏰ <strong style={{ color: 'var(--color-text-primary)' }}>{member.shiftStartTime || '09:00'} - {member.shiftEndTime || '18:00'}</strong>
+                        </span>
+                        <span style={{ color: 'var(--color-primary)', fontWeight: 800 }}>
+                          ₹{member.dailyRate || 0}/day • {member.workingDays || 0}d
+                        </span>
+                      </div>
+
+                      {/* Financial Strip: Earned & Remaining Unpaid */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.03)', padding: '5px 8px', borderRadius: '6px' }}>
+                        <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)' }}>
+                          Gross: <strong style={{ color: '#2ecc71' }}>₹{grossEarned}</strong>
+                        </span>
+                        <span style={{ fontSize: '11px', color: remBalance > 0 ? '#e67e22' : '#2ecc71', fontWeight: 900 }}>
+                          ₹{remBalance} Unpaid
+                        </span>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => openDisburseModal(member)}
+                          className="btn btn-primary"
+                          style={{
+                            flex: 1.5,
+                            padding: '6px 8px',
+                            fontSize: '11.5px',
+                            fontWeight: 800,
+                            background: '#27ae60',
+                            borderColor: '#27ae60',
+                            color: '#fff',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          💸 Pay Salary
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedSalaryStaff(member); setShowSalaryDetailModal(true); }}
+                          className="btn btn-secondary"
+                          style={{ flex: 1, padding: '6px 8px', fontSize: '11px', fontWeight: 700, borderRadius: '6px' }}
+                        >
+                          📋 History
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingStaff({ ...member, staffRole: member.staffRole || member.role || 'staff' });
+                            setShowEditStaffModal(true);
+                          }}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '6px' }}
+                          title="Edit"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetModalStaff(member);
+                            setNewStaffPasswordInput('');
+                            setShowStaffPassToggle(false);
+                          }}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '6px', color: '#D47F46' }}
+                          title="Reset Password"
+                        >
+                          🔑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStaff(member._id, member.name)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '6px', color: '#e74c3c' }}
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
-          <div>
-            <h4 style={{ color: 'var(--color-text-primary)', fontSize: '13px', margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attendance Log & Daily Salary</h4>
-            {(!selectedSalaryStaff.attendances || selectedSalaryStaff.attendances.length === 0) ? (
-              <div style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)', background: 'rgba(0,0,0,0.05)', borderRadius: '8px' }}>
-                No attendance logs found for this month.
+        </>
+      )}
+    </div>
+  </>
+)}
+
+
+
+      {/* ── Add Staff Modal ── */}
+      {showAddStaffModal && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6 }); } }}
+          style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '18px', padding: '24px 20px', width: '100%', maxWidth: '420px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Add New Staff</h3>
+                <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.8rem' }}>Register a new team member</p>
               </div>
-            ) : (
-              <div style={{ maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
-                      <th style={{ padding: '10px' }}>Date</th>
-                      <th style={{ padding: '10px' }}>Check In</th>
-                      <th style={{ padding: '10px' }}>Check Out</th>
-                      <th style={{ padding: '10px' }}>Worked</th>
-                      <th style={{ padding: '10px' }}>Salary</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedSalaryStaff.attendances.map((att, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                        <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{att.date}</td>
-                        <td style={{ padding: '10px', color: 'var(--color-text-secondary)' }}>{new Date(att.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td style={{ padding: '10px', color: 'var(--color-text-secondary)' }}>{att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                        <td style={{ padding: '10px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{att.workingHours || 0} hrs</td>
-                        <td style={{ padding: '10px', color: 'var(--color-primary)', fontWeight: 'bold' }}>₹{att.dailySalary || 0}</td>
+              <button
+                onClick={() => { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6 }); }}
+                style={{ background: 'rgba(0, 0, 0, 0.06)', border: '1px solid rgba(0, 0, 0, 0.08)', borderRadius: '50%', width: '32px', height: '32px', color: 'var(--color-text-primary)', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleAddStaff} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Full Name *</label>
+                  <input type="text" className="form-input" placeholder="e.g. Arjun Kumar" value={newStaff.name} onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })} required />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Username *</label>
+                  <input type="text" className="form-input" placeholder="e.g. arjun" value={newStaff.username || ''} onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Password *</label>
+                  <input type="text" className="form-input" placeholder="e.g. Cafe@123" value={newStaff.password || ''} onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })} required />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Phone Number *</label>
+                  <input type="text" className="form-input" placeholder="e.g. 9876543210" value={newStaff.phone} onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Daily Wage (₹) *</label>
+                  <input type="number" min="0" className="form-input" placeholder="e.g. 600" value={newStaff.dailyRate || ''} onChange={(e) => setNewStaff({ ...newStaff, dailyRate: Number(e.target.value) })} required />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Grace Time (Mins) *</label>
+                  <input type="number" min="0" max="180" className="form-input" placeholder="30" value={newStaff.leanTimeMinutes !== undefined ? newStaff.leanTimeMinutes : 30} onChange={(e) => setNewStaff({ ...newStaff, leanTimeMinutes: Number(e.target.value) })} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift Start *</label>
+                  <input type="time" className="form-input" value={newStaff.shiftStartTime || '09:00'} onChange={(e) => setNewStaff({ ...newStaff, shiftStartTime: e.target.value })} required />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift End *</label>
+                  <input type="time" className="form-input" value={newStaff.shiftEndTime || '18:00'} onChange={(e) => setNewStaff({ ...newStaff, shiftEndTime: e.target.value })} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>4-Digit Attendance PIN *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{4}"
+                  maxLength={4}
+                  className="form-input"
+                  placeholder="e.g. 1234"
+                  value={newStaff.attendancePin || ''}
+                  onChange={(e) => setNewStaff({ ...newStaff, attendancePin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                  required
+                />
+                <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>Security PIN entered by staff member at kiosk terminal to mark attendance</span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6 }); }}
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1.5, padding: '10px', borderRadius: '8px', fontSize: '13px', fontWeight: 800 }}
+                  disabled={staffLoading}
+                >
+                  {staffLoading ? 'Adding...' : 'Add Staff Member'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Staff Modal ── */}
+      {showEditStaffModal && editingStaff && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowEditStaffModal(false); setEditingStaff(null); } }}
+          style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '18px', padding: '24px 20px', width: '100%', maxWidth: '420px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Edit Staff Details</h3>
+                <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.8rem' }}>{editingStaff.name}</p>
+              </div>
+              <button
+                onClick={() => { setShowEditStaffModal(false); setEditingStaff(null); }}
+                style={{ background: 'rgba(0, 0, 0, 0.06)', border: '1px solid rgba(0, 0, 0, 0.08)', borderRadius: '50%', width: '32px', height: '32px', color: 'var(--color-text-primary)', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleEditStaff} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Full Name *</label>
+                  <input type="text" className="form-input" value={editingStaff.name} onChange={(e) => setEditingStaff({ ...editingStaff, name: e.target.value })} required />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Phone Number *</label>
+                  <input type="text" className="form-input" value={editingStaff.phone} onChange={(e) => setEditingStaff({ ...editingStaff, phone: e.target.value })} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Daily Wage (₹) *</label>
+                  <input type="number" min="0" className="form-input" value={editingStaff.dailyRate || ''} onChange={(e) => setEditingStaff({ ...editingStaff, dailyRate: Number(e.target.value) })} required />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Grace Time (Mins) *</label>
+                  <input type="number" min="0" max="180" className="form-input" value={editingStaff.leanTimeMinutes !== undefined ? editingStaff.leanTimeMinutes : 30} onChange={(e) => setEditingStaff({ ...editingStaff, leanTimeMinutes: Number(e.target.value) })} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift Start *</label>
+                  <input type="time" className="form-input" value={editingStaff.shiftStartTime || '09:00'} onChange={(e) => setEditingStaff({ ...editingStaff, shiftStartTime: e.target.value })} required />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift End *</label>
+                  <input type="time" className="form-input" value={editingStaff.shiftEndTime || '18:00'} onChange={(e) => setEditingStaff({ ...editingStaff, shiftEndTime: e.target.value })} required />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>4-Digit Attendance PIN</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{4}"
+                  maxLength={4}
+                  className="form-input"
+                  placeholder="e.g. 1234"
+                  value={editingStaff.attendancePin || ''}
+                  onChange={(e) => setEditingStaff({ ...editingStaff, attendancePin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                />
+                <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>Used for kiosk attendance check-in / check-out</span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowEditStaffModal(false); setEditingStaff(null); }}
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1.5, padding: '10px', borderRadius: '8px', fontSize: '13px', fontWeight: 800 }}
+                  disabled={staffLoading}
+                >
+                  {staffLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Direct Password Reset Modal ── */}
+      {resetModalStaff && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) { setResetModalStaff(null); setNewStaffPasswordInput(''); } }}
+          style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '20px', padding: '28px 24px', width: '100%', maxWidth: '420px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Reset Staff Password</h3>
+                <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.82rem' }}>Staff: <strong>{resetModalStaff.name}</strong> (@{resetModalStaff.username || 'staff'})</p>
+              </div>
+              <button
+                onClick={() => { setResetModalStaff(null); setNewStaffPasswordInput(''); }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '22px', cursor: 'pointer' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleDirectPasswordReset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>New Password (Min 6 chars) *</label>
+                <div style={{ position: 'relative', marginTop: '6px' }}>
+                  <input
+                    type={showStaffPassToggle ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Enter new password"
+                    value={newStaffPasswordInput}
+                    onChange={(e) => setNewStaffPasswordInput(e.target.value)}
+                    required
+                    style={{ width: '100%', paddingRight: '45px', boxSizing: 'border-box' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowStaffPassToggle(!showStaffPassToggle)}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '14px' }}
+                  >
+                    {showStaffPassToggle ? '👁️' : '🔒'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setResetModalStaff(null); setNewStaffPasswordInput(''); }}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ flex: 1.5 }}
+                  disabled={resetStaffLoading || !newStaffPasswordInput.trim()}
+                >
+                  {resetStaffLoading ? 'Resetting...' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Disburse / Pay Salary Modal ── */}
+      {showDisburseModal && disburseStaff && (
+        <div
+          className="modal-overlay"
+          style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '20px', padding: '26px 24px', width: '100%', maxWidth: '480px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(39, 174, 96, 0.15)', color: '#27ae60', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
+                  💳
+                </div>
+                <div>
+                  <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Pay Staff Salary</h3>
+                  <p style={{ color: 'var(--color-text-secondary)', margin: '2px 0 0 0', fontSize: '0.82rem' }}>
+                    Staff: <strong style={{ color: 'var(--color-primary)' }}>{disburseStaff.name}</strong> ({disburseStaff.employeeId || 'Staff'})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowDisburseModal(false); setDisburseStaff(null); }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '24px', cursor: 'pointer' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Earnings Overview Card */}
+              <div style={{ background: 'rgba(0,0,0,0.06)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px 14px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Daily Rate</span>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>₹{disburseStaff.dailyRate || 0}</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Days Worked</span>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#2ecc71', marginTop: '2px' }}>{disburseStaff.workingDays || 0} days</div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Remaining Balance</span>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#e67e22', marginTop: '2px' }}>
+                    ₹{disburseStaff.remainingSalaryBalance !== undefined ? disburseStaff.remainingSalaryBalance : (disburseStaff.currentMonthSalary || disburseStaff.dailyRate || 0)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Amount to Pay Input */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)', textTransform: 'uppercase' }}>
+                    Amount to Pay (₹) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const bal = disburseStaff.remainingSalaryBalance !== undefined 
+                        ? disburseStaff.remainingSalaryBalance 
+                        : (disburseStaff.currentMonthSalary || disburseStaff.dailyRate || 0);
+                      setDisburseAmount(bal > 0 ? bal : (disburseStaff.currentMonthSalary || disburseStaff.dailyRate || 0));
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--color-primary)', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    ↻ Fill Remaining Balance
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  value={disburseAmount}
+                  onChange={(e) => setDisburseAmount(e.target.value)}
+                  placeholder="Enter amount to pay in ₹"
+                  className="form-input"
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: '1.5px solid var(--color-primary)',
+                    background: 'var(--bg-primary)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '16px',
+                    fontWeight: 800,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Payment Method Selector */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '8px', textTransform: 'uppercase' }}>
+                  Payment Method *
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  {[
+                    { id: 'UPI', label: 'UPI / Online', icon: '📱' },
+                    { id: 'Cash', label: 'Cash', icon: '💵' },
+                    { id: 'Bank Transfer', label: 'Bank Transfer', icon: '🏦' }
+                  ].map(method => (
+                    <button
+                      key={method.id}
+                      type="button"
+                      onClick={() => setDisbursePaymentMethod(method.id)}
+                      style={{
+                        padding: '10px 8px',
+                        borderRadius: '10px',
+                        border: disbursePaymentMethod === method.id ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                        background: disbursePaymentMethod === method.id ? 'rgba(255, 107, 8, 0.12)' : 'var(--bg-secondary)',
+                        color: disbursePaymentMethod === method.id ? 'var(--color-primary)' : 'var(--color-text-primary)',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <span style={{ fontSize: '18px' }}>{method.icon}</span>
+                      {method.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Remarks / Notes */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Payment Remarks
+                </label>
+                <input
+                  type="text"
+                  value={disburseRemarks}
+                  onChange={(e) => setDisburseRemarks(e.target.value)}
+                  placeholder="e.g. September Salary / Advance / Cash payout"
+                  className="form-input"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(52, 152, 219, 0.08)', border: '1px solid rgba(52, 152, 219, 0.25)', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                ℹ️ Deducts <strong>₹{disburseAmount || 0}</strong> from remaining balance and logs it permanently.
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => { setShowDisburseModal(false); setDisburseStaff(null); }}
+                className="btn btn-secondary"
+                style={{ width: 'auto', padding: '10px 18px', fontSize: '13px' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDisbursement}
+                disabled={disburseLoading || !disburseAmount || Number(disburseAmount) <= 0}
+                className="btn btn-primary"
+                style={{ width: 'auto', padding: '10px 22px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, background: '#27ae60', borderColor: '#27ae60' }}
+              >
+                {disburseLoading ? 'Processing...' : `Confirm & Pay ₹${disburseAmount || 0}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Employee Detail & Activity History Modal ── */}
+      {showSalaryDetailModal && selectedSalaryStaff && (
+        <div
+          className="modal-overlay"
+          style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '20px', padding: '26px 24px', width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
+                  {selectedSalaryStaff.name}
+                </h3>
+                <p style={{ color: 'var(--color-text-secondary)', margin: '4px 0 0 0', fontSize: '0.85rem' }}>
+                  Role: <strong style={{ color: 'var(--color-primary)' }}>{selectedSalaryStaff.staffRole || selectedSalaryStaff.role || 'Staff'}</strong> • ID: {selectedSalaryStaff.employeeId || 'EMP-STAFF'} • Shift: {selectedSalaryStaff.shiftStartTime || '09:00'} - {selectedSalaryStaff.shiftEndTime || '18:00'}
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '24px', cursor: 'pointer' }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Financial Summary */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', background: 'rgba(0,0,0,0.06)', padding: '12px 14px', borderRadius: '12px', marginBottom: '18px', textAlign: 'center' }}>
+              <div>
+                <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Daily Rate</span>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>₹{selectedSalaryStaff.dailyRate || 0}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Days Worked</span>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: '#2ecc71', marginTop: '2px' }}>{selectedSalaryStaff.workingDays || selectedSalaryStaff.attendances?.length || 0}d</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Total Earned</span>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: '#2ecc71', marginTop: '2px' }}>₹{selectedSalaryStaff.totalEarnedAllTime ?? selectedSalaryStaff.currentMonthSalary ?? 0}</div>
+              </div>
+              <div>
+                <span style={{ fontSize: '10.5px', color: '#e67e22', fontWeight: 700 }}>Unpaid Balance</span>
+                <div style={{ fontSize: '14px', fontWeight: 900, color: '#e67e22', marginTop: '2px' }}>
+                  ₹{selectedSalaryStaff.remainingSalaryBalance !== undefined ? selectedSalaryStaff.remainingSalaryBalance : Math.max(0, (selectedSalaryStaff.totalEarnedAllTime || selectedSalaryStaff.currentMonthSalary || 0) - (selectedSalaryStaff.totalPaidAllTime || 0))}
+                </div>
+              </div>
+            </div>
+
+            {/* Attendance Punch Timestamps */}
+            <div style={{ marginBottom: '18px' }}>
+              <h4 style={{ color: 'var(--color-text-primary)', fontSize: '12.5px', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                🕒 Attendance Punch Logs (Timestamps & Hours)
+              </h4>
+              {(!selectedSalaryStaff.attendances || selectedSalaryStaff.attendances.length === 0) ? (
+                <div style={{ padding: '20px', textAlign: 'center', background: 'rgba(0,0,0,0.03)', borderRadius: '10px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+                  No attendance punch records found.
+                </div>
+              ) : (
+                <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                        <th style={{ padding: '8px 10px' }}>Date</th>
+                        <th style={{ padding: '8px 10px' }}>Check In</th>
+                        <th style={{ padding: '8px 10px' }}>Check Out</th>
+                        <th style={{ padding: '8px 10px' }}>Hours</th>
+                        <th style={{ padding: '8px 10px' }}>Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {selectedSalaryStaff.attendances.map((att, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 600 }}>{att.date}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--color-text-secondary)' }}>
+                            {att.checkInTime ? new Date(att.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: 'var(--color-text-secondary)' }}>
+                            {att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active'}
+                          </td>
+                          <td style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{att.workingHours || 0} hrs</td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <span style={{
+                              fontSize: '10.5px',
+                              fontWeight: 700,
+                              color: att.status === 'Late' ? '#f39c12' : '#2ecc71',
+                              background: att.status === 'Late' ? 'rgba(243,156,18,0.12)' : 'rgba(46,204,113,0.12)',
+                              padding: '2px 6px',
+                              borderRadius: '4px'
+                            }}>
+                              {att.status || 'Present'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Payout History Ledger */}
+            <div>
+              <h4 style={{ color: 'var(--color-text-primary)', fontSize: '12.5px', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                📜 Permanent Salary Payout History
+              </h4>
+              {(!selectedSalaryStaff.paymentHistory || selectedSalaryStaff.paymentHistory.length === 0) ? (
+                <div style={{ padding: '20px', textAlign: 'center', background: 'rgba(0,0,0,0.03)', borderRadius: '10px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+                  No salary payout records logged yet.
+                </div>
+              ) : (
+                <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '10px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                        <th style={{ padding: '8px 10px' }}>Date</th>
+                        <th style={{ padding: '8px 10px' }}>Amount Paid</th>
+                        <th style={{ padding: '8px 10px' }}>Mode</th>
+                        <th style={{ padding: '8px 10px' }}>Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedSalaryStaff.paymentHistory.map((pm, pIdx) => (
+                        <tr key={pm._id || pIdx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: 600 }}>
+                            {pm.paymentDate ? new Date(pm.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px', fontWeight: 800, color: '#27ae60' }}>₹{pm.amount}</td>
+                          <td style={{ padding: '8px 10px' }}>{pm.paymentMethod || 'Cash'}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontSize: '11px' }}>{pm.notes || pm.remarks || 'Salary Paid'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const staffToPay = selectedSalaryStaff;
+                  setShowSalaryDetailModal(false);
+                  setSelectedSalaryStaff(null);
+                  openDisburseModal(staffToPay);
+                }}
+                className="btn btn-primary"
+                style={{ width: 'auto', padding: '9px 18px', background: '#27ae60', borderColor: '#27ae60', color: '#fff', fontWeight: 800 }}
+              >
+                💸 Pay Salary Now
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }}
+                className="btn btn-secondary"
+                style={{ width: 'auto', padding: '9px 18px' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+    {/* ── SUB-TAB 2: DAILY CAFE & WORK PHOTOS ── */}
+    {(staffSubTab === 'photos' || staffSubTab === 'reports') && (() => {
+      const validWorkReports = (workReports || []).filter(report => Array.isArray(report.photos) && report.photos.length > 0);
+      return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Header & Filter Control Bar */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '14px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h3 style={{ color: '#1e293b', margin: 0, fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📸</span> Daily Cafe Proof & Work Photos
+              </h3>
+              <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '0.85rem' }}>
+                Live proof-of-work, clean kitchen, sanitized prep tables, and floor photos uploaded daily by your team
+              </p>
+            </div>
+
+            {/* Action / Refresh */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => fetchWorkReports(false, activeBranchId)}
+                disabled={reportsLoading}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: '#f8fafc',
+                  color: '#334155',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span style={{ display: 'inline-block', transform: reportsLoading ? 'rotate(180deg)' : 'none', transition: 'transform 0.5s' }}>🔄</span>
+                {reportsLoading ? 'Refreshing...' : 'Refresh Photos'}
+              </button>
+            </div>
+          </div>
+
+          {/* Staff Filter & Counter */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+            {/* Staff Member Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12.5px', color: '#475569', fontWeight: 600 }}>Filter by Staff:</span>
+              <select
+                value={reportsFilterStaff}
+                onChange={(e) => {
+                  setReportsFilterStaff(e.target.value);
+                  fetchWorkReports(false, activeBranchId, e.target.value);
+                }}
+                className="form-input"
+                style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12.5px', minWidth: '200px', background: '#ffffff', border: '1px solid #cbd5e1' }}
+              >
+                <option value="">👥 All Staff Members (All Photos)</option>
+                {staff.map(s => (
+                  <option key={s._id} value={s._id}>{s.name} ({s.staffRole || 'Staff'})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Total Reports Counter Badge */}
+            <div style={{ fontSize: '12.5px', color: '#64748b', fontWeight: 600 }}>
+              Showing <strong style={{ color: 'var(--color-primary)' }}>{validWorkReports.length}</strong> photo submission{validWorkReports.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+        </div>
+
+        {/* Photo Gallery Grid */}
+        {reportsLoading && validWorkReports.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+            <div className="spinner" style={{ margin: '0 auto 14px auto', borderColor: 'var(--color-primary)' }} />
+            <p style={{ color: '#64748b', margin: 0, fontSize: '0.95rem', fontWeight: 600 }}>Loading cafe proof photos...</p>
+          </div>
+        ) : validWorkReports.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(0,0,0,0.04)' }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>📸</div>
+            <h4 style={{ color: '#1e293b', margin: '0 0 6px 0', fontSize: '1.2rem', fontWeight: 800 }}>No Proof-of-Work Photos Uploaded Yet</h4>
+            <p style={{ color: '#64748b', margin: '0 auto', maxWidth: '480px', fontSize: '0.88rem', lineHeight: '1.5' }}>
+              When staff members take photos of cleaned tables, sanitized kitchens, coffee machines, and cash counters from their staff dashboard, they will appear here instantly with high-resolution inspection.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+            {validWorkReports.map((report, rIdx) => {
+              const staffObj = report.staffId && typeof report.staffId === 'object' ? report.staffId : null;
+              const staffDisplayName = report.staffName || staffObj?.name || 'Staff Member';
+              const staffRole = staffObj?.staffRole || 'Staff';
+              const empId = staffObj?.employeeId || 'STAFF';
+              const photoList = Array.isArray(report.photos) ? report.photos : [];
+              const reportDateFormatted = report.date ? report.date : (report.createdAt ? new Date(report.createdAt).toISOString().split('T')[0] : 'Today');
+              const timeFormatted = report.createdAt ? new Date(report.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+
+              return (
+                <div
+                  key={report._id || rIdx}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '16px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                    transition: 'transform 0.2s, box-shadow 0.2s'
+                  }}
+                >
+                  {/* Header: Staff Info + Timestamp */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div
+                        style={{
+                          width: '38px',
+                          height: '38px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, var(--color-primary, #d97706), #b45309)',
+                          color: '#fff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 800,
+                          fontSize: '15px',
+                          flexShrink: 0,
+                          boxShadow: '0 2px 6px rgba(217, 119, 6, 0.25)'
+                        }}
+                      >
+                        {staffDisplayName.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ color: '#0f172a', fontWeight: 800, fontSize: '14px' }}>
+                          {staffDisplayName}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                          <span style={{ fontSize: '10.5px', fontWeight: 700, background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: '4px' }}>
+                            {staffRole}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>
+                            {empId}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Timestamp Badge */}
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#0369a1', background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px' }}>
+                        📅 {reportDateFormatted}
+                      </span>
+                      {timeFormatted && (
+                        <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '3px' }}>
+                          🕒 {timeFormatted}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Notes / Work Summary (if provided) */}
+                  {report.notes ? (
+                    <div style={{
+                      background: '#f8fafc',
+                      borderLeft: '3px solid var(--color-primary, #d97706)',
+                      borderRadius: '0 8px 8px 0',
+                      padding: '8px 12px',
+                      fontSize: '12.5px',
+                      color: '#334155',
+                      lineHeight: '1.4'
+                    }}>
+                      📝 <span style={{ fontStyle: 'italic' }}>"{report.notes}"</span>
+                    </div>
+                  ) : null}
+
+                  {/* Photo Thumbnails Grid */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: photoList.length === 1 ? '1fr' : (photoList.length === 2 ? '1fr 1fr' : 'repeat(3, 1fr)'),
+                    gap: '8px'
+                  }}>
+                    {photoList.map((photoUrl, pIdx) => {
+                      const fullUrl = getAssetUrl(photoUrl);
+                      return (
+                        <div
+                          key={pIdx}
+                          onClick={() => {
+                            setSelectedReport(report);
+                            setPreviewPhotoReport(report);
+                            setPreviewPhotoIndex(pIdx);
+                          }}
+                          style={{
+                            position: 'relative',
+                            width: '100%',
+                            height: photoList.length === 1 ? '180px' : '100px',
+                            borderRadius: '10px',
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            background: '#0f172a',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.1)'
+                          }}
+                        >
+                          <img
+                            src={fullUrl}
+                            alt={`Work proof ${pIdx + 1}`}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              transition: 'transform 0.25s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.08)'}
+                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1.0)'}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: '6px',
+                              right: '6px',
+                              background: 'rgba(0,0,0,0.65)',
+                              color: '#fff',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backdropFilter: 'blur(4px)'
+                            }}
+                          >
+                            🔍 Zoom
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Card Footer: Photo Count */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '10px', marginTop: 'auto' }}>
+                    <span style={{ fontSize: '11.5px', color: '#64748b', fontWeight: 600 }}>
+                      📷 {photoList.length} photo{photoList.length !== 1 ? 's' : ''} uploaded
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (photoList.length > 0) {
+                          setSelectedReport(report);
+                          setPreviewPhotoReport(report);
+                          setPreviewPhotoIndex(0);
+                        }
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--color-primary, #d97706)',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: '2px 6px'
+                      }}
+                    >
+                      Inspect Photos →
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      );
+    })()}
+
+    {/* ── SUB-TAB 3: SHIFT & ATTENDANCE LOGS ── */}
+    {staffSubTab === 'attendance' && (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--color-border)',
+          borderRadius: '14px',
+          padding: '14px 18px',
+          boxShadow: 'var(--shadow-sm)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '10px'
+        }}>
+          <div>
+            <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>🕒</span> Live Attendance & Shift Punches
+            </h3>
+            <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.82rem' }}>
+              Daily staff check-ins, check-outs, shift hours, and wage calculations
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => fetchAttendanceToday(false, activeBranchId)}
+            disabled={attendanceLoading}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              background: 'var(--bg-secondary)',
+              color: 'var(--color-text-primary)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '8px',
+              padding: '7px 14px',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            🔄 Refresh Attendance
+          </button>
+        </div>
+
+        {/* Today's Punch Roster Table */}
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '14px', padding: '16px', boxShadow: 'var(--shadow-sm)' }}>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+            Today's Live Punches ({new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})
+          </h4>
+
+          {attendanceLoading && attendanceRecords.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div className="spinner" style={{ margin: '0 auto 12px auto', borderColor: 'var(--color-primary)' }} />
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>Loading punch logs...</p>
+            </div>
+          ) : attendanceRecords.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-secondary)' }}>
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>🕒</div>
+              <h4 style={{ color: 'var(--color-text-primary)', margin: '0 0 4px 0' }}>No Attendance Punches Recorded Today</h4>
+              <p style={{ margin: 0, fontSize: '0.82rem' }}>Staff members can mark attendance from the Staff Dashboard or Kiosk.</p>
+            </div>
+          ) : (
+            <div className="custom-scrollbar" style={{ width: '100%', overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                    <th style={{ padding: '10px 8px' }}>Staff Member</th>
+                    <th style={{ padding: '10px 8px' }}>Check In</th>
+                    <th style={{ padding: '10px 8px' }}>Check Out</th>
+                    <th style={{ padding: '10px 8px' }}>Total Hours</th>
+                    <th style={{ padding: '10px 8px' }}>Status</th>
+                    <th style={{ padding: '10px 8px' }}>Earned Today</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendanceRecords.map((rec, idx) => {
+                    const staffName = rec.userName || rec.user?.name || rec.staffName || 'Staff Member';
+                    const inTime = rec.checkInTime ? new Date(rec.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—';
+                    const outTime = rec.checkOutTime ? new Date(rec.checkOutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'Active on Shift';
+                    const isComplete = Boolean(rec.checkOutTime);
+
+                    return (
+                      <tr key={rec._id || idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '10px 8px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                          {staffName}
+                        </td>
+                        <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>
+                          🟢 {inTime}
+                        </td>
+                        <td style={{ padding: '10px 8px', color: isComplete ? 'var(--color-text-secondary)' : '#27ae60', fontWeight: isComplete ? 500 : 700 }}>
+                          {isComplete ? `🏁 ${outTime}` : `⚡ ${outTime}`}
+                        </td>
+                        <td style={{ padding: '10px 8px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                          {rec.workingHours || 0} hrs
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: rec.status === 'Late' ? '#f39c12' : '#2ecc71',
+                            background: rec.status === 'Late' ? 'rgba(243, 156, 18, 0.12)' : 'rgba(46, 204, 113, 0.12)',
+                            padding: '2px 7px',
+                            borderRadius: '4px'
+                          }}>
+                            {rec.status || 'Present'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 8px', fontWeight: 800, color: '#27ae60' }}>
+                          ₹{rec.dailyWageEarned || 0}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* ── HIGH-RESOLUTION PHOTO LIGHTBOX MODAL ── */}
+    {previewPhotoReport && (
+      <div
+        className="modal-overlay"
+        onClick={() => setPreviewPhotoReport(null)}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 4000,
+          background: 'rgba(0, 0, 0, 0.88)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'relative',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '16px',
+            maxWidth: '850px',
+            width: '100%',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.65)'
+          }}
+        >
+          {/* Modal Header */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '12px 18px',
+            borderBottom: '1px solid var(--color-border)',
+            background: 'var(--bg-secondary)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>📸</span>
+              <div>
+                <div style={{ fontSize: '13.5px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                  {previewPhotoReport.staffName || 'Staff Proof Photo'}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                  {previewPhotoReport.date} • Photo {previewPhotoIndex + 1} of {(previewPhotoReport.photos || []).length}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <a
+                href={getAssetUrl((previewPhotoReport.photos || [])[previewPhotoIndex])}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--color-primary)',
+                  background: 'rgba(212,127,70,0.12)',
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  textDecoration: 'none',
+                  fontWeight: 700
+                }}
+              >
+                🔗 Full View
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewPhotoReport(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: '22px',
+                  color: 'var(--color-text-primary)',
+                  cursor: 'pointer',
+                  padding: '0 4px',
+                  lineHeight: 1
+                }}
+              >
+                &times;
+              </button>
+            </div>
+          </div>
+
+          {/* Main Image View */}
+          <div style={{
+            position: 'relative',
+            background: '#0a0a0a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '300px',
+            maxHeight: '65vh',
+            overflow: 'hidden'
+          }}>
+            <img
+              src={getAssetUrl((previewPhotoReport.photos || [])[previewPhotoIndex])}
+              alt={`Proof photo ${previewPhotoIndex + 1}`}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '65vh',
+                objectFit: 'contain',
+                borderRadius: '4px'
+              }}
+            />
+
+            {/* Prev / Next Arrows if multiple photos */}
+            {(previewPhotoReport.photos || []).length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPhotoIndex(prev => prev > 0 ? prev - 1 : (previewPhotoReport.photos.length - 1))}
+                  style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'rgba(0,0,0,0.6)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '38px',
+                    height: '38px',
+                    fontSize: '18px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backdropFilter: 'blur(4px)'
+                  }}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPhotoIndex(prev => prev < previewPhotoReport.photos.length - 1 ? prev + 1 : 0)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'rgba(0,0,0,0.6)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '38px',
+                    height: '38px',
+                    fontSize: '18px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backdropFilter: 'blur(4px)'
+                  }}
+                >
+                  ›
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Footer: Notes and Thumbnails Strip */}
+          <div style={{ padding: '12px 18px', background: 'var(--bg-card)', borderTop: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {previewPhotoReport.notes && (
+              <div style={{ fontSize: '12.5px', color: 'var(--color-text-primary)' }}>
+                <strong>Notes:</strong> {previewPhotoReport.notes}
+              </div>
+            )}
+
+            {/* Thumbnails strip */}
+            {(previewPhotoReport.photos || []).length > 1 && (
+              <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }} className="no-scrollbar">
+                {(previewPhotoReport.photos || []).map((p, idx) => (
+                  <img
+                    key={idx}
+                    src={getAssetUrl(p)}
+                    alt="thumb"
+                    onClick={() => setPreviewPhotoIndex(idx)}
+                    style={{
+                      width: '46px',
+                      height: '46px',
+                      borderRadius: '6px',
+                      objectFit: 'cover',
+                      cursor: 'pointer',
+                      border: idx === previewPhotoIndex ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      opacity: idx === previewPhotoIndex ? 1 : 0.6
+                    }}
+                  />
+                ))}
               </div>
             )}
           </div>
         </div>
-        <div className="modal-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={() => { setShowSalaryDetailModal(false); setSelectedSalaryStaff(null); }} className="btn btn-secondary" style={{ width: 'auto', padding: '8px 16px' }}>Close</button>
-        </div>
       </div>
-    </div>
-  )}
+    )}
   </div>
- }
+)}
 
- {activeTab === 'inventory' &&
+{activeTab === 'inventory' && (
 <div className="fade-in">
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '20px', borderRadius: '16px', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
 <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Smart Multi-Branch Ingredient Hub</h3>
-<button
- onClick={() =>setShowAddInventoryModal(true)}
- className="btn btn-primary"
- style={{ width: 'auto', padding: '10px 20px' }}>
- 
- Add Ingredient
-</button>
+<div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+  <button
+    onClick={() => { setShowPurchaseRegisterModal(true); fetchCashRegisterData(); }}
+    className="btn btn-secondary"
+    style={{ width: 'auto', padding: '9px 16px', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(39, 174, 96, 0.15)', color: '#27ae60', border: '1px solid rgba(39, 174, 96, 0.35)', fontWeight: 700, borderRadius: '10px', fontSize: '13px' }}
+  >
+    <Wallet size={15} /> Purchases & Cash Register
+  </button>
+  <button
+   onClick={() =>setShowAddInventoryModal(true)}
+   className="btn btn-primary"
+   style={{ width: 'auto', padding: '9px 18px', borderRadius: '10px', fontSize: '13px' }}>
+   + Add Ingredient
+  </button>
+</div>
 </div>
 
   {/* Sub-tab bar */}
@@ -5631,13 +6917,12 @@ const exportStaffToCSV = () => {
 <thead>
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)', whiteSpace: 'nowrap' }}>
 <th style={{ padding: '8px' }}>Ingredient Name</th>
-<th style={{ padding: '8px' }}>Category</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Status</th>
 <th style={{ padding: '8px', textAlign: 'right' }}>Unit Cost</th>
 <th style={{ padding: '8px', textAlign: 'right' }}>Total Value</th>
 <th style={{ padding: '8px' }}>Supplier</th>
-<th style={{ padding: '8px' }}>Branch</th>
+<th style={{ padding: '8px', textAlign: 'center' }}>Last Saved Time</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Reorder Level</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Actions</th>
 </tr>
@@ -5866,12 +7151,12 @@ const exportStaffToCSV = () => {
 
  })}
 </div>
- }
+}
 </div>
- }
+}
 </div>
 </div>
- }
+)}
 
  {/* TAB 5: ORDERS MONITOR (READ-ONLY) */}
  {activeTab === 'orders' &&
@@ -5922,123 +7207,137 @@ const exportStaffToCSV = () => {
 
 <div className="orders-monitor-grid">
  {orders
- .filter((order) => {
- if (order.status === 'Cancelled' || order.status === 'cancelled') return false;
- if (!order.createdAt) return true;
- const localDate = new Date(order.createdAt);
- const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
- 
- const matchesDate = orderDateStr === orderDateFilter;
- if (!matchesDate) return false;
- 
- if (!orderSearchQuery) return true;
- 
- const q = orderSearchQuery.toLowerCase();
- return (
- (order._id && order._id.toLowerCase().includes(q)) || 
- (order.tableNumber && String(order.tableNumber).toLowerCase().includes(q)) || 
- (order.status && order.status.toLowerCase().includes(q)) ||
- (order.items && order.items.some(i => i.name && i.name.toLowerCase().includes(q)))
- );
- })
- .map((order) =>
-<div key={order._id} style={{
- background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)',
- borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
- }}>
- {/* Header: Order ID + Status */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-<div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-<span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>
- #{order._id.substring(order._id.length - 8).toUpperCase()}
-</span>
-<span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>· Table {order.tableNumber}</span>
-</div>
-<span style={{
- color: order.status === 'Placed' ? '#3498db' : order.status === 'Preparing' ? '#ff9800' : order.status === 'Ready' ? '#2ecc71' : order.status === 'Delivered' ? '#9b59b6' : order.status === 'Completed' ? '#27AE60' : '#7f8c8d',
- background: order.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
- padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800
- }}>
- {order.status}
-</span>
-</div>
+    .filter((order) => {
+      if (!order) return false;
+      if (order.status === 'Cancelled' || order.status === 'cancelled') return false;
+      
+      // Date filtering
+      if (orderDateFilter && order.createdAt) {
+        const localDate = new Date(order.createdAt);
+        const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+        if (orderDateStr !== orderDateFilter) return false;
+      }
+      
+      // Search query filtering
+      if (orderSearchQuery && orderSearchQuery.trim() !== '') {
+        const q = orderSearchQuery.toLowerCase().trim();
+        const orderId = String(order._id || order.id || '').toLowerCase();
+        const tableNum = String(order.tableNumber || '').toLowerCase();
+        const status = String(order.status || '').toLowerCase();
+        const customerName = String(order.customerName || '').toLowerCase();
+        const itemsMatch = Array.isArray(order.items) && order.items.some(i => (i.name || '').toLowerCase().includes(q));
+        if (!orderId.includes(q) && !tableNum.includes(q) && !status.includes(q) && !customerName.includes(q) && !itemsMatch) {
+          return false;
+        }
+      }
+      
+      return true;
+    })
+    .map((order, orderIndex) => {
+      const orderIdStr = String(order?._id || order?.id || `ORD-${orderIndex}`);
+      const shortId = orderIdStr.length >= 8 ? orderIdStr.slice(-8).toUpperCase() : (orderIdStr.toUpperCase() || 'ORDER');
+      const orderItems = Array.isArray(order?.items) ? order.items : [];
+      const totalAmt = typeof order?.totalAmount === 'number' ? order.totalAmount.toFixed(2) : (Number(order?.totalAmount) || 0).toFixed(2);
 
-      {/* Items List */}
-      <div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {order.items.map((i, idx) => {
-          const displayImage = i.image ? getAssetUrl(i.image) : '/images/default-food.png';
-          return (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
-              <img
-                src={displayImage}
-                alt={i.name}
-                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
-                onError={(e) => { e.target.src = '/images/default-food.png'; }}
-              />
-              <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
-                {i.quantity}x
-              </span>
-              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
-                {i.name}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Workflow Audit Trail */}
-      <div style={{ marginTop: '8px', fontSize: '11px', background: 'rgba(0,0,0,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <div style={{ fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>Workflow History</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Placed:</span>
-          <span>{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}</span>
+      return (
+      <div key={order?._id || orderIndex} style={{
+        background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)',
+        borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
+      }}>
+        {/* Header: Order ID + Status */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>
+              #{shortId}
+            </span>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>· Table {order?.tableNumber || 'N/A'}</span>
+          </div>
+          <span style={{
+            color: order?.status === 'Placed' ? '#3498db' : order?.status === 'Preparing' ? '#ff9800' : order?.status === 'Ready' ? '#2ecc71' : order?.status === 'Delivered' ? '#9b59b6' : order?.status === 'Completed' ? '#27AE60' : '#7f8c8d',
+            background: order?.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order?.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order?.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order?.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order?.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
+            padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800
+          }}>
+            {order?.status || 'Active'}
+          </span>
         </div>
-        {order.preparingByName && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Preparing by {order.preparingByName}:</span>
-            <span>{order.preparingAt ? new Date(order.preparingAt).toLocaleString() : 'N/A'}</span>
-          </div>
-        )}
-        {order.readyByName && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Ready by {order.readyByName}:</span>
-            <span>{order.readyAt ? new Date(order.readyAt).toLocaleString() : 'N/A'}</span>
-          </div>
-        )}
-        {order.servedByName && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Served by {order.servedByName}:</span>
-            <span>{order.servedAt ? new Date(order.servedAt).toLocaleString() : 'N/A'}</span>
-          </div>
-        )}
-        {order.paidByName && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Paid by {order.paidByName}:</span>
-            <span>{order.paidAt ? new Date(order.paidAt).toLocaleString() : 'N/A'}</span>
-          </div>
-        )}
-      </div>
 
- {/* Footer: Amount + Payment Status */}
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>
-<div style={{ display: 'flex', flexDirection: 'column' }}>
-<span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>Total Amount</span>
-<span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '16px' }}>₹{order.totalAmount.toFixed(2)}</span>
-</div>
-<span style={{
- color: order.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
- fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
- }}>
- {order.paymentStatus === 'Paid' ? ' Paid' : ' Pending'}
-</span>
-</div>
-</div>
-)}
- {orders.length === 0 &&
-<div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px' }}>
- No active orders at the moment.
-</div>
- }
+        {/* Items List */}
+        <div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--color-text-secondary)', maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {orderItems.map((i, idx) => {
+            const displayImage = i.image ? getAssetUrl(i.image) : '/images/default-food.png';
+            return (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+                <img
+                  src={displayImage}
+                  alt={i.name || 'Food item'}
+                  style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--color-border)' }}
+                  onError={(e) => { e.target.src = '/images/default-food.png'; }}
+                />
+                <span style={{ fontSize: '0.72rem', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>
+                  {i.quantity || 1}x
+                </span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-primary)' }}>
+                  {i.name || 'Item'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Workflow Audit Trail */}
+        <div style={{ marginTop: '8px', fontSize: '11px', background: 'rgba(0,0,0,0.02)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-text-secondary)', marginBottom: '2px' }}>Workflow History</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Placed:</span>
+            <span>{order?.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}</span>
+          </div>
+          {order?.preparingByName && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Preparing by {order.preparingByName}:</span>
+              <span>{order.preparingAt ? new Date(order.preparingAt).toLocaleString() : 'N/A'}</span>
+            </div>
+          )}
+          {order?.readyByName && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Ready by {order.readyByName}:</span>
+              <span>{order.readyAt ? new Date(order.readyAt).toLocaleString() : 'N/A'}</span>
+            </div>
+          )}
+          {order?.servedByName && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Served by {order.servedByName}:</span>
+              <span>{order.servedAt ? new Date(order.servedAt).toLocaleString() : 'N/A'}</span>
+            </div>
+          )}
+          {order?.paidByName && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Paid by {order.paidByName}:</span>
+              <span>{order.paidAt ? new Date(order.paidAt).toLocaleString() : 'N/A'}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer: Amount + Payment Status */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>Total Amount</span>
+            <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '16px' }}>₹{totalAmt}</span>
+          </div>
+          <span style={{
+            color: order?.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
+            fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
+          }}>
+            {order?.paymentStatus === 'Paid' ? ' Paid' : ' Pending'}
+          </span>
+        </div>
+      </div>
+    );
+  })}
+  {orders.length === 0 &&
+    <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px' }}>
+      No active orders at the moment.
+    </div>
+  }
 </div>
 </div>
 </div>
@@ -6199,232 +7498,52 @@ const exportStaffToCSV = () => {
 </div>
 </div>
 
- {branchesLoading && branches.length === 0 ?
+ {branchesLoading && branches.length === 0 ? (
 <div style={{ textAlign: 'center', padding: '20px 0' }}>
-<div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
-<p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>Loading branches...</p>
-</div>:
- branches.length === 0 ?
+  <div className="spinner" style={{ margin: '0 auto 10px auto', borderColor: 'var(--color-primary)' }} />
+  <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>Loading branches...</p>
+</div>
+) : branches.length === 0 ? (
 <div style={{ padding: '30px 20px', textAlign: 'center', background: 'var(--bg-secondary)', border: '1px dashed var(--color-border)', borderRadius: '8px', color: 'var(--color-text-secondary)', fontSize: '14px' }}>
- No branches configured yet. Add one to start tracking location-based attendance.
-</div>:
-
+  No branches configured yet. Add one to start tracking location-based attendance.
+</div>
+) : (
 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
- {branches.map((b) =>
-<div key={b._id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-<h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '15px', fontWeight: 'bold' }}>{b.branchName}</h4>
-<div><strong>Branch Code:</strong> {b.branchId}</div>
-<span style={{
- backgroundColor: b.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
- color: b.isActive ? '#2ecc71' : '#e74c3c',
- padding: '2px 8px',
- borderRadius: '10px',
- fontSize: '11px',
- fontWeight: 'bold'
- }}>
- {b.isActive ? 'Active' : 'Inactive'}
-</span>
-</div>
-<div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-<div><strong>Manager:</strong>{b.manager || 'Unassigned'}</div>
-<div><strong>Address:</strong>{b.address}</div>
-<div><strong>Coordinates:</strong>{b.latitude}, {b.longitude}</div>
-<div><strong>Geo-Fence:</strong>{b.allowedRadius} meters radius</div>
-<div><strong>Unified Staff Mode:</strong> {b.unifiedStaffMode ? 'Enabled' : 'Disabled'}</div>
-</div>
-<div style={{ marginTop: '6px', borderTop: '1px solid var(--color-border)', paddingTop: '8px', fontSize: '11px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-  Read Only (Super Admin Configured)
-</div>
+  {branches.map((b) => (
+    <div key={b._id} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <h4 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '15px', fontWeight: 'bold' }}>{b.branchName}</h4>
+        <div><strong>Branch Code:</strong> {b.branchId}</div>
+        <span style={{
+          backgroundColor: b.isActive ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+          color: b.isActive ? '#2ecc71' : '#e74c3c',
+          padding: '2px 8px',
+          borderRadius: '10px',
+          fontSize: '11px',
+          fontWeight: 'bold'
+        }}>
+          {b.isActive ? 'Active' : 'Inactive'}
+        </span>
+      </div>
+      <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div><strong>Manager:</strong> {b.manager || 'Unassigned'}</div>
+        <div><strong>Address:</strong> {b.address}</div>
+        <div><strong>Coordinates:</strong> {b.latitude}, {b.longitude}</div>
+        <div><strong>Geo-Fence:</strong> {b.allowedRadius} meters radius</div>
+        <div><strong>Unified Staff Mode:</strong> {b.unifiedStaffMode ? 'Enabled' : 'Disabled'}</div>
+      </div>
+      <div style={{ marginTop: '6px', borderTop: '1px solid var(--color-border)', paddingTop: '8px', fontSize: '11px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
+        Read Only (Super Admin Configured)
+      </div>
+    </div>
+  ))}
 </div>
 )}
 </div>
- }
 </div>
+}
 
-</div>
-  }
-
-  {/* TAB 8: POS/ERP REPORTS SYSTEM */}
-  {activeTab === 'reports' && (
-    <div className="fade-in">
-      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '25px', borderRadius: '16px', marginBottom: '30px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', gap: '20px', flexWrap: 'wrap' }}>
-          <div>
-            <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>POS/ERP Reports & Financial Analytics</h3>
-            <p style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-              Generate, preview, and download compliance-ready Excel reports for your business operations.
-            </p>
-          </div>
-          <button 
-            onClick={handleDownloadExcel} 
-            disabled={!reportData || reportData.length === 0} 
-            className="btn btn-primary" 
-            style={{ 
-              width: 'auto', 
-              padding: '12px 24px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '10px',
-              fontSize: '14.5px',
-              fontWeight: 700,
-              opacity: (!reportData || reportData.length === 0) ? 0.6 : 1,
-              cursor: (!reportData || reportData.length === 0) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            <span>📥</span> Download Excel (.xlsx)
-          </button>
-        </div>
-
-        {/* Filter Toolbar */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '25px', paddingBottom: '20px', borderBottom: '1px solid var(--color-border)' }}>
-          {/* Report Type */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Report Category</label>
-            <select 
-              value={reportType} 
-              onChange={(e) => setReportType(e.target.value)}
-              className="form-input"
-              style={{ minHeight: '44px' }}
-            >
-              <option value="revenue">Revenue Statement</option>
-              <option value="orders">All Orders Log</option>
-              <option value="inventory">Current Stock Valuation</option>
-              <option value="inventory_consumption">Stock Consumption Report</option>
-              <option value="payment">Payment Mode Breakdown</option>
-            </select>
-          </div>
-
-          {/* Branch Filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Branch Filter</label>
-            <select 
-              value={reportBranchId} 
-              onChange={(e) => setReportBranchId(e.target.value)}
-              className="form-input"
-              style={{ minHeight: '44px' }}
-            >
-              <option value="all">All Branches (Cafe-wide)</option>
-              {branches.map(b => (
-                <option key={b._id} value={b.branchId || b._id}>{b.branchId || b.branchName} ({b.branchName})</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Date Range Preset */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Time Frame</label>
-            <select 
-              value={reportDateRange} 
-              onChange={(e) => setReportDateRange(e.target.value)}
-              className="form-input"
-              style={{ minHeight: '44px' }}
-            >
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="this_week">This Week</option>
-              <option value="last_week">Last Week</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
-              <option value="this_year">This Year</option>
-              <option value="custom">Custom Date Range</option>
-            </select>
-          </div>
-
-          {/* Custom Date Picker Range */}
-          {reportDateRange === 'custom' && (
-            <>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Start Date</label>
-                <input 
-                  type="date" 
-                  value={reportStartDate} 
-                  onChange={(e) => setReportStartDate(e.target.value)} 
-                  className="form-input" 
-                  style={{ minHeight: '44px' }} 
-                />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label className="form-label" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>End Date</label>
-                <input 
-                  type="date" 
-                  value={reportEndDate} 
-                  onChange={(e) => setReportEndDate(e.target.value)} 
-                  className="form-input" 
-                  style={{ minHeight: '44px' }} 
-                />
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Live Preview Console */}
-        <h4 style={{ color: 'var(--color-text-primary)', marginBottom: '15px', fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span>👁️</span> Compliance Report Preview
-        </h4>
-
-        {reportLoading ? (
-          <div style={{ textAlign: 'center', padding: '50px 0' }}>
-            <div className="spinner" style={{ margin: '0 auto 15px auto', borderColor: 'var(--color-primary)' }} />
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem' }}>Fetching data from POS database...</p>
-          </div>
-        ) : reportError ? (
-          <div style={{ padding: '20px', background: 'rgba(231,76,60,0.1)', border: '1px solid rgba(231,76,60,0.2)', color: '#e74c3c', borderRadius: '8px', fontSize: '14px' }}>
-            {reportError}
-          </div>
-        ) : !reportData || reportData.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--bg-secondary)', border: '1px dashed var(--color-border)', borderRadius: '12px', color: 'var(--color-text-secondary)' }}>
-            <p style={{ fontSize: '15px', fontWeight: 600 }}>No entries matching filter parameters</p>
-            <p style={{ fontSize: '13px', marginTop: '4px' }}>Try choosing a wider date range or switching branches.</p>
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
-            <table className="modern-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13.5px' }}>
-              <thead>
-                <tr style={{ background: 'var(--bg-secondary)', borderBottom: '2px solid var(--color-border)' }}>
-                  <th style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>S.No</th>
-                  {Object.keys(reportData[0]).map((key) => {
-                    let friendlyKey = key.replace(/([A-Z])/g, ' $1').trim();
-                    friendlyKey = friendlyKey.charAt(0).toUpperCase() + friendlyKey.slice(1);
-                    return (
-                      <th key={key} style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                        {friendlyKey}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {reportData.map((row, idx) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)', background: idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.01)' }}>
-                    <td style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}>{idx + 1}</td>
-                    {Object.keys(row).map((key) => {
-                      let val = row[key];
-                      if (key === 'date' || key === 'createdAt' || key === 'purchaseDate' || key === 'createdTime' || key === 'completedTime') {
-                        val = new Date(val).toLocaleString();
-                      }
-                      if (typeof val === 'number') {
-                        if (key.toLowerCase().includes('revenue') || key.toLowerCase().includes('total') || key.toLowerCase().includes('salary') || key.toLowerCase().includes('wage') || key.toLowerCase().includes('cost') || key.toLowerCase().includes('profit') || key === 'subtotal' || key === 'tax' || key === 'discount' || key === 'inventoryValue') {
-                          val = `₹${val.toFixed(2)}`;
-                        }
-                      }
-                      return (
-                        <td key={key} style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}>
-                          {val}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  )}
-
- {/* MODAL 1: ADD NEW MENU ITEM */}
+  {/* MODAL 1: ADD NEW MENU ITEM */}
  {showAddModal &&
 <div className="modal-overlay">
 <div className="modal-container">
@@ -6542,64 +7661,12 @@ const exportStaffToCSV = () => {
  }
 </div>
 </div>
-<div className="form-group" style={{ borderTop: '1px solid #432E22', paddingTop: '15px', marginTop: '15px' }}>
-<span id="add-item-recipe-label" className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Recipe Mapping (Ingredients)</span>
- {!newItem.recipe || newItem.recipe.length === 0 ?
-<p style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '5px 0' }}>No ingredients mapped yet. This item will not deduct stock.</p>:
-
-<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
- {newItem.recipe.map((ing, idx) =>{
- const invItem = inventoryList.find((i) =>i.name === ing.name);
- return (
-<div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '6px' }}>
-<span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{ing.name}</span>
-<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-<input type="number" value={ing.quantity} min="0.001" step="0.001" onChange={(e) => { const updated = [...newItem.recipe]; updated[idx].quantity = Number(e.target.value); setNewItem({ ...newItem, recipe: updated }); }} style={{ width: '60px', padding: '4px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent', textAlign: 'center' }} />
-<span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{invItem?.unit || 'g'}</span>
-<button type="button" onClick={() =>handleRemoveIngredientFromNewItem(ing.name)} style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '12px' }}>🗑️</button>
-</div>
-</div>);
-
- })}
-</div>
-  }
-{newItem.recipe && newItem.recipe.length > 0 && (() => {
-  const calcMakingCost = newItem.recipe.reduce((sum, ing) => {
-    const inv = inventoryList.find(i => i.name === ing.name);
-    return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
-  }, 0);
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 107, 8, 0.08)', border: '1px dashed var(--color-primary)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px' }}>
-      <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>
-        Ingredient Cost from Recipe: <strong style={{ color: 'var(--color-primary)' }}>₹{calcMakingCost.toFixed(2)}</strong>
-      </span>
-      <button
-        type="button"
-        onClick={() => setNewItem({ ...newItem, makingCost: calcMakingCost.toFixed(2) })}
-        className="btn btn-secondary"
-        style={{ padding: '4px 10px', fontSize: '12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', height: 'auto' }}>
-        Use as Making Cost
-      </button>
-    </div>
-  );
-})()}
-<div className="recipe-map-grid" aria-labelledby="add-item-recipe-label">
-<div className="form-group" style={{ marginBottom: 0 }}>
-<label htmlFor="add-item-ingredient-select" className="form-label" style={{ fontSize: '11px' }}>Select Ingredient</label>
-<select id="add-item-ingredient-select" name="add-item-ingredient-select" value={selectedIngredient} onChange={(e) =>setSelectedIngredient(e.target.value)} className="form-input" style={{ padding: '8px' }}>
-<option value="">-- Choose Ingredient --</option>
- {inventoryList.map((inv) =>
-<option key={inv._id} value={inv.name}>{inv.name} ({inv.unit})</option>
-)}
-</select>
-</div>
-<div className="form-group" style={{ marginBottom: 0 }}>
-<label htmlFor="add-item-ingredient-qty" className="form-label" style={{ fontSize: '11px' }}>Quantity</label>
-<input type="number" id="add-item-ingredient-qty" name="add-item-ingredient-qty" step="0.001" min="0.001" placeholder="e.g. 10" value={ingredientQuantity} onChange={(e) =>setIngredientQuantity(e.target.value)} className="form-input" style={{ padding: '8px' }} />
-</div>
-<button type="button" onClick={handleAddIngredientToNewItem} className="btn btn-secondary" style={{ width: 'auto', padding: '9px 12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)' }}>Map</button>
-</div>
-</div>
+<RecipeMapper
+  recipe={newItem.recipe || []}
+  onUpdateRecipe={(updated) => setNewItem({ ...newItem, recipe: updated })}
+  inventoryList={inventoryList}
+  onSetMakingCost={(cost) => setNewItem({ ...newItem, makingCost: cost })}
+/>
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>setShowAddModal(false)} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
@@ -6732,64 +7799,12 @@ const exportStaffToCSV = () => {
  }
 </div>
 </div>
-<div className="form-group" style={{ borderTop: '1px solid #432E22', paddingTop: '15px', marginTop: '15px' }}>
-<span id="edit-item-recipe-label" className="form-label" style={{ color: 'var(--color-primary)', fontWeight: 'bold', display: 'block', marginBottom: '6px' }}>Recipe Mapping (Ingredients)</span>
- {!editingItem.recipe || editingItem.recipe.length === 0 ?
-<p style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '5px 0' }}>No ingredients mapped yet. This item will not deduct stock.</p>:
-
-<div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
- {editingItem.recipe.map((ing, idx) =>{
- const invItem = inventoryList.find((i) =>i.name === ing.name);
- return (
-<div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '6px' }}>
-<span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{ing.name}</span>
-<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-<input type="number" value={ing.quantity} min="0.001" step="0.001" onChange={(e) => { const updated = [...editingItem.recipe]; updated[idx].quantity = Number(e.target.value); setEditingItem({ ...editingItem, recipe: updated }); }} style={{ width: '60px', padding: '4px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent', textAlign: 'center' }} />
-<span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>{invItem?.unit || 'g'}</span>
-<button type="button" onClick={() =>handleRemoveIngredientFromEditingItem(ing.name)} style={{ background: 'transparent', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', fontSize: '12px' }}>🗑️</button>
-</div>
-</div>);
-
- })}
-</div>
-  }
-{editingItem.recipe && editingItem.recipe.length > 0 && (() => {
-  const calcMakingCost = editingItem.recipe.reduce((sum, ing) => {
-    const inv = inventoryList.find(i => i.name === ing.name);
-    return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
-  }, 0);
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 107, 8, 0.08)', border: '1px dashed var(--color-primary)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px' }}>
-      <span style={{ fontSize: '13px', color: 'var(--color-text-primary)' }}>
-        Ingredient Cost from Recipe: <strong style={{ color: 'var(--color-primary)' }}>₹{calcMakingCost.toFixed(2)}</strong>
-      </span>
-      <button
-        type="button"
-        onClick={() => setEditingItem({ ...editingItem, makingCost: calcMakingCost.toFixed(2) })}
-        className="btn btn-secondary"
-        style={{ padding: '4px 10px', fontSize: '12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', height: 'auto' }}>
-        Use as Making Cost
-      </button>
-    </div>
-  );
-})()}
-<div className="recipe-map-grid" aria-labelledby="edit-item-recipe-label">
-<div className="form-group" style={{ marginBottom: 0 }}>
-<label htmlFor="edit-item-ingredient-select" className="form-label" style={{ fontSize: '11px' }}>Select Ingredient</label>
-<select id="edit-item-ingredient-select" name="edit-item-ingredient-select" value={selectedIngredient} onChange={(e) =>setSelectedIngredient(e.target.value)} className="form-input" style={{ padding: '8px' }}>
-<option value="">-- Choose Ingredient --</option>
- {inventoryList.map((inv) =>
-<option key={inv._id} value={inv.name}>{inv.name} ({inv.unit})</option>
-)}
-</select>
-</div>
-<div className="form-group" style={{ marginBottom: 0 }}>
-<label htmlFor="edit-item-ingredient-qty" className="form-label" style={{ fontSize: '11px' }}>Quantity</label>
-<input type="number" id="edit-item-ingredient-qty" name="edit-item-ingredient-qty" step="0.001" min="0.001" placeholder="e.g. 10" value={ingredientQuantity} onChange={(e) =>setIngredientQuantity(e.target.value)} className="form-input" style={{ padding: '8px' }} />
-</div>
-<button type="button" onClick={handleAddIngredientToEditingItem} className="btn btn-secondary" style={{ width: 'auto', padding: '9px 12px', border: '1px solid var(--color-primary)', color: 'var(--color-primary)' }}>Map</button>
-</div>
-</div>
+<RecipeMapper
+  recipe={editingItem.recipe || []}
+  onUpdateRecipe={(updated) => setEditingItem({ ...editingItem, recipe: updated })}
+  inventoryList={inventoryList}
+  onSetMakingCost={(cost) => setEditingItem({ ...editingItem, makingCost: cost })}
+/>
 </div>
 <div className="modal-footer">
 <button type="button" onClick={() =>{setShowEditModal(false);setEditingItem(null);}} className="btn btn-secondary" style={{ width: 'auto', padding: '10px 18px' }}>Cancel</button>
@@ -7656,9 +8671,30 @@ const exportStaffToCSV = () => {
 )}
 </select>
 </div>
-<div className="form-group">
-<label className="form-label">Daily Wage (₹) *</label>
-<input type="number" min="0" required value={editingStaff.dailyRate || ''} onChange={(e) =>setEditingStaff({ ...editingStaff, dailyRate: Number(e.target.value) })} className="form-input" />
+<div className="form-row">
+  <div className="form-group">
+    <label className="form-label">Daily Wage (₹) *</label>
+    <input type="number" min="0" required value={editingStaff.dailyRate || ''} onChange={(e) =>setEditingStaff({ ...editingStaff, dailyRate: Number(e.target.value) })} className="form-input" />
+  </div>
+  <div className="form-group">
+    <label className="form-label">Work Days / Wk *</label>
+    <input type="number" min="1" max="7" required value={editingStaff.workDaysPerWeek !== undefined ? editingStaff.workDaysPerWeek : 6} onChange={(e) =>setEditingStaff({ ...editingStaff, workDaysPerWeek: Number(e.target.value) })} className="form-input" />
+  </div>
+</div>
+
+<div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+  <div className="form-group">
+    <label className="form-label">Shift Start *</label>
+    <input type="time" required value={editingStaff.shiftStartTime || '09:00'} onChange={(e) =>setEditingStaff({ ...editingStaff, shiftStartTime: e.target.value })} className="form-input" />
+  </div>
+  <div className="form-group">
+    <label className="form-label">Shift End *</label>
+    <input type="time" required value={editingStaff.shiftEndTime || '18:00'} onChange={(e) =>setEditingStaff({ ...editingStaff, shiftEndTime: e.target.value })} className="form-input" />
+  </div>
+  <div className="form-group">
+    <label className="form-label">Grace (Mins) *</label>
+    <input type="number" min="0" max="180" required value={editingStaff.leanTimeMinutes !== undefined ? editingStaff.leanTimeMinutes : 30} onChange={(e) =>setEditingStaff({ ...editingStaff, leanTimeMinutes: Number(e.target.value) })} className="form-input" />
+  </div>
 </div>
 <div className="form-row">
 <div className="form-group">
@@ -7769,6 +8805,121 @@ const exportStaffToCSV = () => {
     </div>
   </div>
  )}
+
+  {/* MODAL 3C: RECORD MANUAL SALARY PAYMENT */}
+  {paymentModalStaff && (
+    <div className="modal-overlay" style={{ zIndex: 9999 }}>
+      <div className="modal-container" style={{ maxWidth: '460px', borderRadius: '16px', overflow: 'hidden' }}>
+        <div className="modal-header" style={{ borderBottom: '1px solid var(--color-border)', padding: '18px 24px' }}>
+          <h3 className="modal-title" style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', color: '#27ae60' }}>
+            💸 Record Staff Salary Payment
+          </h3>
+          <button onClick={() => setPaymentModalStaff(null)} className="modal-close">&times;</button>
+        </div>
+        <form onSubmit={handleRecordPaymentSubmit}>
+          <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            
+            <div style={{ background: 'rgba(39, 174, 96, 0.08)', border: '1px solid rgba(39, 174, 96, 0.25)', borderRadius: '10px', padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Recipient Staff</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>
+                    {paymentModalStaff.name} ({paymentModalStaff.staffRole || paymentModalStaff.role})
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', color: '#e67e22', fontWeight: 700 }}>Due Balance</div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#e67e22', marginTop: '2px' }}>
+                    ₹{paymentModalStaff.remainingSalaryBalance !== undefined ? paymentModalStaff.remainingSalaryBalance : 0}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                Disbursed Amount (₹) *
+              </label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={paymentForm.amount}
+                onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                className="form-input"
+                placeholder="e.g. 3000"
+                autoFocus
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                  Payment Mode *
+                </label>
+                <select
+                  value={paymentForm.paymentMethod}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, paymentMethod: e.target.value })}
+                  className="form-input"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cheque">Cheque</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                  Payment Date *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={paymentForm.paymentDate}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, paymentDate: e.target.value })}
+                  className="form-input"
+                />
+              </div>
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                Notes / Reference <span style={{ opacity: 0.6 }}>(Optional)</span>
+              </label>
+              <input
+                type="text"
+                value={paymentForm.notes}
+                onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                className="form-input"
+                placeholder="e.g. Weekly settlement via UPI / Cash"
+              />
+            </div>
+
+          </div>
+
+          <div className="modal-footer" style={{ borderTop: '1px solid var(--color-border)', padding: '14px 24px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => setPaymentModalStaff(null)}
+              className="btn btn-secondary"
+              style={{ width: 'auto', padding: '9px 18px' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: 'auto', padding: '9px 24px', background: '#27ae60', borderColor: '#27ae60', color: '#fff', fontWeight: 700 }}
+              disabled={paymentSubmitting}
+            >
+              {paymentSubmitting ? 'Recording...' : 'Confirm & Save Payment'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
 
  {/* MODAL 4: ADD BRANCH */}
  {showAddBranchModal &&
@@ -8128,6 +9279,502 @@ const exportStaffToCSV = () => {
 </div>
 </div>
  }
+
+  {/* MODAL: OTHER EXPENSES MANAGEMENT */}
+  {showExpenseModal && (
+    <div className="modal-overlay" style={{ zIndex: 10000 }}>
+      <div className="modal-container" style={{ maxWidth: '750px', width: '92%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ background: 'rgba(231, 76, 60, 0.12)', padding: '6px', borderRadius: '8px' }}>
+              <Receipt size={20} color="#e74c3c" />
+            </div>
+            <div>
+              <h3 className="modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Other Expenses Management</h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Track extra operational costs (Rent, Electricity, Maintenance) — automatically deducted from Net Profit</p>
+            </div>
+          </div>
+          <button onClick={() => { setShowExpenseModal(false); setEditingExpense(null); }} className="modal-close" style={{ background: 'transparent', border: 'none', fontSize: '22px', cursor: 'pointer', color: 'var(--color-text-secondary)' }}>&times;</button>
+        </div>
+
+        <div className="modal-body custom-scrollbar" style={{ overflowY: 'auto', padding: '16px 0', flex: 1 }}>
+          {/* Summary Badges */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Today's Expenses</span>
+              <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#e74c3c', marginTop: '4px' }}>₹{todayExpensesTotal.toFixed(2)}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>This Month's Expenses</span>
+              <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#e74c3c', marginTop: '4px' }}>₹{monthlyExpensesTotal.toFixed(2)}</div>
+            </div>
+            <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Total Records</span>
+              <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '4px' }}>{expenses.length}</div>
+            </div>
+          </div>
+
+          {/* Add / Edit Expense Form */}
+          <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)', marginBottom: '20px' }}>
+            <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+              {editingExpense ? '✏️ Edit Expense Record' : '+ Add New Expense'}
+            </h4>
+            <form onSubmit={editingExpense ? handleUpdateExpense : handleAddExpense}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Expense Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Shop Rent, Electricity, Cleaning"
+                    value={editingExpense ? editingExpense.title : newExpenseForm.title}
+                    onChange={(e) => editingExpense ? setEditingExpense({ ...editingExpense, title: e.target.value }) : setNewExpenseForm({ ...newExpenseForm, title: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-primary)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Amount (₹) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    required
+                    placeholder="0.00"
+                    value={editingExpense ? editingExpense.amount : newExpenseForm.amount}
+                    onChange={(e) => editingExpense ? setEditingExpense({ ...editingExpense, amount: e.target.value }) : setNewExpenseForm({ ...newExpenseForm, amount: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-primary)', color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: 700 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Category (Select or Type Custom)</label>
+                  <input
+                    type="text"
+                    list="expense-category-suggestions"
+                    placeholder="Type or select category..."
+                    value={editingExpense ? editingExpense.category : newExpenseForm.category}
+                    onChange={(e) => editingExpense ? setEditingExpense({ ...editingExpense, category: e.target.value }) : setNewExpenseForm({ ...newExpenseForm, category: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-primary)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                  />
+                  <datalist id="expense-category-suggestions">
+                    <option value="Rent" />
+                    <option value="Utilities (Power, Gas, Water)" />
+                    <option value="Staff Salary / Advance" />
+                    <option value="Supplies / Packaging" />
+                    <option value="Maintenance & Repairs" />
+                    <option value="Cleaning & Hygiene" />
+                    <option value="Marketing / Promo" />
+                    <option value="Raw Materials / Groceries" />
+                    <option value="Dairy / Ice Cream" />
+                    <option value="Fuel / Travel" />
+                    <option value="Miscellaneous" />
+                  </datalist>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Date</label>
+                  <input
+                    type="date"
+                    value={editingExpense ? (editingExpense.date ? new Date(editingExpense.date).toISOString().split('T')[0] : '') : newExpenseForm.date}
+                    onChange={(e) => editingExpense ? setEditingExpense({ ...editingExpense, date: e.target.value }) : setNewExpenseForm({ ...newExpenseForm, date: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-primary)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Notes / Remarks (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Paid to electricity board"
+                    value={editingExpense ? (editingExpense.notes || '') : (newExpenseForm.notes || '')}
+                    onChange={(e) => editingExpense ? setEditingExpense({ ...editingExpense, notes: e.target.value }) : setNewExpenseForm({ ...newExpenseForm, notes: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-primary)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                {editingExpense && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingExpense(null)}
+                    className="btn btn-secondary"
+                    style={{ width: 'auto', padding: '7px 14px', fontSize: '12px' }}
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={expenseSubmitting}
+                  className="btn btn-primary"
+                  style={{ width: 'auto', padding: '7px 18px', fontSize: '12px', fontWeight: 700 }}
+                >
+                  {expenseSubmitting ? 'Saving...' : editingExpense ? 'Update Expense' : '+ Record Expense'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Expenses List */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: 'var(--color-text-primary)' }}>Recorded Expenses History</h4>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={() => setExpenseDateFilter('all')}
+                  style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: '1px solid var(--color-border)', cursor: 'pointer', background: expenseDateFilter === 'all' ? 'var(--color-primary)' : 'var(--bg-secondary)', color: expenseDateFilter === 'all' ? '#fff' : 'var(--color-text-secondary)' }}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setExpenseDateFilter('today')}
+                  style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: '1px solid var(--color-border)', cursor: 'pointer', background: expenseDateFilter === 'today' ? 'var(--color-primary)' : 'var(--bg-secondary)', color: expenseDateFilter === 'today' ? '#fff' : 'var(--color-text-secondary)' }}
+                >
+                  Today
+                </button>
+                <button
+                  onClick={() => setExpenseDateFilter('month')}
+                  style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: '1px solid var(--color-border)', cursor: 'pointer', background: expenseDateFilter === 'month' ? 'var(--color-primary)' : 'var(--bg-secondary)', color: expenseDateFilter === 'month' ? '#fff' : 'var(--color-text-secondary)' }}
+                >
+                  This Month
+                </button>
+              </div>
+            </div>
+
+            {expensesLoading ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>Loading expenses...</div>
+            ) : expenses.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', background: 'var(--bg-secondary)', borderRadius: '8px', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+                No expenses recorded yet. Use the form above to record your first expense.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Date</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Title</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Category</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700, textAlign: 'right' }}>Amount</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700, textAlign: 'center' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenses
+                      .filter((e) => {
+                        if (expenseDateFilter === 'today') {
+                          const now = new Date();
+                          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          return new Date(e.date || e.createdAt) >= start;
+                        }
+                        if (expenseDateFilter === 'month') {
+                          const now = new Date();
+                          const start = new Date(now.getFullYear(), now.getMonth(), 1);
+                          return new Date(e.date || e.createdAt) >= start;
+                        }
+                        return true;
+                      })
+                      .map((item) => (
+                        <tr key={item._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ padding: '8px 10px', color: 'var(--color-text-secondary)' }}>
+                            {new Date(item.date || item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: 'var(--color-text-primary)', fontWeight: 700 }}>
+                            {item.title}
+                            {item.notes && <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>{item.notes}</div>}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <span style={{ background: 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>
+                              {item.category}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: '#e74c3c' }}>
+                            -₹{Number(item.amount).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                              <button
+                                onClick={() => setEditingExpense(item)}
+                                style={{ background: 'transparent', border: '1px solid var(--color-border)', borderRadius: '4px', padding: '3px 6px', cursor: 'pointer', color: 'var(--color-text-primary)', fontSize: '11px' }}
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={() => handleDeleteExpense(item._id)}
+                                style={{ background: 'rgba(231,76,60,0.1)', border: '1px solid #e74c3c', borderRadius: '4px', padding: '3px 6px', cursor: 'pointer', color: '#e74c3c', fontSize: '11px' }}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="modal-footer" style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => { setShowExpenseModal(false); setEditingExpense(null); }}
+            className="btn btn-secondary"
+            style={{ width: 'auto', padding: '8px 18px', fontSize: '13px' }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* MODAL: PURCHASES & DAILY CASH REGISTER */}
+  {showPurchaseRegisterModal && (
+    <div className="modal-overlay" style={{ zIndex: 10000 }}>
+      <div className="modal-container" style={{ maxWidth: '700px', width: '92%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ background: 'rgba(39, 174, 96, 0.15)', padding: '6px', borderRadius: '8px' }}>
+              <Wallet size={20} color="#27ae60" />
+            </div>
+            <div>
+              <h3 className="modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Purchases & Daily Cash Register</h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Daily cash drawer ledger — deducts raw material stock purchases from physical cash in hand</p>
+            </div>
+          </div>
+          <button onClick={() => setShowPurchaseRegisterModal(false)} className="modal-close" style={{ background: 'transparent', border: 'none', fontSize: '22px', cursor: 'pointer', color: 'var(--color-text-secondary)' }}>&times;</button>
+        </div>
+
+        <div className="modal-body custom-scrollbar" style={{ overflowY: 'auto', padding: '16px 0', flex: 1 }}>
+          {/* Target Date Picker */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', background: 'var(--bg-secondary)', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Register Date:</span>
+            <input
+              type="date"
+              value={cashRegisterDate}
+              onChange={(e) => {
+                setCashRegisterDate(e.target.value);
+                fetchCashRegisterData(e.target.value);
+              }}
+              style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--bg-primary)', color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: 600 }}
+            />
+          </div>
+
+          {/* Real-time Calculation Result Card */}
+          {(() => {
+            const yCash = Number(cashRegisterForm.yesterdayCash) || 0;
+            const tCash = Number(cashRegisterForm.todayCash) || 0;
+            const purchases = Number(cashRegisterForm.purchasesAmount) || 0;
+            const netCash = (yCash + tCash) - purchases;
+            return (
+              <div style={{ background: 'linear-gradient(135deg, rgba(39,174,96,0.12), rgba(46,204,113,0.06))', border: '1px solid rgba(39,174,96,0.3)', padding: '16px', borderRadius: '12px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#27ae60' }}>Net Closing Cash in Hand</span>
+                    <div style={{ fontSize: '1.8rem', fontWeight: 900, color: netCash >= 0 ? '#27ae60' : '#e74c3c', marginTop: '2px' }}>
+                      ₹{netCash.toFixed(2)}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', background: 'var(--bg-primary)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                    Formula: (₹{yCash} + ₹{tCash}) - <strong style={{ color: '#e74c3c' }}>₹{purchases}</strong>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Form Inputs */}
+          <form onSubmit={handleSaveCashRegister}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>Yesterday's Cash in Hand (₹)</label>
+                  {yesterdayCashSales > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCashRegisterForm((prev) => ({ ...prev, yesterdayCash: yesterdayCashSales }))}
+                      style={{ background: 'rgba(52,152,219,0.15)', color: '#2980b9', border: 'none', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                      title="Sync from yesterday's completed cash orders"
+                    >
+                      ⚡ Auto-fill ₹{yesterdayCashSales.toFixed(0)}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="0.00"
+                  value={cashRegisterForm.yesterdayCash}
+                  onChange={(e) => setCashRegisterForm({ ...cashRegisterForm, yesterdayCash: e.target.value })}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-secondary)', color: 'var(--color-text-primary)', fontSize: '14px', fontWeight: 700 }}
+                />
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>Today's Cash Collection (₹)</label>
+                  {todayCashSales > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCashRegisterForm((prev) => ({ ...prev, todayCash: todayCashSales }))}
+                      style={{ background: 'rgba(39,174,96,0.15)', color: '#27ae60', border: 'none', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                      title="Sync from today's completed cash orders"
+                    >
+                      ⚡ Auto-fill ₹{todayCashSales.toFixed(0)}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="0.00"
+                  value={cashRegisterForm.todayCash}
+                  onChange={(e) => setCashRegisterForm({ ...cashRegisterForm, todayCash: e.target.value })}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-secondary)', color: 'var(--color-text-primary)', fontSize: '14px', fontWeight: 700 }}
+                />
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>Bank / UPI Balance (₹)</label>
+                  {todayOnlineSales > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCashRegisterForm((prev) => ({ ...prev, bankBalance: todayOnlineSales }))}
+                      style={{ background: 'rgba(155,89,182,0.15)', color: '#9b59b6', border: 'none', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer' }}
+                      title="Sync from today's completed online/UPI orders"
+                    >
+                      ⚡ Auto-fill ₹{todayOnlineSales.toFixed(0)}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="0.00"
+                  value={cashRegisterForm.bankBalance}
+                  onChange={(e) => setCashRegisterForm({ ...cashRegisterForm, bankBalance: e.target.value })}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-secondary)', color: 'var(--color-text-primary)', fontSize: '14px', fontWeight: 700 }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: '#e74c3c', display: 'block', marginBottom: '4px' }}>Today Total Stock Purchased (₹) *</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="0.00"
+                  value={cashRegisterForm.purchasesAmount}
+                  onChange={(e) => setCashRegisterForm({ ...cashRegisterForm, purchasesAmount: e.target.value })}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(231,76,60,0.4)', background: 'var(--bg-secondary)', color: '#e74c3c', fontSize: '14px', fontWeight: 800 }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Stock Purchased Items (Quick Notes)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Milk 20L, Ginger, Tea leaves, Disposable cups"
+                  value={cashRegisterForm.purchasesNote}
+                  onChange={(e) => setCashRegisterForm({ ...cashRegisterForm, purchasesNote: e.target.value })}
+                  style={{ width: '100%', padding: '9px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-secondary)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>General Day Remarks</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Evening rain caused rush, extra ice purchased"
+                  value={cashRegisterForm.notes}
+                  onChange={(e) => setCashRegisterForm({ ...cashRegisterForm, notes: e.target.value })}
+                  style={{ width: '100%', padding: '9px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-secondary)', color: 'var(--color-text-primary)', fontSize: '13px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+              <button
+                type="submit"
+                disabled={cashRegisterSubmitting}
+                className="btn btn-primary"
+                style={{ width: 'auto', padding: '9px 24px', fontWeight: 800, fontSize: '13px', background: '#27ae60', border: 'none' }}
+              >
+                {cashRegisterSubmitting ? 'Saving...' : '💾 Save Daily Register'}
+              </button>
+            </div>
+          </form>
+
+          {/* Last 7 Days History Table */}
+          {cashRegisterHistory.length > 0 && (
+            <div>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 800, color: 'var(--color-text-primary)' }}>Past 7 Days Register History</h4>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Date</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Yesterday Cash</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Today Cash</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Stock Purchased</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700, textAlign: 'right' }}>Closing Net Cash</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700, textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cashRegisterHistory.map((rec) => (
+                      <tr key={rec._id || rec.date} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{rec.date}</td>
+                        <td style={{ padding: '8px 10px', color: 'var(--color-text-secondary)' }}>₹{(Number(rec.yesterdayCash) || 0).toFixed(2)}</td>
+                        <td style={{ padding: '8px 10px', color: '#27ae60', fontWeight: 600 }}>+₹{(Number(rec.todayCash) || 0).toFixed(2)}</td>
+                        <td style={{ padding: '8px 10px', color: '#e74c3c', fontWeight: 600 }}>
+                          -₹{(Number(rec.purchasesAmount) || 0).toFixed(2)}
+                          {rec.purchasesNote && <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{rec.purchasesNote}</div>}
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 800, color: (Number(rec.netCashInHand) || 0) >= 0 ? '#27ae60' : '#e74c3c' }}>
+                          ₹{(Number(rec.netCashInHand) || 0).toFixed(2)}
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCashRegister(rec._id, rec.date)}
+                            style={{
+                              background: 'rgba(231,76,60,0.1)',
+                              border: '1px solid #e74c3c',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              cursor: 'pointer',
+                              color: '#e74c3c',
+                              fontSize: '12px',
+                              fontWeight: 700
+                            }}
+                            title={`Delete record for ${rec.date}`}
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer" style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => setShowPurchaseRegisterModal(false)}
+            className="btn btn-secondary"
+            style={{ width: 'auto', padding: '8px 18px', fontSize: '13px' }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
 
 </div>
 </OwnerLayout>);

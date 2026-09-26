@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import { useSearchParams } from 'react-router-dom';
 import { getOrders, updateOrderStatus, getInventory, getCafeInfo, getPaymentInfo } from '../services/api';
-import { printPOSReceipt } from '../utils/printHelpers';
+import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { QRCodeSVG } from 'qrcode.react';
 import '../styles/App.css';
 
@@ -273,15 +273,15 @@ const CashierDashboard = () =>{
  }
 </div>
 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block', marginTop: '3px' }}>
- Order #{order._id.substring(order._id.length - 4).toUpperCase()} | {order.items.length} dishes
+  Order #{String(order?._id || order?.id || '').slice(-4).toUpperCase() || 'N/A'} | {Array.isArray(order?.items) ? order.items.length : 0} dishes
 </span>
 </div>
 <div style={{ textAlign: 'right' }}>
 <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', fontSize: '1rem', display: 'block' }}>
- ₹{order.totalAmount.toFixed(2)}
+  ₹{typeof order?.totalAmount === 'number' ? order.totalAmount.toFixed(2) : (Number(order?.totalAmount) || 0).toFixed(2)}
 </span>
 <span style={{ fontSize: '0.7rem', color: '#ff9800', background: 'rgba(255,152,0,0.1)', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
- {order.paymentStatus}
+  {order?.paymentStatus || 'Pending'}
 </span>
 </div>
 </div>
@@ -315,11 +315,11 @@ const CashierDashboard = () =>{
 <div>
 <span style={{ color: 'var(--color-text-primary)', fontSize: '0.85rem', fontWeight: 600 }}>Table {order.tableNumber}</span>
 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', display: 'block' }}>
- Order ID: #{order._id.substring(order._id.length - 4).toUpperCase()}
+  Order ID: #{String(order?._id || order?.id || '').slice(-4).toUpperCase() || 'N/A'}
 </span>
 </div>
 <div style={{ textAlign: 'right' }}>
-<strong style={{ color: '#27AE60', fontSize: '0.9rem' }}>₹{order.totalAmount.toFixed(2)}</strong>
+<strong style={{ color: '#27AE60', fontSize: '0.9rem' }}>₹{typeof order?.totalAmount === 'number' ? order.totalAmount.toFixed(2) : (Number(order?.totalAmount) || 0).toFixed(2)}</strong>
 <span style={{ fontSize: '0.7rem', color: '#27AE60', display: 'block' }}>Paid</span>
 </div>
 </div>
@@ -341,105 +341,160 @@ const CashierDashboard = () =>{
 
  {/* Receipt Visual Mock */}
 <div id="receipt-print-area" style={{
- background: '#FAF6F0',
- color: '#33271c',
- padding: '25px',
- borderRadius: '8px',
- fontFamily: "'Courier New', Courier, monospace",
- border: '1px solid #E6D5C3',
- boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
- }}>
-<div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '15px', marginBottom: '15px' }}>
-<h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 'bold' }}>{cafeInfo?.name || 'Our Cafe'}</h2>
-<p style={{ margin: '4px 0', fontSize: '0.8rem' }}>{cafeInfo?.address || ''}</p>
- {cafeInfo?.gstNumber &&<p style={{ margin: '2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>GSTIN: {cafeInfo.gstNumber}</p>}
-<p style={{ margin: '2px 0', fontSize: '0.8rem' }}>Tel: {cafeInfo?.supportNumber || user?.phone || ''}</p>
-</div>
+        background: '#FAF6F0',
+        color: '#2b221a',
+        padding: '25px',
+        borderRadius: '8px',
+        fontFamily: "'Courier New', Courier, monospace",
+        border: '1px solid #E6D5C3',
+        boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+      }}>
+        {/* Cafe Header */}
+        <div style={{ textAlign: 'center', borderBottom: '2px solid #33271c', paddingBottom: '12px', marginBottom: '12px' }}>
+          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', letterSpacing: '1px' }}>
+            {((cafeInfo?.name || selectedOrder.cafeName || 'DR. CAFE CHAI')).toUpperCase()}
+          </h2>
+          <p style={{ margin: '4px 0 2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>
+            BRANCH: {(currentBranch?.branchName || selectedOrder.branchName || 'CP007-B1').toUpperCase()}, {(currentBranch?.address || selectedOrder.branchAddress || cafeInfo?.address || 'MANGALAGIRI').toUpperCase()}
+          </p>
+          {(cafeInfo?.gstNumber || selectedOrder.cafeGstNumber) && (
+            <p style={{ margin: '2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>
+              GSTIN: {cafeInfo?.gstNumber || selectedOrder.cafeGstNumber}
+            </p>
+          )}
+        </div>
 
-<div style={{ fontSize: '0.85rem', marginBottom: '15px' }}>
-<div><strong>Invoice #:</strong>{selectedOrder._id.toUpperCase()}</div>
-<div><strong>Date:</strong>{new Date(selectedOrder.createdAt).toLocaleString()}</div>
-<div><strong>Table:</strong>Table {selectedOrder.tableNumber}</div>
- {selectedOrder.customerName &&<div><strong>Customer:</strong>{selectedOrder.customerName}</div>}
-</div>
+        {/* Invoice Title */}
+        <div style={{ textAlign: 'center', borderBottom: '1px dashed #33271c', paddingBottom: '8px', marginBottom: '12px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '0.95rem', letterSpacing: '1px' }}>*** TAX INVOICE ***</div>
+        </div>
 
-<table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '15px' }}>
-<thead>
-<tr style={{ borderBottom: '1px solid #33271c', borderTop: '1px solid #33271c' }}>
-<th style={{ padding: '6px 0', textAlign: 'left' }}>Item</th>
-<th style={{ padding: '6px 0', textAlign: 'center' }}>Qty</th>
-<th style={{ padding: '6px 0', textAlign: 'right' }}>Price</th>
-</tr>
-</thead>
-<tbody>
- {selectedOrder.items.map((item, idx) =>
-<tr key={idx}>
-<td style={{ padding: '4px 0' }}>{item.name}</td>
-<td style={{ padding: '4px 0', textAlign: 'center' }}>{item.quantity}</td>
-<td style={{ padding: '4px 0', textAlign: 'right' }}>₹{(item.price * item.quantity).toFixed(2)}</td>
-</tr>
-)}
-</tbody>
-</table>
+        {/* Invoice Metadata */}
+        <div style={{ fontSize: '0.85rem', marginBottom: '12px', lineHeight: '1.4' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span><strong>Bill No:</strong> {selectedOrder.invoiceId || ('INV-' + selectedOrder._id.slice(-6).toUpperCase())}</span>
+            <span><strong>Date:</strong> {new Date(selectedOrder.createdAt).toLocaleDateString('en-GB')}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span><strong>Table No:</strong> Table {selectedOrder.tableNumber}</span>
+            <span><strong>Time:</strong> {new Date(selectedOrder.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+          </div>
+          {selectedOrder.customerName && (
+            <div><strong>Customer:</strong> {selectedOrder.customerName}</div>
+          )}
+        </div>
 
-<div style={{ borderTop: '1px dashed #33271c', paddingTop: '10px', textAlign: 'right', fontSize: '0.85rem' }}>
-<div>Subtotal (Tax Excl.): ₹{(selectedOrder.totalAmount / 1.05).toFixed(2)}</div>
-<div>CGST (2.5%): ₹{((selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05) / 2).toFixed(2)}</div>
-<div>SGST (2.5%): ₹{((selectedOrder.totalAmount - selectedOrder.totalAmount / 1.05) / 2).toFixed(2)}</div>
-<div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginTop: '6px' }}>
- TOTAL AMOUNT: ₹{selectedOrder.totalAmount.toFixed(2)}
-</div>
-<div style={{ fontSize: '0.75rem', color: '#555', marginTop: '4px' }}>
- Method:<strong>{selectedOrder.paymentMethod || 'Counter'}</strong>
-</div>
-</div>
+        {/* Items Table with Inclusive GST Breakdown */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', marginBottom: '12px' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #33271c', borderTop: '1px solid #33271c' }}>
+              <th style={{ padding: '6px 0', textAlign: 'left' }}>ITEM NAME</th>
+              <th style={{ padding: '6px 0', textAlign: 'center' }}>QTY</th>
+              <th style={{ padding: '6px 0', textAlign: 'right' }}>RATE</th>
+              <th style={{ padding: '6px 0', textAlign: 'right' }}>AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {selectedOrder.items.map((item, idx) => {
+              const baseRate = (item.price || 0) / 1.05;
+              const baseTotal = baseRate * (item.quantity || 1);
+              return (
+                <tr key={idx} style={{ borderBottom: '1px dotted #e6d5c3' }}>
+                  <td style={{ padding: '5px 0' }}>{item.name}</td>
+                  <td style={{ padding: '5px 0', textAlign: 'center' }}>{item.quantity}</td>
+                  <td style={{ padding: '5px 0', textAlign: 'right' }}>₹{baseRate.toFixed(2)}</td>
+                  <td style={{ padding: '5px 0', textAlign: 'right' }}>₹{baseTotal.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
 
-<div style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.8rem', borderTop: '1px solid #33271c', paddingTop: '10px' }}>
- Thank you for dining with us!<br />
- Scan QR code on your next visit.
-</div>
-</div>
+        {/* Tax & Grand Total Breakdown */}
+        {(() => {
+          const grandTotal = selectedOrder.grandTotal !== undefined ? selectedOrder.grandTotal : selectedOrder.totalAmount;
+          const taxableSubtotal = grandTotal / 1.05;
+          const totalGst = grandTotal - taxableSubtotal;
+          return (
+            <div style={{ borderTop: '1px dashed #33271c', paddingTop: '8px', fontSize: '0.85rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span>Subtotal (Taxable Value):</span>
+                <span>₹{taxableSubtotal.toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', color: '#555' }}>
+                <span>TOTAL GST (5% Included):</span>
+                <span>₹{totalGst.toFixed(2)}</span>
+              </div>
+              <div style={{ borderTop: '2px solid #33271c', borderBottom: '2px solid #33271c', padding: '8px 0', margin: '8px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '900', fontSize: '1.15rem' }}>
+                <span>GRAND TOTAL:</span>
+                <span>₹{grandTotal.toFixed(2)}</span>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#666', textAlign: 'right' }}>
+                Payment Status: <strong>{selectedOrder.paymentStatus || 'Pending'} ({selectedOrder.paymentMethod || 'Counter'})</strong>
+              </div>
+            </div>
+          );
+        })()}
 
- {/* Action buttons */}
-<div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
- {selectedOrder.paymentStatus !== 'Paid' ?
-<div style={{ display: 'flex', gap: '10px', width: '100%' }}>
-<button
- onClick={() =>handleProcessPayment(selectedOrder._id, 'Cash')}
- className="btn btn-primary touch-btn"
- style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px' }}>
- 
- Settle with Cash
-</button>
-<button
- onClick={() => {
-   if (paymentInfo.enableUpi && paymentInfo.upiId) {
-     setUpiOrder(selectedOrder);
-     setShowUpiModal(true);
-   } else {
-     handleProcessPayment(selectedOrder._id, 'UPI');
-   }
- }}
- className="btn btn-primary touch-btn"
- style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9', minHeight: '44px' }}>
- 
- Settle with UPI
-</button>
-</div>:
+        <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.8rem', borderTop: '1px solid #33271c', paddingTop: '10px', color: '#555' }}>
+          Thank You for Dining With Us!<br />
+          Please Visit Again ☕<br />
+          <span style={{ fontSize: '0.7rem', color: '#888' }}>Powered by CafeTime Smart POS</span>
+        </div>
+      </div>
 
-<div style={{ width: '100%', padding: '12px', background: 'rgba(39, 174, 96, 0.15)', color: '#27AE60', borderRadius: '6px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>
- Receipt Settled & Paid
-</div>
- }
- 
-<button
- onClick={() =>printPOSReceipt(selectedOrder, user, cafeInfo, currentBranch)}
- className="btn btn-secondary touch-btn"
- style={{ width: '100%', padding: '12px', fontSize: '13px', minHeight: '44px' }}>
- 
-  Print Receipt Invoice (Thermal)
-</button>
-</div>
+      {/* Action buttons */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+        {selectedOrder.paymentStatus !== 'Paid' ? (
+          <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+            <button
+              onClick={() => handleProcessPayment(selectedOrder._id, 'Cash')}
+              className="btn btn-primary touch-btn"
+              style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#27AE60', borderColor: '#27AE60', minHeight: '44px' }}
+            >
+              Settle with Cash
+            </button>
+            <button
+              onClick={() => {
+                if (paymentInfo.enableUpi && paymentInfo.upiId) {
+                  setUpiOrder(selectedOrder);
+                  setShowUpiModal(true);
+                } else {
+                  handleProcessPayment(selectedOrder._id, 'UPI');
+                }
+              }}
+              className="btn btn-primary touch-btn"
+              style={{ flex: 1, padding: '12px', fontSize: '13px', background: '#2980B9', borderColor: '#2980B9', minHeight: '44px' }}
+            >
+              Settle with UPI
+            </button>
+          </div>
+        ) : (
+          <div style={{ width: '100%', padding: '10px', background: 'rgba(39, 174, 96, 0.15)', color: '#27AE60', borderRadius: '6px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>
+            ✓ Receipt Settled & Paid
+          </div>
+        )}
+        
+        {/* Two Dedicated Print Buttons: POS Bill and KOT */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%' }}>
+          <button
+            onClick={() => printPOSReceipt(selectedOrder, user, cafeInfo, currentBranch)}
+            className="btn btn-primary touch-btn"
+            style={{ padding: '12px', fontSize: '13px', minHeight: '44px', background: '#2980b9', borderColor: '#2980b9', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            title="Print Customer POS Tax Invoice"
+          >
+            🖨️ Print POS Bill
+          </button>
+          <button
+            onClick={() => printKOT(selectedOrder, user, cafeInfo, currentBranch)}
+            className="btn btn-secondary touch-btn"
+            style={{ padding: '12px', fontSize: '13px', minHeight: '44px', background: '#e67e22', borderColor: '#e67e22', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            title="Print Kitchen Order Ticket"
+          >
+            🍳 Print KOT Slip
+          </button>
+        </div>
+      </div>
 
 </div>:
 

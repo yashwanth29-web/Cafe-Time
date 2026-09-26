@@ -549,6 +549,36 @@ export const approvePayroll = async (id) => {
   return response.data;
 };
 
+// Staff & Salary Payment APIs
+export const getStaffList = async () => {
+  const response = await API.get('/admin/staff');
+  return response.data;
+};
+
+export const createStaffMember = async (payload) => {
+  const response = await API.post('/admin/create-staff', payload);
+  return response.data;
+};
+
+export const updateStaffMember = async (id, payload) => {
+  const response = await API.put(`/admin/staff/${id}`, payload);
+  return response.data;
+};
+
+export const recordStaffPayment = async (idOrData, maybePayload) => {
+  if (maybePayload !== undefined) {
+    const response = await API.post(`/admin/staff/${idOrData}/payment`, maybePayload);
+    return response.data;
+  }
+  const response = await API.post('/payroll/record-payment', idOrData);
+  return response.data;
+};
+
+export const recordStaffPaymentDirect = async (id, payload) => {
+  const response = await API.post(`/admin/staff/${id}/payment`, payload);
+  return response.data;
+};
+
 export const getSalaryHistory = async (params) => {
   const response = await API.get('/payroll/salary-history', { params });
   return response.data;
@@ -570,8 +600,13 @@ export const getTodayAttendanceStatus = async (params) => {
   return response.data;
 };
 
-export const getStaffAttendanceHistory = async () => {
-  const response = await API.get('/attendance/history');
+export const getKioskStaffList = async (params) => {
+  const response = await API.get('/attendance/kiosk/staff-list', { params });
+  return response.data;
+};
+
+export const getStaffAttendanceHistory = async (params) => {
+  const response = await API.get('/attendance/history', { params });
   return response.data;
 };
 
@@ -669,5 +704,44 @@ export const getDashboardStats = async (params) => {
   const response = await API.get('/admin/dashboard-stats', { params });
   return response.data;
 };
+
+// Expense Management APIs
+export const getExpenses = async (params) => {
+  const response = await API.get('/expenses', { params });
+  return response.data;
+};
+
+export const createExpense = async (payload) => {
+  const response = await API.post('/expenses', payload);
+  return response.data;
+};
+
+export const updateExpense = async (id, payload) => {
+  const response = await API.put(`/expenses/${id}`, payload);
+  return response.data;
+};
+
+export const deleteExpense = async (id) => {
+  const response = await API.delete(`/expenses/${id}`);
+  return response.data;
+};
+
+// Daily Cash Register & Purchases APIs
+export const getCashRegister = async (params) => {
+  const response = await API.get('/cash-register', { params });
+  return response.data;
+};
+
+export const saveCashRegister = async (payload) => {
+  const response = await API.post('/cash-register', payload);
+  return response.data;
+};
+
+export const deleteCashRegister = async (id) => {
+  const response = await API.delete(`/cash-register/${id}`);
+  return response.data;
+};
+
+
 
 

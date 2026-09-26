@@ -433,7 +433,7 @@ const payPayroll = async (req, res) => {
       cafeId: payroll.cafeId || cafeId,
       branchId: payroll.branchId || activeBranch,
       title: 'Salary Disbursed',
-      message: `Your salary of $${payroll.netSalary} for the week ${payroll.weekStart} to ${payroll.weekEnd} has been paid via ${paymentMethod}.`
+      message: `Your salary of ₹${payroll.netSalary} for the week ${payroll.weekStart} to ${payroll.weekEnd} has been paid via ${paymentMethod}.`
     });
 
     return res.status(200).json({
@@ -650,11 +650,15 @@ const getSalaryHistory = async (req, res) => {
   const cafeId = req.user.cafeId;
   const userRole = (req.user.role || '').toLowerCase();
   const userId = req.user._id;
-  const { period } = req.query; // 'current_week', 'previous_week', 'previous_month', 'previous_year'
+  const { period, branchId } = req.query; // 'current_week', 'previous_week', 'previous_month', 'previous_year', 'all'
 
   try {
-    const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || req.branchId || 'default';
-    const query = { branchId: activeBranch };
+    const rawBranch = branchId || req.headers['x-branch-id'] || req.user.assignedBranch || req.branchId;
+    const query = {};
+
+    if (rawBranch && rawBranch !== 'all' && rawBranch !== 'default') {
+      query.branchId = rawBranch;
+    }
 
     // Enforce role authorization filters
     if (userRole === 'admin' || userRole === 'owner' || userRole === 'manager') {
@@ -681,12 +685,15 @@ const getSalaryHistory = async (req, res) => {
       const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(current.setUTCDate(diff));
       const weekStartStr = monday.toISOString().split('T')[0];
-      query.weekStart = { $gte: weekStartStr };
+      query.$or = [
+        { weekStart: { $gte: weekStartStr } },
+        { paymentDate: { $gte: new Date(weekStartStr) } },
+        { createdAt: { $gte: new Date(weekStartStr) } }
+      ];
     } else if (period === 'previous_week') {
       const day = current.getUTCDay();
       const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(current.setUTCDate(diff));
-      // subtract 7 days for previous week's Monday
       const prevMonday = new Date(monday.getTime() - 7 * 24 * 60 * 60 * 1000);
       const prevSunday = new Date(monday.getTime() - 1 * 24 * 60 * 60 * 1000);
       
@@ -704,12 +711,147 @@ const getSalaryHistory = async (req, res) => {
     }
 
     const SalaryHistory = require('../models/SalaryHistory');
-    const history = await SalaryHistory.find(query).sort({ weekStart: -1, createdAt: -1 });
-    
-    return res.status(200).json({ success: true, count: history.length, data: history });
+    let history = await SalaryHistory.find(query).sort({ weekStart: -1, createdAt: -1 }).lean();
+
+    // Fallback: If SalaryHistory is empty, check if Paid Payroll records exist
+    if (!history || history.length === 0) {
+      const payrollQuery = { cafeId, paymentStatus: 'Paid' };
+      if (rawBranch && rawBranch !== 'all' && rawBranch !== 'default') {
+        payrollQuery.branchId = rawBranch;
+      }
+      const paidPayrolls = await Payroll.find(payrollQuery).sort({ paymentDate: -1, createdAt: -1 }).lean();
+      if (paidPayrolls && paidPayrolls.length > 0) {
+        history = paidPayrolls.map(p => ({
+          _id: p._id,
+          payrollId: p._id,
+          employeeId: p.employeeId,
+          employeeName: p.employeeName,
+          cafeId: p.cafeId,
+          branchId: p.branchId,
+          branchName: p.branchId,
+          payrollWeek: `${p.weekStart || ''} to ${p.weekEnd || ''}`,
+          weekStart: p.weekStart,
+          weekEnd: p.weekEnd,
+          workedDays: p.presentDays || 0,
+          workedHours: p.workingHours || 0,
+          grossSalary: (p.basicSalary || 0) + (p.overtimePay || 0) + (p.bonus || 0),
+          deductions: p.deductions || 0,
+          finalSalary: p.netSalary || 0,
+          paymentStatus: p.paymentStatus || 'Paid',
+          paymentDate: p.paymentDate || p.updatedAt || p.createdAt,
+          paymentMethod: p.paymentMethod || 'Cash'
+        }));
+      }
+    }
+
+    return res.status(200).json({ success: true, count: history ? history.length : 0, data: history || [] });
   } catch (error) {
     console.error('getSalaryHistory error:', error);
     return res.status(500).json({ success: false, message: 'Server error retrieving salary history' });
+  }
+};
+
+/**
+ * Direct Salary / Advance Payment
+ * POST /api/payroll/record-payment
+ */
+const recordStaffPayment = async (req, res) => {
+  const { employeeId, amount, paymentMethod, remarks, paymentDate } = req.body;
+  const cafeId = req.user.cafeId;
+
+  if (!employeeId) {
+    return res.status(400).json({ success: false, message: 'Employee ID is required' });
+  }
+
+  const payAmount = Number(amount);
+  if (isNaN(payAmount) || payAmount <= 0) {
+    return res.status(400).json({ success: false, message: 'Please enter a valid payment amount greater than 0' });
+  }
+
+  try {
+    const User = require('../models/User');
+    const staff = await User.findById(employeeId);
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    const Branch = require('../models/Branch');
+    const branch = await Branch.findOne({ branchId: staff.assignedBranch, cafeId: staff.cafeId });
+    const branchName = branch ? branch.branchName || branch.branchId : (staff.assignedBranch || 'default');
+
+    const tzOffset = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(Date.now() + tzOffset);
+    const todayStr = nowIST.toISOString().split('T')[0];
+
+    // Current week calculation
+    const current = new Date(todayStr);
+    const day = current.getUTCDay();
+    const diff = current.getUTCDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(current.setUTCDate(diff));
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    const weekStart = monday.toISOString().split('T')[0];
+    const weekEnd = sunday.toISOString().split('T')[0];
+
+    const SalaryHistory = require('../models/SalaryHistory');
+
+    // 1. Create permanent SalaryHistory record
+    const history = await SalaryHistory.create({
+      employeeId: staff._id,
+      employeeName: staff.name,
+      cafeId: staff.cafeId,
+      branchId: staff.assignedBranch || 'default',
+      branchName: branchName,
+      payrollWeek: `${weekStart} to ${weekEnd}`,
+      weekStart,
+      weekEnd,
+      workedDays: staff.workingDays || 0,
+      workedHours: staff.actualHoursWorked || 0,
+      grossSalary: payAmount,
+      deductions: 0,
+      finalSalary: payAmount,
+      paidAmount: payAmount,
+      paymentStatus: 'Paid',
+      paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+      paymentMethod: paymentMethod || 'UPI',
+      notes: remarks || 'Salary Payment'
+    });
+
+    // 2. If there is a Payroll record for this week, update it to Paid
+    const existingPayroll = await Payroll.findOne({ employeeId: staff._id, weekStart, weekEnd, cafeId });
+    if (existingPayroll) {
+      existingPayroll.paymentStatus = 'Paid';
+      existingPayroll.paidBy = req.user._id;
+      existingPayroll.paymentMethod = paymentMethod || 'UPI';
+      existingPayroll.paymentDate = new Date();
+      existingPayroll.remarks = remarks || existingPayroll.remarks;
+      await existingPayroll.save();
+    }
+
+    // 3. Notification to staff
+    try {
+      await Notification.create({
+        userId: staff._id,
+        cafeId: staff.cafeId,
+        branchId: staff.assignedBranch || 'default',
+        title: 'Salary Paid',
+        message: `Salary payment of ₹${payAmount} has been recorded via ${paymentMethod || 'UPI'}.`
+      });
+    } catch (notifErr) {}
+
+    const { invalidateAdminCache } = require('./adminController');
+    if (invalidateAdminCache) {
+      invalidateAdminCache(cafeId);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Payment of ₹${payAmount} recorded successfully for ${staff.name}`,
+      data: history
+    });
+  } catch (error) {
+    console.error('recordStaffPayment error:', error);
+    return res.status(500).json({ success: false, message: 'Server error recording staff payment' });
   }
 };
 
@@ -720,6 +862,7 @@ module.exports = {
   getCurrentEmployeePayroll,
   updatePayroll,
   payPayroll,
+  recordStaffPayment,
   deletePayroll,
   getPayrollHistory,
   getPayrollReport,

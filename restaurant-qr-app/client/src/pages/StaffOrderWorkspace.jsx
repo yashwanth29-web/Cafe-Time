@@ -33,6 +33,7 @@ import socket, { connectSocket } from '../socket';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { QRCodeSVG } from 'qrcode.react';
 import '../styles/App.css';
+import RecipeMapper from '../components/RecipeMapper';
 
 const StaffOrderWorkspace = () => {
   const { user } = useAuth();
@@ -726,6 +727,7 @@ const StaffOrderWorkspace = () => {
     setOrders([]);
     setLoading(true);
     fetchWorkspaceOrders();
+    fetchMenu();
 
     if (userCafeId) {
       connectSocket(userCafeId, activeBranchId || null);
@@ -917,7 +919,7 @@ const StaffOrderWorkspace = () => {
     if (!selectedOrderForAddItems || itemsToAdd.length === 0) return;
     setOrderActionLoading(true);
     try {
-      const mergedItems = [...selectedOrderForAddItems.items];
+      const mergedItems = [...(selectedOrderForAddItems.items || [])];
       for (const add of itemsToAdd) {
         const itemId = String(add.id || add._id || '');
         const existingIdx = mergedItems.findIndex(
@@ -962,45 +964,69 @@ const StaffOrderWorkspace = () => {
 
   // Open Edit Order Modal
   const handleOpenEditOrder = (order) => {
+    if (!menuItems || menuItems.length === 0) {
+      fetchMenu();
+    }
     setEditingOrder({
       _id: order._id,
       tableNumber: order.tableNumber,
       specialInstructions: order.specialInstructions || '',
-      items: order.items.map((it) => ({
+      items: (order.items || []).map((it) => ({
         ...it,
         id: String(it.id || it._id || Math.random().toString(36).substring(2, 9))
       }))
     });
+    setEditOrderSearchQuery('');
     setShowEditOrderModal(true);
   };
 
-  // Save edited order
+  const [editOrderSearchQuery, setEditOrderSearchQuery] = useState('');
+
+  // Save edited order - Instant 0ms optimistic update with background sync
   const handleSaveEditOrder = async () => {
     if (!editingOrder) return;
     if (!editingOrder.items || editingOrder.items.length === 0) {
       alert('Order must contain at least 1 item.');
       return;
     }
-    setOrderActionLoading(true);
-    try {
-      const res = await updateOrder(editingOrder._id, {
-        tableNumber: editingOrder.tableNumber,
-        specialInstructions: editingOrder.specialInstructions,
-        items: editingOrder.items
-      });
-      if (res && res.success) {
-        setOrders((prev) => prev.map((o) => (o._id === res.data._id ? res.data : o)));
-        setShowEditOrderModal(false);
-        setEditingOrder(null);
-        alert('Order updated successfully!');
-      } else {
-        alert(res?.message || 'Failed to update order.');
+
+    const targetOrderId = editingOrder._id;
+    const targetTable = editingOrder.tableNumber;
+    const targetNotes = editingOrder.specialInstructions;
+    const targetItems = editingOrder.items;
+    const newTotal = targetItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+
+    // 1. Optimistic instant UI update
+    setOrders((prev) => prev.map((o) => {
+      if (o._id === targetOrderId) {
+        return {
+          ...o,
+          tableNumber: targetTable,
+          specialInstructions: targetNotes,
+          items: targetItems,
+          totalAmount: newTotal
+        };
       }
+      return o;
+    }));
+
+    // Close modal immediately
+    setShowEditOrderModal(false);
+    setEditingOrder(null);
+    setEditOrderSearchQuery('');
+
+    // 2. Perform API update in background
+    try {
+      await updateOrder(targetOrderId, {
+        tableNumber: targetTable,
+        specialInstructions: targetNotes,
+        items: targetItems
+      });
     } catch (err) {
-      console.error('Update order error:', err);
-      alert(err.response?.data?.message || 'Failed to update order.');
-    } finally {
-      setOrderActionLoading(false);
+      console.error('Update order background sync error:', err);
+      if (typeof fetchActiveOrders === 'function') {
+        fetchActiveOrders(true);
+      }
     }
   };
 
@@ -1766,7 +1792,7 @@ const StaffOrderWorkspace = () => {
                       <div>
                         <strong style={{ fontSize: '1.05rem', color: 'var(--color-text-primary)' }}>Table {order.tableNumber}</strong>
                         <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-                          #{order._id.substring(order._id.length - 6).toUpperCase()} · placed {ageMinutes}m ago
+                          #{String(order?._id || order?.id || '').slice(-6).toUpperCase() || 'N/A'} · placed {ageMinutes}m ago
                         </span>
                       </div>
                       <span style={{
@@ -1824,7 +1850,7 @@ const StaffOrderWorkspace = () => {
 
                     {/* Items List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--color-border)', paddingTop: '10px' }}>
-                      {order.items.map((it, idx) => (
+                      {(order.items || []).map((it, idx) => (
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
                           <span style={{ color: 'var(--color-text-primary)' }}>
                             <strong>{it.quantity}x</strong> {it.name}
@@ -2255,7 +2281,7 @@ const StaffOrderWorkspace = () => {
                         {(log.items || []).map((it, idx) => (
                           <span key={idx} style={{ marginRight: '8px' }}>
                             <strong style={{ color: 'var(--color-text-primary)' }}>{it.quantity}x</strong> {it.name}
-                            {idx < (log.items.length - 1) ? ',' : ''}
+                            {idx < ((log.items?.length || 0) - 1) ? ',' : ''}
                           </span>
                         ))}
                       </div>
@@ -2873,13 +2899,12 @@ const StaffOrderWorkspace = () => {
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left', minWidth: '640px' }}>
                 <thead>
-                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
-                    <th style={{ padding: '10px 8px' }}>Item Name</th>
-                    <th style={{ padding: '10px 8px' }}>Category</th>
-                    <th style={{ padding: '10px 8px' }}>Current Stock</th>
-                    <th style={{ padding: '10px 8px' }}>Min Alert Level</th>
-                    <th style={{ padding: '10px 8px' }}>Status</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'right' }}>Actions</th>
+                  <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)', background: 'var(--bg-secondary, rgba(0,0,0,0.02))' }}>
+                    <th style={{ padding: '12px 14px', fontWeight: 700 }}>Item Name</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 700 }}>Current Stock</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 700 }}>Min Alert Level</th>
+                    <th style={{ padding: '12px 14px', fontWeight: 700 }}>Last Saved / Updated</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2888,30 +2913,58 @@ const StaffOrderWorkspace = () => {
                     const minAlert = inv.reorderLevel !== undefined ? inv.reorderLevel : (inv.minStock ?? 0);
                     const isOutOfStock = currentStock <= 0;
                     const isLow = !isOutOfStock && currentStock <= minAlert;
+                    
+                    const formatSavedTime = (dateStr) => {
+                      if (!dateStr) return 'Recently';
+                      try {
+                        const d = new Date(dateStr);
+                        if (isNaN(d.getTime())) return 'Recently';
+                        return d.toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true
+                        });
+                      } catch (e) {
+                        return 'Recently';
+                      }
+                    };
+
+                    const lastSavedFormatted = formatSavedTime(inv.updatedAt || inv.createdAt);
+
                     return (
-                      <tr key={inv._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                        <td style={{ padding: '10px 8px', fontWeight: 'bold', color: 'var(--color-text-primary)' }}>{inv.name}</td>
-                        <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>{inv.category || 'General'}</td>
-                        <td style={{ padding: '10px 8px' }}>
-                          <span style={{ fontWeight: 700, color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : 'var(--color-text-primary)') }}>
+                      <tr key={inv._id} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background-color 0.15s' }}>
+                        <td style={{ padding: '12px 14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                          {inv.name}
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          <span style={{ fontWeight: 800, fontSize: '13.5px', color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : '#27ae60') }}>
                             {currentStock}
                           </span>{' '}
-                          {inv.unit || 'units'}
-                        </td>
-                        <td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>
-                          {minAlert} {inv.unit || 'units'}
-                        </td>
-                        <td style={{ padding: '10px 8px' }}>
-                          <span style={{
-                            background: isOutOfStock ? 'rgba(231, 76, 60, 0.15)' : (isLow ? 'rgba(243, 156, 18, 0.15)' : 'rgba(46, 204, 113, 0.15)'),
-                            color: isOutOfStock ? '#e74c3c' : (isLow ? '#f39c12' : '#27ae60'),
-                            padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold'
-                          }}>
-                            {isOutOfStock ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock')}
+                          <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                            {inv.unit || 'units'}
                           </span>
                         </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '6px' }}>
+                        <td style={{ padding: '12px 14px', color: 'var(--color-text-secondary)', fontSize: '12.5px', fontWeight: 600 }}>
+                          {minAlert} {inv.unit || 'units'}
+                        </td>
+                        <td style={{ padding: '12px 14px', color: 'var(--color-text-secondary)', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            background: 'var(--bg-secondary, #f8f9fa)',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--color-border)',
+                            fontWeight: 600
+                          }}>
+                            🕒 {lastSavedFormatted}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap' }}>
                             <button
                               onClick={() => {
                                 setSelectedInventoryItem(inv);
@@ -2919,12 +2972,22 @@ const StaffOrderWorkspace = () => {
                                 setShowPurchaseModal(true);
                               }}
                               style={{
-                                background: '#27AE60', color: '#FFFFFF', border: 'none',
-                                padding: '5px 9px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, cursor: 'pointer'
+                                background: 'rgba(39, 174, 96, 0.12)',
+                                color: '#27ae60',
+                                border: '1.5px solid rgba(39, 174, 96, 0.35)',
+                                padding: '6px 12px',
+                                borderRadius: '20px',
+                                fontSize: '12px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.15s ease'
                               }}
                               title="Add incoming stock"
                             >
-                              + Add Stock
+                              ＋ Add Stock
                             </button>
                             <button
                               onClick={() => {
@@ -2933,12 +2996,22 @@ const StaffOrderWorkspace = () => {
                                 setShowWastageModal(true);
                               }}
                               style={{
-                                background: '#E74C3C', color: '#FFFFFF', border: 'none',
-                                padding: '5px 9px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, cursor: 'pointer'
+                                background: 'rgba(231, 76, 60, 0.1)',
+                                color: '#e74c3c',
+                                border: '1.5px solid rgba(231, 76, 60, 0.35)',
+                                padding: '6px 12px',
+                                borderRadius: '20px',
+                                fontSize: '12px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.15s ease'
                               }}
                               title="Reduce or adjust stock count"
                             >
-                              - Reduce Stock
+                              － Reduce Stock
                             </button>
                             <button
                               onClick={() => {
@@ -2960,8 +3033,18 @@ const StaffOrderWorkspace = () => {
                                 setShowEditInventoryModal(true);
                               }}
                               style={{
-                                background: 'rgba(0,0,0,0.06)', color: 'var(--color-text-primary)', border: '1px solid var(--color-border)',
-                                padding: '5px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer'
+                                background: 'var(--bg-secondary, #f8f9fa)',
+                                color: 'var(--color-text-primary)',
+                                border: '1px solid var(--color-border)',
+                                padding: '6px 10px',
+                                borderRadius: '20px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.15s ease'
                               }}
                               title="Edit item details"
                             >
@@ -2970,8 +3053,18 @@ const StaffOrderWorkspace = () => {
                             <button
                               onClick={() => handleDeleteInventoryItem(inv._id)}
                               style={{
-                                background: 'rgba(231, 76, 60, 0.06)', color: '#e74c3c', border: '1px solid #e74c3c',
-                                padding: '5px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer'
+                                background: 'rgba(231, 76, 60, 0.08)',
+                                color: '#e74c3c',
+                                border: '1px solid rgba(231, 76, 60, 0.25)',
+                                padding: '6px 9px',
+                                borderRadius: '20px',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.15s ease'
                               }}
                               title="Delete item"
                             >
@@ -3248,7 +3341,7 @@ const StaffOrderWorkspace = () => {
                   Order Items
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {editingOrder.items.map((it, idx) => (
+                  {(editingOrder.items || []).map((it, idx) => (
                     <div
                       key={idx}
                       style={{
@@ -3262,7 +3355,7 @@ const StaffOrderWorkspace = () => {
                           {it.name}
                         </strong>
                         <span style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
-                          ₹{it.price} each = ₹{(it.price * it.quantity).toFixed(2)}
+                          ₹{it.price} each = ₹{(Number(it.price || 0) * Number(it.quantity || 1)).toFixed(2)}
                         </span>
                       </div>
 
@@ -3273,12 +3366,12 @@ const StaffOrderWorkspace = () => {
                             if (it.quantity <= 1) {
                               setEditingOrder({
                                 ...editingOrder,
-                                items: editingOrder.items.filter((_, i) => i !== idx)
+                                items: (editingOrder.items || []).filter((_, i) => i !== idx)
                               });
                             } else {
                               setEditingOrder({
                                 ...editingOrder,
-                                items: editingOrder.items.map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item)
+                                items: (editingOrder.items || []).map((item, i) => i === idx ? { ...item, quantity: item.quantity - 1 } : item)
                               });
                             }
                           }}
@@ -3298,7 +3391,7 @@ const StaffOrderWorkspace = () => {
                           onClick={() => {
                             setEditingOrder({
                               ...editingOrder,
-                              items: editingOrder.items.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item)
+                              items: (editingOrder.items || []).map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item)
                             });
                           }}
                           style={{
@@ -3314,7 +3407,7 @@ const StaffOrderWorkspace = () => {
                           onClick={() => {
                             setEditingOrder({
                               ...editingOrder,
-                              items: editingOrder.items.filter((_, i) => i !== idx)
+                              items: (editingOrder.items || []).filter((_, i) => i !== idx)
                             });
                           }}
                           style={{
@@ -3330,6 +3423,107 @@ const StaffOrderWorkspace = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Add More Items directly within Edit Order modal */}
+              <div style={{
+                background: 'var(--bg-secondary)',
+                borderRadius: '10px',
+                padding: '12px',
+                border: '1px solid var(--color-border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                    ➕ Add Dishes to this Order ({menuItems?.length || 0} available)
+                  </label>
+                  {editOrderSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setEditOrderSearchQuery('')}
+                      style={{ background: 'transparent', border: 'none', color: '#e74c3c', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="🔍 Type dish name to search & add..."
+                  value={editOrderSearchQuery}
+                  onChange={(e) => setEditOrderSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%', padding: '8px 12px', borderRadius: '8px',
+                    border: '1px solid var(--color-border)', background: 'var(--bg-card)',
+                    color: 'var(--color-text-primary)', fontSize: '12.5px', outline: 'none'
+                  }}
+                />
+
+                <div style={{ maxHeight: '140px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {menuLoading ? (
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textAlign: 'center', padding: '8px 0' }}>
+                      Loading dishes...
+                    </div>
+                  ) : (menuItems || []).length === 0 ? (
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textAlign: 'center', padding: '8px 0' }}>
+                      No dishes found in menu.
+                    </div>
+                  ) : (
+                    (menuItems || [])
+                      .filter((m) => !editOrderSearchQuery.trim() || m.name.toLowerCase().includes(editOrderSearchQuery.toLowerCase()))
+                      .slice(0, 15)
+                      .map((dish) => (
+                        <div
+                          key={dish._id}
+                          onClick={() => {
+                            const curItems = editingOrder.items || [];
+                            const existingIndex = curItems.findIndex(
+                              (it) => it.name.toLowerCase() === dish.name.toLowerCase() || String(it._id || it.id) === String(dish._id)
+                            );
+                            if (existingIndex >= 0) {
+                              setEditingOrder({
+                                ...editingOrder,
+                                items: curItems.map((it, i) =>
+                                  i === existingIndex ? { ...it, quantity: it.quantity + 1 } : it
+                                )
+                              });
+                            } else {
+                              setEditingOrder({
+                                ...editingOrder,
+                                items: [
+                                  ...curItems,
+                                  {
+                                    id: String(dish._id),
+                                    _id: String(dish._id),
+                                    name: dish.name,
+                                    price: Number(dish.price) || 0,
+                                    quantity: 1
+                                  }
+                                ]
+                              });
+                            }
+                          }}
+                          style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            padding: '8px 10px', borderRadius: '6px', background: 'var(--bg-card)',
+                            border: '1px solid var(--color-border)', cursor: 'pointer', fontSize: '12px',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{dish.name}</span>
+                          <span style={{ color: '#27ae60', fontWeight: 800 }}>+ ₹{dish.price}</span>
+                        </div>
+                      ))
+                  )}
+                  {(menuItems || []).length > 0 && editOrderSearchQuery && (menuItems || []).filter((m) => m.name.toLowerCase().includes(editOrderSearchQuery.toLowerCase())).length === 0 && (
+                    <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)', textAlign: 'center', padding: '6px 0' }}>
+                      No dishes matched "{editOrderSearchQuery}"
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Modal Footer */}
@@ -3339,7 +3533,7 @@ const StaffOrderWorkspace = () => {
                   Updated Total:
                 </span>
                 <strong style={{ fontSize: '15px', color: '#27ae60' }}>
-                  ₹{editingOrder.items.reduce((s, it) => s + it.price * it.quantity, 0).toFixed(2)}
+                  ₹{(editingOrder.items || []).reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0).toFixed(2)}
                 </strong>
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -3356,12 +3550,12 @@ const StaffOrderWorkspace = () => {
                 </button>
                 <button
                   type="button"
-                  disabled={editingOrder.items.length === 0 || orderActionLoading}
+                  disabled={!editingOrder.items || editingOrder.items.length === 0 || orderActionLoading}
                   onClick={handleSaveEditOrder}
                   style={{
                     padding: '8px 18px', borderRadius: '8px', border: 'none',
-                    background: editingOrder.items.length === 0 || orderActionLoading ? '#bdc3c7' : 'var(--color-primary)',
-                    color: 'white', cursor: editingOrder.items.length === 0 || orderActionLoading ? 'not-allowed' : 'pointer',
+                    background: !editingOrder.items || editingOrder.items.length === 0 || orderActionLoading ? '#bdc3c7' : 'var(--color-primary)',
+                    color: 'white', cursor: !editingOrder.items || editingOrder.items.length === 0 || orderActionLoading ? 'not-allowed' : 'pointer',
                     fontWeight: 700, fontSize: '12.5px'
                   }}
                 >
@@ -4467,122 +4661,12 @@ const StaffOrderWorkspace = () => {
                 </div>
               </div>
 
-              {/* Recipe Mapping (Ingredients) */}
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '14px', marginTop: '4px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '8px' }}>
-                  Recipe Mapping (Ingredients)
-                </label>
-                
-                {(!newMenuItem.recipe || newMenuItem.recipe.length === 0) ? (
-                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '4px 0 10px 0' }}>
-                    No ingredients mapped yet. This item will not deduct stock.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                    {newMenuItem.recipe.map((ing, idx) => {
-                      const invItem = inventory.find((i) => i.name === ing.name);
-                      return (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '8px' }}>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{ing.name}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <input
-                              type="number"
-                              value={ing.quantity}
-                              min="0.001"
-                              step="0.001"
-                              onChange={(e) => {
-                                const updated = [...newMenuItem.recipe];
-                                updated[idx].quantity = Number(e.target.value);
-                                const calculatedCost = updated.reduce((sum, item) => {
-                                  const inv = inventory.find((i) => i.name === item.name);
-                                  return sum + (Number(item.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
-                                }, 0);
-                                setNewMenuItem({
-                                  ...newMenuItem,
-                                  recipe: updated,
-                                  makingCost: calculatedCost > 0 ? calculatedCost.toFixed(2) : newMenuItem.makingCost
-                                });
-                              }}
-                              style={{ width: '65px', padding: '4px 6px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent', textAlign: 'center' }}
-                            />
-                            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{invItem?.unit || 'unit'}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveIngredientFromNewItem(ing.name)}
-                              style={{ background: 'transparent', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: '14px', padding: '2px' }}
-                              title="Remove ingredient"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Auto Calculated Ingredient Cost Banner */}
-                {newMenuItem.recipe && newMenuItem.recipe.length > 0 && (() => {
-                  const calcMakingCost = newMenuItem.recipe.reduce((sum, ing) => {
-                    const inv = inventory.find(i => i.name === ing.name);
-                    return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
-                  }, 0);
-                  return (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 107, 8, 0.08)', border: '1px dashed var(--color-primary)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                      <span style={{ fontSize: '12.5px', color: 'var(--color-text-primary)' }}>
-                        Ingredient Cost from Recipe: <strong style={{ color: 'var(--color-primary)' }}>₹{calcMakingCost.toFixed(2)}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setNewMenuItem({ ...newMenuItem, makingCost: calcMakingCost.toFixed(2) })}
-                        style={{ padding: '4px 10px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 700 }}
-                      >
-                        Use as Making Cost
-                      </button>
-                    </div>
-                  );
-                })()}
-
-                {/* Add Ingredient Selector Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                      Select Ingredient
-                    </label>
-                    <select
-                      value={selectedIngredient}
-                      onChange={(e) => setSelectedIngredient(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', fontSize: '12px', boxSizing: 'border-box' }}
-                    >
-                      <option value="">-- Choose Ingredient --</option>
-                      {inventory.map((inv) => (
-                        <option key={inv._id} value={inv.name}>{inv.name} ({inv.unit || 'unit'})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                      Quantity
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      min="0.001"
-                      placeholder="e.g. 10"
-                      value={ingredientQuantity}
-                      onChange={(e) => setIngredientQuantity(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', fontSize: '12px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddIngredientToNewItem}
-                    style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 700, fontSize: '12.5px', height: '36px' }}
-                  >
-                    Map
-                  </button>
-                </div>
-              </div>
+              <RecipeMapper
+                recipe={newMenuItem.recipe || []}
+                onUpdateRecipe={(updated) => setNewMenuItem({ ...newMenuItem, recipe: updated })}
+                inventoryList={inventory}
+                onSetMakingCost={(cost) => setNewMenuItem({ ...newMenuItem, makingCost: cost })}
+              />
 
               {/* Dish Photo Upload */}
               <div>
@@ -4783,122 +4867,12 @@ const StaffOrderWorkspace = () => {
                 </div>
               </div>
 
-              {/* Recipe Mapping (Ingredients) */}
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '14px', marginTop: '4px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '8px' }}>
-                  Recipe Mapping (Ingredients)
-                </label>
-                
-                {(!editingMenuItem.recipe || editingMenuItem.recipe.length === 0) ? (
-                  <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontStyle: 'italic', margin: '4px 0 10px 0' }}>
-                    No ingredients mapped yet. This item will not deduct stock.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                    {editingMenuItem.recipe.map((ing, idx) => {
-                      const invItem = inventory.find((i) => i.name === ing.name);
-                      return (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)', border: '1px solid var(--color-border)', padding: '6px 12px', borderRadius: '8px' }}>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text-primary)', fontWeight: 600 }}>{ing.name}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <input
-                              type="number"
-                              value={ing.quantity}
-                              min="0.001"
-                              step="0.001"
-                              onChange={(e) => {
-                                const updated = [...editingMenuItem.recipe];
-                                updated[idx].quantity = Number(e.target.value);
-                                const calculatedCost = updated.reduce((sum, item) => {
-                                  const inv = inventory.find((i) => i.name === item.name);
-                                  return sum + (Number(item.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
-                                }, 0);
-                                setEditingMenuItem({
-                                  ...editingMenuItem,
-                                  recipe: updated,
-                                  makingCost: calculatedCost > 0 ? calculatedCost.toFixed(2) : editingMenuItem.makingCost
-                                });
-                              }}
-                              style={{ width: '65px', padding: '4px 6px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent', textAlign: 'center' }}
-                            />
-                            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{invItem?.unit || 'unit'}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveIngredientFromEditingItem(ing.name)}
-                              style={{ background: 'transparent', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: '14px', padding: '2px' }}
-                              title="Remove ingredient"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Auto Calculated Ingredient Cost Banner */}
-                {editingMenuItem.recipe && editingMenuItem.recipe.length > 0 && (() => {
-                  const calcMakingCost = editingMenuItem.recipe.reduce((sum, ing) => {
-                    const inv = inventory.find(i => i.name === ing.name);
-                    return sum + (Number(ing.quantity || 0) * Number(inv?.costPrice || inv?.cost || 0));
-                  }, 0);
-                  return (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 107, 8, 0.08)', border: '1px dashed var(--color-primary)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                      <span style={{ fontSize: '12.5px', color: 'var(--color-text-primary)' }}>
-                        Ingredient Cost from Recipe: <strong style={{ color: 'var(--color-primary)' }}>₹{calcMakingCost.toFixed(2)}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setEditingMenuItem({ ...editingMenuItem, makingCost: calcMakingCost.toFixed(2) })}
-                        style={{ padding: '4px 10px', fontSize: '11.5px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 700 }}
-                      >
-                        Use as Making Cost
-                      </button>
-                    </div>
-                  );
-                })()}
-
-                {/* Add Ingredient Selector Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                      Select Ingredient
-                    </label>
-                    <select
-                      value={selectedIngredient}
-                      onChange={(e) => setSelectedIngredient(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', fontSize: '12px', boxSizing: 'border-box' }}
-                    >
-                      <option value="">-- Choose Ingredient --</option>
-                      {inventory.map((inv) => (
-                        <option key={inv._id} value={inv.name}>{inv.name} ({inv.unit || 'unit'})</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '4px' }}>
-                      Quantity
-                    </label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      min="0.001"
-                      placeholder="e.g. 10"
-                      value={ingredientQuantity}
-                      onChange={(e) => setIngredientQuantity(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)', color: 'var(--color-text-primary)', fontSize: '12px', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddIngredientToEditingItem}
-                    style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--color-primary)', background: 'transparent', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 700, fontSize: '12.5px', height: '36px' }}
-                  >
-                    Map
-                  </button>
-                </div>
-              </div>
+              <RecipeMapper
+                recipe={editingMenuItem.recipe || []}
+                onUpdateRecipe={(updated) => setEditingMenuItem({ ...editingMenuItem, recipe: updated })}
+                inventoryList={inventory}
+                onSetMakingCost={(cost) => setEditingMenuItem({ ...editingMenuItem, makingCost: cost })}
+              />
 
               {/* Dish Photo Upload */}
               <div>

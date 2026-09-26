@@ -54,9 +54,6 @@ const verifyBranchActive = async (cafeId, branchId) => {
 
 const attachCafeAndBranch = async (req, res, next) => {
   try {
-    // Wait for DB connection if transiently disconnected
-    await waitDbConnection();
-
     // Exempt check
     const path = req.path;
     const isExempt = 
@@ -68,14 +65,22 @@ const attachCafeAndBranch = async (req, res, next) => {
       path.startsWith('/notifications') ||
       path.includes('/branches');
 
+    if (isExempt) {
+      let cafeId = req.headers['x-cafe-id'] || req.query?.cafeId || req.body?.cafeId || '';
+      let branchId = req.headers['x-branch-id'] || req.query?.branchId || req.body?.branchId || '';
+      return runWithContext({ cafeId, branchId }, () => {
+        req.cafeId = cafeId;
+        req.branchId = branchId;
+        next();
+      });
+    }
+
+    // Wait for DB connection if transiently disconnected
+    await waitDbConnection();
+
     // For public order creation (POST /orders from QR scans), the request body's
     // branchId is the authoritative source (set from the QR code parameters stored
     // in sessionStorage).
-    console.log(`\n--- INCOMING REQUEST CONTEXT LOG ---`);
-    console.log(`Method/Path: ${req.method} ${req.originalUrl}`);
-    console.log(`Incoming Query:`, req.query);
-    console.log(`Incoming Body:`, req.body);
-
     const isOrderCreation = req.method === 'POST' && (path === '/orders' || path === '/orders/');
     let cafeId = req.headers['x-cafe-id'] || req.query?.cafeId || req.body?.cafeId;
     let branchId;
@@ -85,27 +90,26 @@ const attachCafeAndBranch = async (req, res, next) => {
       branchId = req.headers['x-branch-id'] || req.query?.branchId || req.body?.branchId;
     }
 
-    // Resolve and self-heal identifiers immediately
-    const { resolveIdentifiers } = require('../utils/tableHelper');
-    const resolved = await resolveIdentifiers({
-      cafeId,
-      branchId,
-      tableNumber: req.body?.tableNumber || req.query?.table || req.body?.table,
-      tableId: req.body?.tableId || (req.query?.table && String(req.query.table).startsWith('T') ? req.query.table : '')
-    });
+    // Resolve table identifiers ONLY if table parameters are explicitly passed in request
+    const hasTableParam = Boolean(req.body?.tableNumber || req.query?.table || req.body?.table || req.body?.tableId);
+    if (hasTableParam) {
+      const { resolveIdentifiers } = require('../utils/tableHelper');
+      const resolved = await resolveIdentifiers({
+        cafeId,
+        branchId,
+        tableNumber: req.body?.tableNumber || req.query?.table || req.body?.table,
+        tableId: req.body?.tableId || (req.query?.table && String(req.query.table).startsWith('T') ? req.query.table : '')
+      });
 
-    cafeId = resolved.cafeId;
-    branchId = resolved.branchId;
+      cafeId = resolved.cafeId;
+      branchId = resolved.branchId;
+    }
 
     // Inject back into request body to satisfy Mongo schema validation requirements
     if (req.body && typeof req.body === 'object') {
-      if (!req.body.cafeId) req.body.cafeId = cafeId;
-      if (!isExempt && !req.body.branchId) req.body.branchId = branchId;
+      if (!req.body.cafeId && cafeId) req.body.cafeId = cafeId;
+      if (!req.body.branchId && branchId) req.body.branchId = branchId;
     }
-
-    console.log(`Resolved Identifiers: cafeId="${cafeId}", branchId="${branchId}", tableId="${resolved.tableId}"`);
-    console.log(`Body after context resolution:`, req.body);
-    console.log(`-------------------------------------\n`);
 
     // Try to extract cafeId from URL path parameter for Cafe details endpoint e.g., /api/cafe/CD002
     if (!cafeId && path.startsWith('/cafe/')) {
@@ -145,7 +149,17 @@ const attachCafeAndBranch = async (req, res, next) => {
       if (token) {
         try {
           const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_cafe_key_12345');
-          user = await User.findById(decoded.id);
+          const { userAuthCache } = require('./authMiddleware');
+          const nowMs = Date.now();
+          const cached = userAuthCache ? userAuthCache.get(decoded.id) : null;
+          if (cached && cached.expiresAt > nowMs) {
+            user = cached.user;
+          } else {
+            user = await User.findById(decoded.id);
+            if (user && userAuthCache) {
+              userAuthCache.set(decoded.id, { user, expiresAt: nowMs + 60000 });
+            }
+          }
           if (user && user.isActive) {
             req.user = user; // Set it so subsequent handlers have it
           }

@@ -18,22 +18,21 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            // Network-first for API calls (always get fresh data)
-            urlPattern: /^https:\/\/cafe-time\.onrender\.com\/api\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 }
-            }
-          },
-          {
-            // Cache-first for images (logos, menu images etc.)
-            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
+            // Cache-first for static images and assets (logos, icons, etc.)
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'images-cache',
               expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 }
+            }
+          },
+          {
+            // Cache Google Fonts / Web Fonts
+            urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 }
             }
           }
         ]

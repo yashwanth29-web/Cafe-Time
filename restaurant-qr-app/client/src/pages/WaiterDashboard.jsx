@@ -344,7 +344,7 @@ const WaiterDashboard = () =>{
 )}
 </div>
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '4px' }}>
- Order #{order._id.substring(order._id.length - 4).toUpperCase()} | Total:<strong style={{ color: '#2ecc71' }}>₹{order.totalAmount}</strong>
+  Order #{String(order?._id || order?.id || '').slice(-4).toUpperCase() || 'N/A'} | Total:<strong style={{ color: '#2ecc71' }}>₹{order?.totalAmount ?? 0}</strong>
 </span>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
   {order.items.map((it, idx) => {
@@ -451,7 +451,7 @@ const WaiterDashboard = () =>{
  }
 </div>
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '3px' }}>
- Order #{order._id.substring(order._id.length - 4).toUpperCase()} | {order.items.length} items
+  Order #{String(order?._id || order?.id || '').slice(-4).toUpperCase() || 'N/A'} | {Array.isArray(order?.items) ? order.items.length : 0} items
 </span>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
   {order.items.map((it, idx) => {
@@ -575,7 +575,7 @@ const WaiterDashboard = () =>{
  }
 </div>
 <span style={{ fontSize: '0.8rem', color: '#A0826C', display: 'block', marginTop: '3px' }}>
- Order #{order._id.substring(order._id.length - 4).toUpperCase()} | Status: {order.status === 'Placed' ? 'Placed' : 'Preparing...'}
+  Order #{String(order?._id || order?.id || '').slice(-4).toUpperCase() || 'N/A'} | Status: {order?.status === 'Placed' ? 'Placed' : 'Preparing...'}
 </span>
 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
   {order.items.map((it, idx) => {

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
   const primaryUri = process.env.MONGO_URI;
-  const fallbackUri = 'mongodb://127.0.0.1:27017/Dr. Chai Cafe';
+  const fallbackUri = 'mongodb://127.0.0.1:27017/coffeedaycafe';
 
   let connected = false;
 
@@ -18,11 +18,19 @@ const connectDB = async () => {
     console.warn('MongoDB connection disconnected.');
   });
 
+  const mongoOptions = {
+    serverSelectionTimeoutMS: 5000,
+    maxPoolSize: 50,
+    minPoolSize: 5,
+    socketTimeoutMS: 45000,
+    family: 4 // Use IPv4, skip slow IPv6 lookups on Windows
+  };
+
   // If a MONGO_URI is defined and is different from the local fallback, try it first
   if (primaryUri && primaryUri !== fallbackUri) {
     try {
       console.log(`Connecting to primary MongoDB at: ${primaryUri.replace(/:([^@]+)@/, ':****@')}`);
-      await mongoose.connect(primaryUri, { serverSelectionTimeoutMS: 5000 });
+      await mongoose.connect(primaryUri, mongoOptions);
       console.log('MongoDB Connected Successfully (Primary)');
       connected = true;
     } catch (error) {
@@ -43,7 +51,7 @@ const connectDB = async () => {
   if (!connected) {
     try {
       console.log(`Connecting to fallback MongoDB at: ${fallbackUri}`);
-      await mongoose.connect(fallbackUri, { serverSelectionTimeoutMS: 5000 });
+      await mongoose.connect(fallbackUri, mongoOptions);
       console.log('MongoDB Connected Successfully (Fallback)');
       connected = true;
     } catch (error) {

@@ -23,7 +23,8 @@ const {
   getReports,
   getDashboardStats,
   initializeTenantAssets,
-  resetStaffPassword
+  resetStaffPassword,
+  recordStaffPayment
 } = require('../controllers/adminController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -68,6 +69,7 @@ router.post('/create-staff', restrictTo('admin', 'owner'), createStaff);
 router.post('/staff/reset-password', restrictTo('admin', 'owner'), resetStaffPassword);
 router.get('/staff', restrictTo('admin', 'owner', 'manager'), getStaff);
 router.put('/staff/:id', restrictTo('admin', 'owner'), updateStaff);
+router.post('/staff/:id/payment', restrictTo('admin', 'owner'), recordStaffPayment);
 router.delete('/staff/:id', restrictTo('admin', 'owner'), deleteStaff);
 router.get('/staff-summary', restrictTo('admin', 'owner', 'manager'), getStaffSummary);
 

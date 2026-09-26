@@ -248,20 +248,47 @@ const recalculateStaffSalary = async (staffId) => {
 
       actualWorkedHoursThisMonth += (recWorkHours + recOtHours);
 
-      let regularSalary = 0;
-      if (record.status === 'Half Day') {
-        regularSalary = dailyRate * 0.5;
-      } else if (record.status === 'Present' || record.status === 'Late' || record.checkInTime) {
-        regularSalary = dailyRate;
-      } else if (record.status === 'Absent') {
-        regularSalary = 0;
+      if (record.dailyWageEarned !== undefined && record.dailyWageEarned !== null && record.dailyWageEarned > 0) {
+        salaryEarnedThisMonth += record.dailyWageEarned;
       } else {
-        regularSalary = (dailyRate * recWorkHours) / requiredHours;
+        let regularSalary = 0;
+        const recRate = record.dailyWageRate || dailyRate;
+        if (record.status === 'Half Day') {
+          regularSalary = recRate * 0.5;
+        } else if (record.status === 'Present' || record.status === 'Late' || record.checkInTime) {
+          regularSalary = recRate;
+        } else if (record.status === 'Absent') {
+          regularSalary = 0;
+        } else {
+          regularSalary = (recRate * recWorkHours) / requiredHours;
+        }
+        const overtimeSalary = (recRate * recOtHours) / requiredHours;
+        salaryEarnedThisMonth += regularSalary + overtimeSalary;
       }
-      const overtimeSalary = (dailyRate * recOtHours) / requiredHours;
-
-      salaryEarnedThisMonth += regularSalary + overtimeSalary;
     }
+
+    // 4. Calculate All-Time Cumulative Earnings and Payments for Ledger Integrity
+    const SalaryHistory = require('../models/SalaryHistory');
+    const allAttRecords = await Attendance.find({ staffId: user._id }).lean();
+    let totalEarnedAllTime = 0;
+    for (const att of allAttRecords) {
+      if (att.dailyWageEarned !== undefined && att.dailyWageEarned !== null && att.dailyWageEarned > 0) {
+        totalEarnedAllTime += att.dailyWageEarned;
+      } else {
+        const attRate = att.dailyWageRate || dailyRate;
+        let reg = 0;
+        if (att.status === 'Half Day') reg = attRate * 0.5;
+        else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) reg = attRate;
+        else if (att.status === 'Absent') reg = 0;
+        else reg = (attRate * (att.workingHours || 0)) / requiredHours;
+        const ot = (attRate * (att.overtimeHours || 0)) / requiredHours;
+        totalEarnedAllTime += (reg + ot);
+      }
+    }
+
+    const paidRecords = await SalaryHistory.find({ employeeId: user._id, paymentStatus: 'Paid' }).lean();
+    const totalPaidAllTime = paidRecords.reduce((sum, h) => sum + (h.finalSalary || 0), 0);
+    const remainingSalaryBalance = Math.max(0, Number((totalEarnedAllTime - totalPaidAllTime).toFixed(2)));
 
     // Update staff member fields in the database
     await User.updateOne(
@@ -275,7 +302,10 @@ const recalculateStaffSalary = async (staffId) => {
           overtimeHoursThisWeek: Number(overtimeHoursThisWeek.toFixed(2)),
           salaryEarnedThisWeek: Number(salaryEarnedThisWeek.toFixed(2)),
           actualWorkedHoursThisMonth: Number(actualWorkedHoursThisMonth.toFixed(2)),
-          salaryEarnedThisMonth: Number(salaryEarnedThisMonth.toFixed(2))
+          salaryEarnedThisMonth: Number(salaryEarnedThisMonth.toFixed(2)),
+          totalEarnedAllTime: Number(totalEarnedAllTime.toFixed(2)),
+          totalPaidAllTime: Number(totalPaidAllTime.toFixed(2)),
+          remainingSalaryBalance: remainingSalaryBalance
         }
       }
     );

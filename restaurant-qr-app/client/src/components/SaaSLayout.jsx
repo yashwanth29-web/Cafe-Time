@@ -254,7 +254,6 @@ const SaaSLayout = ({ children }) => {
         { label: 'Staff Management', icon: '👥', path: '/owner/dashboard?tab=staff' },
         { label: 'Inventory', icon: '📦', path: '/owner/dashboard?tab=inventory' },
         { label: 'Monitor Orders', icon: '👁️', path: '/owner/dashboard?tab=orders' },
-        { label: 'Financial Reports', icon: '📊', path: '/owner/dashboard?tab=financial_reports' },
         { label: 'Settings & Profile', icon: '⚙️', path: '/owner/profile' }];
 
       case 'manager':
@@ -266,21 +265,14 @@ const SaaSLayout = ({ children }) => {
         { label: 'Cafe Menu', icon: '📋', path: '/manager/dashboard?tab=menu' }];
 
       case 'chef':
-        return [
-        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
-        { label: 'My Attendance', icon: '⏰', path: '/staff/attendance', disabled: true },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
-        { label: 'My Salary', icon: '💵', path: '/employee/payroll', disabled: true }];
-
       case 'waiter':
       case 'cashier':
       case 'waiter_cashier':
       case 'staff':
         return [
-        { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
-        { label: 'My Attendance', icon: '⏰', path: '/staff/attendance', disabled: true },
-        { label: 'Submit Work Report', icon: '📝', path: '/staff/attendance?tab=report' },
-        { label: 'My Salary', icon: '💵', path: '/employee/payroll', disabled: true }];
+          { label: 'Order Workspace', icon: '🛍️', path: '/staff/workspace' },
+          { label: 'My Daily Work', icon: '⏰', path: '/staff/attendance' }
+        ];
 
       default:
         return [];
@@ -312,23 +304,17 @@ const SaaSLayout = ({ children }) => {
         primary = allItems.filter((item) =>
         ['Operational Stats', 'Order Workspace', 'Staff Attendance'].includes(item.label)
         );
-        primary.push({ label: 'My Attendance', icon: '⏰', path: '/staff/attendance' });
+        primary.push({ label: 'My Daily Work', icon: '⏰', path: '/staff/attendance' });
         remaining = allItems.filter((item) => !['Operational Stats', 'Order Workspace', 'Staff Attendance'].includes(item.label));
         break;
 
       case 'chef':
-        primary = allItems.filter((item) =>
-        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
-        );
-        remaining = allItems.filter((item) => !primary.includes(item));
-        break;
-
       case 'waiter':
       case 'cashier':
       case 'waiter_cashier':
       case 'staff':
         primary = allItems.filter((item) =>
-        ['Order Workspace', 'My Attendance', 'Submit Work Report'].includes(item.label)
+          ['Order Workspace', 'My Daily Work'].includes(item.label)
         );
         remaining = allItems.filter((item) => !primary.includes(item));
         break;
@@ -364,8 +350,9 @@ const SaaSLayout = ({ children }) => {
       case 'Inventory':
       case 'Ingredient Stock':
         return 'Inventory';
+      case 'My Daily Work':
       case 'My Attendance':
-        return 'Attendance';
+        return 'Daily Work';
       case 'Submit Work Report':
         return 'Work Reports';
       case 'Staff Attendance':

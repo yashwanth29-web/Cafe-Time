@@ -39,6 +39,8 @@ const cafeRoutes = require('./routes/cafeRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const expenseRoutes = require('./routes/expenseRoutes');
+const cashRegisterRoutes = require('./routes/cashRegisterRoutes');
 
 // Create Express instance
 const app = express();
@@ -169,7 +171,8 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization", "x-branch-id", "x-cafe-id"]
 }));
 app.use(cookieParser());
-app.use(express.json()); // Body parser
+app.use(express.json({ limit: '25mb' })); // Body parser with support for base64 image uploads
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
 // Connect to Database
 connectDB().then(async () => {
@@ -233,6 +236,8 @@ app.use('/api/cafe', cafeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/expenses', expenseRoutes);
+app.use('/api/cash-register', cashRegisterRoutes);
 
 
 // Health check endpoint
@@ -284,6 +289,10 @@ setInterval(() => {
   console.log('[CRON-JOB] Triggering expired work reports cleanup...');
   runAutoCleanup();
 }, 3600000);
+
+// Start background 60-day (2-month) transactional data retention service
+const { startDataRetentionCron } = require('./services/dataRetentionService');
+startDataRetentionCron();
 
 // Create HTTP Server and Initialize Socket.IO
 const server = http.createServer(app);

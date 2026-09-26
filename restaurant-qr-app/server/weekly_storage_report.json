@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-09-19T01:58:55.477Z",
-  "totalGridFsFiles": 176,
-  "totalGridFsSizeMB": 48.025,
+  "timestamp": "2026-09-26T04:30:31.463Z",
+  "totalGridFsFiles": 186,
+  "totalGridFsSizeMB": 56.171,
   "orphanedFiles": [
     {
       "fileId": "6a335227d30565d9c9c73ea4",
@@ -178,10 +178,22 @@
       "length": 93536
     },
     {
+      "fileId": "6a5657e752ffec6dcb9491a1",
+      "filename": "report-1784043494385-728902523.jpeg",
+      "uploadDate": "2026-07-14T15:38:16.639Z",
+      "length": 43826
+    },
+    {
       "fileId": "6a56f2995f635467d384d638",
       "filename": "CP00_logo.jpg",
       "uploadDate": "2026-07-15T02:38:18.129Z",
       "length": 4625
+    },
+    {
+      "fileId": "6a57708746a3e0c92b0a4255",
+      "filename": "report-1784115334579-118591619.png",
+      "uploadDate": "2026-07-15T11:35:36.739Z",
+      "length": 75091
     },
     {
       "fileId": "6a57811185a520dd762bf6dc",
@@ -220,6 +232,12 @@
       "length": 202459
     },
     {
+      "fileId": "6aa7ca67210721552f866f92",
+      "filename": "dish-1783002195649-133785266.jpg",
+      "uploadDate": "2026-09-14T10:20:23.632Z",
+      "length": 202459
+    },
+    {
       "fileId": "6aa7ca67210721552f866f94",
       "filename": "dish-1783407180723-57134842.jpg",
       "uploadDate": "2026-09-14T10:20:24.081Z",
@@ -247,6 +265,18 @@
       "fileId": "6aa7ca6898d407bc4985a7a8",
       "filename": "dish-1784199694238-665835906.jpeg",
       "uploadDate": "2026-09-14T10:20:24.998Z",
+      "length": 117332
+    },
+    {
+      "fileId": "6aa7ca69210721552f866f9c",
+      "filename": "dish-1784221606078-363027325.jpeg",
+      "uploadDate": "2026-09-14T10:20:25.564Z",
+      "length": 117332
+    },
+    {
+      "fileId": "6aa7ca6998d407bc4985a7ac",
+      "filename": "dish-1784221606078-363027325.jpeg",
+      "uploadDate": "2026-09-14T10:20:25.842Z",
       "length": 117332
     },
     {
@@ -364,7 +394,7 @@
       "length": 683048
     }
   ],
-  "reclaimableSpaceMB": 7.083,
+  "reclaimableSpaceMB": 7.613,
   "chunkIntegrity": {
     "totalOrphanedChunks": 0,
     "orphanedChunkFileIds": []

@@ -4,7 +4,7 @@ const SalaryHistorySchema = new mongoose.Schema({
   payrollId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Payroll',
-    required: true
+    required: false
   },
   employeeId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -28,28 +28,34 @@ const SalaryHistorySchema = new mongoose.Schema({
     default: ''
   },
   payrollWeek: {
-    type: String, // "YYYY-MM-DD to YYYY-MM-DD"
-    required: true
+    type: String, // "YYYY-MM-DD to YYYY-MM-DD" or "Payment on YYYY-MM-DD"
+    required: false,
+    default: ''
   },
   weekStart: {
     type: String,
-    required: true
+    required: false,
+    default: ''
   },
   weekEnd: {
     type: String,
-    required: true
+    required: false,
+    default: ''
   },
   workedDays: {
     type: Number,
-    required: true
+    required: false,
+    default: 0
   },
   workedHours: {
     type: Number,
-    required: true
+    required: false,
+    default: 0
   },
   grossSalary: {
     type: Number,
-    required: true
+    required: false,
+    default: 0
   },
   deductions: {
     type: Number,
@@ -59,6 +65,10 @@ const SalaryHistorySchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  paidAmount: {
+    type: Number,
+    default: 0
+  },
   paymentStatus: {
     type: String,
     enum: ['Paid'],
@@ -66,9 +76,22 @@ const SalaryHistorySchema = new mongoose.Schema({
   },
   paymentDate: {
     type: Date,
-    required: true
+    required: true,
+    default: Date.now
+  },
+  paidAt: {
+    type: Date,
+    default: Date.now
   },
   paymentMethod: {
+    type: String,
+    default: 'Cash'
+  },
+  notes: {
+    type: String,
+    default: ''
+  },
+  payoutId: {
     type: String,
     default: ''
   }

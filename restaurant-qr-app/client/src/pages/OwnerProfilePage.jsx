@@ -445,8 +445,6 @@ const OwnerProfilePage = () => {
         <input className="minput" id="profile-closing-time" name="profile-closing-time" type="time" value={form.closingTime || ''} onChange={fld('closingTime')} />
         <label className="mlabel" htmlFor="profile-support-phone">Support Phone Number</label>
         <input className="minput" id="profile-support-phone" name="profile-support-phone" type="tel" value={form.supportNumber || ''} onChange={fld('supportNumber')} placeholder="+91 XXXXXXXXXX" />
-        <label className="mlabel" htmlFor="profile-required-hours">Required Daily Hours</label>
-        <input className="minput" id="profile-required-hours" name="profile-required-hours" type="number" min={1} max={24} value={form.requiredDailyHours !== undefined ? form.requiredDailyHours : 8} onChange={fld('requiredDailyHours')} placeholder="e.g. 8" />
       </>,
 
     payment:

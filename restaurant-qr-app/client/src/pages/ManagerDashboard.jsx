@@ -6,6 +6,24 @@ import { getOrders, getStaff, getInventory, updateInventoryItem, recordPurchase,
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import '../styles/App.css';
 
+const formatLastSavedTime = (dateStr) => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  if (isToday) {
+    return `Today, ${timeStr}`;
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) {
+    return `Yesterday, ${timeStr}`;
+  }
+  return `${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${timeStr}`;
+};
+
 const ManagerDashboard = () =>{
  const { logout, user } = useAuth();
   const { activeBranchId, branches } = useBranch();
@@ -370,7 +388,7 @@ const ManagerDashboard = () =>{
 <tbody>
  {orders.map((order) =>
 <tr key={order._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-primary)' }}>#{order._id.substring(order._id.length - 8).toUpperCase()}</td>
+<td style={{ padding: '10px 8px', color: 'var(--color-text-primary)' }}>#{String(order?._id || order?.id || '').slice(-8).toUpperCase() || 'N/A'}</td>
 <td style={{ padding: '10px 8px' }}>
  Table {order.tableNumber}
  {order.paymentMethod === 'Counter' &&
@@ -416,7 +434,7 @@ const ManagerDashboard = () =>{
  {orders.map((order) =>
 <div key={order._id} style={{ background: 'rgba(0, 0, 0,0.02)', border: order.paymentMethod === 'Counter' ? '2px solid #e67e22' : '1px solid var(--color-border)', padding: '14px', borderRadius: '10px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-<span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>#{order._id.substring(order._id.length - 8).toUpperCase()}</span>
+<span style={{ color: 'var(--color-text-primary)', fontWeight: 'bold' }}>#{String(order?._id || order?.id || '').slice(-8).toUpperCase() || 'N/A'}</span>
 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
 <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>Table {order.tableNumber}</span>
  {order.paymentMethod === 'Counter' &&
@@ -580,13 +598,12 @@ const ManagerDashboard = () =>{
 <thead>
 <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-primary)' }}>
 <th style={{ padding: '8px' }}>Ingredient Name</th>
-<th style={{ padding: '8px' }}>Category</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Stock Level</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Status</th>
 <th style={{ padding: '8px', textAlign: 'right' }}>Cost Price</th>
 <th style={{ padding: '8px', textAlign: 'right' }}>Selling Price</th>
 <th style={{ padding: '8px' }}>Supplier</th>
-<th style={{ padding: '8px' }}>Branch</th>
+<th style={{ padding: '8px', textAlign: 'center' }}>Last Saved Time</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Safety Min</th>
 <th style={{ padding: '8px', textAlign: 'center' }}>Actions</th>
 </tr>
@@ -605,7 +622,6 @@ const ManagerDashboard = () =>{
  return (
 <tr key={item._id} style={{ borderBottom: '1px solid #432E22' }}>
 <td style={{ padding: '10px 8px', color: 'var(--color-text-primary)', fontWeight: 'bold' }}>{item.name}</td>
-<td style={{ padding: '10px 8px', color: 'var(--color-text-secondary)' }}>{item.category || 'Ingredients'}</td>
 <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: isLow ? '#E74C3C' : 'var(--color-text-primary)' }}>
  {qtyVal} {item.unit}
 </td>
@@ -625,7 +641,9 @@ const ManagerDashboard = () =>{
 <td style={{ padding: '10px 8px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>₹{costPriceVal?.toFixed(2)} (R/O)</td>
 <td style={{ padding: '10px 8px', textAlign: 'right', color: 'var(--color-text-secondary)' }}>₹{(item.sellingPrice || 0).toFixed(2)} (R/O)</td>
 <td style={{ padding: '10px 8px' }}>{item.supplier || 'N/A'}</td>
-<td style={{ padding: '10px 8px' }}>{item.branch || 'Main'}</td>
+<td style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '12px', fontWeight: 600 }}>
+  {formatLastSavedTime(item.updatedAt || item.createdAt)}
+</td>
 <td style={{ padding: '10px 8px', textAlign: 'center' }}>{reorderVal} {item.unit}</td>
 <td style={{ padding: '10px 8px', textAlign: 'center' }}>
 <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
