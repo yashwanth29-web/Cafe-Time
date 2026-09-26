@@ -2061,11 +2061,12 @@ const getDashboardStats = async (req, res) => {
     
     const startOfYear = new Date(Date.UTC(year, 0, 1) - (5.5 * 60 * 60 * 1000));
 
-    // Revenue: count orders that are Ready, Delivered, or Completed
-    // (In a cafe counter model, Order Ready = sale is fulfilled)
+    // Revenue: count orders that are Ready, Delivered, or Completed with payment collected (Paid)
+    // (Fulfilled + Paid = actual revenue, ensuring 100% synchronization with Cash & Online collections)
     const revenueMatch = {
       ...orderMatchQuery,
-      status: { $in: ['Ready', 'Delivered', 'Completed'] }
+      status: { $in: ['Ready', 'Delivered', 'Completed'] },
+      paymentStatus: 'Paid'
     };
     
     const invMatchQuery = { cafeId };
@@ -2118,7 +2119,12 @@ const getDashboardStats = async (req, res) => {
             todayCashRevenue: {
               $sum: {
                 $cond: [
-                  { $and: [ { $gte: ['$createdAt', startOfToday] }, { $in: ['$paymentMethod', ['Cash', 'cash']] } ] },
+                  { 
+                    $and: [ 
+                      { $gte: ['$createdAt', startOfToday] }, 
+                      { $in: [ { $toLower: { $ifNull: ['$paymentMethod', ''] } }, ['cash'] ] } 
+                    ] 
+                  },
                   '$totalAmount', 0
                 ]
               }
@@ -2126,7 +2132,12 @@ const getDashboardStats = async (req, res) => {
             todayOnlineRevenue: {
               $sum: {
                 $cond: [
-                  { $and: [ { $gte: ['$createdAt', startOfToday] }, { $in: ['$paymentMethod', ['Online', 'UPI', 'Card', 'online', 'upi', 'card']] } ] },
+                  { 
+                    $and: [ 
+                      { $gte: ['$createdAt', startOfToday] }, 
+                      { $ne: [ { $toLower: { $ifNull: ['$paymentMethod', ''] } }, 'cash'] } 
+                    ] 
+                  },
                   '$totalAmount', 0
                 ]
               }
@@ -2144,7 +2155,12 @@ const getDashboardStats = async (req, res) => {
             monthlyCashRevenue: {
               $sum: {
                 $cond: [
-                  { $and: [ { $gte: ['$createdAt', startOfMonth] }, { $in: ['$paymentMethod', ['Cash', 'cash']] } ] },
+                  { 
+                    $and: [ 
+                      { $gte: ['$createdAt', startOfMonth] }, 
+                      { $in: [ { $toLower: { $ifNull: ['$paymentMethod', ''] } }, ['cash'] ] } 
+                    ] 
+                  },
                   '$totalAmount', 0
                 ]
               }
@@ -2152,7 +2168,12 @@ const getDashboardStats = async (req, res) => {
             monthlyOnlineRevenue: {
               $sum: {
                 $cond: [
-                  { $and: [ { $gte: ['$createdAt', startOfMonth] }, { $in: ['$paymentMethod', ['Online', 'UPI', 'Card', 'online', 'upi', 'card']] } ] },
+                  { 
+                    $and: [ 
+                      { $gte: ['$createdAt', startOfMonth] }, 
+                      { $ne: [ { $toLower: { $ifNull: ['$paymentMethod', ''] } }, 'cash'] } 
+                    ] 
+                  },
                   '$totalAmount', 0
                 ]
               }
@@ -2267,6 +2288,10 @@ const getDashboardStats = async (req, res) => {
       yearlyRevenue: 0, 
       completedOrdersCount: 0 
     };
+
+    // Guarantee 100% mathematical sync: Total Revenue strictly equals Cash Revenue + Online Revenue
+    revenueData.todayRevenue = Number(((Number(revenueData.todayCashRevenue) || 0) + (Number(revenueData.todayOnlineRevenue) || 0)).toFixed(2));
+    revenueData.monthlyRevenue = Number(((Number(revenueData.monthlyCashRevenue) || 0) + (Number(revenueData.monthlyOnlineRevenue) || 0)).toFixed(2));
     
     const orderSourceData = { QR: 0, POS: 0, Counter: 0 };
     sourceStats.forEach(stat => {

@@ -2780,9 +2780,9 @@ const exportStaffToCSV = () => {
  };
 
   // Analytical Calculations
-  // Count Ready/Delivered/Completed orders as revenue (cafe counter model: Order Ready = sale done)
+  // Count Paid orders that are fulfilled (Ready/Delivered/Completed) as revenue
   const completedOrders = useMemo(() => {
-    return orders.filter((o) => ['Ready', 'Delivered', 'Completed'].includes(o.status));
+    return orders.filter((o) => ['Ready', 'Delivered', 'Completed'].includes(o.status) && o.paymentStatus === 'Paid');
   }, [orders]);
 
   const todayOrders = useMemo(() => {
@@ -2791,15 +2791,9 @@ const exportStaffToCSV = () => {
     return completedOrders.filter((o) => new Date(o.createdAt) >= startOfToday);
   }, [completedOrders]);
 
-  const todayRevenue = useMemo(() => {
-    return statsData && statsData.todayRevenue !== undefined 
-      ? statsData.todayRevenue 
-      : todayOrders.reduce((acc, o) => acc + o.totalAmount, 0);
-  }, [statsData, todayOrders]);
-
   // Use server-side payment breakdown (accurate, IST-timezone-aware)
   const todayCashSales = useMemo(() => {
-    if (statsData && statsData.todayCashRevenue !== undefined) return statsData.todayCashRevenue;
+    if (statsData && statsData.todayCashRevenue !== undefined) return Number(statsData.todayCashRevenue);
     return todayOrders
       .filter((o) => {
         const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
@@ -2809,14 +2803,19 @@ const exportStaffToCSV = () => {
   }, [statsData, todayOrders]);
 
   const todayOnlineSales = useMemo(() => {
-    if (statsData && statsData.todayOnlineRevenue !== undefined) return statsData.todayOnlineRevenue;
+    if (statsData && statsData.todayOnlineRevenue !== undefined) return Number(statsData.todayOnlineRevenue);
     return todayOrders
       .filter((o) => {
         const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
-        return method === 'online' || method === 'upi' || method === 'card';
+        return method !== 'cash';
       })
       .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
   }, [statsData, todayOrders]);
+
+  // 100% mathematical synchronization: Today's Revenue ALWAYS equals Cash Paid + Online Paid
+  const todayRevenue = useMemo(() => {
+    return Number(((Number(todayCashSales) || 0) + (Number(todayOnlineSales) || 0)).toFixed(2));
+  }, [todayCashSales, todayOnlineSales]);
 
   const yesterdayOrders = useMemo(() => {
     const now = new Date();
@@ -2841,7 +2840,7 @@ const exportStaffToCSV = () => {
     return yesterdayOrders
       .filter((o) => {
         const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
-        return method === 'online' || method === 'upi' || method === 'card';
+        return method !== 'cash';
       })
       .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
   }, [yesterdayOrders]);
@@ -2852,14 +2851,8 @@ const exportStaffToCSV = () => {
     return completedOrders.filter((o) => new Date(o.createdAt) >= startOfMonth);
   }, [completedOrders]);
 
-  const monthlyRevenue = useMemo(() => {
-    return statsData && statsData.monthlyRevenue !== undefined 
-      ? statsData.monthlyRevenue 
-      : monthlyOrders.reduce((acc, o) => acc + o.totalAmount, 0);
-  }, [statsData, monthlyOrders]);
-
   const monthlyCashSales = useMemo(() => {
-    if (statsData && statsData.monthlyCashRevenue !== undefined) return statsData.monthlyCashRevenue;
+    if (statsData && statsData.monthlyCashRevenue !== undefined) return Number(statsData.monthlyCashRevenue);
     return monthlyOrders
       .filter((o) => {
         const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
@@ -2869,14 +2862,19 @@ const exportStaffToCSV = () => {
   }, [statsData, monthlyOrders]);
 
   const monthlyOnlineSales = useMemo(() => {
-    if (statsData && statsData.monthlyOnlineRevenue !== undefined) return statsData.monthlyOnlineRevenue;
+    if (statsData && statsData.monthlyOnlineRevenue !== undefined) return Number(statsData.monthlyOnlineRevenue);
     return monthlyOrders
       .filter((o) => {
         const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
-        return method === 'online' || method === 'upi' || method === 'card';
+        return method !== 'cash';
       })
       .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
   }, [statsData, monthlyOrders]);
+
+  // 100% mathematical synchronization: Monthly Revenue ALWAYS equals Monthly Cash Paid + Monthly Online Paid
+  const monthlyRevenue = useMemo(() => {
+    return Number(((Number(monthlyCashSales) || 0) + (Number(monthlyOnlineSales) || 0)).toFixed(2));
+  }, [monthlyCashSales, monthlyOnlineSales]);
 
 
   // Fast memoized lookup map for menu item makingCost
