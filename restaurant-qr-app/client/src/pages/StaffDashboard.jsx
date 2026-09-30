@@ -63,7 +63,7 @@ const StaffDashboard = () => {
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState('');
 
-  // Camera capture states
+  // Camera capture states (Mobile & Tablet optimized)
   const [cameraLoading, setCameraLoading] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const videoRef = useRef(null);
@@ -94,60 +94,84 @@ const StaffDashboard = () => {
     dailyRate: user?.dailyRate || 0
   };
 
-  // Helper: Stop active camera stream tracks
+  // Helper: Stop active camera stream tracks safely on all devices
   const stopCameraStream = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        try {
+      try {
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach(track => {
           track.stop();
-        } catch (e) {
-          console.warn('Track stop error:', e);
-        }
-      });
+        });
+      } catch (e) {
+        console.warn('Track stop error:', e);
+      }
       streamRef.current = null;
     }
     if (videoRef.current) {
-      videoRef.current.srcObject = null;
+      try {
+        videoRef.current.srcObject = null;
+      } catch (e) {}
     }
   }, []);
 
-  // Helper: Start front-facing camera for check-in selfie
+  // Helper: Start front-facing camera with device fallbacks (Tablets / Android / iOS / Desktop)
   const startCameraStream = useCallback(async () => {
     setCameraLoading(true);
     setCameraError('');
     try {
       stopCameraStream();
-      const constraints = {
-        video: {
-          facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 480 }
-        },
-        audio: false
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      let stream = null;
+      // 1. Try front camera with ideal dimensions
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          },
+          audio: false
+        });
+      } catch (frontErr) {
+        console.warn('Front camera constraint failed, trying generic video:', frontErr);
+        // 2. Generic fallback for tablets/devices with specific camera configs
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn('Video play error (retry with user interaction):', playErr);
+        }
       }
     } catch (err) {
       console.error('Camera access error:', err);
-      setCameraError('Camera access denied or unavailable. Please enable camera permissions in your browser.');
+      setCameraError('Camera access denied or unavailable. Please enable camera permission in your tablet settings.');
     } finally {
       setCameraLoading(false);
     }
   }, [stopCameraStream]);
 
-  // Helper: Capture video frame to compressed JPEG data URL (~25KB–35KB)
+  // Helper: Tablet & Mobile Bulletproof Snapshot & Compression (~25KB–35KB)
   const captureAndCompressPhoto = useCallback(() => {
     try {
-      if (!videoRef.current) return null;
       const video = videoRef.current;
+      if (!video) return null;
+
+      // Resolve actual video pixel dimensions or fallback to container size
+      let width = video.videoWidth || video.clientWidth || 480;
+      let height = video.videoHeight || video.clientHeight || 480;
+      if (width <= 0) width = 480;
+      if (height <= 0) height = 480;
+
       const canvas = document.createElement('canvas');
       const maxDim = 480;
-      let width = video.videoWidth || 640;
-      let height = video.videoHeight || 480;
 
       if (width > maxDim || height > maxDim) {
         if (width > height) {
@@ -162,6 +186,8 @@ const StaffDashboard = () => {
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
       // Mirror horizontal for natural selfie view
       ctx.translate(width, 0);
       ctx.scale(-1, 1);
@@ -182,7 +208,7 @@ const StaffDashboard = () => {
       if (!isSilent) setLoading(true);
       setErrorMsg('');
 
-      // 1. Resolve geolocation in background
+      // 1. Resolve geolocation in background asynchronously
       if (navigator.geolocation && !coords) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
@@ -259,7 +285,6 @@ const StaffDashboard = () => {
     pollingRef.current = setInterval(() => {
       const targetId = selectedStaffId || user?._id;
       if (targetId && !pinModal.isOpen) {
-        // Silently fetch status to catch auto-checkouts and status changes in real-time
         getTodayAttendanceStatus({ ...(coords || {}), staffId: targetId })
           .then((res) => {
             if (res && res.success) {
@@ -298,7 +323,6 @@ const StaffDashboard = () => {
     setSelectedStaffId(staffId);
     setErrorMsg('');
     setSuccessMsg('');
-    // Instant reset to zero out previous staff's profile
     setTodayStatus(null);
     setHistoryData([]);
     setLoading(true);
@@ -379,7 +403,7 @@ const StaffDashboard = () => {
     if (isAM && sHour === 12) sHour = 0;
 
     const shiftStartMins = sHour * 60 + sMin;
-    const earlyOpenMins = shiftStartMins - 15; // Open 15 mins before shift
+    const earlyOpenMins = shiftStartMins - 15;
 
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
@@ -406,7 +430,7 @@ const StaffDashboard = () => {
     return { isAllowed: true, reason: '' };
   };
 
-  // Open 4-digit PIN verification modal for Check-In (Step 1: PIN -> Step 2: Camera)
+  // Open 4-digit PIN verification modal for Check-In
   const handleConfirmAttendance = () => {
     setErrorMsg('');
     setSuccessMsg('');
@@ -427,7 +451,7 @@ const StaffDashboard = () => {
     });
   };
 
-  // Open 4-digit PIN verification modal for Check-Out (No camera needed for check-out)
+  // Open 4-digit PIN verification modal for Check-Out
   const handleCheckOut = () => {
     setErrorMsg('');
     setSuccessMsg('');
@@ -459,17 +483,15 @@ const StaffDashboard = () => {
 
     setPinError('');
     if (pinModal.action === 'check-in') {
-      // Advance to live camera selfie capture
       setPinModal(prev => ({ ...prev, step: 'camera' }));
       startCameraStream();
     } else {
-      // Check-out: execute immediately
       handleVerifyAndSubmitAttendance(pin, null);
     }
   };
 
-  // Verify PIN & submit attendance (with mandatory compressed selfie photo for check-in)
-  const handleVerifyAndSubmitAttendance = (pinToSubmit, photoBase64) => {
+  // Verify PIN & submit attendance with zero-hang fast execution
+  const handleVerifyAndSubmitAttendance = async (pinToSubmit, photoBase64) => {
     const pin = String(pinToSubmit !== undefined ? pinToSubmit : enteredPin).trim();
     if (pin.length !== 4) {
       setPinError('Please enter all 4 digits of your Attendance PIN.');
@@ -484,78 +506,91 @@ const StaffDashboard = () => {
     const currentTargetName = targetStaff?.name || activeStaffMember?.name || 'Staff';
     const isCheckIn = pinModal.action === 'check-in';
 
-    const executeSubmission = async (lat = 0, lng = 0) => {
+    // Fast GPS resolution: use cached coords or race with 1.5s timeout (never hang on tablets)
+    let lat = coords?.latitude || 0;
+    let lng = coords?.longitude || 0;
+
+    if (!lat && navigator.geolocation) {
       try {
-        if (isCheckIn) {
-          const userAgent = navigator.userAgent;
-          let deviceInfo = 'Kiosk Device';
-          if (/mobile/i.test(userAgent)) deviceInfo = 'Mobile Kiosk';
-          if (/chrome/i.test(userAgent)) deviceInfo = 'Chrome Kiosk';
-          if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) deviceInfo = 'Safari Kiosk';
-
-          const res = await checkIn({
-            staffId: currentTargetId,
-            latitude: lat,
-            longitude: lng,
-            deviceInfo,
-            attendancePin: pin,
-            imageData: photoBase64 || undefined
-          });
-
-          if (res.success) {
-            closePinModal();
-            setSuccessMsg(`✓ Attendance marked successfully for ${currentTargetName}!`);
-            fetchData(false, currentTargetId);
-          } else {
-            setPinError(res.message || 'Check-in validation failed.');
-          }
-        } else {
-          const res = await checkOut({
-            staffId: currentTargetId,
-            latitude: lat,
-            longitude: lng,
-            attendancePin: pin
-          });
-
-          if (res.success) {
-            closePinModal();
-            setSuccessMsg(`✓ Shift check-out completed for ${currentTargetName}!`);
-            fetchData(false, currentTargetId);
-          } else {
-            setPinError(res.message || 'Check-out request failed.');
-          }
+        const fastPos = await new Promise((resolve) => {
+          const timeout = setTimeout(() => resolve(null), 1500);
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              clearTimeout(timeout);
+              resolve(pos.coords);
+            },
+            () => {
+              clearTimeout(timeout);
+              resolve(null);
+            },
+            { enableHighAccuracy: false, timeout: 1500, maximumAge: 60000 }
+          );
+        });
+        if (fastPos) {
+          lat = fastPos.latitude;
+          lng = fastPos.longitude;
+          setCoords({ latitude: lat, longitude: lng });
         }
-      } catch (err) {
-        console.error('Attendance submit error:', err);
-        const msg = err.response?.data?.message || (isCheckIn ? 'Check-in failed. Please verify your 4-digit PIN.' : 'Check-out failed. Please verify your 4-digit PIN.');
-        setPinError(msg);
-        if (msg.toLowerCase().includes('pin')) {
-          setEnteredPin('');
-          if (pinModal.step === 'camera') {
-            stopCameraStream();
-            setPinModal(prev => ({ ...prev, step: 'pin' }));
-          }
-        }
-      } finally {
-        setActionLoading(false);
+      } catch (geoErr) {
+        console.warn('Fast geo lookup skipped:', geoErr);
       }
-    };
+    }
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          setCoords({ latitude, longitude });
-          executeSubmission(latitude, longitude);
-        },
-        () => {
-          // Geolocation fallback
-          executeSubmission(0, 0);
-        },
-        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
-      );
-    } else {
-      executeSubmission(0, 0);
+    try {
+      if (isCheckIn) {
+        const userAgent = navigator.userAgent;
+        let deviceInfo = 'Tablet Kiosk';
+        if (/iPad|tablet/i.test(userAgent)) deviceInfo = 'iPad Kiosk';
+        else if (/mobile/i.test(userAgent)) deviceInfo = 'Mobile Kiosk';
+        else if (/chrome/i.test(userAgent)) deviceInfo = 'Chrome Kiosk';
+        else if (/safari/i.test(userAgent)) deviceInfo = 'Safari Kiosk';
+
+        const res = await checkIn({
+          staffId: currentTargetId,
+          latitude: lat,
+          longitude: lng,
+          deviceInfo,
+          attendancePin: pin,
+          imageData: photoBase64 || undefined
+        });
+
+        if (res.success) {
+          stopCameraStream();
+          closePinModal();
+          setSuccessMsg(`✓ Attendance marked successfully for ${currentTargetName}!`);
+          fetchData(false, currentTargetId);
+        } else {
+          setPinError(res.message || 'Check-in validation failed.');
+        }
+      } else {
+        const res = await checkOut({
+          staffId: currentTargetId,
+          latitude: lat,
+          longitude: lng,
+          attendancePin: pin
+        });
+
+        if (res.success) {
+          closePinModal();
+          setSuccessMsg(`✓ Shift check-out completed for ${currentTargetName}!`);
+          fetchData(false, currentTargetId);
+        } else {
+          setPinError(res.message || 'Check-out request failed.');
+        }
+      }
+    } catch (err) {
+      console.error('Attendance submit error:', err);
+      const msg = err.response?.data?.message || (isCheckIn ? 'Check-in failed. Please verify your 4-digit PIN.' : 'Check-out failed. Please verify your 4-digit PIN.');
+      setPinError(msg);
+      if (msg.toLowerCase().includes('pin')) {
+        setEnteredPin('');
+        if (pinModal.step === 'camera') {
+          stopCameraStream();
+          setPinModal(prev => ({ ...prev, step: 'pin' }));
+        }
+      }
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -1752,7 +1787,7 @@ const StaffDashboard = () => {
                   </span>
                 </div>
 
-                {/* Camera Viewport Container */}
+                {/* Camera Viewport Container (Tablet & Mobile Optimized) */}
                 <div style={{
                   position: 'relative',
                   width: '100%',
@@ -1773,6 +1808,7 @@ const StaffDashboard = () => {
                     autoPlay
                     playsInline
                     muted
+                    webkit-playsinline="true"
                     style={{
                       width: '100%',
                       height: '100%',
@@ -1856,7 +1892,6 @@ const StaffDashboard = () => {
                   disabled={actionLoading || cameraLoading}
                   onClick={() => {
                     const photo = captureAndCompressPhoto();
-                    stopCameraStream();
                     handleVerifyAndSubmitAttendance(enteredPin, photo);
                   }}
                   className="btn btn-primary"
