@@ -81,6 +81,17 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 8
   },
+  scheduleType: {
+    type: String,
+    enum: ['SINGLE', 'SPLIT'],
+    default: 'SINGLE'
+  },
+  shifts: [{
+    shiftNumber: { type: Number, default: 1 },
+    shiftLabel: { type: String, default: 'Shift 1' },
+    startTime: { type: String, default: '09:00' },
+    endTime: { type: String, default: '18:00' }
+  }],
   shiftStartTime: {
     type: String,
     default: '09:00'

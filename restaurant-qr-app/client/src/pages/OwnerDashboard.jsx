@@ -48,6 +48,7 @@ import {
  payPayroll,
  approvePayroll,
   getSalaryHistory,
+  getExpenseFinancialSummary,
   getExpenses,
   createExpense,
   updateExpense,
@@ -62,7 +63,7 @@ import { useBranch } from '../context/BranchContext';
 import socket from '../socket';
 import OwnerLayout from '../components/OwnerLayout';
 import RecipeMapper from '../components/RecipeMapper';
-import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3, FileSpreadsheet, Receipt, Wallet, Plus, Trash2, Edit2, Banknote, Smartphone } from 'lucide-react';
+import { TrendingUp, TrendingDown, IndianRupee, Package, BarChart3, FileSpreadsheet, Receipt, Wallet, Plus, Trash2, Edit2, Banknote, Smartphone, ChevronDown, ChevronUp, Layers, PieChart, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const PRESET_CATEGORIES = [
@@ -480,6 +481,22 @@ const OwnerDashboard = () =>{
    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   });
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
+
+  // Feature 1: All Sold Items Feed States
+  const [soldItemsPeriod, setSoldItemsPeriod] = useState('today'); // 'today' | 'overall'
+  const [soldItemsSearch, setSoldItemsSearch] = useState('');
+
+  // Feature 4: Current Active Month Limits
+  const currentMonthMinDate = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  }, []);
+
+  const currentMonthMaxDate = useMemo(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  }, []);
   
   const [menuItems, setMenuItems] = useState(() => {
     const activeId = localStorage.getItem('activeBranchId') || 'all';
@@ -536,12 +553,20 @@ const OwnerDashboard = () =>{
   const [expenseSubmitting, setExpenseSubmitting] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [expenseDateFilter, setExpenseDateFilter] = useState('all');
+  const [expenseFinancialPeriod, setExpenseFinancialPeriod] = useState('today'); // 'today' | 'week' | '15days' | 'month'
+  const [financialSummary, setFinancialSummary] = useState(null);
+  const [financialSummaryLoading, setFinancialSummaryLoading] = useState(false);
+  const [showDishCostDrawer, setShowDishCostDrawer] = useState(false);
   const [newExpenseForm, setNewExpenseForm] = useState({
     title: '',
     amount: '',
     category: 'Miscellaneous',
     paymentMode: 'Cash',
-    date: new Date().toISOString().split('T')[0],
+    periodTag: 'Today',
+    date: (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })(),
     notes: ''
   });
 
@@ -794,6 +819,8 @@ const OwnerDashboard = () =>{
     staffRole: 'staff',
     assignedBranch: '',
     dailyRate: 0,
+    scheduleType: 'SINGLE',
+    shifts: [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: '09:00', endTime: '18:00' }],
     shiftStartTime: '09:00',
     shiftEndTime: '18:00',
     leanTimeMinutes: 30,
@@ -1750,6 +1777,9 @@ const OwnerDashboard = () =>{
     }
   };
 
+  // State for Viewing Attendance Selfie Photo (12h retention)
+  const [viewingSelfieModal, setViewingSelfieModal] = useState(null);
+
   // Fetch Attendance Today Dashboard
   const fetchAttendanceToday = async (isSilent = false, targetBranchId = activeBranchId) =>{
     const cache = getBranchCache(targetBranchId);
@@ -1859,13 +1889,22 @@ const OwnerDashboard = () =>{
     }
     try {
       setStaffLoading(true);
+      const isSplit = newStaff.scheduleType === 'SPLIT';
+      const staffShifts = (isSplit && Array.isArray(newStaff.shifts) && newStaff.shifts.length > 0)
+        ? newStaff.shifts
+        : [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: newStaff.shiftStartTime || '09:00', endTime: newStaff.shiftEndTime || '18:00' }];
+      const effStart = staffShifts[0]?.startTime || newStaff.shiftStartTime || '09:00';
+      const effEnd = staffShifts[staffShifts.length - 1]?.endTime || newStaff.shiftEndTime || '18:00';
+
       const response = await createStaff({
         ...newStaff,
         username: newStaff.username ? newStaff.username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '') : undefined,
         password: newStaff.password ? newStaff.password.trim() : undefined,
         dailyRate: Number(newStaff.dailyRate || 0),
-        shiftStartTime: newStaff.shiftStartTime || '09:00',
-        shiftEndTime: newStaff.shiftEndTime || '18:00',
+        scheduleType: isSplit ? 'SPLIT' : 'SINGLE',
+        shifts: staffShifts,
+        shiftStartTime: effStart,
+        shiftEndTime: effEnd,
         leanTimeMinutes: Number(newStaff.leanTimeMinutes !== undefined ? newStaff.leanTimeMinutes : 30),
         workDaysPerWeek: Number(newStaff.workDaysPerWeek !== undefined ? newStaff.workDaysPerWeek : 6),
         attendancePin: newStaff.attendancePin ? String(newStaff.attendancePin).trim() : ''
@@ -1875,6 +1914,8 @@ const OwnerDashboard = () =>{
         setNewStaff({
           name: '', username: '', password: '', email: '', phone: '',
           staffRole: 'staff', assignedBranch: '', dailyRate: 0,
+          scheduleType: 'SINGLE',
+          shifts: [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: '09:00', endTime: '18:00' }],
           shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6,
           attendancePin: ''
         });
@@ -1898,6 +1939,13 @@ const OwnerDashboard = () =>{
     }
     try {
       setStaffLoading(true);
+      const isSplit = editingStaff.scheduleType === 'SPLIT';
+      const staffShifts = (isSplit && Array.isArray(editingStaff.shifts) && editingStaff.shifts.length > 0)
+        ? editingStaff.shifts
+        : [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: editingStaff.shiftStartTime || '09:00', endTime: editingStaff.shiftEndTime || '18:00' }];
+      const effStart = staffShifts[0]?.startTime || editingStaff.shiftStartTime || '09:00';
+      const effEnd = staffShifts[staffShifts.length - 1]?.endTime || editingStaff.shiftEndTime || '18:00';
+
       const payload = {
         name: editingStaff.name,
         username: editingStaff.username ? editingStaff.username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '') : undefined,
@@ -1907,8 +1955,10 @@ const OwnerDashboard = () =>{
         assignedBranch: editingStaff.assignedBranch,
         isActive: editingStaff.isActive,
         dailyRate: Number(editingStaff.dailyRate || 0),
-        shiftStartTime: editingStaff.shiftStartTime || '09:00',
-        shiftEndTime: editingStaff.shiftEndTime || '18:00',
+        scheduleType: isSplit ? 'SPLIT' : 'SINGLE',
+        shifts: staffShifts,
+        shiftStartTime: effStart,
+        shiftEndTime: effEnd,
         leanTimeMinutes: Number(editingStaff.leanTimeMinutes !== undefined ? editingStaff.leanTimeMinutes : 30),
         workDaysPerWeek: Number(editingStaff.workDaysPerWeek !== undefined ? editingStaff.workDaysPerWeek : 6),
         attendancePin: editingStaff.attendancePin !== undefined ? String(editingStaff.attendancePin).trim() : undefined
@@ -2925,6 +2975,25 @@ const exportStaffToCSV = () => {
     }
   }, [user?.cafeId, activeBranchId]);
 
+  const fetchExpenseFinancialSummary = useCallback(async (period = expenseFinancialPeriod) => {
+    if (!user?.cafeId) return;
+    setFinancialSummaryLoading(true);
+    try {
+      const params = { cafeId: user.cafeId, period };
+      if (activeBranchId && activeBranchId !== 'all') {
+        params.branchId = activeBranchId;
+      }
+      const res = await getExpenseFinancialSummary(params);
+      if (res && res.success) {
+        setFinancialSummary(res.data);
+      }
+    } catch (err) {
+      console.warn('Error fetching financial summary:', err);
+    } finally {
+      setFinancialSummaryLoading(false);
+    }
+  }, [user?.cafeId, activeBranchId, expenseFinancialPeriod]);
+
   const handleAddExpense = async (e) => {
     e.preventDefault();
     if (!newExpenseForm.title?.trim()) {
@@ -2946,6 +3015,7 @@ const exportStaffToCSV = () => {
         amount: amt,
         category: newExpenseForm.category || 'Miscellaneous',
         paymentMode: newExpenseForm.paymentMode || 'Cash',
+        periodTag: newExpenseForm.periodTag === 'Daily' ? 'Today' : (newExpenseForm.periodTag || 'Today'),
         date: newExpenseForm.date ? new Date(newExpenseForm.date) : new Date(),
         notes: newExpenseForm.notes || ''
       };
@@ -2953,12 +3023,16 @@ const exportStaffToCSV = () => {
       const res = await createExpense(payload);
       if (res && res.success) {
         setExpenses((prev) => [res.data, ...prev]);
+        fetchExpenseFinancialSummary(expenseFinancialPeriod);
+        const d = new Date();
+        const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         setNewExpenseForm({
           title: '',
           amount: '',
           category: 'Miscellaneous',
           paymentMode: 'Cash',
-          date: new Date().toISOString().split('T')[0],
+          periodTag: 'Today',
+          date: localDate,
           notes: ''
         });
         alert('Expense recorded successfully!');
@@ -2993,12 +3067,14 @@ const exportStaffToCSV = () => {
         amount: amt,
         category: editingExpense.category,
         paymentMode: editingExpense.paymentMode,
+        periodTag: editingExpense.periodTag === 'Daily' ? 'Today' : (editingExpense.periodTag || 'Today'),
         date: editingExpense.date,
         notes: editingExpense.notes
       });
       if (res && res.success) {
         setExpenses((prev) => prev.map((item) => item._id === editingExpense._id ? res.data : item));
         setEditingExpense(null);
+        fetchExpenseFinancialSummary(expenseFinancialPeriod);
         alert('Expense updated successfully!');
       } else {
         alert(res.message || 'Failed to update expense.');
@@ -3017,6 +3093,7 @@ const exportStaffToCSV = () => {
       const res = await deleteExpense(id);
       if (res && res.success) {
         setExpenses((prev) => prev.filter((item) => item._id !== id));
+        fetchExpenseFinancialSummary(expenseFinancialPeriod);
       } else {
         alert(res.message || 'Failed to delete expense.');
       }
@@ -3269,6 +3346,126 @@ const exportStaffToCSV = () => {
   }, [todayOrders, menuItems, statsData]);
 
   const { topSelling, slowSelling } = rankedItems;
+
+  // Feature 1: All Sold Items Feed (Today vs Overall)
+  const allSoldItemsList = useMemo(() => {
+    const serverItems = soldItemsPeriod === 'today' 
+      ? statsData?.allSoldItemsToday 
+      : statsData?.allSoldItemsOverall;
+
+    let list = [];
+
+    if (Array.isArray(serverItems) && serverItems.length > 0) {
+      list = serverItems.map((item) => ({
+        name: item.name || 'Unknown Item',
+        quantity: Number(item.quantity) || 0,
+        totalAmount: Number(item.totalAmount) || 0,
+        lastSoldDate: item.lastSoldDate ? new Date(item.lastSoldDate) : null
+      }));
+    } else {
+      // Fallback: calculate from client-side orders
+      const targetOrders = soldItemsPeriod === 'today' 
+        ? (todayOrders.length > 0 ? todayOrders : (orders || []).filter(o => {
+            if (o.status === 'Cancelled' || o.status === 'cancelled') return false;
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            return new Date(o.createdAt) >= startOfToday;
+          }))
+        : (completedOrders.length > 0 ? completedOrders : (orders || []).filter(o => o.status !== 'Cancelled' && o.status !== 'cancelled'));
+
+      const itemMap = {};
+
+      (targetOrders || []).forEach((order) => {
+        const orderDate = new Date(order.createdAt || order.updatedAt);
+        if (Array.isArray(order.items) && order.items.length > 0) {
+          order.items.forEach((item) => {
+            const name = item.name || 'Unknown Item';
+            const qty = Number(item.quantity) || 0;
+            const price = Number(item.price) || 0;
+            const itemTotal = qty * price;
+
+            if (!itemMap[name]) {
+              itemMap[name] = {
+                name,
+                quantity: 0,
+                totalAmount: 0,
+                lastSoldDate: orderDate
+              };
+            }
+
+            itemMap[name].quantity += qty;
+            itemMap[name].totalAmount += itemTotal;
+            if (orderDate > itemMap[name].lastSoldDate) {
+              itemMap[name].lastSoldDate = orderDate;
+            }
+          });
+        }
+      });
+
+      list = Object.values(itemMap);
+    }
+
+    if (soldItemsSearch && soldItemsSearch.trim()) {
+      const q = soldItemsSearch.toLowerCase().trim();
+      list = list.filter((i) => i.name.toLowerCase().includes(q));
+    }
+
+    // Sort by highest quantity sold
+    list.sort((a, b) => b.quantity - a.quantity);
+    return list;
+  }, [soldItemsPeriod, statsData, todayOrders, completedOrders, orders, soldItemsSearch]);
+
+  // Feature 4: Orders Monitor Summary Calculations
+  const monitorSummary = useMemo(() => {
+    const filtered = (orders || []).filter((order) => {
+      if (!order) return false;
+      if (order.status === 'Cancelled' || order.status === 'cancelled') return false;
+      if (orderDateFilter && order.createdAt) {
+        const localDate = new Date(order.createdAt);
+        const orderDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+        if (orderDateStr !== orderDateFilter) return false;
+      }
+      return true;
+    });
+
+    let totalOrders = filtered.length;
+    let fulfilledRevenue = 0;
+    let cashRevenue = 0;
+    let onlineRevenue = 0;
+    let pendingRevenue = 0;
+    let extraSalesRevenue = 0;
+
+    filtered.forEach((order) => {
+      const amt = Number(order.totalAmount) || 0;
+      const isPaid = order.paymentStatus === 'Paid' || ['Ready', 'Delivered', 'Completed'].includes(order.status);
+      const isExtra = order.orderSource === 'EXTRA_SALE' || order.source === 'EXTRA_SALE' || order.customerName === 'Extra Sale' || order.tableNumber === 'EXTRA-SALE';
+
+      if (isExtra) {
+        extraSalesRevenue += amt;
+      }
+
+      if (isPaid) {
+        fulfilledRevenue += amt;
+        const method = (order.paymentMethod || order.paymentDetails?.method || 'cash').toLowerCase();
+        if (method.includes('upi') || method.includes('online') || method.includes('qr') || method.includes('card')) {
+          onlineRevenue += amt;
+        } else {
+          cashRevenue += amt;
+        }
+      } else {
+        pendingRevenue += amt;
+      }
+    });
+
+    return {
+      totalOrders,
+      fulfilledRevenue,
+      cashRevenue,
+      onlineRevenue,
+      pendingRevenue,
+      extraSalesRevenue
+    };
+  }, [orders, orderDateFilter]);
 
   const handleExportMonthlyReportExcel = useCallback(() => {
     try {
@@ -3557,7 +3754,10 @@ const exportStaffToCSV = () => {
     const refreshData = async () => {
       if (activeTab === 'analytics') {
         const silent = !!cache.hasLoaded.statsData;
-        await fetchDashboardStats(silent, targetBranch);
+        await Promise.all([
+          fetchDashboardStats(silent, targetBranch),
+          fetchOrders(true, targetBranch)
+        ]);
       } else if (activeTab === 'orders') {
         const silent = !!cache.hasLoaded.orders;
         await fetchOrders(silent, targetBranch);
@@ -4258,7 +4458,7 @@ const exportStaffToCSV = () => {
           })()} Report (Excel)
         </button>
        <button 
-         onClick={() => { setShowExpenseModal(true); fetchExpensesList(); }} 
+         onClick={() => { setShowExpenseModal(true); fetchExpensesList(); fetchExpenseFinancialSummary('today'); }} 
          className="btn btn-secondary" 
          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 14px', width: 'auto', borderRadius: '10px', fontWeight: 700, fontSize: '12px', background: 'rgba(231, 76, 60, 0.12)', color: '#e74c3c', border: '1px solid rgba(231, 76, 60, 0.35)' }}
        >
@@ -4425,6 +4625,184 @@ const exportStaffToCSV = () => {
   )}
 </div>
 </div>
+</div>
+
+{/* FEATURE 1: ALL SOLD ITEMS FEED (TODAY / OVERALL) */}
+<div style={{
+  background: 'var(--bg-card)',
+  border: '1px solid var(--color-border)',
+  borderRadius: '16px',
+  padding: '24px',
+  marginTop: '24px',
+  boxShadow: '0 4px 15px rgba(0,0,0,0.02)'
+}}>
+  {/* Header with Title and Toggle */}
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '12px',
+    marginBottom: '18px'
+  }}>
+    <div>
+      <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span>📋</span> All Sold Items
+      </h4>
+      <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '3px' }}>
+        Summary of dishes sold {soldItemsPeriod === 'today' ? "today" : "all-time overall"}
+      </span>
+    </div>
+
+    {/* Toggle: Today vs Overall */}
+    <div style={{
+      display: 'inline-flex',
+      background: 'var(--bg-secondary)',
+      border: '1px solid var(--color-border)',
+      borderRadius: '20px',
+      padding: '3px'
+    }}>
+      <button
+        type="button"
+        onClick={() => setSoldItemsPeriod('today')}
+        style={{
+          border: 'none',
+          padding: '6px 16px',
+          borderRadius: '16px',
+          fontSize: '12px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          background: soldItemsPeriod === 'today' ? 'var(--color-primary)' : 'transparent',
+          color: soldItemsPeriod === 'today' ? '#ffffff' : 'var(--color-text-secondary)',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        Today
+      </button>
+      <button
+        type="button"
+        onClick={() => setSoldItemsPeriod('overall')}
+        style={{
+          border: 'none',
+          padding: '6px 16px',
+          borderRadius: '16px',
+          fontSize: '12px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          background: soldItemsPeriod === 'overall' ? 'var(--color-primary)' : 'transparent',
+          color: soldItemsPeriod === 'overall' ? '#ffffff' : 'var(--color-text-secondary)',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        Overall
+      </button>
+    </div>
+  </div>
+
+  {/* Search Bar */}
+  <div style={{ marginBottom: '16px' }}>
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        placeholder="🔍 Search sold dish name..."
+        value={soldItemsSearch}
+        onChange={(e) => setSoldItemsSearch(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '10px 36px 10px 14px',
+          borderRadius: '10px',
+          border: '1px solid var(--color-border)',
+          background: 'var(--bg-secondary)',
+          color: 'var(--color-text-primary)',
+          fontSize: '13px',
+          outline: 'none',
+          boxSizing: 'border-box'
+        }}
+      />
+      {soldItemsSearch && (
+        <button
+          type="button"
+          onClick={() => setSoldItemsSearch('')}
+          style={{
+            position: 'absolute',
+            right: '12px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--color-text-secondary)',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  </div>
+
+  {/* Table / List */}
+  <div style={{ overflowX: 'auto' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+      <thead>
+        <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <th style={{ padding: '10px 12px', fontWeight: 700 }}>Item Name</th>
+          <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'center' }}>Qty {soldItemsPeriod === 'today' ? '(Today)' : '(Overall)'}</th>
+          <th style={{ padding: '10px 12px', fontWeight: 700 }}>Date & Time</th>
+          <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>Total Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {allSoldItemsList.length > 0 ? (
+          allSoldItemsList.map((item, idx) => (
+            <tr
+              key={item.name + idx}
+              style={{
+                borderBottom: '1px solid var(--color-border)',
+                fontSize: '13px',
+                transition: 'background 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.02)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                {item.name}
+              </td>
+              <td style={{ padding: '12px', textAlign: 'center' }}>
+                <span style={{
+                  background: 'rgba(52, 152, 219, 0.12)',
+                  color: '#2980b9',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontWeight: 800,
+                  fontSize: '12px'
+                }}>
+                  {item.quantity}
+                </span>
+              </td>
+              <td style={{ padding: '12px', color: 'var(--color-text-secondary)', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
+                {(() => {
+                  const d = item.lastSoldDate ? new Date(item.lastSoldDate) : null;
+                  return d && !isNaN(d.getTime())
+                    ? `${d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                    : 'Recently';
+                })()}
+              </td>
+              <td style={{ padding: '12px', textAlign: 'right', fontWeight: 800, color: 'var(--color-primary)' }}>
+                ₹{item.totalAmount.toFixed(2)}
+              </td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td colSpan="4" style={{ padding: '30px 12px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+              {soldItemsSearch ? `No sold items match "${soldItemsSearch}".` : `No items sold ${soldItemsPeriod === 'today' ? 'today yet' : 'so far'}.`}
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
 </div>
 </div>
   }
@@ -5490,13 +5868,28 @@ const exportStaffToCSV = () => {
                       </div>
 
                       {/* Shift & Rate Info */}
-                      <div style={{ background: 'rgba(0,0,0,0.03)', padding: '5px 8px', borderRadius: '6px', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--color-text-secondary)' }}>
-                          ⏰ <strong style={{ color: 'var(--color-text-primary)' }}>{member.shiftStartTime || '09:00'} - {member.shiftEndTime || '18:00'}</strong>
-                        </span>
-                        <span style={{ color: 'var(--color-primary)', fontWeight: 800 }}>
-                          ₹{member.dailyRate || 0}/day • {member.workingDays || 0}d
-                        </span>
+                      <div style={{ background: 'rgba(0,0,0,0.03)', padding: '6px 8px', borderRadius: '6px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            ⏰ <strong style={{ color: 'var(--color-text-primary)' }}>
+                              {member.scheduleType === 'SPLIT' && member.shifts?.length > 1
+                                ? `Split (${member.shifts.length} Shifts)`
+                                : `${member.shiftStartTime || '09:00'} - ${member.shiftEndTime || '18:00'}`}
+                            </strong>
+                          </span>
+                          <span style={{ color: 'var(--color-primary)', fontWeight: 800 }}>
+                            ₹{member.dailyRate || 0}/day • {member.workingDays || 0}d
+                          </span>
+                        </div>
+                        {member.scheduleType === 'SPLIT' && member.shifts?.length > 1 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+                            {member.shifts.map((s, idx) => (
+                              <span key={idx} style={{ fontSize: '10px', background: 'rgba(52, 152, 219, 0.12)', color: '#2980b9', padding: '1px 5px', borderRadius: '4px', fontWeight: 600 }}>
+                                {s.shiftLabel || `S${idx + 1}`}: {s.startTime} - {s.endTime}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       {/* Financial Strip: Earned & Remaining Unpaid */}
@@ -5539,7 +5932,18 @@ const exportStaffToCSV = () => {
                         <button
                           type="button"
                           onClick={() => {
-                            setEditingStaff({ ...member, staffRole: member.staffRole || member.role || 'staff' });
+                            const isSplit = member.scheduleType === 'SPLIT' || (member.shifts && member.shifts.length > 1);
+                            const parsedShifts = (member.shifts && member.shifts.length > 0)
+                              ? member.shifts
+                              : [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: member.shiftStartTime || '09:00', endTime: member.shiftEndTime || '18:00' }];
+                            setEditingStaff({
+                              ...member,
+                              staffRole: member.staffRole || member.role || 'staff',
+                              scheduleType: isSplit ? 'SPLIT' : 'SINGLE',
+                              shifts: parsedShifts,
+                              shiftStartTime: member.shiftStartTime || '09:00',
+                              shiftEndTime: member.shiftEndTime || '18:00'
+                            });
                             setShowEditStaffModal(true);
                           }}
                           className="btn btn-secondary"
@@ -5587,24 +5991,24 @@ const exportStaffToCSV = () => {
       {/* ── Add Staff Modal ── */}
       {showAddStaffModal && (
         <div
-          onClick={(e) => { if (e.target === e.currentTarget) { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6 }); } }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, scheduleType: 'SINGLE', shifts: [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: '09:00', endTime: '18:00' }], shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6, attendancePin: '' }); } }}
           style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
         >
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '18px', padding: '24px 20px', width: '100%', maxWidth: '420px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '18px', padding: '24px 20px', width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Add New Staff</h3>
-                <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.8rem' }}>Register a new team member</p>
+                <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.8rem' }}>Register a new team member with shift timings</p>
               </div>
               <button
-                onClick={() => { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6 }); }}
+                onClick={() => { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, scheduleType: 'SINGLE', shifts: [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: '09:00', endTime: '18:00' }], shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6, attendancePin: '' }); }}
                 style={{ background: 'rgba(0, 0, 0, 0.06)', border: '1px solid rgba(0, 0, 0, 0.08)', borderRadius: '50%', width: '32px', height: '32px', color: 'var(--color-text-primary)', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               >
                 &times;
               </button>
             </div>
 
-            <form onSubmit={handleAddStaff} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <form onSubmit={handleAddStaff} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Full Name *</label>
@@ -5630,23 +6034,171 @@ const exportStaffToCSV = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Daily Wage (₹) *</label>
-                  <input type="number" min="0" className="form-input" placeholder="e.g. 600" value={newStaff.dailyRate || ''} onChange={(e) => setNewStaff({ ...newStaff, dailyRate: Number(e.target.value) })} required />
+                  <input type="number" min="0" className="form-input" placeholder="e.g. 600" value={newStaff.dailyRate === '' ? '' : (newStaff.dailyRate ?? '')} onChange={(e) => setNewStaff({ ...newStaff, dailyRate: e.target.value === '' ? '' : Number(e.target.value) })} required />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Grace Time (Mins) *</label>
-                  <input type="number" min="0" max="180" className="form-input" placeholder="30" value={newStaff.leanTimeMinutes !== undefined ? newStaff.leanTimeMinutes : 30} onChange={(e) => setNewStaff({ ...newStaff, leanTimeMinutes: Number(e.target.value) })} required />
+                  <input type="number" min="0" max="180" className="form-input" placeholder="30" value={newStaff.leanTimeMinutes === '' ? '' : (newStaff.leanTimeMinutes ?? '')} onChange={(e) => setNewStaff({ ...newStaff, leanTimeMinutes: e.target.value === '' ? '' : Number(e.target.value) })} required />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift Start *</label>
-                  <input type="time" className="form-input" value={newStaff.shiftStartTime || '09:00'} onChange={(e) => setNewStaff({ ...newStaff, shiftStartTime: e.target.value })} required />
+              {/* ── Schedule Configuration (Option 2: Single vs Split Shifts) ── */}
+              <div style={{ background: 'var(--bg-secondary, rgba(0,0,0,0.03))', padding: '12px', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', fontWeight: 800, margin: 0 }}>
+                  Shift Schedule Type *
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setNewStaff({ ...newStaff, scheduleType: 'SINGLE' })}
+                    style={{
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: (newStaff.scheduleType || 'SINGLE') === 'SINGLE' ? '2px solid var(--color-primary, #ff6b08)' : '1px solid var(--color-border)',
+                      background: (newStaff.scheduleType || 'SINGLE') === 'SINGLE' ? 'rgba(255, 107, 8, 0.12)' : 'var(--bg-card)',
+                      color: (newStaff.scheduleType || 'SINGLE') === 'SINGLE' ? 'var(--color-primary, #ff6b08)' : 'var(--color-text-secondary)',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    ⏱️ Single Shift
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = (newStaff.shifts && newStaff.shifts.length > 0)
+                        ? newStaff.shifts
+                        : [
+                            { shiftNumber: 1, shiftLabel: 'Lunch Shift', startTime: '11:00', endTime: '15:30' },
+                            { shiftNumber: 2, shiftLabel: 'Dinner Shift', startTime: '19:00', endTime: '23:30' }
+                          ];
+                      setNewStaff({ ...newStaff, scheduleType: 'SPLIT', shifts: cur });
+                    }}
+                    style={{
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: newStaff.scheduleType === 'SPLIT' ? '2px solid var(--color-primary, #ff6b08)' : '1px solid var(--color-border)',
+                      background: newStaff.scheduleType === 'SPLIT' ? 'rgba(255, 107, 8, 0.12)' : 'var(--bg-card)',
+                      color: newStaff.scheduleType === 'SPLIT' ? 'var(--color-primary, #ff6b08)' : 'var(--color-text-secondary)',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    🔀 Split / Multi-Shift
+                  </button>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift End *</label>
-                  <input type="time" className="form-input" value={newStaff.shiftEndTime || '18:00'} onChange={(e) => setNewStaff({ ...newStaff, shiftEndTime: e.target.value })} required />
-                </div>
+
+                {(newStaff.scheduleType || 'SINGLE') === 'SINGLE' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift Start *</label>
+                      <input type="time" className="form-input" value={newStaff.shiftStartTime || '09:00'} onChange={(e) => setNewStaff({ ...newStaff, shiftStartTime: e.target.value })} required />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift End *</label>
+                      <input type="time" className="form-input" value={newStaff.shiftEndTime || '18:00'} onChange={(e) => setNewStaff({ ...newStaff, shiftEndTime: e.target.value })} required />
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                        Configured Shifts ({(newStaff.shifts || []).length}/4)
+                      </span>
+                      {(newStaff.shifts || []).length < 4 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextNum = (newStaff.shifts || []).length + 1;
+                            const nextShift = {
+                              shiftNumber: nextNum,
+                              shiftLabel: nextNum === 2 ? 'Dinner Shift' : `Shift ${nextNum}`,
+                              startTime: nextNum === 2 ? '19:00' : '09:00',
+                              endTime: nextNum === 2 ? '23:30' : '18:00'
+                            };
+                            setNewStaff({ ...newStaff, shifts: [...(newStaff.shifts || []), nextShift] });
+                          }}
+                          style={{
+                            background: 'rgba(255, 107, 8, 0.12)',
+                            color: 'var(--color-primary, #ff6b08)',
+                            border: '1px solid var(--color-primary, #ff6b08)',
+                            borderRadius: '6px',
+                            padding: '3px 8px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          + Add Shift
+                        </button>
+                      )}
+                    </div>
+
+                    {(newStaff.shifts || []).map((s, idx) => (
+                      <div key={idx} style={{ background: 'var(--bg-card)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            value={s.shiftLabel || `Shift ${idx + 1}`}
+                            onChange={(e) => {
+                              const updated = [...newStaff.shifts];
+                              updated[idx] = { ...updated[idx], shiftLabel: e.target.value };
+                              setNewStaff({ ...newStaff, shifts: updated });
+                            }}
+                            placeholder={`Shift ${idx + 1} Label`}
+                            style={{ width: '130px', padding: '3px 6px', fontSize: '11px', fontWeight: 700, border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--color-text-primary)' }}
+                          />
+                          {newStaff.shifts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = newStaff.shifts.filter((_, i) => i !== idx).map((sh, i) => ({ ...sh, shiftNumber: i + 1 }));
+                                setNewStaff({ ...newStaff, shifts: updated });
+                              }}
+                              style={{ background: 'transparent', border: 'none', color: '#e74c3c', fontSize: '11px', cursor: 'pointer', fontWeight: 700 }}
+                            >
+                              ✕ Remove
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div>
+                            <label style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block' }}>Start Time</label>
+                            <input
+                              type="time"
+                              value={s.startTime}
+                              onChange={(e) => {
+                                const updated = [...newStaff.shifts];
+                                updated[idx] = { ...updated[idx], startTime: e.target.value };
+                                setNewStaff({ ...newStaff, shifts: updated });
+                              }}
+                              required
+                              style={{ width: '100%', padding: '4px 6px', fontSize: '12px', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--color-text-primary)' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block' }}>End Time</label>
+                            <input
+                              type="time"
+                              value={s.endTime}
+                              onChange={(e) => {
+                                const updated = [...newStaff.shifts];
+                                updated[idx] = { ...updated[idx], endTime: e.target.value };
+                                setNewStaff({ ...newStaff, shifts: updated });
+                              }}
+                              required
+                              style={{ width: '100%', padding: '4px 6px', fontSize: '12px', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--color-text-primary)' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -5668,7 +6220,7 @@ const exportStaffToCSV = () => {
               <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
                 <button
                   type="button"
-                  onClick={() => { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6 }); }}
+                  onClick={() => { setShowAddStaffModal(false); setNewStaff({ name: '', email: '', phone: '', staffRole: 'staff', assignedBranch: '', dailyRate: 0, scheduleType: 'SINGLE', shifts: [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: '09:00', endTime: '18:00' }], shiftStartTime: '09:00', shiftEndTime: '18:00', leanTimeMinutes: 30, workDaysPerWeek: 6, attendancePin: '' }); }}
                   style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
                 >
                   Cancel
@@ -5693,11 +6245,11 @@ const exportStaffToCSV = () => {
           onClick={(e) => { if (e.target === e.currentTarget) { setShowEditStaffModal(false); setEditingStaff(null); } }}
           style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
         >
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '18px', padding: '24px 20px', width: '100%', maxWidth: '420px', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', borderRadius: '18px', padding: '24px 20px', width: '100%', maxWidth: '440px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ color: 'var(--color-text-primary)', margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>Edit Staff Details</h3>
-                <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.8rem' }}>{editingStaff.name}</p>
+                <p style={{ color: 'var(--color-text-secondary)', margin: '3px 0 0 0', fontSize: '0.8rem' }}>{editingStaff.name} ({editingStaff.employeeId || 'STAFF'})</p>
               </div>
               <button
                 onClick={() => { setShowEditStaffModal(false); setEditingStaff(null); }}
@@ -5707,7 +6259,7 @@ const exportStaffToCSV = () => {
               </button>
             </div>
 
-            <form onSubmit={handleEditStaff} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <form onSubmit={handleEditStaff} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Full Name *</label>
@@ -5722,23 +6274,171 @@ const exportStaffToCSV = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Daily Wage (₹) *</label>
-                  <input type="number" min="0" className="form-input" value={editingStaff.dailyRate || ''} onChange={(e) => setEditingStaff({ ...editingStaff, dailyRate: Number(e.target.value) })} required />
+                  <input type="number" min="0" className="form-input" value={editingStaff.dailyRate === '' ? '' : (editingStaff.dailyRate ?? '')} onChange={(e) => setEditingStaff({ ...editingStaff, dailyRate: e.target.value === '' ? '' : Number(e.target.value) })} required />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Grace Time (Mins) *</label>
-                  <input type="number" min="0" max="180" className="form-input" value={editingStaff.leanTimeMinutes !== undefined ? editingStaff.leanTimeMinutes : 30} onChange={(e) => setEditingStaff({ ...editingStaff, leanTimeMinutes: Number(e.target.value) })} required />
+                  <input type="number" min="0" max="180" className="form-input" value={editingStaff.leanTimeMinutes === '' ? '' : (editingStaff.leanTimeMinutes ?? '')} onChange={(e) => setEditingStaff({ ...editingStaff, leanTimeMinutes: e.target.value === '' ? '' : Number(e.target.value) })} required />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift Start *</label>
-                  <input type="time" className="form-input" value={editingStaff.shiftStartTime || '09:00'} onChange={(e) => setEditingStaff({ ...editingStaff, shiftStartTime: e.target.value })} required />
+              {/* ── Schedule Configuration (Option 2: Single vs Split Shifts) ── */}
+              <div style={{ background: 'var(--bg-secondary, rgba(0,0,0,0.03))', padding: '12px', borderRadius: '12px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase', fontWeight: 800, margin: 0 }}>
+                  Shift Schedule Type *
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setEditingStaff({ ...editingStaff, scheduleType: 'SINGLE' })}
+                    style={{
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: (editingStaff.scheduleType || 'SINGLE') === 'SINGLE' ? '2px solid var(--color-primary, #ff6b08)' : '1px solid var(--color-border)',
+                      background: (editingStaff.scheduleType || 'SINGLE') === 'SINGLE' ? 'rgba(255, 107, 8, 0.12)' : 'var(--bg-card)',
+                      color: (editingStaff.scheduleType || 'SINGLE') === 'SINGLE' ? 'var(--color-primary, #ff6b08)' : 'var(--color-text-secondary)',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    ⏱️ Single Shift
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = (editingStaff.shifts && editingStaff.shifts.length > 0)
+                        ? editingStaff.shifts
+                        : [
+                            { shiftNumber: 1, shiftLabel: 'Lunch Shift', startTime: '11:00', endTime: '15:30' },
+                            { shiftNumber: 2, shiftLabel: 'Dinner Shift', startTime: '19:00', endTime: '23:30' }
+                          ];
+                      setEditingStaff({ ...editingStaff, scheduleType: 'SPLIT', shifts: cur });
+                    }}
+                    style={{
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: editingStaff.scheduleType === 'SPLIT' ? '2px solid var(--color-primary, #ff6b08)' : '1px solid var(--color-border)',
+                      background: editingStaff.scheduleType === 'SPLIT' ? 'rgba(255, 107, 8, 0.12)' : 'var(--bg-card)',
+                      color: editingStaff.scheduleType === 'SPLIT' ? 'var(--color-primary, #ff6b08)' : 'var(--color-text-secondary)',
+                      fontWeight: 800,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    🔀 Split / Multi-Shift
+                  </button>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift End *</label>
-                  <input type="time" className="form-input" value={editingStaff.shiftEndTime || '18:00'} onChange={(e) => setEditingStaff({ ...editingStaff, shiftEndTime: e.target.value })} required />
-                </div>
+
+                {(editingStaff.scheduleType || 'SINGLE') === 'SINGLE' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift Start *</label>
+                      <input type="time" className="form-input" value={editingStaff.shiftStartTime || '09:00'} onChange={(e) => setEditingStaff({ ...editingStaff, shiftStartTime: e.target.value })} required />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="form-label" style={{ color: 'var(--color-text-secondary)', fontSize: '11px', textTransform: 'uppercase' }}>Shift End *</label>
+                      <input type="time" className="form-input" value={editingStaff.shiftEndTime || '18:00'} onChange={(e) => setEditingStaff({ ...editingStaff, shiftEndTime: e.target.value })} required />
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                        Configured Shifts ({(editingStaff.shifts || []).length}/4)
+                      </span>
+                      {(editingStaff.shifts || []).length < 4 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextNum = (editingStaff.shifts || []).length + 1;
+                            const nextShift = {
+                              shiftNumber: nextNum,
+                              shiftLabel: nextNum === 2 ? 'Dinner Shift' : `Shift ${nextNum}`,
+                              startTime: nextNum === 2 ? '19:00' : '09:00',
+                              endTime: nextNum === 2 ? '23:30' : '18:00'
+                            };
+                            setEditingStaff({ ...editingStaff, shifts: [...(editingStaff.shifts || []), nextShift] });
+                          }}
+                          style={{
+                            background: 'rgba(255, 107, 8, 0.12)',
+                            color: 'var(--color-primary, #ff6b08)',
+                            border: '1px solid var(--color-primary, #ff6b08)',
+                            borderRadius: '6px',
+                            padding: '3px 8px',
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          + Add Shift
+                        </button>
+                      )}
+                    </div>
+
+                    {(editingStaff.shifts || []).map((s, idx) => (
+                      <div key={idx} style={{ background: 'var(--bg-card)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            value={s.shiftLabel || `Shift ${idx + 1}`}
+                            onChange={(e) => {
+                              const updated = [...editingStaff.shifts];
+                              updated[idx] = { ...updated[idx], shiftLabel: e.target.value };
+                              setEditingStaff({ ...editingStaff, shifts: updated });
+                            }}
+                            placeholder={`Shift ${idx + 1} Label`}
+                            style={{ width: '130px', padding: '3px 6px', fontSize: '11px', fontWeight: 700, border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--color-text-primary)' }}
+                          />
+                          {editingStaff.shifts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = editingStaff.shifts.filter((_, i) => i !== idx).map((sh, i) => ({ ...sh, shiftNumber: i + 1 }));
+                                setEditingStaff({ ...editingStaff, shifts: updated });
+                              }}
+                              style={{ background: 'transparent', border: 'none', color: '#e74c3c', fontSize: '11px', cursor: 'pointer', fontWeight: 700 }}
+                            >
+                              ✕ Remove
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div>
+                            <label style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block' }}>Start Time</label>
+                            <input
+                              type="time"
+                              value={s.startTime}
+                              onChange={(e) => {
+                                const updated = [...editingStaff.shifts];
+                                updated[idx] = { ...updated[idx], startTime: e.target.value };
+                                setEditingStaff({ ...editingStaff, shifts: updated });
+                              }}
+                              required
+                              style={{ width: '100%', padding: '4px 6px', fontSize: '12px', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--color-text-primary)' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block' }}>End Time</label>
+                            <input
+                              type="time"
+                              value={s.endTime}
+                              onChange={(e) => {
+                                const updated = [...editingStaff.shifts];
+                                updated[idx] = { ...updated[idx], endTime: e.target.value };
+                                setEditingStaff({ ...editingStaff, shifts: updated });
+                              }}
+                              required
+                              style={{ width: '100%', padding: '4px 6px', fontSize: '12px', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-primary)', color: 'var(--color-text-primary)' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -6530,6 +7230,7 @@ const exportStaffToCSV = () => {
                     <th style={{ padding: '10px 8px' }}>Total Hours</th>
                     <th style={{ padding: '10px 8px' }}>Status</th>
                     <th style={{ padding: '10px 8px' }}>Earned Today</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'center' }}>Selfie (12h)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -6568,6 +7269,54 @@ const exportStaffToCSV = () => {
                         <td style={{ padding: '10px 8px', fontWeight: 800, color: '#27ae60' }}>
                           ₹{rec.dailyWageEarned || 0}
                         </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                          {rec.image ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewingSelfieModal({
+                                image: rec.image,
+                                staffName,
+                                time: inTime,
+                                date: rec.date
+                              })}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: 'rgba(255, 107, 8, 0.1)',
+                                border: '1px solid var(--color-primary, #ff6b08)',
+                                borderRadius: '8px',
+                                padding: '3px 8px',
+                                cursor: 'pointer',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: 'var(--color-primary, #ff6b08)'
+                              }}
+                            >
+                              <img
+                                src={rec.image}
+                                alt="Selfie"
+                                style={{ width: '22px', height: '22px', borderRadius: '4px', objectFit: 'cover' }}
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                              />
+                              <span>📸 View</span>
+                            </button>
+                          ) : rec.imageExpired ? (
+                            <span style={{
+                              fontSize: '10.5px',
+                              fontWeight: 600,
+                              color: 'var(--color-text-secondary)',
+                              background: 'rgba(0,0,0,0.06)',
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              display: 'inline-block'
+                            }}>
+                              🔒 Expired (12h)
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}>—</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -6575,6 +7324,119 @@ const exportStaffToCSV = () => {
               </table>
             </div>
           )}
+        </div>
+      </div>
+    )}
+
+    {/* ── ATTENDANCE SELFIE VIEW MODAL (12-HOUR AUTO-PURGE) ── */}
+    {viewingSelfieModal && (
+      <div
+        className="modal-overlay"
+        onClick={() => setViewingSelfieModal(null)}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 4500,
+          background: 'rgba(0, 0, 0, 0.82)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'relative',
+            background: 'var(--bg-card)',
+            border: '1.5px solid var(--color-primary, #ff6b08)',
+            borderRadius: '20px',
+            maxWidth: '420px',
+            width: '100%',
+            overflow: 'hidden',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          {/* Header */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--color-border)',
+            background: 'var(--bg-secondary)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.2rem' }}>📸</span>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                  {viewingSelfieModal.staffName}
+                </h4>
+                <p style={{ margin: 0, fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                  Clock-in selfie at {viewingSelfieModal.time} ({viewingSelfieModal.date || 'Today'})
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewingSelfieModal(null)}
+              style={{
+                background: 'rgba(0,0,0,0.06)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '28px',
+                height: '28px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-text-secondary)'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Photo */}
+          <div style={{ padding: '16px', background: '#0a0a0a', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <img
+              src={viewingSelfieModal.image}
+              alt={`${viewingSelfieModal.staffName} Check-In Selfie`}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '340px',
+                borderRadius: '12px',
+                objectFit: 'contain',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+              }}
+            />
+          </div>
+
+          {/* Footer Note */}
+          <div style={{
+            padding: '12px 16px',
+            background: 'var(--bg-secondary)',
+            borderTop: '1px solid var(--color-border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span style={{ fontSize: '11px', color: '#27ae60', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              🔒 Auto-purged in 12 hours
+            </span>
+            <button
+              type="button"
+              onClick={() => setViewingSelfieModal(null)}
+              className="btn btn-primary"
+              style={{ padding: '6px 16px', fontSize: '12px', fontWeight: 700, borderRadius: '8px' }}
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     )}
@@ -7168,6 +8030,8 @@ const exportStaffToCSV = () => {
  <input 
  type="date" 
  value={orderDateFilter} 
+ min={currentMonthMinDate}
+ max={currentMonthMaxDate}
  onChange={(e) => setOrderDateFilter(e.target.value)}
  style={{
  padding: '10px 14px',
@@ -7201,6 +8065,64 @@ const exportStaffToCSV = () => {
  }}
  />
  </div>
+</div>
+
+{/* Orders Monitor Summary Ribbon (Matching Staff Order History & Screenshot 2) */}
+<div style={{
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+  gap: '10px',
+  background: 'var(--bg-secondary)',
+  padding: '14px',
+  borderRadius: '12px',
+  border: '1px solid var(--color-border)',
+  marginBottom: '20px'
+}}>
+  <div>
+    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>TOTAL ORDERS</div>
+    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '2px' }}>
+      {monitorSummary.totalOrders}
+    </div>
+  </div>
+
+  <div>
+    <div style={{ fontSize: '11px', color: '#10B981', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <span>💰</span> TOTAL REVENUE
+    </div>
+    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10B981', marginTop: '2px' }}>
+      ₹{monitorSummary.fulfilledRevenue.toFixed(2)}
+    </div>
+  </div>
+
+  <div>
+    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>💵 CASH TOTAL</div>
+    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#e67e22', marginTop: '2px' }}>
+      ₹{monitorSummary.cashRevenue.toFixed(2)}
+    </div>
+  </div>
+
+  <div>
+    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>📱 ONLINE TOTAL</div>
+    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#27ae60', marginTop: '2px' }}>
+      ₹{monitorSummary.onlineRevenue.toFixed(2)}
+    </div>
+  </div>
+
+  <div>
+    <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>⏳ PENDING / UNPAID</div>
+    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#f39c12', marginTop: '2px' }}>
+      ₹{monitorSummary.pendingRevenue.toFixed(2)}
+    </div>
+  </div>
+
+  <div>
+    <div style={{ fontSize: '11px', color: '#8e44ad', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <span>➕</span> EXTRA SALES
+    </div>
+    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#8e44ad', marginTop: '2px' }}>
+      ₹{monitorSummary.extraSalesRevenue.toFixed(2)}
+    </div>
+  </div>
 </div>
 
 <div className="orders-monitor-grid">
@@ -7248,7 +8170,20 @@ const exportStaffToCSV = () => {
             <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>
               #{shortId}
             </span>
-            <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>· Table {order?.tableNumber || 'N/A'}</span>
+            {order?.orderSource === 'EXTRA_SALE' || order?.source === 'EXTRA_SALE' ? (
+              <span style={{
+                background: 'linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%)',
+                color: '#fff',
+                padding: '2px 8px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 800
+              }}>
+                ➕ EXTRA SALE
+              </span>
+            ) : (
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>· Table {order?.tableNumber || 'N/A'}</span>
+            )}
           </div>
           <span style={{
             color: order?.status === 'Placed' ? '#3498db' : order?.status === 'Preparing' ? '#ff9800' : order?.status === 'Ready' ? '#2ecc71' : order?.status === 'Delivered' ? '#9b59b6' : order?.status === 'Completed' ? '#27AE60' : '#7f8c8d',
@@ -9296,21 +10231,214 @@ const exportStaffToCSV = () => {
         </div>
 
         <div className="modal-body custom-scrollbar" style={{ overflowY: 'auto', padding: '16px 0', flex: 1 }}>
-          {/* Summary Badges */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-            <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Today's Expenses</span>
-              <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#e74c3c', marginTop: '4px' }}>₹{todayExpensesTotal.toFixed(2)}</div>
+          {/* Executive Timeframe Tabs */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '10px', border: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
+              {[
+                { id: 'today', label: '📅 Today' },
+                { id: 'week', label: '📊 Last 7 Days' },
+                { id: '15days', label: '🗓️ 15 Days' },
+                { id: 'month', label: '📈 This Month' }
+              ].map((tab) => {
+                const isActive = expenseFinancialPeriod === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setExpenseFinancialPeriod(tab.id);
+                      fetchExpenseFinancialSummary(tab.id);
+                    }}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      border: 'none',
+                      transition: 'all 0.2s',
+                      background: isActive ? 'var(--color-primary, #ff6b08)' : 'transparent',
+                      color: isActive ? '#fff' : 'var(--color-text-secondary)',
+                      boxShadow: isActive ? '0 2px 8px rgba(255, 107, 8, 0.3)' : 'none'
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
-            <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>This Month's Expenses</span>
-              <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#e74c3c', marginTop: '4px' }}>₹{monthlyExpensesTotal.toFixed(2)}</div>
-            </div>
-            <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Total Records</span>
-              <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text-primary)', marginTop: '4px' }}>{expenses.length}</div>
-            </div>
+            {financialSummaryLoading && (
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                Refreshing financial metrics...
+              </span>
+            )}
           </div>
+
+          {/* 5 Executive P&L Metric Cards */}
+          {(() => {
+            const curSales = Number(financialSummary?.totalSales ?? financialSummary?.summary?.totalSales ?? 0);
+            const curMakingCost = Number(financialSummary?.recipeMakingCost ?? financialSummary?.menuMakingCost ?? financialSummary?.summary?.recipeMakingCost ?? 0);
+            const curOtherExpenses = Number(financialSummary?.otherExpenses ?? financialSummary?.otherExpensesTotal ?? financialSummary?.summary?.otherExpensesTotal ?? (expenseFinancialPeriod === 'today' ? todayExpensesTotal : monthlyExpensesTotal));
+            const curTotalExpenses = Number(financialSummary?.totalExpenses ?? financialSummary?.totalAllExpenses ?? financialSummary?.summary?.totalAllExpenses ?? (curMakingCost + curOtherExpenses));
+            const curNetProfit = Number(financialSummary?.netProfit ?? financialSummary?.trueNetProfit ?? financialSummary?.summary?.trueNetProfit ?? (curSales - curTotalExpenses));
+            const curNetMargin = curSales > 0 ? Number(((curNetProfit / curSales) * 100).toFixed(1)) : 0;
+            const curOrdersCount = Number(financialSummary?.ordersCount ?? financialSummary?.paidOrdersCount ?? financialSummary?.summary?.paidOrdersCount ?? 0);
+            const curExpensesCount = Number(financialSummary?.expensesCount ?? financialSummary?.otherExpensesCount ?? financialSummary?.summary?.otherExpensesCount ?? expenses.length);
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                {/* Card 1: Total Sales */}
+                <div style={{ background: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>1. Total Sales</span>
+                    <TrendingUp size={14} color="#3498db" />
+                  </div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#3498db', marginTop: '4px' }}>
+                    ₹{curSales.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                    {curOrdersCount} Paid Orders
+                  </div>
+                </div>
+
+                {/* Card 2: Making Cost (COGS) */}
+                <div style={{ background: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>2. Making Cost (COGS)</span>
+                    <Package size={14} color="#e67e22" />
+                  </div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#e67e22', marginTop: '4px' }}>
+                    ₹{curMakingCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDishCostDrawer(!showDishCostDrawer)}
+                    style={{ background: 'transparent', border: 'none', padding: '2px 0', fontSize: '10.5px', color: 'var(--color-primary, #ff6b08)', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}
+                  >
+                    {showDishCostDrawer ? '▲ Hide Dishes' : '▼ Inspect Dish Costs'}
+                  </button>
+                </div>
+
+                {/* Card 3: Other Expenses (OPEX) */}
+                <div style={{ background: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>3. Other Expenses</span>
+                    <Receipt size={14} color="#e74c3c" />
+                  </div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#e74c3c', marginTop: '4px' }}>
+                    ₹{curOtherExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                    {curExpensesCount} Recorded Items
+                  </div>
+                </div>
+
+                {/* Card 4: Total All Expenses */}
+                <div style={{ background: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid rgba(231, 76, 60, 0.4)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: '#e74c3c', fontWeight: 800, textTransform: 'uppercase' }}>4. Total All Costs</span>
+                    <Layers size={14} color="#e74c3c" />
+                  </div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#e74c3c', marginTop: '4px' }}>
+                    ₹{curTotalExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                    Making Cost + Other Costs
+                  </div>
+                </div>
+
+                {/* Card 5: True Net Profit */}
+                <div style={{
+                  background: curNetProfit >= 0 ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)',
+                  padding: '12px 14px',
+                  borderRadius: '12px',
+                  border: `1.5px solid ${curNetProfit >= 0 ? '#2ecc71' : '#e74c3c'}`
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: curNetProfit >= 0 ? '#27ae60' : '#c0392b', fontWeight: 800, textTransform: 'uppercase' }}>
+                      5. True Net Profit
+                    </span>
+                    <IndianRupee size={14} color={curNetProfit >= 0 ? '#27ae60' : '#c0392b'} />
+                  </div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 900, color: curNetProfit >= 0 ? '#27ae60' : '#c0392b', marginTop: '4px' }}>
+                    ₹{curNetProfit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: curNetProfit >= 0 ? '#27ae60' : '#c0392b', marginTop: '2px' }}>
+                    {curNetMargin.toFixed(1)}% Net Margin
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Expandable Dish-by-Dish Recipe Cost Breakdown Drawer */}
+          {showDishCostDrawer && (
+            <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '14px', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <PieChart size={16} color="var(--color-primary, #ff6b08)" />
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                    Dish-by-Dish Recipe Making Cost & Profit Breakdown ({financialSummary?.summary?.periodLabel || expenseFinancialPeriod})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDishCostDrawer(false)}
+                  style={{ background: 'transparent', border: 'none', fontSize: '12px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+                >
+                  ✕ Close
+                </button>
+              </div>
+
+              {(!financialSummary?.dishCostBreakdown || financialSummary.dishCostBreakdown.length === 0) ? (
+                <div style={{ textAlign: 'center', padding: '16px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>
+                  No dish sales recorded yet in this selected timeframe.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(0,0,0,0.03)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                        <th style={{ padding: '6px 8px', color: 'var(--color-text-secondary)' }}>Dish / Item Name</th>
+                        <th style={{ padding: '6px 8px', color: 'var(--color-text-secondary)', textAlign: 'center' }}>Qty Sold</th>
+                        <th style={{ padding: '6px 8px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>Unit Cost</th>
+                        <th style={{ padding: '6px 8px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>Selling Price</th>
+                        <th style={{ padding: '6px 8px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>Total Cost (₹)</th>
+                        <th style={{ padding: '6px 8px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>Total Sales (₹)</th>
+                        <th style={{ padding: '6px 8px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>Gross Profit</th>
+                        <th style={{ padding: '6px 8px', color: 'var(--color-text-secondary)', textAlign: 'right' }}>Margin %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {financialSummary.dishCostBreakdown.map((dish, idx) => {
+                        const q = dish.quantitySold ?? dish.quantity ?? 0;
+                        const uCost = Number(dish.unitMakingCost || 0);
+                        const sPrice = Number(dish.sellingPrice || 0);
+                        const tCost = Number(dish.totalMakingCost || 0);
+                        const tRev = Number(dish.totalRevenue || 0);
+                        const gProf = Number(dish.grossProfit || 0);
+                        const mPct = Number(dish.marginPct || 0);
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                            <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--color-text-primary)' }}>{dish.name}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 700 }}>{q}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', color: '#e67e22' }}>₹{uCost.toFixed(2)}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', color: '#3498db' }}>₹{sPrice.toFixed(2)}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: '#e74c3c' }}>₹{tCost.toFixed(2)}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: '#27ae60' }}>₹{tRev.toFixed(2)}</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800, color: gProf >= 0 ? '#27ae60' : '#e74c3c' }}>
+                              ₹{gProf.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>{mPct.toFixed(1)}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Add / Edit Expense Form */}
           <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '12px', border: '1px solid var(--color-border)', marginBottom: '20px' }}>
@@ -9318,7 +10446,7 @@ const exportStaffToCSV = () => {
               {editingExpense ? '✏️ Edit Expense Record' : '+ Add New Expense'}
             </h4>
             <form onSubmit={editingExpense ? handleUpdateExpense : handleAddExpense}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '12px' }}>
                 <div>
                   <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Expense Title *</label>
                   <input
@@ -9344,7 +10472,21 @@ const exportStaffToCSV = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Category (Select or Type Custom)</label>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Frequency Tag</label>
+                  <select
+                    value={editingExpense ? (editingExpense.periodTag === 'Daily' ? 'Today' : (editingExpense.periodTag || 'Today')) : (newExpenseForm.periodTag || 'Today')}
+                    onChange={(e) => editingExpense ? setEditingExpense({ ...editingExpense, periodTag: e.target.value }) : setNewExpenseForm({ ...newExpenseForm, periodTag: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-primary)', color: 'var(--color-text-primary)', fontSize: '13px', fontWeight: 600 }}
+                  >
+                    <option value="Today">Today</option>
+                    <option value="Weekly">Weekly</option>
+                    <option value="15 Days">15 Days</option>
+                    <option value="Monthly">Monthly</option>
+                    <option value="One-Time">One-Time</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Category</label>
                   <input
                     type="text"
                     list="expense-category-suggestions"
@@ -9371,7 +10513,7 @@ const exportStaffToCSV = () => {
                   <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>Date</label>
                   <input
                     type="date"
-                    value={editingExpense ? (editingExpense.date ? new Date(editingExpense.date).toISOString().split('T')[0] : '') : newExpenseForm.date}
+                    value={editingExpense ? (editingExpense.date ? (() => { const d = new Date(editingExpense.date); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '') : newExpenseForm.date}
                     onChange={(e) => editingExpense ? setEditingExpense({ ...editingExpense, date: e.target.value }) : setNewExpenseForm({ ...newExpenseForm, date: e.target.value })}
                     style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'var(--bg-primary)', color: 'var(--color-text-primary)', fontSize: '13px' }}
                   />
@@ -9413,27 +10555,35 @@ const exportStaffToCSV = () => {
 
           {/* Expenses List */}
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
               <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: 'var(--color-text-primary)' }}>Recorded Expenses History</h4>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  onClick={() => setExpenseDateFilter('all')}
-                  style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: '1px solid var(--color-border)', cursor: 'pointer', background: expenseDateFilter === 'all' ? 'var(--color-primary)' : 'var(--bg-secondary)', color: expenseDateFilter === 'all' ? '#fff' : 'var(--color-text-secondary)' }}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setExpenseDateFilter('today')}
-                  style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: '1px solid var(--color-border)', cursor: 'pointer', background: expenseDateFilter === 'today' ? 'var(--color-primary)' : 'var(--bg-secondary)', color: expenseDateFilter === 'today' ? '#fff' : 'var(--color-text-secondary)' }}
-                >
-                  Today
-                </button>
-                <button
-                  onClick={() => setExpenseDateFilter('month')}
-                  style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: '1px solid var(--color-border)', cursor: 'pointer', background: expenseDateFilter === 'month' ? 'var(--color-primary)' : 'var(--bg-secondary)', color: expenseDateFilter === 'month' ? '#fff' : 'var(--color-text-secondary)' }}
-                >
-                  This Month
-                </button>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: 'Today', label: 'Today' },
+                  { key: 'Weekly', label: 'Weekly' },
+                  { key: '15 Days', label: '15 Days' },
+                  { key: 'Monthly', label: 'Monthly' },
+                  { key: 'One-Time', label: 'One-Time' }
+                ].map((f) => (
+                  <button
+                    key={f.key}
+                    onClick={() => setExpenseDateFilter(f.key)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      border: '1px solid var(--color-border)',
+                      cursor: 'pointer',
+                      background: expenseDateFilter === f.key ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                      color: expenseDateFilter === f.key ? '#fff' : 'var(--color-text-secondary)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -9450,6 +10600,7 @@ const exportStaffToCSV = () => {
                     <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                       <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Date</th>
                       <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Title</th>
+                      <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Frequency</th>
                       <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Category</th>
                       <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700, textAlign: 'right' }}>Amount</th>
                       <th style={{ padding: '8px 10px', color: 'var(--color-text-secondary)', fontWeight: 700, textAlign: 'center' }}>Actions</th>
@@ -9458,17 +10609,9 @@ const exportStaffToCSV = () => {
                   <tbody>
                     {expenses
                       .filter((e) => {
-                        if (expenseDateFilter === 'today') {
-                          const now = new Date();
-                          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                          return new Date(e.date || e.createdAt) >= start;
-                        }
-                        if (expenseDateFilter === 'month') {
-                          const now = new Date();
-                          const start = new Date(now.getFullYear(), now.getMonth(), 1);
-                          return new Date(e.date || e.createdAt) >= start;
-                        }
-                        return true;
+                        if (expenseDateFilter === 'all') return true;
+                        const tag = e.periodTag === 'Daily' ? 'Today' : (e.periodTag || 'Today');
+                        return tag === expenseDateFilter;
                       })
                       .map((item) => (
                         <tr key={item._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -9478,6 +10621,11 @@ const exportStaffToCSV = () => {
                           <td style={{ padding: '8px 10px', color: 'var(--color-text-primary)', fontWeight: 700 }}>
                             {item.title}
                             {item.notes && <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 400 }}>{item.notes}</div>}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <span style={{ background: 'rgba(52, 152, 219, 0.12)', color: '#2980b9', padding: '2px 7px', borderRadius: '6px', fontSize: '10.5px', fontWeight: 700 }}>
+                              {item.periodTag === 'Daily' ? 'Today' : (item.periodTag || 'Today')}
+                            </span>
                           </td>
                           <td style={{ padding: '8px 10px' }}>
                             <span style={{ background: 'rgba(0,0,0,0.06)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>

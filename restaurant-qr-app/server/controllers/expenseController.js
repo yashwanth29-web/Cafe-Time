@@ -1,4 +1,6 @@
 const Expense = require('../models/Expense');
+const Order = require('../models/Order');
+const MenuItem = require('../models/MenuItem');
 
 // @desc    Get expenses for a cafe / branch
 // @route   GET /api/expenses
@@ -10,11 +12,15 @@ exports.getExpenses = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Cafe ID is required' });
     }
 
-    const { branchId, date, month, startDate, endDate } = req.query;
+    const { branchId, date, month, startDate, endDate, periodTag } = req.query;
     const query = { cafeId };
 
     if (branchId && branchId !== 'all') {
       query.branchId = branchId;
+    }
+
+    if (periodTag && periodTag !== 'all') {
+      query.periodTag = periodTag;
     }
 
     if (date) {
@@ -65,7 +71,7 @@ exports.createExpense = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Cafe ID is required' });
     }
 
-    const { title, amount, category, paymentMode, date, notes, branchId } = req.body;
+    const { title, amount, category, paymentMode, date, notes, branchId, periodTag } = req.body;
 
     if (!title || title.trim() === '') {
       return res.status(400).json({ success: false, message: 'Expense title is required' });
@@ -76,6 +82,17 @@ exports.createExpense = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Valid expense amount greater than 0 is required' });
     }
 
+    let expenseDate;
+    if (date) {
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        expenseDate = new Date(`${date}T12:00:00+05:30`);
+      } else {
+        expenseDate = new Date(date);
+      }
+    } else {
+      expenseDate = new Date();
+    }
+
     const newExpense = new Expense({
       cafeId,
       branchId: branchId || req.branchId || 'default',
@@ -83,7 +100,8 @@ exports.createExpense = async (req, res) => {
       amount: parsedAmount,
       category: category || 'Miscellaneous',
       paymentMode: paymentMode || 'Cash',
-      date: date ? new Date(date) : new Date(),
+      periodTag: (periodTag === 'Daily' ? 'Today' : (periodTag || 'Today')),
+      date: expenseDate,
       notes: (notes || '').trim(),
       recordedBy: req.user ? (req.user.name || req.user.email || 'Owner') : 'Owner'
     });
@@ -107,7 +125,7 @@ exports.createExpense = async (req, res) => {
 exports.updateExpense = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, amount, category, paymentMode, date, notes } = req.body;
+    const { title, amount, category, paymentMode, date, notes, periodTag } = req.body;
 
     const expense = await Expense.findById(id);
     if (!expense) {
@@ -124,7 +142,14 @@ exports.updateExpense = async (req, res) => {
     }
     if (category !== undefined) expense.category = category;
     if (paymentMode !== undefined) expense.paymentMode = paymentMode;
-    if (date !== undefined) expense.date = new Date(date);
+    if (periodTag !== undefined) expense.periodTag = periodTag === 'Daily' ? 'Today' : periodTag;
+    if (date !== undefined) {
+      if (date && typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        expense.date = new Date(`${date}T12:00:00+05:30`);
+      } else {
+        expense.date = date ? new Date(date) : new Date();
+      }
+    }
     if (notes !== undefined) expense.notes = notes.trim();
 
     await expense.save();
@@ -158,5 +183,171 @@ exports.deleteExpense = async (req, res) => {
   } catch (error) {
     console.error('Error deleting expense:', error);
     return res.status(500).json({ success: false, message: 'Failed to delete expense', error: error.message });
+  }
+};
+
+// @desc    Get executive financial P&L summary (Revenue, Recipe Making Cost, Other Expenses, Total Expenses, Net Profit)
+// @route   GET /api/expenses/financial-summary
+// @access  Private (Owner/Admin)
+exports.getFinancialSummary = async (req, res) => {
+  try {
+    const cafeId = req.cafeId || req.query.cafeId || (req.user && req.user.cafeId);
+    if (!cafeId) {
+      return res.status(400).json({ success: false, message: 'Cafe ID is required' });
+    }
+
+    const { branchId, period = 'today' } = req.query;
+
+    // Timezone calculations for IST (UTC+5:30)
+    const now = new Date();
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const year = istTime.getUTCFullYear();
+    const month = istTime.getUTCMonth();
+    const date = istTime.getUTCDate();
+
+    let startDate;
+    if (period === 'today') {
+      startDate = new Date(Date.UTC(year, month, date) - (5.5 * 60 * 60 * 1000));
+    } else if (period === 'week') {
+      // 7 days ago
+      startDate = new Date(Date.UTC(year, month, date - 6) - (5.5 * 60 * 60 * 1000));
+    } else if (period === '15days') {
+      // 15 days ago
+      startDate = new Date(Date.UTC(year, month, date - 14) - (5.5 * 60 * 60 * 1000));
+    } else if (period === 'month') {
+      // 1st of current month
+      startDate = new Date(Date.UTC(year, month, 1) - (5.5 * 60 * 60 * 1000));
+    } else {
+      startDate = new Date(Date.UTC(year, month, date) - (5.5 * 60 * 60 * 1000));
+    }
+
+    const orderQuery = {
+      cafeId,
+      status: { $in: ['Ready', 'Delivered', 'Completed'] },
+      paymentStatus: 'Paid',
+      createdAt: { $gte: startDate }
+    };
+
+    const expenseQuery = {
+      cafeId,
+      date: { $gte: startDate }
+    };
+
+    if (branchId && branchId !== 'all') {
+      orderQuery.branchId = branchId;
+      expenseQuery.branchId = branchId;
+    }
+
+    // Run parallel queries
+    const [orders, menuItems, expenses] = await Promise.all([
+      Order.find(orderQuery).select('totalAmount items createdAt paymentMethod').lean(),
+      MenuItem.find({ cafeId }).select('_id name makingCost price category').lean(),
+      Expense.find(expenseQuery).sort({ date: -1 }).lean()
+    ]);
+
+    // Build fast lookup maps for making costs
+    const menuCostById = {};
+    const menuCostByName = {};
+    menuItems.forEach((m) => {
+      const cost = Number(m.makingCost) || 0;
+      if (m._id) menuCostById[String(m._id)] = cost;
+      if (m.name) menuCostByName[m.name.toLowerCase().trim()] = cost;
+    });
+
+    let totalSales = 0;
+    let menuMakingCost = 0;
+    const dishCostMap = {};
+
+    orders.forEach((order) => {
+      totalSales += Number(order.totalAmount) || 0;
+      if (Array.isArray(order.items)) {
+        order.items.forEach((it) => {
+          const qty = Number(it.quantity) || 1;
+          const idKey = String(it.id || it._id || '');
+          const nameKey = (it.name || '').toLowerCase().trim();
+          const unitCost = menuCostById[idKey] ?? menuCostByName[nameKey] ?? 0;
+          const itemCost = unitCost * qty;
+          const price = Number(it.price || 0);
+          const revenue = price * qty;
+          menuMakingCost += itemCost;
+
+          const dishName = it.name || 'Unknown Dish';
+          if (!dishCostMap[dishName]) {
+            dishCostMap[dishName] = {
+              name: dishName,
+              quantity: 0,
+              quantitySold: 0,
+              unitMakingCost: unitCost,
+              sellingPrice: price,
+              totalMakingCost: 0,
+              totalRevenue: 0,
+              grossProfit: 0,
+              marginPct: 0
+            };
+          }
+          dishCostMap[dishName].quantity += qty;
+          dishCostMap[dishName].quantitySold += qty;
+          dishCostMap[dishName].totalMakingCost += itemCost;
+          dishCostMap[dishName].totalRevenue += revenue;
+          dishCostMap[dishName].grossProfit = dishCostMap[dishName].totalRevenue - dishCostMap[dishName].totalMakingCost;
+          dishCostMap[dishName].marginPct = dishCostMap[dishName].totalRevenue > 0
+            ? Number(((dishCostMap[dishName].grossProfit / dishCostMap[dishName].totalRevenue) * 100).toFixed(1))
+            : 0;
+        });
+      }
+    });
+
+    const dishCostBreakdown = Object.values(dishCostMap)
+      .sort((a, b) => b.totalMakingCost - a.totalMakingCost);
+
+    let otherExpenses = 0;
+    const categoryBreakdown = {};
+    expenses.forEach((exp) => {
+      const amt = Number(exp.amount) || 0;
+      otherExpenses += amt;
+      const cat = exp.category || 'Miscellaneous';
+      categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + amt;
+    });
+
+    const totalExpenses = Number((menuMakingCost + otherExpenses).toFixed(2));
+    const grossProfit = Number((totalSales - menuMakingCost).toFixed(2));
+    const netProfit = Number((totalSales - totalExpenses).toFixed(2));
+    const netMargin = totalSales > 0 ? Number(((netProfit / totalSales) * 100).toFixed(1)) : 0;
+    const grossMargin = totalSales > 0 ? Number(((grossProfit / totalSales) * 100).toFixed(1)) : 0;
+
+    const summaryObj = {
+      period,
+      startDate,
+      totalSales: Number(totalSales.toFixed(2)),
+      recipeMakingCost: Number(menuMakingCost.toFixed(2)),
+      menuMakingCost: Number(menuMakingCost.toFixed(2)),
+      otherExpensesTotal: Number(otherExpenses.toFixed(2)),
+      otherExpenses: Number(otherExpenses.toFixed(2)),
+      totalAllExpenses: totalExpenses,
+      totalExpenses,
+      grossProfit,
+      grossMargin,
+      trueNetProfit: netProfit,
+      netProfit,
+      trueNetMarginPct: netMargin,
+      netMargin,
+      paidOrdersCount: orders.length,
+      ordersCount: orders.length,
+      otherExpensesCount: expenses.length,
+      expensesCount: expenses.length
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...summaryObj,
+        summary: summaryObj,
+        dishCostBreakdown,
+        categoryBreakdown
+      }
+    });
+  } catch (error) {
+    console.error('getFinancialSummary error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to calculate financial summary', error: error.message });
   }
 };

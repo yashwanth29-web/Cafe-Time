@@ -30,7 +30,7 @@ router.use(protect);
 router.get('/', restrictTo(...ALL_STAFF), getInventory);
 router.post('/', restrictTo(...ALL_STAFF), createInventoryItem);        // Staff can add items
 router.patch('/:id', restrictTo(...ALL_STAFF), updateInventoryItem);   // Staff can edit items
-router.delete('/:id', restrictTo(...ADMIN_ONLY), deleteInventoryItem); // Only admin/owner can delete
+router.delete('/:id', restrictTo(...ALL_STAFF), deleteInventoryItem);  // Staff can delete items
 
 // Advanced stock operations & logs — all staff can purchase, wastage, shortage, revert
 router.get('/logs', restrictTo(...ALL_STAFF), getInventoryLogs);

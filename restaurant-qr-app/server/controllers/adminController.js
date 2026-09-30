@@ -42,7 +42,8 @@ const createStaff = async (req, res) => {
   const { 
     name, username, password, email, phone, staffRole, assignedBranch, isActive,
     salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus,
-    shiftStartTime, shiftEndTime, leanTimeMinutes, workDaysPerWeek, attendancePin
+    shiftStartTime, shiftEndTime, leanTimeMinutes, workDaysPerWeek, attendancePin,
+    scheduleType, shifts
   } = req.body;
   const cafeId = req.user.cafeId;
 
@@ -114,6 +115,28 @@ const createStaff = async (req, res) => {
     const rawPassword = password && password.trim() !== '' ? password.trim() : 'Cafe@12345';
     const hashedPassword = await bcrypt.hash(rawPassword, 12);
 
+    // Format normalized shifts array
+    let parsedShifts = [];
+    const chosenScheduleType = scheduleType === 'SPLIT' ? 'SPLIT' : 'SINGLE';
+    if (chosenScheduleType === 'SPLIT' && Array.isArray(shifts) && shifts.length > 0) {
+      parsedShifts = shifts.map((s, idx) => ({
+        shiftNumber: idx + 1,
+        shiftLabel: s.shiftLabel || `Shift ${idx + 1}`,
+        startTime: s.startTime || '09:00',
+        endTime: s.endTime || '18:00'
+      }));
+    } else {
+      parsedShifts = [{
+        shiftNumber: 1,
+        shiftLabel: 'Shift 1',
+        startTime: shiftStartTime || '09:00',
+        endTime: shiftEndTime || '18:00'
+      }];
+    }
+
+    const effectiveShiftStart = parsedShifts[0]?.startTime || shiftStartTime || '09:00';
+    const effectiveShiftEnd = parsedShifts[parsedShifts.length - 1]?.endTime || shiftEndTime || '18:00';
+
     const newStaff = await User.create({
       name: name.trim(),
       displayName: name.trim(),
@@ -130,8 +153,10 @@ const createStaff = async (req, res) => {
       salaryType: salaryType || 'DAILY',
       dailyRate: dailyRate !== undefined ? Number(dailyRate) : 0,
       requiredHours: requiredHours !== undefined ? Number(requiredHours) : 8,
-      shiftStartTime: shiftStartTime || '09:00',
-      shiftEndTime: shiftEndTime || '18:00',
+      scheduleType: chosenScheduleType,
+      shifts: parsedShifts,
+      shiftStartTime: effectiveShiftStart,
+      shiftEndTime: effectiveShiftEnd,
       leanTimeMinutes: leanTimeMinutes !== undefined ? Number(leanTimeMinutes) : 30,
       workDaysPerWeek: workDaysPerWeek !== undefined ? Number(workDaysPerWeek) : 6,
       hourlyRate: dailyRate !== undefined ? Number((Number(dailyRate) / (requiredHours !== undefined ? Number(requiredHours) : 8)).toFixed(2)) : 0,
@@ -537,7 +562,8 @@ const updateStaff = async (req, res) => {
   const { 
     name, email, phone, staffRole, assignedBranch, isActive,
     salaryType, dailyRate, requiredHours, hourlyRate, weeklyRate, monthlyRate, weeklyOff, joiningDate, salaryStatus,
-    shiftStartTime, shiftEndTime, leanTimeMinutes, workDaysPerWeek, attendancePin
+    shiftStartTime, shiftEndTime, leanTimeMinutes, workDaysPerWeek, attendancePin,
+    scheduleType, shifts
   } = req.body;
   const cafeId = req.user.cafeId;
 
@@ -617,11 +643,27 @@ const updateStaff = async (req, res) => {
     if (requiredHours !== undefined) {
       staffMember.requiredHours = Number(requiredHours);
     }
-    if (shiftStartTime !== undefined) {
-      staffMember.shiftStartTime = shiftStartTime;
+    if (scheduleType !== undefined) {
+      staffMember.scheduleType = scheduleType === 'SPLIT' ? 'SPLIT' : 'SINGLE';
     }
-    if (shiftEndTime !== undefined) {
-      staffMember.shiftEndTime = shiftEndTime;
+    if (shifts !== undefined && Array.isArray(shifts)) {
+      staffMember.shifts = shifts.map((s, idx) => ({
+        shiftNumber: idx + 1,
+        shiftLabel: s.shiftLabel || `Shift ${idx + 1}`,
+        startTime: s.startTime || '09:00',
+        endTime: s.endTime || '18:00'
+      }));
+      if (staffMember.shifts.length > 0) {
+        staffMember.shiftStartTime = staffMember.shifts[0].startTime;
+        staffMember.shiftEndTime = staffMember.shifts[staffMember.shifts.length - 1].endTime;
+      }
+    } else {
+      if (shiftStartTime !== undefined) {
+        staffMember.shiftStartTime = shiftStartTime;
+      }
+      if (shiftEndTime !== undefined) {
+        staffMember.shiftEndTime = shiftEndTime;
+      }
     }
     if (leanTimeMinutes !== undefined) {
       staffMember.leanTimeMinutes = Number(leanTimeMinutes);
@@ -2094,6 +2136,7 @@ const getDashboardStats = async (req, res) => {
       revenueStats,
       sourceStats,
       allSalesItems,
+      allSalesItemsOverall,
       inventoryValueAgg,
       inventoryLogStats,
       ordersToday,
@@ -2193,13 +2236,46 @@ const getDashboardStats = async (req, res) => {
         { $group: { _id: '$orderSource', count: { $sum: 1 } } }
       ]),
       Order.aggregate([
-        { $match: { ...revenueMatch, createdAt: { $gte: startOfToday } } },
+        { 
+          $match: { 
+            ...orderMatchQuery, 
+            status: { $nin: ['Cancelled', 'cancelled', 'Failed', 'Expired'] },
+            $or: [
+              { paymentStatus: 'Paid' },
+              { status: { $in: ['Ready', 'Delivered', 'Completed'] } }
+            ],
+            createdAt: { $gte: startOfToday } 
+          } 
+        },
         { $unwind: '$items' },
         { 
           $group: {
             _id: '$items.name',
             quantity: { $sum: '$items.quantity' },
-            revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } }
+            revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } },
+            lastSoldDate: { $max: '$createdAt' }
+          }
+        },
+        { $sort: { quantity: -1 } }
+      ]),
+      Order.aggregate([
+        { 
+          $match: { 
+            ...orderMatchQuery, 
+            status: { $nin: ['Cancelled', 'cancelled', 'Failed', 'Expired'] },
+            $or: [
+              { paymentStatus: 'Paid' },
+              { status: { $in: ['Ready', 'Delivered', 'Completed'] } }
+            ]
+          } 
+        },
+        { $unwind: '$items' },
+        { 
+          $group: {
+            _id: '$items.name',
+            quantity: { $sum: '$items.quantity' },
+            revenue: { $sum: { $multiply: ['$items.quantity', '$items.price'] } },
+            lastSoldDate: { $max: '$createdAt' }
           }
         },
         { $sort: { quantity: -1 } }
@@ -2448,6 +2524,18 @@ const getDashboardStats = async (req, res) => {
       orderSourceData,
       topSellingItems: formattedTopSelling,
       slowSellingItems: formattedSlowSelling,
+      allSoldItemsToday: (allSalesItems || []).map(item => ({
+        name: item._id,
+        quantity: item.quantity,
+        totalAmount: item.revenue,
+        lastSoldDate: item.lastSoldDate
+      })),
+      allSoldItemsOverall: (allSalesItemsOverall || []).map(item => ({
+        name: item._id,
+        quantity: item.quantity,
+        totalAmount: item.revenue,
+        lastSoldDate: item.lastSoldDate
+      })),
       weeklySalesData,
       recentOrders: formattedRecentOrders,
       inventory: {

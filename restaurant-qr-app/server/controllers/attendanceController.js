@@ -1,3 +1,5 @@
+const path = require('path');
+const fs = require('fs');
 const Attendance = require('../models/Attendance');
 const User = require('../models/User');
 const Branch = require('../models/Branch');
@@ -57,15 +59,35 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c; // distance in meters
 };
 
-// Helper: Auto-checkout if shift ended >= 5 minutes ago and extra work was not started
-const checkAndApplyAutoCheckout = async (session, staff) => {
-  if (!session || session.checkOutTime || session.isExtraWorkActive) {
+// Helper: Auto-checkout if shift ended >= 5 minutes ago
+const checkAndApplyAutoCheckout = async (attendance, staff) => {
+  if (!attendance) return false;
+
+  // Find active session in shiftSessions, or root attendance
+  const activeSession = (attendance.shiftSessions || []).find(s => !s.checkOutTime) ||
+                        (attendance.activeSessionNumber > 0 ? attendance.shiftSessions?.find(s => s.sessionNumber === attendance.activeSessionNumber) : null);
+
+  // If already checked out and no active session
+  if (attendance.checkOutTime && (!activeSession || activeSession.checkOutTime)) {
     return false;
   }
 
-  const shiftStartTime = session.shiftStartTime || (staff && staff.shiftStartTime) || '09:00';
-  const shiftEndTime = session.shiftEndTime || (staff && staff.shiftEndTime) || '18:00';
-  const dailyRate = Number(session.dailyWageRate || (staff ? staff.dailyRate : 0) || 0);
+  if (!staff && attendance.staffId) {
+    const User = require('../models/User');
+    staff = await User.findById(attendance.staffId).setOptions({ bypassBranchFilter: true });
+  }
+
+  // Determine target shift for the active session
+  let targetShift = null;
+  const activeShiftNum = activeSession ? activeSession.sessionNumber : (attendance.activeSessionNumber || 1);
+  if (staff?.scheduleType === 'SPLIT' && Array.isArray(staff?.shifts) && staff.shifts.length > 0) {
+    targetShift = staff.shifts.find(s => s.shiftNumber === activeShiftNum) ||
+                  staff.shifts[activeShiftNum - 1] ||
+                  staff.shifts[0];
+  }
+
+  const shiftStartTime = activeSession?.shiftStartTime || (targetShift && targetShift.startTime) || attendance.shiftStartTime || (staff && staff.shiftStartTime) || '09:00';
+  const shiftEndTime = activeSession?.shiftEndTime || (targetShift && targetShift.endTime) || attendance.shiftEndTime || (staff && staff.shiftEndTime) || '18:00';
 
   let startMins = parseTimeToMinutes(shiftStartTime) ?? (9 * 60);
   let endMins = parseTimeToMinutes(shiftEndTime) ?? (18 * 60);
@@ -80,23 +102,54 @@ const checkAndApplyAutoCheckout = async (session, staff) => {
     currentISTMins += 24 * 60;
   }
 
-  const diffMs = now.getTime() - session.checkInTime.getTime();
+  const sessionCheckInTime = activeSession?.checkInTime ? new Date(activeSession.checkInTime) : new Date(attendance.checkInTime);
+  const diffMs = now.getTime() - sessionCheckInTime.getTime();
   const durationMin = Math.max(1, Math.round(diffMs / 60000));
 
-  // Auto-checkout condition: Current time >= shiftEndTime + 5 minutes OR exceeded 8 hours
-  const isShiftExceeded5Mins = currentISTMins >= endMins + 5;
+  // Auto-checkout condition: Current time >= shiftEndTime (immediate, no buffer) OR duration >= 480 mins
+  const isShiftTimeOver = currentISTMins >= endMins;
   const isOverMaxDuration = durationMin >= 480;
 
-  if (isShiftExceeded5Mins || isOverMaxDuration) {
-    session.checkOutTime = now;
-    session.totalDuration = durationMin;
-    session.workingHours = Number((durationMin / 60).toFixed(2));
-    session.status = session.status === 'Late' ? 'Late' : 'Present';
-    session.dailyWageEarned = dailyRate;
-    session.overtimeHours = 0;
-    session.overtimePay = 0;
-    session.isWageFinalized = true;
-    await session.save();
+  if (isShiftTimeOver || isOverMaxDuration) {
+    const dailyRate = Number(attendance.dailyWageRate || (staff ? staff.dailyRate : 0) || 0);
+    const totalConfiguredShifts = (staff?.scheduleType === 'SPLIT' && Array.isArray(staff?.shifts) && staff.shifts.length > 0)
+      ? staff.shifts.length
+      : ((attendance.shiftSessions && attendance.shiftSessions.length > 1) ? attendance.shiftSessions.length : 1);
+    const shiftWageAllocation = Number((dailyRate / totalConfiguredShifts).toFixed(2));
+
+    let penaltyDeduction = 0;
+    if (activeSession?.isLateAfterGrace) {
+      penaltyDeduction = activeSession.penaltyAmount || 100;
+    }
+    const sessionFinalWage = Math.max(0, Number((shiftWageAllocation - penaltyDeduction).toFixed(2)));
+
+    if (activeSession) {
+      activeSession.checkOutTime = now;
+      activeSession.durationMinutes = durationMin;
+      activeSession.workingHours = Number((durationMin / 60).toFixed(2));
+      activeSession.sessionWage = sessionFinalWage;
+      activeSession.status = activeSession.isLateAfterGrace ? 'Late' : 'Present';
+      if (!activeSession.shiftStartTime) activeSession.shiftStartTime = shiftStartTime;
+      if (!activeSession.shiftEndTime) activeSession.shiftEndTime = shiftEndTime;
+    }
+
+    const completedList = (attendance.shiftSessions || []).filter(s => !!s.checkOutTime);
+    const totalDayDuration = completedList.reduce((acc, s) => acc + (s.durationMinutes || 0), 0) || durationMin;
+    const totalDayWorkingHours = Number((totalDayDuration / 60).toFixed(2));
+    const totalDayWages = completedList.length > 0
+      ? Number(completedList.reduce((acc, s) => acc + (s.sessionWage || 0), 0).toFixed(2))
+      : sessionFinalWage;
+    const totalDayPenalties = completedList.reduce((acc, s) => acc + (s.penaltyAmount || 0), 0);
+
+    attendance.checkOutTime = now;
+    attendance.totalDuration = totalDayDuration;
+    attendance.workingHours = totalDayWorkingHours;
+    attendance.dailyWageEarned = totalDayWages;
+    attendance.totalPenaltyAmount = totalDayPenalties;
+    attendance.activeSessionNumber = 0;
+    attendance.autoCheckedOut = true;
+    attendance.isWageFinalized = true;
+    await attendance.save();
     return true;
   }
 
@@ -211,7 +264,7 @@ const checkIn = async (req, res) => {
 
     // 4. Auto-close previous days' open sessions
     const todayStr = getISTDate();
-    const openSessions = await Attendance.find({ staffId, checkOutTime: { $exists: false } });
+    const openSessions = await Attendance.find({ staffId, checkOutTime: { $exists: false } }).setOptions({ bypassBranchFilter: true });
     for (const session of openSessions) {
       if (session.date !== todayStr) {
         const autoCheckOutTime = new Date(session.checkInTime.getTime() + 8 * 60 * 60 * 1000);
@@ -222,25 +275,56 @@ const checkIn = async (req, res) => {
       }
     }
 
-    // 5. Duplicate checks
-    const existingAttendance = await Attendance.findOne({ staffId, date: todayStr });
-    if (existingAttendance) {
-      return res.status(400).json({ success: false, message: 'You have already checked in today.' });
+    // 5. Multi-Shift & Open Session Verification
+    const activeOpenAttendance = await Attendance.findOne({ 
+      staffId, 
+      date: todayStr,
+      $or: [
+        { activeSessionNumber: { $gt: 0 } },
+        { checkOutTime: { $exists: false } },
+        { checkOutTime: null }
+      ]
+    }).setOptions({ bypassBranchFilter: true });
+    if (activeOpenAttendance) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'You already have an active checked-in shift session. Please clock out of your current shift first.' 
+      });
     }
 
-    const activeSession = await Attendance.findOne({ staffId, checkOutTime: { $exists: false } });
-    if (activeSession) {
-      return res.status(400).json({ success: false, message: 'You already have an active session. Please check out first.' });
+    let existingAttendance = await Attendance.findOne({ staffId, date: todayStr }).setOptions({ bypassBranchFilter: true });
+    const completedSessions = (existingAttendance?.shiftSessions || []).filter(s => !!s.checkOutTime);
+    if (completedSessions.length >= 4) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Maximum limit of 4 shifts for today has been reached.' 
+      });
     }
 
-    // 5. Shift & Lean Time (Grace Period) Validation
-    const shiftStartTime = staff.shiftStartTime || '09:00';
-    const shiftEndTime = staff.shiftEndTime || '18:00';
+    const currentShiftNumber = completedSessions.length + 1;
+
+    // 6. Shift & Lean Time (Grace Period) Validation
+    let targetShift = null;
+    if (staff.scheduleType === 'SPLIT' && Array.isArray(staff.shifts) && staff.shifts.length > 0) {
+      targetShift = staff.shifts.find(s => s.shiftNumber === currentShiftNumber) ||
+                    staff.shifts[currentShiftNumber - 1] ||
+                    staff.shifts[0];
+    }
+    const shiftStartTime = (targetShift && targetShift.startTime) || staff.shiftStartTime || '09:00';
+    const shiftEndTime = (targetShift && targetShift.endTime) || staff.shiftEndTime || '18:00';
+    const currentShiftLabel = (targetShift && targetShift.shiftLabel) ? targetShift.shiftLabel : `Shift ${currentShiftNumber}`;
     const leanTimeMinutes = staff.leanTimeMinutes !== undefined ? Number(staff.leanTimeMinutes) : 30;
 
+    const dailyRate = Number(staff.dailyRate || 0);
+    const requiredHours = Number(staff.requiredHours || 8);
+    const hourlyRate = Number(staff.hourlyRate || (dailyRate > 0 ? dailyRate / requiredHours : 0));
+
     let isLate = false;
+    let isLateAfterGrace = false;
+    let penaltyHours = 0;
+    let penaltyAmount = 0;
+
     try {
-      // Parse shiftStartTime (supports "09:00" or "9:00 AM")
       let sHour = 9, sMin = 0;
       const isPM = /PM/i.test(shiftStartTime);
       const isAM = /AM/i.test(shiftStartTime);
@@ -257,41 +341,20 @@ const checkIn = async (req, res) => {
       const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
       const currentISTMins = nowIST.getUTCHours() * 60 + nowIST.getUTCMinutes();
 
-      const formatMin = (m) => {
-        const h = Math.floor(m / 60) % 24;
-        const mins = m % 60;
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const h12 = h % 12 || 12;
-        return `${String(h12).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${ampm}`;
-      };
-
-      if (currentISTMins < (shiftStartMins - 10)) {
-        const earlyOpenMins = shiftStartMins - 10;
-        return res.status(400).json({
-          success: false,
-          message: `Check-in is not open yet. Check-in opens 10 minutes before your scheduled shift at ${formatMin(earlyOpenMins)} (Your shift starts at ${formatMin(shiftStartMins)}).`,
-          shiftStartTime,
-          checkInOpensAt: formatMin(earlyOpenMins)
-        });
-      }
-
+      // If arrived AFTER grace period, do NOT lock! Allow check-in to proceed, tag as Late After Grace, and apply flat ₹100 wage penalty.
       if (currentISTMins > graceCutoffMins) {
-        return res.status(400).json({
-          success: false,
-          message: `Attendance window locked! Your shift was scheduled for ${formatMin(shiftStartMins)} with a ${leanTimeMinutes}-min grace period (Deadline was ${formatMin(graceCutoffMins)}). Please contact owner/manager.`,
-          shiftStartTime,
-          graceDeadline: formatMin(graceCutoffMins)
-        });
-      }
-
-      if (currentISTMins > shiftStartMins) {
+        isLate = true;
+        isLateAfterGrace = true;
+        penaltyHours = 1;
+        penaltyAmount = 100;
+      } else if (currentISTMins > shiftStartMins) {
         isLate = true;
       }
     } catch (err) {
       console.error('Shift timing check error:', err);
     }
 
-    // 6. Handle check-in selfie if uploaded (file or base64 payload from camera)
+    // 7. Handle check-in selfie if uploaded (file or base64 payload from camera)
     let image = '';
     let gridFsFileId = null;
     let gridFsFilename = '';
@@ -344,43 +407,93 @@ const checkIn = async (req, res) => {
       }
     }
 
-    // 7. Calculate and Lock Immutable Daily Wage Snapshot
-    const dailyRate = Number(staff.dailyRate || 0);
     const initialStatus = isLate ? 'Late' : 'Present';
-    const dailyWageEarned = initialStatus === 'Half Day' ? Number((dailyRate * 0.5).toFixed(2)) : dailyRate;
 
-    // 8. Create record
-    const attendance = await Attendance.create({
-      staffId,
-      staffName: staff.name,
-      branchId: branch.branchId,
-      branchName: branch.branchId,
-      cafeId: staff.cafeId,
-      date: todayStr,
+    const newSession = {
+      sessionNumber: currentShiftNumber,
+      shiftLabel: currentShiftLabel,
+      shiftStartTime,
+      shiftEndTime,
       checkInTime: new Date(),
+      checkOutTime: null,
+      durationMinutes: 0,
+      workingHours: 0,
+      isLateAfterGrace,
+      penaltyHours,
+      penaltyAmount,
+      sessionWage: 0,
+      status: initialStatus,
       latitude: Number(latitude),
       longitude: Number(longitude),
       distanceFromCafe: Math.round(distance),
       deviceInfo: deviceInfo || 'Web Browser',
-      status: initialStatus,
-      shiftStartTime,
-      shiftEndTime,
-      leanTimeMinutes,
-      dailyWageRate: dailyRate,
-      dailyWageEarned: dailyWageEarned,
-      isWageFinalized: false,
       image,
-      gridFsFileId,
-      gridFsFilename
-    });
+      cafeId: staff.cafeId,
+      branchId: branch?.branchId || staff.assignedBranch || 'default'
+    };
 
-    const msg = `Checked in successfully. Location verified (${Math.round(distance)}m). Expected Day Wage: ₹${dailyWageEarned}.${isLate ? ' (Late Arrival)' : ''}`;
+    const totalConfiguredShifts = (staff.scheduleType === 'SPLIT' && Array.isArray(staff.shifts) && staff.shifts.length > 0)
+      ? staff.shifts.length
+      : 1;
+    const shiftWageAllocation = Number((dailyRate / totalConfiguredShifts).toFixed(2));
+
+    let attendance;
+    if (existingAttendance) {
+      existingAttendance.shiftSessions.push(newSession);
+      existingAttendance.activeSessionNumber = currentShiftNumber;
+      existingAttendance.checkOutTime = null; // Unset root checkout so session is open
+      if (isLateAfterGrace) existingAttendance.status = 'Late';
+      existingAttendance.totalPenaltyAmount = (existingAttendance.totalPenaltyAmount || 0) + penaltyAmount;
+      const completedWages = (existingAttendance.shiftSessions || [])
+        .filter(s => !!s.checkOutTime)
+        .reduce((sum, s) => sum + (s.sessionWage || 0), 0);
+      existingAttendance.dailyWageEarned = Number((completedWages + shiftWageAllocation).toFixed(2));
+      await existingAttendance.save();
+      attendance = existingAttendance;
+    } else {
+      attendance = await Attendance.create({
+        staffId,
+        staffName: staff.name,
+        branchId: branch.branchId,
+        branchName: branch.branchId,
+        cafeId: staff.cafeId,
+        date: todayStr,
+        checkInTime: new Date(),
+        checkOutTime: null,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        distanceFromCafe: Math.round(distance),
+        deviceInfo: deviceInfo || 'Web Browser',
+        status: initialStatus,
+        shiftStartTime,
+        shiftEndTime,
+        leanTimeMinutes,
+        dailyWageRate: dailyRate,
+        dailyWageEarned: shiftWageAllocation,
+        isWageFinalized: false,
+        image,
+        gridFsFileId,
+        gridFsFilename,
+        shiftSessions: [newSession],
+        activeSessionNumber: currentShiftNumber,
+        totalPenaltyAmount: penaltyAmount
+      });
+    }
+
+    const lateNotice = isLateAfterGrace 
+      ? ` ⚠️ Late Check-In: Arrived after grace period. ₹${penaltyAmount} penalty will be deducted from this shift's wage.`
+      : (isLate ? ' (Late Arrival within grace period).' : '');
+
+    const msg = `Checked in for ${currentShiftLabel} successfully!${lateNotice}`;
 
     return res.status(201).json({
       success: true,
       message: msg,
       attendance,
-      todayWageEarned: dailyWageEarned,
+      todayWageEarned: attendance.dailyWageEarned,
+      shiftNumber: currentShiftNumber,
+      isLateAfterGrace,
+      penaltyAmount,
       staff: {
         id: staff._id,
         name: staff.name,
@@ -391,17 +504,32 @@ const checkIn = async (req, res) => {
         shiftStartTime,
         shiftEndTime,
         leanTimeMinutes,
-        todayWageEarned: dailyWageEarned
+        todayWageEarned: attendance.dailyWageEarned
       }
     });
   } catch (error) {
     console.error('checkIn error:', error);
+    try {
+      fs.appendFileSync(path.join(__dirname, '../debug_error.log'), `[${new Date().toISOString()}] checkIn error: ${error.stack || error.message}\n`);
+    } catch (logErr) {}
+
     // Cleanup uploaded file if DB creation fails
     if (req.file && req.file.path) {
-      const fs = require('fs');
       try { fs.unlinkSync(req.file.path); } catch (e) {}
     }
-    return res.status(500).json({ success: false, message: 'Server error processing check-in' });
+
+    if (error.code === 11000) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'An attendance record for today already exists for this staff member. Please refresh the page.' 
+      });
+    }
+
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Server error processing check-in',
+      details: error.stack
+    });
   }
 };
 
@@ -423,12 +551,23 @@ const checkOut = async (req, res) => {
   }
 
   try {
-    const session = await Attendance.findOne({ staffId, checkOutTime: { $exists: false } });
+    const todayStr = getISTDate();
+    // Find attendance record with an active open session
+    const session = await Attendance.findOne({ 
+      staffId, 
+      date: todayStr,
+      $or: [
+        { activeSessionNumber: { $gt: 0 } },
+        { checkOutTime: { $exists: false } },
+        { checkOutTime: null }
+      ]
+    }).setOptions({ bypassBranchFilter: true }) || await Attendance.findOne({ staffId, checkOutTime: { $exists: false } }).setOptions({ bypassBranchFilter: true });
+
     if (!session) {
-      return res.status(400).json({ success: false, message: 'No active check-in session found for today.' });
+      return res.status(400).json({ success: false, message: 'No active check-in shift session found to clock out from.' });
     }
 
-    const staff = await User.findById(staffId);
+    const staff = await User.findById(staffId).setOptions({ bypassBranchFilter: true });
 
     // Verify 4-digit Attendance PIN (set by owner)
     if (staff && staff.attendancePin && staff.attendancePin.trim() !== '') {
@@ -467,84 +606,106 @@ const checkOut = async (req, res) => {
     }
 
     const checkOutTime = new Date();
-    const diffMs = checkOutTime.getTime() - session.checkInTime.getTime();
-    const totalDuration = Math.round(diffMs / 60000); // in minutes
-    const workingHours = Number((totalDuration / 60).toFixed(2));
+
+    // Identify active shift session in shiftSessions array
+    const activeSession = (session.shiftSessions || []).find(s => !s.checkOutTime) ||
+                          (session.shiftSessions && session.shiftSessions.length > 0 ? session.shiftSessions[session.shiftSessions.length - 1] : null);
+
+    const sessionCheckInTime = activeSession?.checkInTime ? new Date(activeSession.checkInTime) : session.checkInTime;
+    const diffMs = checkOutTime.getTime() - sessionCheckInTime.getTime();
+    const sessionDurationMin = Math.max(1, Math.round(diffMs / 60000));
+    const sessionWorkingHours = Number((sessionDurationMin / 60).toFixed(2));
 
     const dailyRate = Number(session.dailyWageRate || (staff ? staff.dailyRate : 0) || 0);
-    const shiftStartTime = session.shiftStartTime || (staff && staff.shiftStartTime) || '09:00';
-    const shiftEndTime = session.shiftEndTime || (staff && staff.shiftEndTime) || '18:00';
+    const requiredHours = Number(staff?.requiredHours || 8);
+    // Number of configured shifts for this staff
+    const totalConfiguredShifts = (staff?.scheduleType === 'SPLIT' && Array.isArray(staff?.shifts) && staff.shifts.length > 0)
+      ? staff.shifts.length
+      : ((session.shiftSessions && session.shiftSessions.length > 1) ? session.shiftSessions.length : 1);
 
-    let startMins = parseTimeToMinutes(shiftStartTime) ?? (9 * 60);
-    let endMins = parseTimeToMinutes(shiftEndTime) ?? (18 * 60);
-    if (endMins <= startMins) {
-      endMins += 24 * 60; // Overnight shift
+    // Equal wage allocated to each shift (e.g. ₹1000 / 2 = ₹500 per shift)
+    const shiftWageAllocation = Number((dailyRate / totalConfiguredShifts).toFixed(2));
+
+    // Target shift timing
+    let targetShift = null;
+    const activeShiftNum = activeSession?.sessionNumber || session.activeSessionNumber || 1;
+    if (staff?.scheduleType === 'SPLIT' && Array.isArray(staff?.shifts) && staff.shifts.length > 0) {
+      targetShift = staff.shifts.find(s => s.shiftNumber === activeShiftNum) ||
+                    staff.shifts[activeShiftNum - 1] ||
+                    staff.shifts[0];
     }
-    const scheduledShiftMinutes = Math.max(15, endMins - startMins);
-    const scheduledShiftHours = scheduledShiftMinutes / 60;
+    const shiftStartTime = activeSession?.shiftStartTime || (targetShift && targetShift.startTime) || session.shiftStartTime || (staff && staff.shiftStartTime) || '09:00';
+    const shiftEndTime = activeSession?.shiftEndTime || (targetShift && targetShift.endTime) || session.shiftEndTime || (staff && staff.shiftEndTime) || '18:00';
+    let sM = parseTimeToMinutes(shiftStartTime) ?? (9 * 60);
+    let eM = parseTimeToMinutes(shiftEndTime) ?? (18 * 60);
+    if (eM <= sM) eM += 24 * 60;
+    const scheduledShiftMin = Math.max(1, eM - sM);
 
-    // Check-out time in IST (minutes from midnight)
-    const nowIST = new Date(checkOutTime.getTime() + 5.5 * 60 * 60 * 1000);
-    let checkOutISTMins = nowIST.getUTCHours() * 60 + nowIST.getUTCMinutes();
-    if (endMins >= 24 * 60 && checkOutISTMins < startMins) {
-      checkOutISTMins += 24 * 60;
+    // Give full shift wage if completed shift (worked >= 60 mins, or stayed until shift end time):
+    let sessionBaseWage = shiftWageAllocation;
+    if (sessionDurationMin < 60 && sessionDurationMin < (scheduledShiftMin - 10)) {
+      // Pro-rate only if left unusually early before 1 hour and before scheduled end
+      sessionBaseWage = Number(Math.min(shiftWageAllocation, (sessionDurationMin / scheduledShiftMin) * shiftWageAllocation).toFixed(2));
     }
 
-    let status = session.status === 'Late' ? 'Late' : 'Present';
-    let dailyWageEarned = dailyRate;
-    let overtimeHours = 0;
-    let overtimePay = 0;
-
-    // Has staff completed the shift?
-    // Complete if: checked out at/after shift end (with 3-min margin), OR worked at least 80% of scheduled duration
-    const isCompleted = (checkOutISTMins >= endMins - 3) || (totalDuration >= scheduledShiftMinutes * 0.8);
-
-    if (isCompleted) {
-      // Completed Full Shift -> Full Daily Wage
-      dailyWageEarned = dailyRate;
-
-      // Overtime if worked more than 30 mins past scheduled end time
-      if (checkOutISTMins > endMins + 30) {
-        const extraMins = checkOutISTMins - endMins;
-        overtimeHours = Number((extraMins / 60).toFixed(2));
-        const cappedOt = Math.min(overtimeHours, 4);
-        overtimePay = Number(((dailyRate / scheduledShiftHours) * cappedOt).toFixed(2));
-        dailyWageEarned = Number((dailyRate + overtimePay).toFixed(2));
-      }
-    } else {
-      // Left early before completing shift
-      const workedFraction = totalDuration / scheduledShiftMinutes;
-      if (workedFraction >= 0.5) {
-        status = 'Half Day';
-        dailyWageEarned = Number((dailyRate * 0.5).toFixed(2));
-      } else {
-        status = 'Half Day';
-        dailyWageEarned = Number((dailyRate * Math.max(0.2, workedFraction)).toFixed(2));
-      }
+    // Apply late penalty deduction (flat ₹100) if arrived after grace period
+    let penaltyDeduction = 0;
+    if (activeSession?.isLateAfterGrace) {
+      penaltyDeduction = activeSession.penaltyAmount || 100;
     }
+    const sessionFinalWage = Math.max(0, Number((sessionBaseWage - penaltyDeduction).toFixed(2)));
+
+    if (activeSession) {
+      activeSession.checkOutTime = checkOutTime;
+      activeSession.durationMinutes = sessionDurationMin;
+      activeSession.workingHours = sessionWorkingHours;
+      activeSession.sessionWage = sessionFinalWage;
+      activeSession.status = activeSession.isLateAfterGrace ? 'Late' : 'Present';
+    }
+
+    // Sum across all completed shift sessions for today
+    const completedList = (session.shiftSessions || []).filter(s => s.checkOutTime !== null && s.checkOutTime !== undefined);
+    const totalDayDuration = completedList.reduce((acc, s) => acc + (s.durationMinutes || 0), 0) || sessionDurationMin;
+    const totalDayWorkingHours = Number((totalDayDuration / 60).toFixed(2));
+    const totalDayWages = completedList.length > 0 
+      ? Number(completedList.reduce((acc, s) => acc + (s.sessionWage || 0), 0).toFixed(2))
+      : sessionFinalWage;
+    const totalDayPenalties = completedList.reduce((acc, s) => acc + (s.penaltyAmount || 0), 0);
 
     session.checkOutTime = checkOutTime;
-    session.totalDuration = totalDuration;
-    session.workingHours = workingHours;
-    session.status = status;
-    session.overtimeHours = overtimeHours;
-    session.overtimePay = overtimePay;
-    session.dailyWageEarned = dailyWageEarned;
+    session.totalDuration = totalDayDuration;
+    session.workingHours = totalDayWorkingHours;
+    session.dailyWageEarned = totalDayWages;
+    session.totalPenaltyAmount = totalDayPenalties;
+    session.activeSessionNumber = 0;
     session.isWageFinalized = true;
     await session.save();
 
-    const hours = Math.floor(totalDuration / 60);
-    const mins = totalDuration % 60;
+    const hours = Math.floor(sessionDurationMin / 60);
+    const mins = sessionDurationMin % 60;
+
+    const penaltyNotice = penaltyDeduction > 0 
+      ? ` (Late Penalty: -₹${penaltyDeduction})` 
+      : '';
 
     return res.status(200).json({
       success: true,
-      message: `Checked out successfully. Shift duration: ${hours}h ${mins}m. Finalized Day Wage: ₹${dailyWageEarned}`,
+      message: `Checked out from ${activeSession?.shiftLabel || 'shift'} successfully! Duration: ${hours}h ${mins}m. Shift Earnings: ₹${sessionFinalWage}${penaltyNotice}. Total Day Wages: ₹${totalDayWages}`,
       attendance: session,
-      finalizedWage: dailyWageEarned
+      finalizedWage: totalDayWages,
+      sessionWage: sessionFinalWage,
+      penaltyDeduction
     });
   } catch (error) {
     console.error('checkOut error:', error);
-    return res.status(500).json({ success: false, message: 'Server error processing check-out' });
+    try {
+      fs.appendFileSync(path.join(__dirname, '../debug_error.log'), `[${new Date().toISOString()}] checkOut error: ${error.stack || error.message}\n`);
+    } catch (logErr) {}
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Server error processing check-out',
+      details: error.stack
+    });
   }
 };
 
@@ -568,7 +729,7 @@ const getTodayStatus = async (req, res) => {
   const todayStr = getISTDate();
 
   try {
-    const staff = await User.findById(staffId);
+    const staff = await User.findById(staffId).setOptions({ bypassBranchFilter: true });
     if (!staff) {
       return res.status(404).json({ success: false, message: 'Staff member not found' });
     }
@@ -602,12 +763,21 @@ const getTodayStatus = async (req, res) => {
     }
 
     // Check if there is an active session and apply auto-checkout if shift ended >= 5 mins ago
-    let session = await Attendance.findOne({ staffId, checkOutTime: { $exists: false } });
+    let session = await Attendance.findOne({ 
+      staffId, 
+      date: todayStr,
+      $or: [
+        { activeSessionNumber: { $gt: 0 } },
+        { checkOutTime: { $exists: false } },
+        { checkOutTime: null }
+      ]
+    }).setOptions({ bypassBranchFilter: true }) || await Attendance.findOne({ staffId, checkOutTime: { $exists: false } }).setOptions({ bypassBranchFilter: true });
+
     if (session) {
       await checkAndApplyAutoCheckout(session, staff);
     }
 
-    const attendance = await Attendance.findOne({ staffId, date: todayStr });
+    const attendance = await Attendance.findOne({ staffId, date: todayStr }).setOptions({ bypassBranchFilter: true });
     const todayWageEarned = attendance ? (attendance.dailyWageEarned || staff.dailyRate || 0) : 0;
 
     const SalaryHistory = require('../models/SalaryHistory');
@@ -631,10 +801,26 @@ const getTodayStatus = async (req, res) => {
 
     const liveRemainingBal = Math.max(0, Number((liveTotalEarned - liveTotalPaid).toFixed(2)));
 
+    const activeSession = (attendance?.shiftSessions || []).find(s => !s.checkOutTime) || null;
+    const isCurrentlyCheckedIn = !!activeSession || (attendance ? (attendance.activeSessionNumber > 0 || !attendance.checkOutTime) : false);
+    const completedSessions = (attendance?.shiftSessions || []).filter(s => !!s.checkOutTime);
+    const completedSessionsCount = completedSessions.length;
+    const nextShiftNumber = Math.min(4, completedSessionsCount + 1);
+    const canStartNextShift = !isCurrentlyCheckedIn && completedSessionsCount < 4;
+
     return res.status(200).json({
       success: true,
       checkedIn: !!attendance,
-      checkedOut: attendance ? !!attendance.checkOutTime : false,
+      checkedOut: attendance ? (!isCurrentlyCheckedIn && completedSessionsCount > 0) : false,
+      isCurrentlyCheckedIn,
+      canStartNextShift,
+      nextShiftNumber,
+      completedSessionsCount,
+      shiftSessions: attendance?.shiftSessions || [],
+      activeSession,
+      currentShiftLabel: isCurrentlyCheckedIn 
+        ? (activeSession?.shiftLabel || `Shift ${attendance?.activeSessionNumber || 1}`) 
+        : `Shift ${nextShiftNumber}`,
       attendance,
       todayWageEarned,
       branchName,
@@ -653,6 +839,11 @@ const getTodayStatus = async (req, res) => {
         weeklyRate: staff.weeklyRate !== undefined ? staff.weeklyRate : 0,
         monthlyRate: staff.monthlyRate !== undefined ? staff.monthlyRate : 0,
         requiredHours: staff.requiredHours || 8,
+        scheduleType: staff.scheduleType || 'SINGLE',
+        shifts: staff.shifts || [],
+        shiftStartTime: staff.shiftStartTime || '09:00',
+        shiftEndTime: staff.shiftEndTime || '18:00',
+        leanTimeMinutes: staff.leanTimeMinutes !== undefined ? staff.leanTimeMinutes : 30,
         todayWageEarned,
         totalEarnedAllTime: liveTotalEarned,
         totalPaidAllTime: liveTotalPaid,
@@ -673,18 +864,31 @@ const getStaffHistory = async (req, res) => {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   try {
-    const staff = await User.findById(staffId);
+    const staff = await User.findById(staffId).setOptions({ bypassBranchFilter: true });
 
     // Apply auto-checkout to any active session if shift ended >= 5 mins ago
-    const activeSession = await Attendance.findOne({ staffId, checkOutTime: { $exists: false } });
+    const activeSession = await Attendance.findOne({ 
+      staffId, 
+      $or: [{ activeSessionNumber: { $gt: 0 } }, { checkOutTime: { $exists: false } }, { checkOutTime: null }]
+    }).setOptions({ bypassBranchFilter: true });
     if (activeSession) {
       await checkAndApplyAutoCheckout(activeSession, staff);
     }
 
-    const history = await Attendance.find({
-      staffId,
-      checkInTime: { $gte: thirtyDaysAgo }
-    }).sort({ checkInTime: -1 });
+    const SalaryHistory = require('../models/SalaryHistory');
+
+    // Run history, wage totals, and payment queries in parallel for high speed
+    const [history, allStaffRecords, paidRecords] = await Promise.all([
+      Attendance.find({
+        staffId,
+        checkInTime: { $gte: thirtyDaysAgo }
+      }).sort({ checkInTime: -1 }).lean(),
+      Attendance.find({ staffId }).select('dailyWageEarned status').lean(),
+      SalaryHistory.find({
+        employeeId: staffId,
+        paymentStatus: 'Paid'
+      }).select('finalSalary paidAmount amountPaid amount').lean()
+    ]);
 
     // Calculate monthly stats based on current calendar month
     const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
@@ -694,15 +898,13 @@ const getStaffHistory = async (req, res) => {
     // Filter records for current month
     const currentMonthRecords = history.filter(r => r.date && r.date.startsWith(currentMonthPrefix));
     const activeDays = currentMonthRecords.length > 0 ? currentMonthRecords.length : history.length;
-    const absentDays = Math.max(0, daysPassedInMonth - (currentMonthRecords.length > 0 ? currentMonthRecords.length : history.length));
+    const absentDays = Math.max(0, daysPassedInMonth - activeDays);
 
     const totalWorkingMinutes = history.reduce((sum, record) => sum + (record.totalDuration || 0), 0);
     const totalHours = Number((totalWorkingMinutes / 60).toFixed(1));
     const lateCount = history.filter(r => r.status === 'Late').length;
     
     // Calculate all-time earned vs paid to get accurate Unpaid Salary Balance
-    const SalaryHistory = require('../models/SalaryHistory');
-    const allStaffRecords = await Attendance.find({ staffId });
     const totalEarnedAllTime = Number(allStaffRecords.reduce((sum, record) => {
       let wage = record.dailyWageEarned;
       if (wage === undefined || wage === null) {
@@ -711,24 +913,12 @@ const getStaffHistory = async (req, res) => {
       return sum + Number(wage || 0);
     }, 0).toFixed(2));
 
-    const paidRecords = await SalaryHistory.find({
-      employeeId: staffId,
-      paymentStatus: 'Paid'
-    }).lean();
-
     const totalPaidAllTime = Number(paidRecords.reduce((sum, ph) => {
       const amt = ph.finalSalary !== undefined ? ph.finalSalary : (ph.paidAmount || ph.amountPaid || ph.amount || 0);
       return sum + Number(amt || 0);
     }, 0).toFixed(2));
 
     const unpaidSalaryBalance = Math.max(0, Number((totalEarnedAllTime - totalPaidAllTime).toFixed(2)));
-
-    if (staff) {
-      staff.totalEarnedAllTime = totalEarnedAllTime;
-      staff.totalPaidAllTime = totalPaidAllTime;
-      staff.remainingSalaryBalance = unpaidSalaryBalance;
-      await staff.save().catch(() => {});
-    }
 
     const attendancePercentage = Math.round((activeDays / Math.max(1, daysPassedInMonth)) * 100);
 
@@ -1165,7 +1355,7 @@ const getKioskStaffList = async (req, res) => {
     }
 
     const staffMembers = await User.find(query)
-      .select('name employeeId staffRole role assignedBranch shiftStartTime shiftEndTime leanTimeMinutes dailyRate phone avatar attendancePin')
+      .select('name employeeId staffRole role assignedBranch shiftStartTime shiftEndTime leanTimeMinutes dailyRate phone avatar attendancePin scheduleType shifts')
       .lean();
 
     const attendanceQuery = { cafeId, date: todayStr };
@@ -1219,12 +1409,16 @@ const getKioskStaffList = async (req, res) => {
         name: member.name,
         employeeId: member.employeeId || 'N/A',
         staffRole: member.staffRole || member.role || 'Staff',
+        role: member.role || 'Staff',
         assignedBranch: member.assignedBranch || 'default',
+        scheduleType: member.scheduleType || 'SINGLE',
+        shifts: member.shifts || [],
         shiftStartTime: member.shiftStartTime || '09:00',
         shiftEndTime: member.shiftEndTime || '18:00',
         leanTimeMinutes: member.leanTimeMinutes !== undefined ? member.leanTimeMinutes : 30,
         dailyRate: member.dailyRate || 0,
         hasAttendancePin: Boolean(member.attendancePin && member.attendancePin.trim() !== ''),
+        attendancePin: member.attendancePin || '',
         isCheckedIn: !!att,
         isCheckedOut: !!(att && att.checkOutTime),
         checkInTime: att ? att.checkInTime : null,
@@ -1258,5 +1452,6 @@ module.exports = {
   startExtraWork,
   stopExtraWork,
   editAttendance,
-  getKioskStaffList
+  getKioskStaffList,
+  checkAndApplyAutoCheckout
 };

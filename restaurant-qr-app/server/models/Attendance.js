@@ -133,6 +133,38 @@ const AttendanceSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Multi-Shift Support (up to 4 shifts per day)
+  shiftSessions: [{
+    cafeId: { type: String, default: '' },
+    branchId: { type: String, default: '' },
+    sessionNumber: { type: Number, default: 1 },
+    shiftLabel: { type: String, default: 'Shift 1' },
+    shiftStartTime: { type: String, default: '09:00' },
+    shiftEndTime: { type: String, default: '18:00' },
+    checkInTime: { type: Date },
+    checkOutTime: { type: Date },
+    durationMinutes: { type: Number, default: 0 },
+    workingHours: { type: Number, default: 0 },
+    isLateAfterGrace: { type: Boolean, default: false },
+    penaltyHours: { type: Number, default: 0 },
+    penaltyAmount: { type: Number, default: 0 },
+    sessionWage: { type: Number, default: 0 },
+    status: { type: String, default: 'Present' },
+    latitude: { type: Number },
+    longitude: { type: Number },
+    distanceFromCafe: { type: Number },
+    deviceInfo: { type: String, default: 'Unknown Device' },
+    image: { type: String, default: '' },
+    imageExpired: { type: Boolean, default: false }
+  }],
+  activeSessionNumber: {
+    type: Number,
+    default: 0 // 0 = idle / not currently checked in, 1 = Shift 1 active, 2 = Shift 2 active...
+  },
+  totalPenaltyAmount: {
+    type: Number,
+    default: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now

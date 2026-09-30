@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-09-26T05:28:19.448Z",
-  "totalGridFsFiles": 186,
-  "totalGridFsSizeMB": 56.171,
+  "timestamp": "2026-09-30T08:54:08.790Z",
+  "totalGridFsFiles": 193,
+  "totalGridFsSizeMB": 57.043,
   "orphanedFiles": [
     {
       "fileId": "6a335227d30565d9c9c73ea4",
@@ -328,6 +328,12 @@
       "length": 842294
     },
     {
+      "fileId": "6aaa7897839574f12a891cbd",
+      "filename": "dish-1789556887039-961603686.jpg",
+      "uploadDate": "2026-09-16T11:08:08.442Z",
+      "length": 147075
+    },
+    {
       "fileId": "6aaa7a36839574f12a891ccb",
       "filename": "dish-1789557302571-764106861.jpg",
       "uploadDate": "2026-09-16T11:15:03.282Z",
@@ -392,9 +398,21 @@
       "filename": "dish-1789592596701-208291655.png",
       "uploadDate": "2026-09-16T21:03:17.363Z",
       "length": 683048
+    },
+    {
+      "fileId": "6abcc087cccf71e80f54696b",
+      "filename": "attendance-cam-1790754951384-259896649.jpg",
+      "uploadDate": "2026-09-30T07:55:51.681Z",
+      "length": 6048
+    },
+    {
+      "fileId": "6abcc25bad9c8420747eb551",
+      "filename": "attendance-cam-1790755419443-810480064.jpg",
+      "uploadDate": "2026-09-30T08:03:39.708Z",
+      "length": 5699
     }
   ],
-  "reclaimableSpaceMB": 7.613,
+  "reclaimableSpaceMB": 7.765,
   "chunkIntegrity": {
     "totalOrphanedChunks": 0,
     "orphanedChunkFileIds": []

@@ -7,6 +7,7 @@ const { protect, restrictTo } = require('../middleware/authMiddleware');
 router.use(protect);
 router.use(restrictTo('owner', 'admin', 'manager', 'superadmin'));
 
+router.get('/financial-summary', expenseController.getFinancialSummary);
 router.get('/', expenseController.getExpenses);
 router.post('/', expenseController.createExpense);
 router.put('/:id', expenseController.updateExpense);

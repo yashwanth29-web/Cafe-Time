@@ -150,64 +150,38 @@ const runDataRetentionCleanup = async () => {
 };
 
 /**
- * Auto-Checkout Job: Checks out staff who forgot to check out once (Shift End + 1 Hour) has passed
+ * Auto-Checkout Job: Automatically checks out staff 5 minutes after scheduled shift end
  */
 const runAutoCheckOutJob = async () => {
   try {
     const tzOffset = 5.5 * 60 * 60 * 1000;
     const nowIST = new Date(Date.now() + tzOffset);
     const todayStr = nowIST.toISOString().split('T')[0];
-    const currentISTMins = nowIST.getUTCHours() * 60 + nowIST.getUTCMinutes();
 
-    const openSessions = await Attendance.find({ checkOutTime: { $exists: false } });
+    // Find any attendance record with active sessions or unfinalized checkouts
+    const openSessions = await Attendance.find({
+      $or: [
+        { activeSessionNumber: { $gt: 0 } },
+        { checkOutTime: { $exists: false } },
+        { checkOutTime: null },
+        { isWageFinalized: false }
+      ]
+    }).setOptions({ bypassBranchFilter: true });
+
     let autoClosedCount = 0;
+    const { checkAndApplyAutoCheckout } = require('../controllers/attendanceController');
 
     for (const session of openSessions) {
-      let shouldAutoClose = false;
-
-      // If session is from a previous date, close immediately
-      if (session.date !== todayStr) {
-        shouldAutoClose = true;
-      } else {
-        // Check if Shift End + 60 minutes has elapsed
-        const shiftEndTime = session.shiftEndTime || '18:00';
-        let eHour = 18, eMin = 0;
-        const isPM = /PM/i.test(shiftEndTime);
-        const isAM = /AM/i.test(shiftEndTime);
-        const cleanTime = shiftEndTime.replace(/\s*(AM|PM)\s*/i, '');
-        const parts = cleanTime.split(':').map(Number);
-        eHour = parts[0] || 0;
-        eMin = parts[1] || 0;
-        if (isPM && eHour < 12) eHour += 12;
-        if (isAM && eHour === 12) eHour = 0;
-
-        const shiftEndMins = eHour * 60 + eMin;
-        const autoCloseDeadline = shiftEndMins + 60; // 1 hour after shift end
-
-        if (currentISTMins >= autoCloseDeadline) {
-          shouldAutoClose = true;
-        }
-      }
-
-      if (shouldAutoClose) {
-        const User = require('../models/User');
-        const staff = await User.findById(session.staffId);
-        const reqHours = (staff && staff.requiredHours) || 8;
-        const autoCheckOutTime = new Date(session.checkInTime.getTime() + reqHours * 60 * 60 * 1000);
-
-        session.checkOutTime = autoCheckOutTime;
-        session.totalDuration = reqHours * 60;
-        session.workingHours = reqHours;
-        session.autoCheckedOut = true;
-        session.notes = 'Auto Checked-Out (Staff did not check out)';
-        session.isWageFinalized = true;
-        await session.save();
-        autoClosedCount++;
+      try {
+        const closed = await checkAndApplyAutoCheckout(session);
+        if (closed) autoClosedCount++;
+      } catch (sessErr) {
+        console.error('[Auto-Checkout] Error checking session:', session._id, sessErr.message);
       }
     }
 
     if (autoClosedCount > 0) {
-      console.log(`[Auto-Checkout] Successfully auto-closed ${autoClosedCount} forgotten staff shift(s).`);
+      console.log(`[Auto-Checkout] Successfully auto-closed ${autoClosedCount} shift session(s).`);
     }
   } catch (err) {
     console.error('[Auto-Checkout] Error running auto-checkout job:', err);
@@ -215,20 +189,22 @@ const runAutoCheckOutJob = async () => {
 };
 
 /**
- * Daily Photo Cleanup: Deletes temporary selfie & cafe inspection photos from previous days
+ * 12-Hour Photo Retention: Deletes temporary selfie photos from disk & database 12 hours after creation
  */
 const runDailyPhotoCleanup = async () => {
   try {
     const fs = require('fs');
     const path = require('path');
-    const tzOffset = 5.5 * 60 * 60 * 1000;
-    const todayStr = new Date(Date.now() + tzOffset).toISOString().split('T')[0];
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
 
-    // 1. Attendance selfies older than today
+    // 1. Attendance selfies older than 12 hours (root or shiftSessions)
     const oldAttendances = await Attendance.find({
-      date: { $lt: todayStr },
-      image: { $exists: true, $ne: '' }
-    });
+      checkInTime: { $lt: twelveHoursAgo },
+      $or: [
+        { image: { $exists: true, $ne: '' } },
+        { 'shiftSessions.image': { $exists: true, $ne: '' } }
+      ]
+    }).setOptions({ bypassBranchFilter: true });
 
     let attendancePhotosCleaned = 0;
     for (const att of oldAttendances) {
@@ -242,40 +218,30 @@ const runDailyPhotoCleanup = async () => {
       att.image = '';
       att.imageExpired = true;
       att.imageExpiredAt = new Date();
+
+      if (Array.isArray(att.shiftSessions)) {
+        for (const s of att.shiftSessions) {
+          if (s.image && s.image.includes('/uploads/')) {
+            const fname = s.image.split('/uploads/').pop();
+            const fpath = path.join(__dirname, '../public/uploads', fname);
+            if (fs.existsSync(fpath)) {
+              try { fs.unlinkSync(fpath); } catch (e) {}
+            }
+          }
+          s.image = '';
+          s.imageExpired = true;
+        }
+      }
+
       await att.save();
       attendancePhotosCleaned++;
     }
 
-    // 2. Work report cafe photos older than today
-    const oldReports = await WorkReport.find({
-      date: { $lt: todayStr },
-      photos: { $exists: true, $not: { $size: 0 } }
-    });
-
-    let reportPhotosCleaned = 0;
-    for (const report of oldReports) {
-      if (Array.isArray(report.photos)) {
-        for (const p of report.photos) {
-          if (p.includes('/uploads/')) {
-            const filename = p.split('/uploads/').pop();
-            const filePath = path.join(__dirname, '../public/uploads', filename);
-            if (fs.existsSync(filePath)) {
-              try { fs.unlinkSync(filePath); } catch (e) {}
-            }
-          }
-        }
-      }
-      report.photos = [];
-      report.imageExpired = true;
-      await report.save();
-      reportPhotosCleaned++;
-    }
-
-    if (attendancePhotosCleaned > 0 || reportPhotosCleaned > 0) {
-      console.log(`[Daily Photo Purge] Cleaned temporary photos from ${attendancePhotosCleaned} attendance and ${reportPhotosCleaned} work report records.`);
+    if (attendancePhotosCleaned > 0) {
+      console.log(`[12-Hour Photo Purge] Cleaned expired selfie photos from ${attendancePhotosCleaned} attendance records.`);
     }
   } catch (err) {
-    console.error('[Daily Photo Purge] Error running photo cleanup:', err);
+    console.error('[12-Hour Photo Purge] Error running photo cleanup:', err);
   }
 };
 
@@ -303,17 +269,17 @@ const startDataRetentionCron = () => {
     runDataRetentionCleanup().catch((err) => console.error('[Data Retention] Recurring run error:', err));
   }, 24 * 60 * 60 * 1000);
 
-  // 3. Schedule auto-checkout job every 15 minutes
+  // 3. Schedule auto-checkout job every 30 seconds for immediate shift close
   autoCheckoutInterval = setInterval(() => {
     runAutoCheckOutJob().catch((err) => console.error('[Auto-Checkout] Interval error:', err));
-  }, 15 * 60 * 1000);
+  }, 30 * 1000);
 
-  // 4. Schedule daily photo cleanup every 6 hours
+  // 4. Schedule photo purge job every 30 minutes for 12-hour deletion
   photoCleanupInterval = setInterval(() => {
     runDailyPhotoCleanup().catch((err) => console.error('[Photo Cleanup] Interval error:', err));
-  }, 6 * 60 * 60 * 1000);
+  }, 30 * 60 * 1000);
 
-  console.log('[Data Retention] Service initialized. 60-day purge, 15-min auto-checkout, and daily photo cleanups active.');
+  console.log('[Data Retention] Service initialized. 60-day purge, 30-sec auto-checkout, and 30-min photo cleanups active.');
 };
 
 module.exports = {

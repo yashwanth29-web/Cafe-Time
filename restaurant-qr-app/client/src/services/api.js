@@ -706,6 +706,11 @@ export const getDashboardStats = async (params) => {
 };
 
 // Expense Management APIs
+export const getExpenseFinancialSummary = async (params) => {
+  const response = await API.get('/expenses/financial-summary', { params });
+  return response.data;
+};
+
 export const getExpenses = async (params) => {
   const response = await API.get('/expenses', { params });
   return response.data;

@@ -64,21 +64,22 @@ const generateWeeklyPayroll = async (cafeId, branchId, weekStart, weekEnd, gener
       workingHours += attWorkingHours;
       overtimeHours += attOvertimeHours;
 
-      // When attendance is marked, credit full day salary
+      // When attendance is marked, use recorded dailyWageEarned or calculate pro-rata
       let daySalary = 0;
-      if (att.status === 'Half Day') {
+      if (att.dailyWageEarned !== undefined && att.dailyWageEarned !== null) {
+        daySalary = att.dailyWageEarned;
+      } else if (att.status === 'Half Day') {
         daySalary = baseDailyRate * 0.5;
         halfDaySalary += daySalary;
       } else if (att.status === 'Present' || att.status === 'Late' || att.checkInTime) {
         daySalary = baseDailyRate;
-        basicSalary += daySalary;
       } else if (att.status === 'Absent') {
         daySalary = 0;
       } else {
         daySalary = (baseDailyRate * attWorkingHours) / requiredHours;
-        basicSalary += daySalary;
       }
-      const dayOvertimePay = (baseDailyRate * attOvertimeHours) / requiredHours;
+      basicSalary += daySalary;
+      const dayOvertimePay = att.overtimePay !== undefined ? att.overtimePay : (baseDailyRate * attOvertimeHours) / requiredHours;
       overtimePay += dayOvertimePay;
     });
 
@@ -195,20 +196,22 @@ const recalculateStaffSalary = async (staffId) => {
       actualWorkedHoursToday = todayRecord.workingHours || 0;
       overtimeHoursToday = todayRecord.overtimeHours || 0;
 
-      let regularSalary = 0;
-      if (todayRecord.status === 'Half Day') {
-        regularSalary = dailyRate * 0.5;
-      } else if (todayRecord.status === 'Present' || todayRecord.status === 'Late' || todayRecord.checkInTime) {
-        // Attendance marked -> Full day salary!
-        regularSalary = dailyRate;
-      } else if (todayRecord.status === 'Absent') {
-        regularSalary = 0;
+      if (todayRecord.dailyWageEarned !== undefined && todayRecord.dailyWageEarned !== null) {
+        salaryEarnedToday = Number(todayRecord.dailyWageEarned.toFixed(2));
       } else {
-        regularSalary = (dailyRate * actualWorkedHoursToday) / requiredHours;
+        let regularSalary = 0;
+        if (todayRecord.status === 'Half Day') {
+          regularSalary = dailyRate * 0.5;
+        } else if (todayRecord.status === 'Present' || todayRecord.status === 'Late' || todayRecord.checkInTime) {
+          regularSalary = dailyRate;
+        } else if (todayRecord.status === 'Absent') {
+          regularSalary = 0;
+        } else {
+          regularSalary = (dailyRate * actualWorkedHoursToday) / requiredHours;
+        }
+        const overtimeSalary = (dailyRate * overtimeHoursToday) / requiredHours;
+        salaryEarnedToday = Number((regularSalary + overtimeSalary).toFixed(2));
       }
-      const overtimeSalary = (dailyRate * overtimeHoursToday) / requiredHours;
-
-      salaryEarnedToday = Number((regularSalary + overtimeSalary).toFixed(2));
     }
 
     // Calculate week's metrics
@@ -223,19 +226,22 @@ const recalculateStaffSalary = async (staffId) => {
       actualWorkedHoursThisWeek += recWorkHours;
       overtimeHoursThisWeek += recOtHours;
 
-      let regularSalary = 0;
-      if (record.status === 'Half Day') {
-        regularSalary = dailyRate * 0.5;
-      } else if (record.status === 'Present' || record.status === 'Late' || record.checkInTime) {
-        regularSalary = dailyRate;
-      } else if (record.status === 'Absent') {
-        regularSalary = 0;
+      if (record.dailyWageEarned !== undefined && record.dailyWageEarned !== null) {
+        salaryEarnedThisWeek += record.dailyWageEarned;
       } else {
-        regularSalary = (dailyRate * recWorkHours) / requiredHours;
+        let regularSalary = 0;
+        if (record.status === 'Half Day') {
+          regularSalary = dailyRate * 0.5;
+        } else if (record.status === 'Present' || record.status === 'Late' || record.checkInTime) {
+          regularSalary = dailyRate;
+        } else if (record.status === 'Absent') {
+          regularSalary = 0;
+        } else {
+          regularSalary = (dailyRate * recWorkHours) / requiredHours;
+        }
+        const overtimeSalary = (dailyRate * recOtHours) / requiredHours;
+        salaryEarnedThisWeek += regularSalary + overtimeSalary;
       }
-      const overtimeSalary = (dailyRate * recOtHours) / requiredHours;
-
-      salaryEarnedThisWeek += regularSalary + overtimeSalary;
     }
 
     // Calculate month's metrics

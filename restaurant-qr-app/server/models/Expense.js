@@ -44,6 +44,11 @@ const expenseSchema = new mongoose.Schema({
   recordedBy: {
     type: String,
     default: 'Owner'
+  },
+  periodTag: {
+    type: String,
+    enum: ['Today', 'Daily', 'Weekly', '15 Days', 'Monthly', 'One-Time'],
+    default: 'Today'
   }
 }, {
   timestamps: true

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
@@ -9,8 +9,6 @@ import {
   getStaffAttendanceHistory,
   getKioskStaffList,
   submitWorkReport,
-  startExtraWork,
-  stopExtraWork,
   getAssetUrl
 } from '../services/api';
 import { compressMultipleImages } from '../utils/imageCompressor';
@@ -55,14 +53,21 @@ const StaffDashboard = () => {
   const [coords, setCoords] = useState(null);
   const [elapsedTime, setElapsedTime] = useState('00h 00m 00s');
 
-  // 4-Digit Attendance PIN Verification Modal State
+  // 4-Digit Attendance PIN + Live Camera Verification Modal State
   const [pinModal, setPinModal] = useState({
     isOpen: false,
     action: 'check-in', // 'check-in' | 'check-out'
-    staff: null
+    staff: null,
+    step: 'pin' // 'pin' | 'camera'
   });
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState('');
+
+  // Camera capture states
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
   // Cafe Photos Submission state
   const [reportNotes, setReportNotes] = useState('');
@@ -74,6 +79,7 @@ const StaffDashboard = () => {
   const cafePhotoInputRef = useRef(null);
 
   const timerRef = useRef(null);
+  const pollingRef = useRef(null);
 
   // Active staff object resolved from kiosk list or current user
   const activeStaffMember = kioskStaffList.find(s => String(s._id) === String(selectedStaffId)) || {
@@ -88,13 +94,95 @@ const StaffDashboard = () => {
     dailyRate: user?.dailyRate || 0
   };
 
+  // Helper: Stop active camera stream tracks
+  const stopCameraStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn('Track stop error:', e);
+        }
+      });
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  // Helper: Start front-facing camera for check-in selfie
+  const startCameraStream = useCallback(async () => {
+    setCameraLoading(true);
+    setCameraError('');
+    try {
+      stopCameraStream();
+      const constraints = {
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        },
+        audio: false
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+    } catch (err) {
+      console.error('Camera access error:', err);
+      setCameraError('Camera access denied or unavailable. Please enable camera permissions in your browser.');
+    } finally {
+      setCameraLoading(false);
+    }
+  }, [stopCameraStream]);
+
+  // Helper: Capture video frame to compressed JPEG data URL (~25KB–35KB)
+  const captureAndCompressPhoto = useCallback(() => {
+    try {
+      if (!videoRef.current) return null;
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      const maxDim = 480;
+      let width = video.videoWidth || 640;
+      let height = video.videoHeight || 480;
+
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      // Mirror horizontal for natural selfie view
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, width, height);
+
+      // High efficiency JPEG compression at 0.6 (~25KB-35KB)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+      return dataUrl;
+    } catch (err) {
+      console.error('Photo capture error:', err);
+      return null;
+    }
+  }, []);
+
   // Fetch initial data & branch kiosk staff roster
-  const fetchData = async (isSilent = false, overrideStaffId = null) => {
+  const fetchData = useCallback(async (isSilent = false, overrideStaffId = null) => {
     try {
       if (!isSilent) setLoading(true);
       setErrorMsg('');
 
-      // 1. Resolve geolocation in the background asynchronously without blocking the UI
+      // 1. Resolve geolocation in background
       if (navigator.geolocation && !coords) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
@@ -109,7 +197,7 @@ const StaffDashboard = () => {
       const branchParam = activeBranchId || user?.assignedBranch || 'default';
       let resolvedTargetId = overrideStaffId || selectedStaffId || user?._id;
 
-      // 2. Fetch Kiosk roster and Attendance concurrently in parallel for maximum speed
+      // 2. Fetch Kiosk roster and Attendance concurrently in parallel
       const [kioskRes, todayRes, historyRes] = await Promise.all([
         getKioskStaffList({ branchId: branchParam }).catch((err) => {
           console.warn('Kiosk list fetch error:', err);
@@ -129,11 +217,11 @@ const StaffDashboard = () => {
         }
       }
 
-      if (todayRes.success) {
+      if (todayRes && todayRes.success) {
         setTodayStatus(todayRes);
       }
 
-      if (historyRes.success) {
+      if (historyRes && historyRes.success) {
         setHistoryData(historyRes.history || []);
         setSummary(historyRes.summary || {
           totalWorkingHours: 0,
@@ -144,12 +232,13 @@ const StaffDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching staff attendance data:', error);
-      setErrorMsg('Failed to sync attendance details with server.');
+      if (!isSilent) setErrorMsg('Failed to sync attendance details with server.');
     } finally {
       if (!isSilent) setLoading(false);
     }
-  };
+  }, [activeBranchId, user, selectedStaffId, coords]);
 
+  // Initial load
   useEffect(() => {
     setTodayStatus(null);
     setHistoryData([]);
@@ -158,24 +247,71 @@ const StaffDashboard = () => {
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      stopCameraStream();
     };
   }, [activeBranchId]);
 
-  // When staff switches their profile on the shared device
+  // Live auto-checkout & status polling (every 10s) — ensures seamless zero-refresh UI updates
+  useEffect(() => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+
+    pollingRef.current = setInterval(() => {
+      const targetId = selectedStaffId || user?._id;
+      if (targetId && !pinModal.isOpen) {
+        // Silently fetch status to catch auto-checkouts and status changes in real-time
+        getTodayAttendanceStatus({ ...(coords || {}), staffId: targetId })
+          .then((res) => {
+            if (res && res.success) {
+              setTodayStatus((prev) => {
+                const prevCheckedIn = prev?.checkedIn;
+                const prevCheckedOut = prev?.checkedOut;
+                const newCheckedIn = res.checkedIn;
+                const newCheckedOut = res.checkedOut;
+                const prevSession = prev?.attendance?.activeSessionNumber;
+                const newSession = res.attendance?.activeSessionNumber;
+
+                if (prevCheckedIn !== newCheckedIn || prevCheckedOut !== newCheckedOut || prevSession !== newSession) {
+                  getStaffAttendanceHistory({ staffId: targetId }).then((hist) => {
+                    if (hist?.success) {
+                      setHistoryData(hist.history || []);
+                      setSummary(hist.summary || { totalWorkingHours: 0, attendancePercentage: 0, lateDays: 0, presentDays: 0 });
+                    }
+                  });
+                }
+                return res;
+              });
+            }
+          })
+          .catch((err) => console.warn('Silent attendance poll error:', err.message));
+      }
+    }, 10000);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [selectedStaffId, user, coords, pinModal.isOpen]);
+
+  // Instant Zero-Lag staff switching in kiosk roster
   const handleSelectStaff = async (staffId) => {
+    if (String(staffId) === String(selectedStaffId)) return;
     setSelectedStaffId(staffId);
     setErrorMsg('');
     setSuccessMsg('');
+    // Instant reset to zero out previous staff's profile
+    setTodayStatus(null);
+    setHistoryData([]);
     setLoading(true);
+
     try {
       const [todayRes, historyRes] = await Promise.all([
         getTodayAttendanceStatus({ ...(coords || {}), staffId }),
         getStaffAttendanceHistory({ staffId })
       ]);
-      if (todayRes.success) {
+      if (todayRes && todayRes.success) {
         setTodayStatus(todayRes);
       }
-      if (historyRes.success) {
+      if (historyRes && historyRes.success) {
         setHistoryData(historyRes.history || []);
         setSummary(historyRes.summary || {
           totalWorkingHours: 0,
@@ -194,8 +330,11 @@ const StaffDashboard = () => {
   // Update live shift duration timer
   useEffect(() => {
     let interval = null;
-    if (todayStatus?.checkedIn && !todayStatus?.checkedOut && todayStatus?.attendance?.checkInTime) {
-      const startTime = new Date(todayStatus.attendance.checkInTime).getTime();
+    const activeSession = (todayStatus?.attendance?.shiftSessions || []).find(s => !s.checkOutTime) ||
+                          (todayStatus?.checkedIn && !todayStatus?.checkedOut ? todayStatus?.attendance : null);
+
+    if (activeSession && activeSession.checkInTime) {
+      const startTime = new Date(activeSession.checkInTime).getTime();
 
       const updateTimer = () => {
         const diffMs = Date.now() - startTime;
@@ -222,15 +361,13 @@ const StaffDashboard = () => {
     };
   }, [todayStatus]);
 
-  // Helper: Validate if Check-in is currently within the allowed 10-minute pre-shift and grace window
+  // Helper: Validate if Check-in is currently allowed
   const getShiftCheckInStatus = (staff) => {
     if (!staff || !staff.shiftStartTime) {
       return { isAllowed: true, reason: '' };
     }
 
     const shiftStartTime = staff.shiftStartTime;
-    const leanTimeMinutes = staff.leanTimeMinutes !== undefined ? Number(staff.leanTimeMinutes) : 30;
-
     let sHour = 9, sMin = 0;
     const isPM = /PM/i.test(shiftStartTime);
     const isAM = /AM/i.test(shiftStartTime);
@@ -242,8 +379,7 @@ const StaffDashboard = () => {
     if (isAM && sHour === 12) sHour = 0;
 
     const shiftStartMins = sHour * 60 + sMin;
-    const earlyOpenMins = shiftStartMins - 10;
-    const graceCutoffMins = shiftStartMins + leanTimeMinutes;
+    const earlyOpenMins = shiftStartMins - 15; // Open 15 mins before shift
 
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
@@ -263,24 +399,14 @@ const StaffDashboard = () => {
         isTooEarly: true,
         opensAt: formatMin(earlyOpenMins),
         shiftStart: formatMin(shiftStartMins),
-        reason: `🔒 Check-in opens at ${formatMin(earlyOpenMins)} (10 minutes before your ${formatMin(shiftStartMins)} shift)`
-      };
-    }
-
-    if (currentMins > graceCutoffMins) {
-      return {
-        isAllowed: false,
-        isExpired: true,
-        deadline: formatMin(graceCutoffMins),
-        shiftStart: formatMin(shiftStartMins),
-        reason: `⚠️ Shift attendance window expired at ${formatMin(graceCutoffMins)} (Shift was: ${formatMin(shiftStartMins)})`
+        reason: `🔒 Check-in opens at ${formatMin(earlyOpenMins)} (15 minutes before your ${formatMin(shiftStartMins)} shift)`
       };
     }
 
     return { isAllowed: true, reason: '' };
   };
 
-  // Open 4-digit PIN verification modal for Instant Check-In
+  // Open 4-digit PIN verification modal for Check-In (Step 1: PIN -> Step 2: Camera)
   const handleConfirmAttendance = () => {
     setErrorMsg('');
     setSuccessMsg('');
@@ -296,11 +422,12 @@ const StaffDashboard = () => {
     setPinModal({
       isOpen: true,
       action: 'check-in',
-      staff: activeStaffMember
+      staff: activeStaffMember,
+      step: 'pin'
     });
   };
 
-  // Open 4-digit PIN verification modal for Check-Out
+  // Open 4-digit PIN verification modal for Check-Out (No camera needed for check-out)
   const handleCheckOut = () => {
     setErrorMsg('');
     setSuccessMsg('');
@@ -309,12 +436,40 @@ const StaffDashboard = () => {
     setPinModal({
       isOpen: true,
       action: 'check-out',
-      staff: activeStaffMember
+      staff: activeStaffMember,
+      step: 'pin'
     });
   };
 
-  // Verify 4-Digit PIN and submit Attendance (Check-in or Check-out)
-  const handleVerifyAndSubmitAttendance = (pinToSubmit) => {
+  const closePinModal = () => {
+    stopCameraStream();
+    setPinModal({ isOpen: false, action: 'check-in', staff: null, step: 'pin' });
+    setEnteredPin('');
+    setPinError('');
+    setCameraError('');
+  };
+
+  // Handle advance from Step 1 (PIN) to Step 2 (Camera) for check-in, or submit directly for check-out
+  const handlePinComplete = (pinVal) => {
+    const pin = String(pinVal !== undefined ? pinVal : enteredPin).trim();
+    if (pin.length !== 4) {
+      setPinError('Please enter all 4 digits of your Attendance PIN.');
+      return;
+    }
+
+    setPinError('');
+    if (pinModal.action === 'check-in') {
+      // Advance to live camera selfie capture
+      setPinModal(prev => ({ ...prev, step: 'camera' }));
+      startCameraStream();
+    } else {
+      // Check-out: execute immediately
+      handleVerifyAndSubmitAttendance(pin, null);
+    }
+  };
+
+  // Verify PIN & submit attendance (with mandatory compressed selfie photo for check-in)
+  const handleVerifyAndSubmitAttendance = (pinToSubmit, photoBase64) => {
     const pin = String(pinToSubmit !== undefined ? pinToSubmit : enteredPin).trim();
     if (pin.length !== 4) {
       setPinError('Please enter all 4 digits of your Attendance PIN.');
@@ -329,81 +484,84 @@ const StaffDashboard = () => {
     const currentTargetName = targetStaff?.name || activeStaffMember?.name || 'Staff';
     const isCheckIn = pinModal.action === 'check-in';
 
-    if (!navigator.geolocation) {
-      setActionLoading(false);
-      setPinError('Geolocation is not supported by your browser.');
-      return;
-    }
+    const executeSubmission = async (lat = 0, lng = 0) => {
+      try {
+        if (isCheckIn) {
+          const userAgent = navigator.userAgent;
+          let deviceInfo = 'Kiosk Device';
+          if (/mobile/i.test(userAgent)) deviceInfo = 'Mobile Kiosk';
+          if (/chrome/i.test(userAgent)) deviceInfo = 'Chrome Kiosk';
+          if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) deviceInfo = 'Safari Kiosk';
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        setCoords({ latitude, longitude });
+          const res = await checkIn({
+            staffId: currentTargetId,
+            latitude: lat,
+            longitude: lng,
+            deviceInfo,
+            attendancePin: pin,
+            imageData: photoBase64 || undefined
+          });
 
-        try {
-          if (isCheckIn) {
-            const userAgent = navigator.userAgent;
-            let deviceInfo = 'Kiosk Device';
-            if (/mobile/i.test(userAgent)) deviceInfo = 'Mobile Kiosk';
-            if (/chrome/i.test(userAgent)) deviceInfo = 'Chrome Kiosk';
-            if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) deviceInfo = 'Safari Kiosk';
-
-            const res = await checkIn({
-              staffId: currentTargetId,
-              latitude,
-              longitude,
-              deviceInfo,
-              attendancePin: pin
-            });
-
-            if (res.success) {
-              setPinModal({ isOpen: false, action: 'check-in', staff: null });
-              setEnteredPin('');
-              setSuccessMsg(`✓ Attendance marked successfully for ${currentTargetName} (${targetStaff?.employeeId || 'ID Verified'})!`);
-              fetchData(false, currentTargetId);
-            } else {
-              setPinError(res.message || 'Check-in validation failed.');
-            }
+          if (res.success) {
+            closePinModal();
+            setSuccessMsg(`✓ Attendance marked successfully for ${currentTargetName}!`);
+            fetchData(false, currentTargetId);
           } else {
-            const res = await checkOut({
-              staffId: currentTargetId,
-              latitude,
-              longitude,
-              attendancePin: pin
-            });
+            setPinError(res.message || 'Check-in validation failed.');
+          }
+        } else {
+          const res = await checkOut({
+            staffId: currentTargetId,
+            latitude: lat,
+            longitude: lng,
+            attendancePin: pin
+          });
 
-            if (res.success) {
-              setPinModal({ isOpen: false, action: 'check-out', staff: null });
-              setEnteredPin('');
-              setSuccessMsg(`✓ Shift check-out completed for ${currentTargetName}!`);
-              fetchData(false, currentTargetId);
-            } else {
-              setPinError(res.message || 'Check-out request failed.');
-            }
+          if (res.success) {
+            closePinModal();
+            setSuccessMsg(`✓ Shift check-out completed for ${currentTargetName}!`);
+            fetchData(false, currentTargetId);
+          } else {
+            setPinError(res.message || 'Check-out request failed.');
           }
-        } catch (err) {
-          console.error('Attendance submit error:', err);
-          const msg = err.response?.data?.message || (isCheckIn ? 'Check-in failed. Please verify your 4-digit PIN.' : 'Check-out failed. Please verify your 4-digit PIN.');
-          setPinError(msg);
-          if (msg.toLowerCase().includes('pin')) {
-            setEnteredPin('');
-          }
-        } finally {
-          setActionLoading(false);
         }
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
+      } catch (err) {
+        console.error('Attendance submit error:', err);
+        const msg = err.response?.data?.message || (isCheckIn ? 'Check-in failed. Please verify your 4-digit PIN.' : 'Check-out failed. Please verify your 4-digit PIN.');
+        setPinError(msg);
+        if (msg.toLowerCase().includes('pin')) {
+          setEnteredPin('');
+          if (pinModal.step === 'camera') {
+            stopCameraStream();
+            setPinModal(prev => ({ ...prev, step: 'pin' }));
+          }
+        }
+      } finally {
         setActionLoading(false);
-        setPinError('GPS location is required to verify presence at the cafe counter. Please allow location access in browser settings.');
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
+      }
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setCoords({ latitude, longitude });
+          executeSubmission(latitude, longitude);
+        },
+        () => {
+          // Geolocation fallback
+          executeSubmission(0, 0);
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+      );
+    } else {
+      executeSubmission(0, 0);
+    }
   };
 
   // Keyboard support for 4-digit PIN modal
   useEffect(() => {
-    if (!pinModal.isOpen) return;
+    if (!pinModal.isOpen || pinModal.step !== 'pin') return;
 
     const handleKeyDown = (e) => {
       if (e.key >= '0' && e.key <= '9') {
@@ -412,7 +570,7 @@ const StaffDashboard = () => {
           setEnteredPin(nextPin);
           setPinError('');
           if (nextPin.length === 4) {
-            handleVerifyAndSubmitAttendance(nextPin);
+            handlePinComplete(nextPin);
           }
         }
       } else if (e.key === 'Backspace') {
@@ -420,76 +578,18 @@ const StaffDashboard = () => {
         setPinError('');
       } else if (e.key === 'Escape') {
         if (!actionLoading) {
-          setPinModal({ isOpen: false, action: 'check-in', staff: null });
-          setEnteredPin('');
-          setPinError('');
+          closePinModal();
         }
       } else if (e.key === 'Enter') {
         if (enteredPin.length === 4 && !actionLoading) {
-          handleVerifyAndSubmitAttendance(enteredPin);
+          handlePinComplete(enteredPin);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pinModal.isOpen, enteredPin, actionLoading, pinModal.action, pinModal.staff, activeStaffMember]);
-
-  // Overtime Extra Work Start/Stop
-  const handleStartExtraWork = () => {
-    setErrorMsg('');
-    setSuccessMsg('');
-    setActionLoading(true);
-    const currentTargetId = selectedStaffId || user?._id;
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const res = await startExtraWork({ staffId: currentTargetId, latitude: position.coords.latitude, longitude: position.coords.longitude });
-          if (res.success) {
-            setSuccessMsg('Extra work session started.');
-            fetchData(false, currentTargetId);
-          }
-        } catch (err) {
-          setErrorMsg(err.response?.data?.message || 'Failed to start extra work.');
-        } finally {
-          setActionLoading(false);
-        }
-      },
-      () => {
-        setActionLoading(false);
-        setErrorMsg('GPS location required.');
-      }
-    );
-  };
-
-  const handleStopExtraWork = () => {
-    if (!window.confirm('Stop extra work session?')) return;
-    setErrorMsg('');
-    setSuccessMsg('');
-    setActionLoading(true);
-    const currentTargetId = selectedStaffId || user?._id;
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const res = await stopExtraWork({ staffId: currentTargetId, latitude: position.coords.latitude, longitude: position.coords.longitude });
-          if (res.success) {
-            setSuccessMsg('Extra work session completed.');
-            fetchData(false, currentTargetId);
-          }
-        } catch (err) {
-          setErrorMsg(err.response?.data?.message || 'Failed to stop extra work.');
-        } finally {
-          setActionLoading(false);
-        }
-      },
-      () => {
-        setActionLoading(false);
-        setErrorMsg('GPS location required.');
-      }
-    );
-  };
+  }, [pinModal.isOpen, pinModal.step, enteredPin, actionLoading, pinModal.action]);
 
   // Cafe Photos Handlers
   const handleCafePhotoSelect = async (e) => {
@@ -504,7 +604,6 @@ const StaffDashboard = () => {
     }
 
     try {
-      // Auto-compress large camera photos (e.g. 8MB -> ~150KB)
       const compressedFiles = await compressMultipleImages(rawFiles, { maxWidth: 1280, maxHeight: 1280, quality: 0.75 });
       const newSelected = [...selectedPhotos, ...compressedFiles].slice(0, 15);
       setSelectedPhotos(newSelected);
@@ -590,7 +689,11 @@ const StaffDashboard = () => {
     }
   };
 
-  const currentDailyWage = todayStatus?.todayWageEarned || todayStatus?.attendance?.dailyWageEarned || todayStatus?.staff?.todayWageEarned || todayStatus?.staff?.dailyRate || activeStaffMember?.dailyRate || user?.dailyRate || 0;
+  const currentDailyWage = todayStatus?.todayWageEarned !== undefined 
+    ? todayStatus.todayWageEarned 
+    : (todayStatus?.attendance?.dailyWageEarned !== undefined 
+        ? todayStatus.attendance.dailyWageEarned 
+        : (activeStaffMember?.dailyRate || user?.dailyRate || 0));
 
   const currentUnpaidDue = summary?.unpaidSalaryBalance !== undefined
     ? Number(summary.unpaidSalaryBalance)
@@ -598,20 +701,9 @@ const StaffDashboard = () => {
         ? Number(activeStaffMember.remainingSalaryBalance)
         : (summary?.salaryEarnedThisMonth !== undefined
             ? Number(summary.salaryEarnedThisMonth)
-            : historyData.reduce((sum, r) => sum + (r.dailyWageEarned !== undefined ? Number(r.dailyWageEarned) : (r.status === 'Half Day' ? (activeStaffMember?.dailyRate || user?.dailyRate || 0) * 0.5 : (activeStaffMember?.dailyRate || user?.dailyRate || 0))), 0)
+            : historyData.reduce((sum, r) => sum + (r.dailyWageEarned !== undefined ? Number(r.dailyWageEarned) : (activeStaffMember?.dailyRate || 0)), 0)
           )
       );
-
-  const currentTotalEarned = summary?.totalEarnedAllTime !== undefined
-    ? Number(summary.totalEarnedAllTime)
-    : (activeStaffMember?.totalEarnedAllTime !== undefined
-        ? Number(activeStaffMember.totalEarnedAllTime)
-        : currentUnpaidDue
-      );
-
-  const currentTotalPaid = summary?.totalPaidAllTime !== undefined
-    ? Number(summary.totalPaidAllTime)
-    : Number(activeStaffMember?.totalPaidAllTime || 0);
 
   // Filtered staff list for kiosk search
   const filteredKioskStaff = kioskStaffList.filter(s => {
@@ -621,6 +713,21 @@ const StaffDashboard = () => {
            (s.employeeId && String(s.employeeId).toLowerCase().includes(q)) ||
            (s.staffRole && s.staffRole.toLowerCase().includes(q));
   });
+
+  // Determine active open session or completed sessions for multi-shift split flow
+  const shiftSessions = todayStatus?.attendance?.shiftSessions || [];
+  const completedSessions = shiftSessions.filter(s => !!s.checkOutTime);
+  const activeSession = shiftSessions.find(s => !s.checkOutTime) ||
+                        (todayStatus?.checkedIn && !todayStatus?.checkedOut ? todayStatus?.attendance : null);
+
+  const isCheckedIn = !!activeSession && !activeSession.checkOutTime;
+
+  // Active shift number calculation
+  const totalConfiguredShifts = (activeStaffMember?.scheduleType === 'SPLIT' && Array.isArray(activeStaffMember?.shifts) && activeStaffMember.shifts.length > 0)
+    ? activeStaffMember.shifts.length
+    : 1;
+  const currentShiftNumber = activeSession ? (activeSession.sessionNumber || 1) : (completedSessions.length + 1);
+  const canStartNextShift = !isCheckedIn && currentShiftNumber <= totalConfiguredShifts;
 
   return (
     <div className="fade-in" style={{ maxWidth: '1100px', margin: '0 auto', padding: '16px' }}>
@@ -656,7 +763,7 @@ const StaffDashboard = () => {
             {activeStaffMember?.name?.charAt(0)?.toUpperCase() || user?.name?.charAt(0)?.toUpperCase() || 'S'}
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
                 {activeStaffMember?.name || user?.name || 'Staff Member'}
               </h2>
@@ -687,10 +794,7 @@ const StaffDashboard = () => {
             </p>
             <div style={{ marginTop: '4px', fontSize: '11.5px', color: 'var(--color-text-secondary)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ background: 'rgba(52, 152, 219, 0.12)', color: '#2980b9', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
-                ⏰ Shift: {activeStaffMember?.shiftStartTime || todayStatus?.staff?.shiftStartTime || user?.shiftStartTime || '09:00'} - {activeStaffMember?.shiftEndTime || todayStatus?.staff?.shiftEndTime || user?.shiftEndTime || '18:00'}
-              </span>
-              <span style={{ background: 'rgba(243, 156, 18, 0.12)', color: '#d35400', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
-                ⏳ Grace Period: {activeStaffMember?.leanTimeMinutes !== undefined ? activeStaffMember?.leanTimeMinutes : (todayStatus?.staff?.leanTimeMinutes !== undefined ? todayStatus?.staff?.leanTimeMinutes : 30)}m
+                ⏰ Shift: {activeStaffMember?.shiftStartTime || '09:00'} - {activeStaffMember?.shiftEndTime || '18:00'}
               </span>
             </div>
           </div>
@@ -706,14 +810,14 @@ const StaffDashboard = () => {
             textAlign: 'right'
           }}>
             <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'block', fontWeight: 600 }}>
-              {todayStatus?.checkedIn ? "Today's Wage Credited" : "Standard Daily Rate"}
+              {todayStatus?.checkedIn ? "Today's Wage Credited" : "Shift Rate"}
             </span>
             <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#2ecc71' }}>
               ₹{currentDailyWage}
             </span>
           </div>
 
-          {todayStatus?.checkedIn && !todayStatus?.checkedOut && (
+          {isCheckedIn && (
             <div style={{
               background: 'rgba(46, 204, 113, 0.12)',
               border: '1px solid #2ecc71',
@@ -722,7 +826,7 @@ const StaffDashboard = () => {
               textAlign: 'center'
             }}>
               <span style={{ fontSize: '11px', color: '#27ae60', display: 'block', fontWeight: 700 }}>
-                ● Active Shift
+                ● Active Shift {currentShiftNumber}
               </span>
               <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#27ae60', fontFamily: 'monospace' }}>
                 {elapsedTime}
@@ -1005,340 +1109,258 @@ const StaffDashboard = () => {
             </div>
           )}
 
-          {/* Two-Column Grid: Attendance Action Card & Wage Receipt Card */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-            
-            {/* Card A: 1-Click Check-in & Check-out Control */}
-            <div className="staff-dashboard-card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-                    Staff Shift Terminal
-                  </h3>
-                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                    Active Member: <strong style={{ color: 'var(--color-primary, #ff6b08)' }}>{activeStaffMember?.name}</strong> ({activeStaffMember?.employeeId || 'ID Verified'})
-                  </p>
-                </div>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  padding: '4px 10px',
-                  borderRadius: '6px',
-                  background: todayStatus?.checkedIn ? (todayStatus?.checkedOut ? 'rgba(52, 152, 219, 0.12)' : 'rgba(46, 204, 113, 0.12)') : 'rgba(231, 76, 60, 0.12)',
-                  color: todayStatus?.checkedIn ? (todayStatus?.checkedOut ? '#2980b9' : '#27ae60') : '#e74c3c'
-                }}>
-                  {todayStatus?.checkedIn ? (todayStatus?.checkedOut ? '✓ Completed Today' : '● Shift Active') : '○ Not Checked In'}
-                </span>
-              </div>
-
-              {/* Profile & Salary Overview Box */}
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(255, 107, 8, 0.06) 0%, rgba(255, 107, 8, 0.02) 100%)',
-                border: '1px solid rgba(255, 107, 8, 0.25)',
-                borderRadius: '14px',
-                padding: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {/* ─── ACTIVE STAFF TERMINAL CARD (Zero-lag skeleton when loading) ─── */}
+          {loading ? (
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '16px',
+              padding: '28px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '220px',
+              gap: '12px'
+            }}>
+              <div className="spinner" style={{ width: '32px', height: '32px', borderColor: 'var(--color-primary)' }} />
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                Syncing {activeStaffMember?.name}'s live shift status...
+              </span>
+            </div>
+          ) : (
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '16px',
+              padding: '24px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '14px',
-                    background: 'var(--color-primary, #ff6b08)',
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: '#3498db',
                     color: '#fff',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '1.6rem',
-                    fontWeight: 800,
-                    boxShadow: '0 4px 12px rgba(255, 107, 8, 0.25)',
-                    flexShrink: 0
+                    fontSize: '1.2rem',
+                    fontWeight: 800
                   }}>
                     {activeStaffMember?.name?.charAt(0)?.toUpperCase() || 'S'}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <h4 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-                        {activeStaffMember?.name}
-                      </h4>
-                      <span style={{ fontSize: '11px', background: 'rgba(52, 152, 219, 0.15)', color: '#2980b9', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
-                        {activeStaffMember?.role || 'Staff'} • {activeStaffMember?.employeeId || 'EMP'}
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                      {activeStaffMember?.name}
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary)', marginLeft: '8px' }}>
+                        ({activeStaffMember?.employeeId || 'EMP'})
                       </span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-                      ⏰ Shift: <strong>{activeStaffMember?.shiftStartTime || '09:00'} - {activeStaffMember?.shiftEndTime || '18:00'}</strong> (Grace: {activeStaffMember?.leanTimeMinutes || 30}m)
-                    </div>
+                    </h3>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                      ⏰ Shift: {activeStaffMember?.shiftStartTime || '09:00'} - {activeStaffMember?.shiftEndTime || '18:00'}
+                    </span>
                   </div>
                 </div>
 
-                {/* Live Salary Badges in Staff Card */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '10px',
-                  background: 'var(--bg-card, #ffffff)',
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--color-border)'
-                }}>
-                  <div>
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'block', fontWeight: 600 }}>Daily Shift Rate</span>
-                    <strong style={{ fontSize: '15px', color: 'var(--color-text-primary)' }}>
-                      ₹{activeStaffMember?.dailyRate || user?.dailyRate || 0} <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>/ shift</span>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'block', fontWeight: 600 }}>
+                      Shift Rate
+                    </span>
+                    <strong style={{ fontSize: '1.15rem', color: 'var(--color-text-primary)' }}>
+                      ₹{activeStaffMember?.dailyRate || 0} <span style={{ fontSize: '11px', fontWeight: 500 }}>/ shift</span>
                     </strong>
                   </div>
-                  <div>
-                    <span style={{ fontSize: '11px', color: '#e67e22', display: 'block', fontWeight: 700 }}>
+
+                  <div style={{ textAlign: 'right', borderLeft: '1px solid var(--color-border)', paddingLeft: '12px' }}>
+                    <span style={{ fontSize: '11px', color: '#d35400', display: 'block', fontWeight: 700 }}>
                       💰 Unpaid Salary (To Receive)
                     </span>
-                    <strong style={{ fontSize: '15px', color: '#27ae60', fontWeight: 800 }}>
+                    <strong style={{ fontSize: '1.2rem', color: '#27ae60' }}>
                       ₹{currentUnpaidDue.toFixed(2)}
                     </strong>
-                    <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '2px' }}>
-                      Earned: ₹{currentTotalEarned.toFixed(2)} • Paid: ₹{currentTotalPaid.toFixed(2)}
-                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Direct 1-Click Check-In / Check-Out Controls */}
-              {!todayStatus?.checkedIn ? (
-                (() => {
-                  const checkInWindow = getShiftCheckInStatus(activeStaffMember);
-                  return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <button
-                        type="button"
-                        onClick={handleConfirmAttendance}
-                        disabled={actionLoading || !checkInWindow.isAllowed}
-                        className="btn btn-primary"
-                        style={{
-                          padding: '16px',
-                          fontSize: '15.5px',
-                          fontWeight: 800,
-                          boxShadow: checkInWindow.isAllowed ? '0 6px 20px rgba(255,107,8,0.3)' : 'none',
-                          cursor: (actionLoading || !checkInWindow.isAllowed) ? 'not-allowed' : 'pointer',
-                          borderRadius: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '10px',
-                          opacity: checkInWindow.isAllowed ? 1 : 0.65,
-                          background: !checkInWindow.isAllowed ? '#888' : undefined,
-                          borderColor: !checkInWindow.isAllowed ? '#888' : undefined
-                        }}
-                      >
-                        <span style={{ fontSize: '1.2rem' }}>{checkInWindow.isAllowed ? '👉' : '🔒'}</span>
-                        {actionLoading 
-                          ? 'Verifying GPS & Marking Check-In...' 
-                          : checkInWindow.isTooEarly 
-                            ? `Check-in Opens at ${checkInWindow.opensAt}` 
-                            : checkInWindow.isExpired
-                              ? 'Attendance Window Closed'
-                              : `Mark Check-In for ${activeStaffMember?.name}`}
-                      </button>
+              {/* ─── ACTIVE SHIFT SESSION BANNER (if currently checked in) ─── */}
+              {isCheckedIn && (
+                <div style={{
+                  background: 'rgba(46, 204, 113, 0.08)',
+                  border: '1.5px solid #2ecc71',
+                  borderRadius: '12px',
+                  padding: '14px 18px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}>
+                  <div>
+                    <strong style={{ color: '#27ae60', fontSize: '14px', display: 'block' }}>
+                      ● ACTIVE WORKING SESSION (SHIFT {currentShiftNumber})
+                    </strong>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                      Checked in at: {formatTime(activeSession.checkInTime)}
+                    </span>
+                  </div>
 
-                      {!checkInWindow.isAllowed && (
-                        <div style={{
-                          padding: '10px 14px',
-                          borderRadius: '8px',
-                          background: checkInWindow.isTooEarly ? 'rgba(230, 126, 34, 0.1)' : 'rgba(231, 76, 60, 0.1)',
-                          border: `1px solid ${checkInWindow.isTooEarly ? '#e67e22' : '#e74c3c'}`,
-                          fontSize: '12.5px',
-                          fontWeight: 700,
-                          color: checkInWindow.isTooEarly ? '#d35400' : '#c0392b',
-                          textAlign: 'center'
-                        }}>
-                          {checkInWindow.reason}
-                        </div>
-                      )}
-
-                      <div style={{
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        background: 'var(--bg-secondary, #f8f9fa)',
-                        border: '1px solid var(--color-border)',
-                        fontSize: '12px',
-                        color: 'var(--color-text-secondary)',
-                        textAlign: 'center'
-                      }}>
-                        📍 <strong>GPS Geofence:</strong> Presence is verified automatically against cafe counter coordinates.
-                      </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '1.3rem', fontWeight: 800, color: '#27ae60', fontFamily: 'monospace' }}>
+                        {elapsedTime}
+                      </span>
                     </div>
-                  );
-                })()
-              ) : (
-                /* Already Checked In Controls */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {!todayStatus?.checkedOut ? (
-                    <>
-                      {/* Active Shift Banner */}
-                      <div style={{
-                        background: 'rgba(46, 204, 113, 0.08)',
-                        border: '1px solid #2ecc71',
-                        borderRadius: '10px',
-                        padding: '12px 16px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}>
-                        <div>
-                          <span style={{ fontSize: '11px', color: '#27ae60', fontWeight: 700, textTransform: 'uppercase' }}>
-                            ● Active Working Session
-                          </span>
-                          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-                            Checked in at: {formatTime(todayStatus?.attendance?.checkInTime)}
-                          </div>
-                        </div>
-                        <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#27ae60', fontFamily: 'monospace' }}>
-                          {elapsedTime}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleCheckOut}
-                        disabled={actionLoading}
-                        style={{
-                          background: '#e74c3c',
-                          color: '#fff',
-                          border: 'none',
-                          padding: '15px',
-                          borderRadius: '12px',
-                          fontSize: '15px',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          boxShadow: '0 4px 14px rgba(231, 76, 60, 0.25)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px'
-                        }}
-                      >
-                        {actionLoading ? 'Processing Checkout...' : `⏹️ End Shift & Check Out (${activeStaffMember?.name})`}
-                      </button>
-
-                      {/* Overtime Trigger during shift */}
-                      {todayStatus?.attendance?.isExtraWorkActive ? (
-                        <button
-                          type="button"
-                          onClick={handleStopExtraWork}
-                          disabled={actionLoading}
-                          className="btn btn-secondary"
-                          style={{ padding: '10px', fontWeight: 700, color: '#e74c3c' }}
-                        >
-                          ⏹️ Stop Extra Work / Overtime
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleStartExtraWork}
-                          disabled={actionLoading}
-                          className="btn btn-secondary"
-                          style={{ padding: '10px', fontWeight: 700 }}
-                        >
-                          ⏱️ Start Extra Work / Overtime
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div style={{
-                        background: 'rgba(46, 204, 113, 0.1)',
-                        border: '1.5px solid #2ecc71',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        textAlign: 'center',
-                        color: '#27ae60',
-                        fontWeight: 700
-                      }}>
-                        <div style={{ fontSize: '1.6rem', marginBottom: '4px' }}>✓</div>
-                        <div>Shift Completed & Checked Out for Today ({activeStaffMember?.name})</div>
-                        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px', fontWeight: 500 }}>
-                          Duration: {todayStatus?.attendance?.totalDuration ? `${Math.floor(todayStatus.attendance.totalDuration / 60)}h ${todayStatus.attendance.totalDuration % 60}m` : 'Completed'} • Day Wage Finalized: <strong>₹{currentDailyWage}</strong>
-                        </div>
-                      </div>
-
-                      {/* Overtime Trigger after Checkout */}
-                      {todayStatus?.attendance?.isExtraWorkActive ? (
-                        <button
-                          type="button"
-                          onClick={handleStopExtraWork}
-                          disabled={actionLoading}
-                          style={{
-                            background: '#e74c3c',
-                            color: '#fff',
-                            border: 'none',
-                            padding: '13px',
-                            borderRadius: '10px',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px'
-                          }}
-                        >
-                          ⏹️ Stop Extra Work / Overtime ({activeStaffMember?.name})
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleStartExtraWork}
-                          disabled={actionLoading}
-                          className="btn btn-secondary"
-                          style={{ padding: '12px', fontWeight: 700, border: '1.5px dashed var(--color-primary, #ff6b08)', color: 'var(--color-primary, #ff6b08)' }}
-                        >
-                          ⏱️ Start Extra Work / Overtime ({activeStaffMember?.name})
-                        </button>
-                      )}
-                    </>
-                  )}
+                  </div>
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* Monthly Aggregates Summary for Active Staff */}
+              {/* ─── MAIN ATTENDANCE ACTION BUTTON (Clock In / Clock Out) ─── */}
+              <div style={{ marginTop: '6px' }}>
+                {isCheckedIn ? (
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={handleCheckOut}
+                    className="btn"
+                    style={{
+                      width: '100%',
+                      padding: '16px',
+                      background: '#e74c3c',
+                      borderColor: '#e74c3c',
+                      color: '#fff',
+                      borderRadius: '12px',
+                      fontSize: '16px',
+                      fontWeight: 800,
+                      cursor: actionLoading ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 14px rgba(231, 76, 60, 0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <span>⏹</span>
+                    {actionLoading ? 'Processing Check-Out...' : `End Shift ${currentShiftNumber} & Check Out (${activeStaffMember?.name})`}
+                  </button>
+                ) : canStartNextShift ? (
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={handleConfirmAttendance}
+                    className="btn btn-primary"
+                    style={{
+                      width: '100%',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      fontSize: '16px',
+                      fontWeight: 800,
+                      cursor: actionLoading ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 14px rgba(255, 107, 8, 0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <span>📸</span>
+                    {actionLoading ? 'Initializing Camera & PIN...' : `Check In for Shift ${currentShiftNumber} (${activeStaffMember?.name})`}
+                  </button>
+                ) : (
+                  <div style={{
+                    background: 'rgba(52, 152, 219, 0.08)',
+                    border: '1.5px solid #3498db',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    textAlign: 'center',
+                    color: '#2980b9',
+                    fontWeight: 700,
+                    fontSize: '14px'
+                  }}>
+                    ✓ All shifts for today have been completed for {activeStaffMember?.name}. Great job!
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ─── SUMMARY METRICS (Presents, Absents, Unpaid Balance) ─── */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '14px',
-            marginTop: '10px'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '14px'
           }}>
-            <div style={{ background: 'var(--bg-card)', padding: '18px 20px', borderRadius: '14px', border: '1px solid var(--color-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'block' }}>Presents (This Month)</span>
-              <strong style={{ fontSize: '1.6rem', color: '#27ae60', marginTop: '6px', display: 'block', fontWeight: 800 }}>{summary.presentDays || 0} Days</strong>
-            </div>
-            <div style={{ background: 'var(--bg-card)', padding: '18px 20px', borderRadius: '14px', border: '1px solid var(--color-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600, display: 'block' }}>Absents (This Month)</span>
-              <strong style={{ fontSize: '1.6rem', color: '#e74c3c', marginTop: '6px', display: 'block', fontWeight: 800 }}>
-                {summary.absentDays !== undefined ? summary.absentDays : Math.max(0, new Date().getDate() - (summary.presentDays || 0))} Days
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '14px',
+              padding: '16px 20px',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+            }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block' }}>
+                Presents (This Month)
+              </span>
+              <strong style={{ fontSize: '1.8rem', fontWeight: 800, color: '#2ecc71', display: 'block', marginTop: '4px' }}>
+                {summary.presentDays || (historyData.filter(h => h.status === 'Present' || h.status === 'Late').length)} Days
               </strong>
             </div>
-            <div style={{ background: 'var(--bg-card)', padding: '18px 20px', borderRadius: '14px', border: '1px solid var(--color-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '14px',
+              padding: '16px 20px',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+            }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block' }}>
+                Absents (This Month)
+              </span>
+              <strong style={{ fontSize: '1.8rem', fontWeight: 800, color: '#e74c3c', display: 'block', marginTop: '4px' }}>
+                {summary.absentDays !== undefined ? summary.absentDays : Math.max(0, 30 - (summary.presentDays || historyData.length))} Days
+              </strong>
+            </div>
+
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--color-border)',
+              borderRadius: '14px',
+              padding: '16px 20px',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+            }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Unpaid Salary Due (To Receive)</span>
-                <span style={{ fontSize: '10.5px', background: 'rgba(39, 174, 96, 0.12)', color: '#27ae60', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>Pending Payout</span>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+                  Unpaid Salary Due (To Receive)
+                </span>
+                <span style={{ fontSize: '10px', background: 'rgba(46, 204, 113, 0.15)', color: '#27ae60', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>
+                  Pending Payout
+                </span>
               </div>
-              <strong style={{ fontSize: '1.6rem', color: '#27ae60', marginTop: '6px', display: 'block', fontWeight: 800 }}>
+              <strong style={{ fontSize: '1.8rem', fontWeight: 800, color: '#27ae60', display: 'block', marginTop: '4px' }}>
                 ₹{currentUnpaidDue.toFixed(2)}
               </strong>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <span>Earned: <strong>₹{currentTotalEarned.toFixed(2)}</strong></span>
-                <span>•</span>
-                <span>Paid by Owner: <strong style={{ color: '#2980b9' }}>₹{currentTotalPaid.toFixed(2)}</strong></span>
-              </div>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                Earned: ₹{(summary?.totalEarnedAllTime || currentUnpaidDue).toFixed(2)} • Paid by Owner: ₹{(summary?.totalPaidAllTime || 0).toFixed(2)}
+              </span>
             </div>
           </div>
 
-          {/* 30-Day Shift & Wage History Table for Active Staff */}
-          <div className="staff-dashboard-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+          {/* ─── PAST 30 DAYS SHIFT & WAGE LOGS TABLE ─── */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '16px',
+            padding: '20px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
                   Past 30 Days Shift & Wage Logs ({activeStaffMember?.name})
                 </h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
@@ -1350,85 +1372,135 @@ const StaffDashboard = () => {
               </span>
             </div>
 
-            {historyData.length === 0 ? (
-              <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--color-text-secondary)', background: 'var(--bg-secondary, #f8f9fa)', borderRadius: '12px', border: '1px dashed var(--color-border)' }}>
-                <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📅</div>
-                <strong style={{ color: 'var(--color-text-primary)' }}>No past attendance records found for {activeStaffMember?.name} in the last 30 days.</strong>
-                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Mark attendance today to record first shift.</p>
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', textAlign: 'left', minWidth: '520px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1.5px solid var(--color-border)', background: 'var(--bg-secondary, #f8f9fa)' }}>
-                      <th style={{ padding: '12px 14px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Date</th>
-                      <th style={{ padding: '12px 14px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Check In</th>
-                      <th style={{ padding: '12px 14px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Check Out</th>
-                      <th style={{ padding: '12px 14px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Wage Earned</th>
-                      <th style={{ padding: '12px 14px', color: 'var(--color-text-secondary)', fontWeight: 700 }}>Status</th>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--color-border)', textAlign: 'left', color: 'var(--color-text-secondary)' }}>
+                    <th style={{ padding: '10px 12px' }}>Date</th>
+                    <th style={{ padding: '10px 12px' }}>Check In</th>
+                    <th style={{ padding: '10px 12px' }}>Check Out</th>
+                    <th style={{ padding: '10px 12px' }}>Wage Earned</th>
+                    <th style={{ padding: '10px 12px' }}>Status</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'center' }}>Selfie (12h)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyData.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-secondary)' }}>
+                        No attendance records found for this staff member.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {historyData.map((record) => {
-                      const statusColor = record.status === 'Late' ? '#f39c12' : '#2ecc71';
-                      const wage = record.dailyWageEarned !== undefined ? record.dailyWageEarned : (record.status === 'Half Day' ? (activeStaffMember?.dailyRate || user?.dailyRate || 0) * 0.5 : (activeStaffMember?.dailyRate || user?.dailyRate || 0));
+                  ) : (
+                    historyData.map((record, idx) => {
+                      const wage = record.dailyWageEarned !== undefined ? record.dailyWageEarned : (activeStaffMember?.dailyRate || 0);
+                      const isLate = record.status === 'Late';
+                      const penalty = record.totalPenaltyAmount || 0;
+                      const hasSelfie = record.image && !record.imageExpired;
 
                       return (
-                        <tr key={record._id} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background-color 0.15s' }}>
-                          <td style={{ padding: '12px 14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                        <tr key={record._id || idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ padding: '12px', fontWeight: 700 }}>
                             {formatDate(record.date)}
                           </td>
-                          <td style={{ padding: '12px 14px', color: 'var(--color-text-secondary)' }}>
+                          <td style={{ padding: '12px', color: 'var(--color-text-secondary)' }}>
                             {formatTime(record.checkInTime)}
                           </td>
-                          <td style={{ padding: '12px 14px', color: 'var(--color-text-secondary)' }}>
-                            {record.checkOutTime ? formatTime(record.checkOutTime) : 'Shift In Progress'}
+                          <td style={{ padding: '12px', color: 'var(--color-text-secondary)' }}>
+                            {record.checkOutTime ? formatTime(record.checkOutTime) : (
+                              <span style={{ color: '#27ae60', fontWeight: 700 }}>Shift In Progress</span>
+                            )}
                           </td>
-                          <td style={{ padding: '12px 14px', fontWeight: 800, color: '#2ecc71' }}>
+                          <td style={{ padding: '12px', fontWeight: 800, color: '#27ae60' }}>
                             ₹{wage}
+                            {penalty > 0 && (
+                              <span style={{ fontSize: '11px', color: '#e74c3c', marginLeft: '6px' }}>
+                                (-₹{penalty} late cut)
+                              </span>
+                            )}
                           </td>
-                          <td style={{ padding: '12px 14px' }}>
+                          <td style={{ padding: '12px' }}>
                             <span style={{
-                              backgroundColor: `${statusColor}1A`,
-                              border: `1px solid ${statusColor}`,
-                              color: statusColor,
-                              padding: '2px 8px',
-                              borderRadius: '4px',
                               fontSize: '11px',
-                              fontWeight: 'bold',
-                              display: 'inline-block'
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              background: isLate ? 'rgba(243, 156, 18, 0.15)' : 'rgba(46, 204, 113, 0.15)',
+                              color: isLate ? '#d35400' : '#27ae60'
                             }}>
                               {record.status || 'Present'}
                             </span>
                           </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            {hasSelfie ? (
+                              <a
+                                href={record.image.startsWith('data:') ? record.image : getAssetUrl(record.image)}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  color: 'var(--color-primary)',
+                                  textDecoration: 'none',
+                                  background: 'rgba(255, 107, 8, 0.08)',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px'
+                                }}
+                              >
+                                <img
+                                  src={record.image.startsWith('data:') ? record.image : getAssetUrl(record.image)}
+                                  alt="Selfie"
+                                  style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }}
+                                />
+                                View
+                              </a>
+                            ) : record.imageExpired ? (
+                              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                                🔒 Purged (12h)
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                                —
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
       {/* ═════════════════════════════════════════════════════════════════ */}
-      {/* SECTION 2: SUBMIT CAFE PHOTOS (Proof of Cleanliness / Shifts)    */}
+      {/* SECTION 2: SUBMIT CAFE PHOTOS (Workstation Sanitization & Prep)    */}
       {/* ═════════════════════════════════════════════════════════════════ */}
       {activeTab === 'cafe_photos' && (
-        <div className="staff-dashboard-card" style={{ maxWidth: '850px', margin: '0 auto' }}>
-          <div style={{ marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-              Submit Daily Cafe & Work Photos
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--color-border)',
+          borderRadius: '16px',
+          padding: '24px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
+        }}>
+          <div style={{ marginBottom: '18px' }}>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+              📸 Submit Daily Cafe & Station Photos
             </h3>
-            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: '1.5' }}>
-              Upload proof-of-work photos (cleaned tables, sanitized kitchen, prep counter, register area). Photos can be submitted anytime during the day (No shift cutoff time).
+            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+              Take photos of cleaned counters, sanitized equipment, prepped kitchen ingredients, and opening/closing readiness.
             </p>
           </div>
 
           {reportError && (
             <div style={{
-              backgroundColor: '#FDF2F2',
+              background: '#FDF2F2',
               borderLeft: '4px solid #EC5B5B',
               color: '#8A2525',
               padding: '12px 16px',
@@ -1443,7 +1515,7 @@ const StaffDashboard = () => {
 
           {reportSuccess && (
             <div style={{
-              backgroundColor: '#F3FAF7',
+              background: '#F3FAF7',
               borderLeft: '4px solid #2ecc71',
               color: '#27ae60',
               padding: '12px 16px',
@@ -1456,93 +1528,78 @@ const StaffDashboard = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmitCafePhotos} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
-            {/* Hidden Photo file picker */}
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              capture="environment"
-              ref={cafePhotoInputRef}
-              style={{ display: 'none' }}
-              onChange={handleCafePhotoSelect}
-            />
+          <form onSubmit={handleSubmitCafePhotos} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', display: 'block', marginBottom: '8px' }}>
+                Capture or Select Photos (Up to 15 photos, automatically optimized)
+              </label>
+              
+              <input
+                type="file"
+                ref={cafePhotoInputRef}
+                onChange={handleCafePhotoSelect}
+                accept="image/*"
+                multiple
+                style={{ display: 'none' }}
+              />
 
-            {/* Photo Capture Dropzone */}
-            <div
-              onClick={() => cafePhotoInputRef.current?.click()}
-              style={{
-                border: '2px dashed var(--color-primary, #ff6b08)',
-                borderRadius: '14px',
-                padding: '30px 20px',
-                textAlign: 'center',
-                backgroundColor: 'rgba(255, 107, 8, 0.03)',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>📷</div>
-              <strong style={{ fontSize: '15px', color: 'var(--color-primary, #ff6b08)', display: 'block' }}>
-                Tap to Open Camera or Choose Photos
-              </strong>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
-                Capture up to 15 photos of cafe floor, kitchen, and counters (JPG, PNG, WEBP)
-              </span>
+              <div
+                onClick={() => cafePhotoInputRef.current && cafePhotoInputRef.current.click()}
+                style={{
+                  border: '2px dashed var(--color-primary, #ff6b08)',
+                  borderRadius: '14px',
+                  padding: '30px 20px',
+                  textAlign: 'center',
+                  background: 'rgba(255, 107, 8, 0.03)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span style={{ fontSize: '2.4rem', display: 'block', marginBottom: '8px' }}>📷</span>
+                <strong style={{ fontSize: '14px', color: 'var(--color-primary, #ff6b08)', display: 'block' }}>
+                  Click to open Camera or Upload Cafe Photos
+                </strong>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '4px' }}>
+                  JPEG / PNG formats accepted • Max 15 photos
+                </span>
+              </div>
             </div>
 
-            {/* Photo Previews Grid */}
+            {/* Photo Previews */}
             {photoPreviews.length > 0 && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                    Selected Photos ({photoPreviews.length} / 15)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedPhotos([]); setPhotoPreviews([]); }}
-                    style={{ background: 'transparent', border: 'none', color: '#e74c3c', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Clear All
-                  </button>
-                </div>
-
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '8px' }}>
+                  Selected Photos ({photoPreviews.length} / 15)
+                </span>
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                  gap: '12px'
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
+                  gap: '10px'
                 }}>
                   {photoPreviews.map((preview, idx) => (
-                    <div key={idx} style={{
-                      position: 'relative',
-                      height: '110px',
-                      borderRadius: '10px',
-                      overflow: 'hidden',
-                      border: '1px solid var(--color-border)',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-                    }}>
-                      <img src={preview} alt={`Upload ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div key={idx} style={{ position: 'relative', width: '100%', height: '90px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                      <img src={preview} alt={`Preview ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); removePhoto(idx); }}
+                        onClick={() => removePhoto(idx)}
                         style={{
                           position: 'absolute',
                           top: '4px',
                           right: '4px',
-                          background: 'rgba(0,0,0,0.7)',
+                          background: 'rgba(0,0,0,0.65)',
                           color: '#fff',
                           border: 'none',
                           borderRadius: '50%',
-                          width: '24px',
-                          height: '24px',
-                          fontSize: '12px',
+                          width: '22px',
+                          height: '22px',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center'
+                          justifyContent: 'center',
+                          fontSize: '11px'
                         }}
                       >
-                        &times;
+                        ✕
                       </button>
                     </div>
                   ))}
@@ -1584,15 +1641,13 @@ const StaffDashboard = () => {
       )}
 
       {/* ═════════════════════════════════════════════════════════════════ */}
-      {/* 4-DIGIT ATTENDANCE PIN VERIFICATION POPUP MODAL                   */}
+      {/* 2-STEP ATTENDANCE PIN + MANDATORY LIVE CAMERA POPUP MODAL         */}
       {/* ═════════════════════════════════════════════════════════════════ */}
       {pinModal.isOpen && (
         <div
           onClick={(e) => {
             if (e.target === e.currentTarget && !actionLoading) {
-              setPinModal({ isOpen: false, action: 'check-in', staff: null });
-              setEnteredPin('');
-              setPinError('');
+              closePinModal();
             }
           }}
           style={{
@@ -1625,13 +1680,7 @@ const StaffDashboard = () => {
             {/* Close button */}
             <button
               type="button"
-              onClick={() => {
-                if (!actionLoading) {
-                  setPinModal({ isOpen: false, action: 'check-in', staff: null });
-                  setEnteredPin('');
-                  setPinError('');
-                }
-              }}
+              onClick={closePinModal}
               disabled={actionLoading}
               style={{
                 position: 'absolute',
@@ -1653,210 +1702,386 @@ const StaffDashboard = () => {
               ✕
             </button>
 
-            {/* Modal Header Badge & Staff Info */}
-            <div
-              style={{
-                width: '56px',
-                height: '56px',
-                borderRadius: '16px',
-                background: pinModal.action === 'check-in' ? 'var(--color-primary, #ff6b08)' : '#e74c3c',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1.6rem',
-                fontWeight: 800,
-                boxShadow: '0 6px 18px rgba(0,0,0,0.2)',
-                marginBottom: '14px'
-              }}
-            >
-              🔐
-            </div>
-
-            <h3 style={{ margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)', textAlign: 'center' }}>
-              {pinModal.action === 'check-in' ? 'Check-In Verification' : 'Check-Out Verification'}
-            </h3>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'rgba(255, 107, 8, 0.1)',
-              padding: '4px 12px',
-              borderRadius: '20px',
-              marginBottom: '10px'
-            }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-primary, #ff6b08)' }}>
-                👤 {pinModal.staff?.name || activeStaffMember?.name}
-              </span>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
-                ({pinModal.staff?.employeeId || activeStaffMember?.employeeId || 'EMP'})
-              </span>
-            </div>
-
-            <p style={{ margin: '0 0 16px 0', fontSize: '12.5px', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
-              Enter the 4-digit PIN set up by the owner to confirm attendance.
-            </p>
-
-            {/* 4-Digit Slot Display */}
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
-              {[0, 1, 2, 3].map((idx) => {
-                const char = enteredPin[idx] || '';
-                const isCurrent = enteredPin.length === idx;
-                return (
-                  <div
-                    key={idx}
-                    style={{
-                      width: '48px',
-                      height: '54px',
-                      borderRadius: '12px',
-                      border: isCurrent 
-                        ? '2px solid var(--color-primary, #ff6b08)' 
-                        : char 
-                          ? '2px solid #2ecc71' 
-                          : '1.5px solid var(--color-border)',
-                      background: char ? 'rgba(46, 204, 113, 0.08)' : 'var(--bg-secondary, #f8f9fa)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '1.6rem',
-                      fontWeight: 800,
-                      color: 'var(--color-text-primary)',
-                      boxShadow: isCurrent ? '0 0 12px rgba(255, 107, 8, 0.3)' : 'none',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {char ? '●' : ''}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Error Message */}
-            {pinError && (
-              <div
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  background: 'rgba(231, 76, 60, 0.12)',
-                  border: '1.5px solid #e74c3c',
-                  color: '#c0392b',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  textAlign: 'center',
-                  marginBottom: '14px',
-                  boxSizing: 'border-box'
-                }}
-              >
-                ⚠️ {pinError}
-              </div>
-            )}
-
-            {/* On-Screen Touch Keypad */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '10px',
-                width: '100%',
-                maxWidth: '260px',
-                marginBottom: '18px'
-              }}
-            >
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'].map((btn) => (
-                <button
-                  key={btn}
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={() => {
-                    if (btn === 'C') {
-                      setEnteredPin('');
-                      setPinError('');
-                    } else if (btn === '⌫') {
-                      setEnteredPin(prev => prev.slice(0, -1));
-                      setPinError('');
-                    } else {
-                      if (enteredPin.length < 4) {
-                        const nextPin = enteredPin + btn;
-                        setEnteredPin(nextPin);
-                        setPinError('');
-                        if (nextPin.length === 4) {
-                          handleVerifyAndSubmitAttendance(nextPin);
-                        }
-                      }
-                    }
-                  }}
+            {/* ═════════════════════════════════════════════════════════ */}
+            {/* STEP 2: LIVE SELFIE CAMERA CAPTURE (12h AUTO-PURGE)       */}
+            {/* ═════════════════════════════════════════════════════════ */}
+            {pinModal.step === 'camera' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                {/* Header Badge */}
+                <div
                   style={{
-                    height: '52px',
-                    borderRadius: '12px',
-                    border: '1px solid var(--color-border)',
-                    background: btn === 'C' ? 'rgba(231, 76, 60, 0.1)' : btn === '⌫' ? 'rgba(243, 156, 18, 0.1)' : 'var(--bg-secondary, #f8f9fa)',
-                    color: btn === 'C' ? '#e74c3c' : btn === '⌫' ? '#d35400' : 'var(--color-text-primary)',
-                    fontSize: btn === '⌫' ? '1.3rem' : '1.25rem',
-                    fontWeight: 700,
-                    cursor: actionLoading ? 'not-allowed' : 'pointer',
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '16px',
+                    background: 'var(--color-primary, #ff6b08)',
+                    color: '#fff',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'all 0.1s ease',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.05)'
+                    fontSize: '1.6rem',
+                    fontWeight: 800,
+                    boxShadow: '0 6px 18px rgba(0,0,0,0.2)',
+                    marginBottom: '12px'
                   }}
                 >
-                  {btn}
+                  📸
+                </div>
+
+                <h3 style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-text-primary)', textAlign: 'center' }}>
+                  Smile for Check-In Selfie!
+                </h3>
+
+                <p style={{ margin: '0 0 10px 0', fontSize: '11.5px', color: '#27ae60', fontWeight: 700, textAlign: 'center' }}>
+                  🔒 Auto-purged from cloud & storage in 12 hours
+                </p>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'rgba(255, 107, 8, 0.1)',
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  marginBottom: '14px'
+                }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-primary, #ff6b08)' }}>
+                    👤 {pinModal.staff?.name || activeStaffMember?.name}
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontFamily: 'monospace' }}>
+                    ({pinModal.staff?.employeeId || activeStaffMember?.employeeId || 'EMP'})
+                  </span>
+                </div>
+
+                {/* Camera Viewport Container */}
+                <div style={{
+                  position: 'relative',
+                  width: '100%',
+                  maxWidth: '300px',
+                  height: '240px',
+                  borderRadius: '18px',
+                  overflow: 'hidden',
+                  background: '#111',
+                  marginBottom: '16px',
+                  border: '2px solid var(--color-primary, #ff6b08)',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      transform: 'scaleX(-1)'
+                    }}
+                  />
+
+                  {/* Top Live Badge */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    left: '10px',
+                    background: 'rgba(0, 0, 0, 0.65)',
+                    backdropFilter: 'blur(4px)',
+                    color: '#2ecc71',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2ecc71', display: 'inline-block' }} />
+                    LIVE CAMERA
+                  </div>
+
+                  {/* Camera Loading Spinner */}
+                  {cameraLoading && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'rgba(0,0,0,0.85)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      color: '#fff'
+                    }}>
+                      <div className="spinner" style={{ width: '28px', height: '28px', borderColor: 'var(--color-primary)' }} />
+                      <span style={{ fontSize: '12px', fontWeight: 600 }}>Starting camera...</span>
+                    </div>
+                  )}
+
+                  {/* Face Guide Oval */}
+                  {!cameraLoading && !cameraError && (
+                    <div style={{
+                      position: 'absolute',
+                      width: '140px',
+                      height: '170px',
+                      borderRadius: '50%',
+                      border: '2px dashed rgba(255, 255, 255, 0.45)',
+                      pointerEvents: 'none'
+                    }} />
+                  )}
+                </div>
+
+                {/* Camera Warning if denied */}
+                {cameraError && (
+                  <div style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    background: 'rgba(243, 156, 18, 0.12)',
+                    border: '1px solid #f39c12',
+                    color: '#d35400',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    textAlign: 'center',
+                    marginBottom: '14px'
+                  }}>
+                    ⚠️ {cameraError}
+                  </div>
+                )}
+
+                {/* Primary: Snap Photo & Clock In */}
+                <button
+                  type="button"
+                  disabled={actionLoading || cameraLoading}
+                  onClick={() => {
+                    const photo = captureAndCompressPhoto();
+                    stopCameraStream();
+                    handleVerifyAndSubmitAttendance(enteredPin, photo);
+                  }}
+                  className="btn btn-primary"
+                  style={{
+                    width: '100%',
+                    padding: '13px',
+                    borderRadius: '12px',
+                    fontWeight: 800,
+                    fontSize: '14px',
+                    marginBottom: '10px',
+                    boxShadow: '0 6px 20px rgba(255, 107, 8, 0.3)',
+                    cursor: (actionLoading || cameraLoading) ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {actionLoading ? '⏳ Clocking In...' : '📸 Snap Photo & Clock In'}
                 </button>
-              ))}
-            </div>
 
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
-              <button
-                type="button"
-                disabled={actionLoading}
-                onClick={() => {
-                  setPinModal({ isOpen: false, action: 'check-in', staff: null });
-                  setEnteredPin('');
-                  setPinError('');
-                }}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--color-border)',
-                  background: 'transparent',
-                  color: 'var(--color-text-secondary)',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: actionLoading ? 'not-allowed' : 'pointer'
-                }}
-              >
-                Cancel
-              </button>
+                {/* Back to PIN button */}
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => {
+                    stopCameraStream();
+                    setPinModal(prev => ({ ...prev, step: 'pin' }));
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--color-text-secondary)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: actionLoading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  ← Back to Change PIN
+                </button>
+              </div>
+            ) : (
+              /* ═════════════════════════════════════════════════════════ */
+              /* STEP 1: 4-DIGIT ATTENDANCE PIN ENTRY                      */
+              /* ═════════════════════════════════════════════════════════ */
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+                <div
+                  style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '16px',
+                    background: pinModal.action === 'check-out' ? 'rgba(231, 76, 60, 0.12)' : 'rgba(255, 107, 8, 0.12)',
+                    color: pinModal.action === 'check-out' ? '#e74c3c' : 'var(--color-primary, #ff6b08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.6rem',
+                    fontWeight: 800,
+                    marginBottom: '14px'
+                  }}
+                >
+                  {pinModal.action === 'check-out' ? '⏹' : '🔒'}
+                </div>
 
-              <button
-                type="button"
-                disabled={actionLoading || enteredPin.length !== 4}
-                onClick={() => handleVerifyAndSubmitAttendance(enteredPin)}
-                className="btn btn-primary"
-                style={{
-                  flex: 1.5,
-                  padding: '12px',
-                  borderRadius: '10px',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                  background: pinModal.action === 'check-out' ? '#e74c3c' : undefined,
-                  borderColor: pinModal.action === 'check-out' ? '#e74c3c' : undefined,
-                  cursor: (actionLoading || enteredPin.length !== 4) ? 'not-allowed' : 'pointer',
-                  opacity: enteredPin.length === 4 ? 1 : 0.6
-                }}
-              >
-                {actionLoading 
-                  ? 'Verifying GPS & PIN...' 
-                  : pinModal.action === 'check-in' 
-                    ? 'Confirm Check-In' 
-                    : 'Confirm Check-Out'}
-              </button>
-            </div>
+                <h3 style={{ margin: '0 0 6px 0', fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-primary)', textAlign: 'center' }}>
+                  {pinModal.action === 'check-out' ? 'Confirm Check-Out' : 'Staff Check-In'}
+                </h3>
+
+                <p style={{ margin: '0 0 16px 0', fontSize: '12.5px', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+                  Enter the 4-digit PIN for <strong>{pinModal.staff?.name || activeStaffMember?.name}</strong>
+                </p>
+
+                {/* 4-Digit Slot Display */}
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '16px' }}>
+                  {[0, 1, 2, 3].map((idx) => {
+                    const char = enteredPin[idx] || '';
+                    const isCurrent = enteredPin.length === idx;
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          width: '48px',
+                          height: '54px',
+                          borderRadius: '12px',
+                          border: isCurrent 
+                            ? '2px solid var(--color-primary, #ff6b08)' 
+                            : char 
+                              ? '2px solid #2ecc71' 
+                              : '1.5px solid var(--color-border)',
+                          background: char ? 'rgba(46, 204, 113, 0.08)' : 'var(--bg-secondary, #f8f9fa)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '1.6rem',
+                          fontWeight: 800,
+                          color: 'var(--color-text-primary)',
+                          boxShadow: isCurrent ? '0 0 12px rgba(255, 107, 8, 0.3)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {char ? '●' : ''}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Error Message */}
+                {pinError && (
+                  <div
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      background: 'rgba(231, 76, 60, 0.12)',
+                      border: '1.5px solid #e74c3c',
+                      color: '#c0392b',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      textAlign: 'center',
+                      marginBottom: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    ⚠️ {pinError}
+                  </div>
+                )}
+
+                {/* On-Screen Touch Keypad */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '10px',
+                    width: '100%',
+                    maxWidth: '260px',
+                    marginBottom: '18px'
+                  }}
+                >
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'].map((btn) => (
+                    <button
+                      key={btn}
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => {
+                        if (btn === 'C') {
+                          setEnteredPin('');
+                          setPinError('');
+                        } else if (btn === '⌫') {
+                          setEnteredPin(prev => prev.slice(0, -1));
+                          setPinError('');
+                        } else {
+                          if (enteredPin.length < 4) {
+                            const nextPin = enteredPin + btn;
+                            setEnteredPin(nextPin);
+                            setPinError('');
+                            if (nextPin.length === 4) {
+                              handlePinComplete(nextPin);
+                            }
+                          }
+                        }
+                      }}
+                      style={{
+                        height: '52px',
+                        borderRadius: '12px',
+                        border: '1px solid var(--color-border)',
+                        background: btn === 'C' ? 'rgba(231, 76, 60, 0.1)' : btn === '⌫' ? 'rgba(243, 156, 18, 0.1)' : 'var(--bg-secondary, #f8f9fa)',
+                        color: btn === 'C' ? '#e74c3c' : btn === '⌫' ? '#d35400' : 'var(--color-text-primary)',
+                        fontSize: btn === '⌫' ? '1.3rem' : '1.25rem',
+                        fontWeight: 700,
+                        cursor: actionLoading ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.1s ease',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.05)'
+                      }}
+                    >
+                      {btn}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={closePinModal}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--color-border)',
+                      background: 'transparent',
+                      color: 'var(--color-text-secondary)',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      cursor: actionLoading ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={actionLoading || enteredPin.length !== 4}
+                    onClick={() => handlePinComplete(enteredPin)}
+                    className="btn btn-primary"
+                    style={{
+                      flex: 1.5,
+                      padding: '12px',
+                      borderRadius: '10px',
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      background: pinModal.action === 'check-out' ? '#e74c3c' : undefined,
+                      borderColor: pinModal.action === 'check-out' ? '#e74c3c' : undefined,
+                      cursor: (actionLoading || enteredPin.length !== 4) ? 'not-allowed' : 'pointer',
+                      opacity: enteredPin.length === 4 ? 1 : 0.6
+                    }}
+                  >
+                    {actionLoading 
+                      ? 'Verifying...' 
+                      : pinModal.action === 'check-in' 
+                        ? 'Next: Selfie 📸' 
+                        : 'Confirm Check-Out'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

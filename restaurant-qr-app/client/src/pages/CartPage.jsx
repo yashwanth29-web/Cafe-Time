@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CartItem from '../components/CartItem';
-import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getPaymentInfo } from '../services/api';
+import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getPaymentInfo, getMenu } from '../services/api';
 import { printPOSReceipt, printKOT } from '../utils/printHelpers';
 import { useAuth } from '../context/AuthContext';
 import socket, { connectSocket } from '../socket';
 
-const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId, branchId }) => {
+const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeFromCart, clearCart, tableNumber, cafeId, branchId }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const searchParams = new URLSearchParams(window.location.search);
@@ -21,6 +21,29 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
   const [errorMsg, setErrorMsg] = useState('');
   const [activeOrders, setActiveOrders] = useState([]);
   const [completedOrders, setCompletedOrders] = useState([]);
+
+  // In-Cart Add Items Modal State
+  const [showAddItemsModal, setShowAddItemsModal] = useState(false);
+  const [menuItems, setMenuItems] = useState([]);
+  const [loadingMenu, setLoadingMenu] = useState(false);
+  const [addItemsSearch, setAddItemsSearch] = useState('');
+  const [addItemsCategory, setAddItemsCategory] = useState('all');
+
+  const handleOpenAddItemsModal = async () => {
+    setShowAddItemsModal(true);
+    if (menuItems.length === 0) {
+      setLoadingMenu(true);
+      try {
+        const menuRes = await getMenu();
+        const items = Array.isArray(menuRes?.data) ? menuRes.data : Array.isArray(menuRes) ? menuRes : [];
+        setMenuItems(items);
+      } catch (err) {
+        console.error('Failed to load menu in cart modal:', err);
+      } finally {
+        setLoadingMenu(false);
+      }
+    }
+  };
 
   // Special Instructions State
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -405,10 +428,31 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         <div className="cart-empty">
           <div className="cart-empty-icon">🛒</div>
           <p className="cart-empty-text">Your cart is currently empty.</p>
-          <button onClick={handleBackToMenu} className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-            ← Browse Delicious Menu
-          </button>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '12px' }}>
+            <button
+              onClick={handleOpenAddItemsModal}
+              style={{
+                background: 'rgba(52, 152, 219, 0.15)',
+                color: '#2980b9',
+                border: '1px solid rgba(52, 152, 219, 0.4)',
+                borderRadius: '8px',
+                padding: '10px 18px',
+                fontSize: '13.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              ➕ Add Items
+            </button>
+            <button onClick={handleBackToMenu} className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+              ← Browse Menu
+            </button>
+          </div>
         </div>
+        {showAddItemsModal && renderAddItemsModal()}
       </div>
     );
   }
@@ -444,13 +488,13 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
         </div>
 
         <button
-          onClick={handleBackToMenu}
+          onClick={handleOpenAddItemsModal}
           style={{
-            background: 'transparent',
-            border: '1px solid var(--color-primary)',
-            color: 'var(--color-primary)',
-            borderRadius: '20px',
-            padding: '6px 12px',
+            background: 'rgba(52, 152, 219, 0.12)',
+            color: '#2980b9',
+            border: '1px solid rgba(52, 152, 219, 0.3)',
+            borderRadius: '6px',
+            padding: '5px 10px',
             fontSize: '12px',
             fontWeight: 700,
             cursor: 'pointer',
@@ -460,8 +504,9 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
             fontFamily: 'inherit',
             flexShrink: 0
           }}
+          title="Add items to cart"
         >
-          <span>➕</span> Add More
+          ➕ Add Items
         </button>
       </div>
 
@@ -485,14 +530,14 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
           ))}
 
           <button
-            onClick={handleBackToMenu}
+            onClick={handleOpenAddItemsModal}
             style={{
               width: '100%',
-              padding: '12px',
-              border: '1px dashed var(--color-primary)',
-              borderRadius: '12px',
-              background: 'rgba(255, 107, 8, 0.05)',
-              color: 'var(--color-primary)',
+              padding: '11px',
+              border: '1px dashed rgba(52, 152, 219, 0.45)',
+              borderRadius: '10px',
+              background: 'rgba(52, 152, 219, 0.08)',
+              color: '#2980b9',
               fontWeight: 700,
               fontSize: '13px',
               cursor: 'pointer',
@@ -504,7 +549,7 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
               fontFamily: 'inherit'
             }}
           >
-            <span>➕</span> Browse Menu & Add More Dishes
+            ➕ Add Items
           </button>
         </div>
 
@@ -654,8 +699,288 @@ const CartPage = ({ cart, increaseQuantity, decreaseQuantity, removeFromCart, cl
           </div>
         </div>
       </div>
+
+      {showAddItemsModal && renderAddItemsModal()}
     </div>
   );
+
+  function renderAddItemsModal() {
+    const categories = ['all', ...Array.from(new Set(menuItems.map(m => m.category).filter(Boolean)))];
+    const filteredItems = menuItems.filter(m => {
+      const matchCat = addItemsCategory === 'all' || m.category === addItemsCategory;
+      const matchSearch = !addItemsSearch || 
+        m.name?.toLowerCase().includes(addItemsSearch.toLowerCase()) || 
+        (m.category && m.category.toLowerCase().includes(addItemsSearch.toLowerCase()));
+      return matchCat && matchSearch && m.isAvailable !== false;
+    });
+
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.65)',
+        backdropFilter: 'blur(3px)',
+        zIndex: 2000,
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
+        padding: '16px'
+      }}>
+        <div style={{
+          background: 'var(--bg-card, #ffffff)',
+          color: 'var(--color-text-primary, #1e293b)',
+          borderRadius: '16px',
+          width: '100%', maxWidth: '520px',
+          maxHeight: '85vh',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)',
+          overflow: 'hidden'
+        }}>
+          {/* Modal Header */}
+          <div style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--color-border, #e2e8f0)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>➕ Add Items to Cart</h3>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748b)', display: 'block', marginTop: '2px' }}>
+                {totalItems} item{totalItems === 1 ? '' : 's'} in cart (₹{subtotal.toFixed(2)})
+              </span>
+            </div>
+            <button
+              onClick={() => setShowAddItemsModal(false)}
+              style={{
+                background: 'rgba(0,0,0,0.06)', border: 'none',
+                width: '32px', height: '32px', borderRadius: '50%',
+                fontSize: '16px', color: 'var(--color-text-primary)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border, #e2e8f0)' }}>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Search dish or category..."
+                value={addItemsSearch}
+                onChange={(e) => setAddItemsSearch(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 36px 10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--color-border, #cbd5e1)',
+                  background: 'var(--bg-secondary, #f8fafc)',
+                  color: 'var(--color-text-primary)',
+                  fontSize: '13px', outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+              {addItemsSearch && (
+                <button
+                  onClick={() => setAddItemsSearch('')}
+                  style={{
+                    position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '14px'
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Category horizontal chips */}
+            {categories.length > 2 && (
+              <div style={{
+                display: 'flex', gap: '6px', overflowX: 'auto',
+                marginTop: '10px', paddingBottom: '4px', scrollbarWidth: 'none'
+              }}>
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setAddItemsCategory(cat)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '14px',
+                      border: '1px solid',
+                      borderColor: addItemsCategory === cat ? 'var(--color-primary, #ff6b08)' : 'var(--color-border, #e2e8f0)',
+                      background: addItemsCategory === cat ? 'var(--color-primary, #ff6b08)' : 'transparent',
+                      color: addItemsCategory === cat ? '#ffffff' : 'var(--color-text-secondary, #64748b)',
+                      fontSize: '11.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      textTransform: 'capitalize'
+                    }}
+                  >
+                    {cat === 'all' ? 'All Dishes' : cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Menu Items List */}
+          <div style={{
+            padding: '12px 16px', overflowY: 'auto', flex: 1,
+            display: 'flex', flexDirection: 'column', gap: '8px'
+          }}>
+            {loadingMenu ? (
+              <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--color-text-secondary)' }}>
+                ⏳ Loading menu...
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--color-text-secondary)' }}>
+                No dishes found matching "{addItemsSearch}".
+              </div>
+            ) : (
+              filteredItems.map(m => {
+                const itemId = m._id || m.id;
+                const cartEntry = cart.find(c => (c.item._id || c.item.id) === itemId);
+                const qty = cartEntry ? cartEntry.quantity : 0;
+
+                return (
+                  <div
+                    key={itemId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--color-border, #e2e8f0)',
+                      background: qty > 0 ? 'rgba(52, 152, 219, 0.05)' : 'var(--bg-secondary, #fafafa)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--color-text-primary)' }}>
+                          {m.name}
+                        </span>
+                        {m.category && (
+                          <span style={{
+                            fontSize: '10px',
+                            background: 'rgba(0,0,0,0.06)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            color: 'var(--color-text-secondary)'
+                          }}>
+                            {m.category}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-primary, #ff6b08)', marginTop: '2px' }}>
+                        ₹{m.price}
+                      </div>
+                    </div>
+
+                    {/* Quantity Selector */}
+                    <div>
+                      {qty === 0 ? (
+                        <button
+                          onClick={() => {
+                            if (addToCart) {
+                              addToCart(m);
+                            } else {
+                              increaseQuantity(itemId);
+                            }
+                          }}
+                          style={{
+                            background: 'rgba(52, 152, 219, 0.12)',
+                            color: '#2980b9',
+                            border: '1px solid rgba(52, 152, 219, 0.35)',
+                            padding: '6px 14px',
+                            borderRadius: '6px',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          ➕ Add
+                        </button>
+                      ) : (
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: 'rgba(52, 152, 219, 0.12)',
+                          padding: '3px 6px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(52, 152, 219, 0.35)'
+                        }}>
+                          <button
+                            onClick={() => decreaseQuantity(itemId)}
+                            style={{
+                              background: '#2980b9', color: '#fff',
+                              border: 'none', width: '24px', height: '24px',
+                              borderRadius: '6px', cursor: 'pointer',
+                              fontWeight: 900, fontSize: '14px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}
+                          >
+                            −
+                          </button>
+                          <span style={{ fontWeight: 800, fontSize: '13px', minWidth: '18px', textAlign: 'center', color: '#2980b9' }}>
+                            {qty}
+                          </span>
+                          <button
+                            onClick={() => increaseQuantity(itemId)}
+                            style={{
+                              background: '#2980b9', color: '#fff',
+                              border: 'none', width: '24px', height: '24px',
+                              borderRadius: '6px', cursor: 'pointer',
+                              fontWeight: 900, fontSize: '14px',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Modal Footer */}
+          <div style={{
+            padding: '14px 20px',
+            borderTop: '1px solid var(--color-border, #e2e8f0)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'var(--bg-secondary, #f8fafc)'
+          }}>
+            <div>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'block' }}>Total In Cart</span>
+              <strong style={{ fontSize: '15px', color: 'var(--color-primary, #ff6b08)' }}>₹{subtotal.toFixed(2)}</strong>
+            </div>
+            <button
+              onClick={() => setShowAddItemsModal(false)}
+              style={{
+                background: 'linear-gradient(135deg, var(--color-primary, #ff6b08) 0%, var(--color-primary-hover, #e05d00) 100%)',
+                color: '#ffffff',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: 'pointer'
+              }}
+            >
+              Done / View Cart ({totalItems})
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 };
 
 export default CartPage;

@@ -253,6 +253,7 @@ function AppContent() {
             element={
               <CartPage 
                 cart={cart}
+                addToCart={addToCart}
                 increaseQuantity={increaseQuantity}
                 decreaseQuantity={decreaseQuantity}
                 removeFromCart={removeFromCart}

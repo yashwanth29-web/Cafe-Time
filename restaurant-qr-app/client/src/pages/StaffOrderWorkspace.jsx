@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import {
   getOrders,
+  placeOrder,
   updateOrderStatus,
   updateOrder,
   deleteOrder,
@@ -136,6 +137,71 @@ const StaffOrderWorkspace = () => {
   const [orderActionLoading, setOrderActionLoading] = useState(false);
   const [paymentModalOrder, setPaymentModalOrder] = useState(null);
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+
+  // Extra Sales State & Handler
+  const [showExtraSaleModal, setShowExtraSaleModal] = useState(false);
+  const [extraSaleSaving, setExtraSaleSaving] = useState(false);
+  const [extraSaleForm, setExtraSaleForm] = useState({
+    amount: '',
+    paymentMethod: 'Cash',
+    note: 'Tip / Extra Sale'
+  });
+
+  const handleSaveExtraSale = async (e) => {
+    if (e) e.preventDefault();
+    const amt = Number(extraSaleForm.amount);
+    if (!amt || amt <= 0) {
+      alert('Please enter a valid amount greater than 0.');
+      return;
+    }
+
+    setExtraSaleSaving(true);
+    try {
+      const payload = {
+        cafeId: userCafeId || cafeInfo?.cafeId || 'CD001',
+        branchId: activeBranchId || 'default',
+        tableNumber: 'EXTRA-SALE',
+        customerName: 'Extra Sale',
+        customerPhone: '',
+        customerEmail: '',
+        orderSource: 'EXTRA_SALE',
+        source: 'EXTRA_SALE',
+        status: 'Completed',
+        paymentStatus: 'Paid',
+        paymentMethod: extraSaleForm.paymentMethod || 'Cash',
+        totalAmount: amt,
+        grandTotal: amt,
+        subtotal: amt,
+        tax: 0,
+        specialInstructions: extraSaleForm.note?.trim() || 'Extra Sale / Tip',
+        items: [
+          {
+            name: extraSaleForm.note?.trim() || 'Extra Sale / Tip',
+            price: amt,
+            quantity: 1,
+            image: '/images/default-food.png'
+          }
+        ]
+      };
+
+      const res = await placeOrder(payload);
+      if (res && (res.success || res.data)) {
+        const saved = res.data || res;
+        setOrders((prev) => [saved, ...prev.filter(o => o._id !== saved._id)]);
+        setCompletedLogs((prev) => [saved, ...prev.filter(o => o._id !== saved._id)]);
+        setShowExtraSaleModal(false);
+        setExtraSaleForm({ amount: '', paymentMethod: 'Cash', note: 'Tip / Extra Sale' });
+        alert(`Successfully recorded Extra Sale of ₹${amt.toFixed(2)} (${extraSaleForm.paymentMethod})!`);
+      } else {
+        alert(res?.message || 'Failed to save extra sale.');
+      }
+    } catch (err) {
+      console.error('Error saving extra sale:', err);
+      alert(err.response?.data?.message || 'Failed to save extra sale.');
+    } finally {
+      setExtraSaleSaving(false);
+    }
+  };
 
   // Inventory Management states for Staff
   const [categories, setCategories] = useState([]);
@@ -1024,8 +1090,8 @@ const StaffOrderWorkspace = () => {
       });
     } catch (err) {
       console.error('Update order background sync error:', err);
-      if (typeof fetchActiveOrders === 'function') {
-        fetchActiveOrders(true);
+      if (typeof fetchWorkspaceOrders === 'function') {
+        fetchWorkspaceOrders(true);
       }
     }
   };
@@ -1237,6 +1303,28 @@ const StaffOrderWorkspace = () => {
     } catch (err) {
       console.error('Error updating ingredient:', err);
       alert(err.response?.data?.message || 'Failed to update ingredient.');
+    } finally {
+      setInventoryActionLoading(false);
+    }
+  };
+
+  // Delete Inventory Item
+  const handleDeleteInventoryItem = async (id, itemName = 'this ingredient') => {
+    if (inventoryActionLoading) return;
+    if (!window.confirm(`Are you sure you want to delete "${itemName}"? This cannot be undone.`)) return;
+    setInventoryActionLoading(true);
+    try {
+      const res = await deleteInventoryItem(id);
+      if (res && res.success) {
+        setInventory((prev) => prev.filter((item) => String(item._id) !== String(id)));
+        alert('Ingredient deleted successfully.');
+        fetchInventory();
+      } else {
+        alert(res?.message || 'Failed to delete ingredient.');
+      }
+    } catch (err) {
+      console.error('Error deleting inventory item:', err);
+      alert(err.response?.data?.message || 'Failed to delete ingredient.');
     } finally {
       setInventoryActionLoading(false);
     }
@@ -1501,6 +1589,8 @@ const StaffOrderWorkspace = () => {
     let pendingRev = 0;
     let cashRev = 0;
     let upiRev = 0;
+    let extraSalesRev = 0;
+    let extraSalesCount = 0;
     let itemsCount = 0;
     let readyCount = 0;
     let paidCount = 0;
@@ -1527,6 +1617,12 @@ const StaffOrderWorkspace = () => {
         pendingRev += amt;
       }
 
+      const isExtra = log.orderSource === 'EXTRA_SALE' || log.source === 'EXTRA_SALE' || log.customerName === 'Extra Sale' || log.tableNumber === 'EXTRA-SALE';
+      if (isExtra) {
+        extraSalesRev += amt;
+        extraSalesCount++;
+      }
+
       if (log.status === 'Ready') readyCount++;
       if (log.status === 'Placed' || log.status === 'Preparing') inProgressCount++;
 
@@ -1543,6 +1639,8 @@ const StaffOrderWorkspace = () => {
       pendingRevenue: pendingRev,
       cashRevenue: cashRev,
       upiRevenue: upiRev,
+      extraSalesRevenue: extraSalesRev,
+      extraSalesCount,
       totalItems: itemsCount,
       readyCount,
       paidCount,
@@ -1677,6 +1775,29 @@ const StaffOrderWorkspace = () => {
         >
           {autoPrintKOT ? '🖨️ Auto-Print KOT: ON' : '🖨️ Auto-Print KOT: OFF'}
         </button>
+
+        {/* Add Extra Sales / KOT Button */}
+        <button
+          onClick={() => setShowExtraSaleModal(true)}
+          style={{
+            flexShrink: 0,
+            background: 'linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%)',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '8px 16px',
+            fontSize: '12.5px',
+            color: '#ffffff',
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            boxShadow: '0 2px 8px rgba(142, 68, 173, 0.25)'
+          }}
+          title="Add tip or extra sales to today's revenue"
+        >
+          ➕ Add Extra Sales / KOT
+        </button>
       </div>
 
       {errorMsg && (
@@ -1790,7 +1911,23 @@ const StaffOrderWorkspace = () => {
                     {/* Header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong style={{ fontSize: '1.05rem', color: 'var(--color-text-primary)' }}>Table {order.tableNumber}</strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong style={{ fontSize: '1.05rem', color: 'var(--color-text-primary)' }}>
+                            {order.orderSource === 'EXTRA_SALE' ? '➕ Extra Sale / Tip' : `Table ${order.tableNumber}`}
+                          </strong>
+                          {order.orderSource === 'EXTRA_SALE' && (
+                            <span style={{
+                              background: 'linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%)',
+                              color: '#fff',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: 800
+                            }}>
+                              EXTRA SALE
+                            </span>
+                          )}
+                        </div>
                         <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
                           #{String(order?._id || order?.id || '').slice(-6).toUpperCase() || 'N/A'} · placed {ageMinutes}m ago
                         </span>
@@ -2098,6 +2235,15 @@ const StaffOrderWorkspace = () => {
                 ₹{historySummary.pendingRevenue.toFixed(2)}
               </div>
             </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: '#8e44ad', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>➕</span> Extra Sales
+              </div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#8e44ad', marginTop: '2px' }}>
+                ₹{(historySummary.extraSalesRevenue || 0).toFixed(2)}
+              </div>
+            </div>
           </div>
 
           {/* Search & Status/Payment Filters Row */}
@@ -2235,15 +2381,27 @@ const StaffOrderWorkspace = () => {
                     <div style={{ minWidth: '220px', flex: '1 1 300px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{
-                          background: isTableOrder ? 'var(--color-primary)' : '#7f8c8d',
+                          background: log.orderSource === 'EXTRA_SALE' ? 'linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%)' : (isTableOrder ? 'var(--color-primary)' : '#7f8c8d'),
                           color: '#fff',
                           padding: '3px 8px',
                           borderRadius: '6px',
                           fontSize: '12px',
                           fontWeight: 700
                         }}>
-                          {isTableOrder ? `Table ${log.tableNumber}` : log.tableNumber || 'Takeaway'}
+                          {log.orderSource === 'EXTRA_SALE' ? '➕ Extra Sale' : (isTableOrder ? `Table ${log.tableNumber}` : log.tableNumber || 'Takeaway')}
                         </span>
+                        {log.orderSource === 'EXTRA_SALE' && (
+                          <span style={{
+                            background: 'rgba(142, 68, 173, 0.15)',
+                            color: '#8e44ad',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontWeight: 800,
+                            fontSize: '11px'
+                          }}>
+                            [EXTRA SALE]
+                          </span>
+                        )}
                         <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                           {tokenStr}
                         </span>
@@ -3051,7 +3209,7 @@ const StaffOrderWorkspace = () => {
                               ✏️ Edit
                             </button>
                             <button
-                              onClick={() => handleDeleteInventoryItem(inv._id)}
+                              onClick={() => handleDeleteInventoryItem(inv._id, inv.name)}
                               style={{
                                 background: 'rgba(231, 76, 60, 0.08)',
                                 color: '#e74c3c',
@@ -5184,6 +5342,152 @@ const StaffOrderWorkspace = () => {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: ADD EXTRA SALES / KOT ======================= */}
+      {showExtraSaleModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)',
+          zIndex: 1200, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', borderRadius: '16px',
+            width: '100%', maxWidth: '440px',
+            boxShadow: 'var(--shadow-lg)', overflow: 'hidden',
+            border: '1px solid var(--color-border)'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '16px 20px', borderBottom: '1px solid var(--color-border)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              background: 'linear-gradient(135deg, rgba(142, 68, 173, 0.1) 0%, rgba(155, 89, 182, 0.05) 100%)'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'var(--color-text-primary)', fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>➕</span> Add Extra Sales / KOT
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '2px' }}>
+                  Record extra cash, tip, or end-of-day sale to revenue
+                </span>
+              </div>
+              <button
+                onClick={() => setShowExtraSaleModal(false)}
+                style={{ background: 'transparent', border: 'none', fontSize: '20px', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSaveExtraSale} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '6px' }}>
+                  Extra Amount (₹) *
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 800, color: '#8e44ad', fontSize: '16px' }}>₹</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    required
+                    autoFocus
+                    placeholder="Enter amount (e.g. 150)"
+                    value={extraSaleForm.amount}
+                    onChange={(e) => setExtraSaleForm(prev => ({ ...prev, amount: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '12px 14px 12px 32px', borderRadius: '10px',
+                      border: '2px solid rgba(142, 68, 173, 0.3)', background: 'var(--bg-secondary)',
+                      color: 'var(--color-text-primary)', fontSize: '16px', fontWeight: 700, outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '6px' }}>
+                  Payment Method
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setExtraSaleForm(prev => ({ ...prev, paymentMethod: 'Cash' }))}
+                    style={{
+                      padding: '10px', borderRadius: '8px', border: '1px solid',
+                      borderColor: extraSaleForm.paymentMethod === 'Cash' ? '#e67e22' : 'var(--color-border)',
+                      background: extraSaleForm.paymentMethod === 'Cash' ? 'rgba(230, 126, 34, 0.12)' : 'var(--bg-secondary)',
+                      color: extraSaleForm.paymentMethod === 'Cash' ? '#e67e22' : 'var(--color-text-secondary)',
+                      fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                    }}
+                  >
+                    💵 Cash
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExtraSaleForm(prev => ({ ...prev, paymentMethod: 'Online' }))}
+                    style={{
+                      padding: '10px', borderRadius: '8px', border: '1px solid',
+                      borderColor: extraSaleForm.paymentMethod === 'Online' ? '#27ae60' : 'var(--color-border)',
+                      background: extraSaleForm.paymentMethod === 'Online' ? 'rgba(39, 174, 96, 0.12)' : 'var(--bg-secondary)',
+                      color: extraSaleForm.paymentMethod === 'Online' ? '#27ae60' : 'var(--color-text-secondary)',
+                      fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                    }}
+                  >
+                    📱 Online / UPI
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '6px' }}>
+                  Note / Reason
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Tip, Extra Cash at End of Day"
+                  value={extraSaleForm.note}
+                  onChange={(e) => setExtraSaleForm(prev => ({ ...prev, note: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '10px 14px', borderRadius: '8px',
+                    border: '1px solid var(--color-border)', background: 'var(--bg-secondary)',
+                    color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowExtraSaleModal(false)}
+                  style={{
+                    padding: '10px 18px', borderRadius: '8px', border: '1px solid var(--color-border)',
+                    background: 'var(--bg-secondary)', color: 'var(--color-text-primary)',
+                    fontWeight: 700, fontSize: '13px', cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={extraSaleSaving || !extraSaleForm.amount}
+                  style={{
+                    padding: '10px 20px', borderRadius: '8px', border: 'none',
+                    background: 'linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%)',
+                    color: '#ffffff', fontWeight: 800, fontSize: '13px',
+                    cursor: extraSaleSaving ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 8px rgba(142, 68, 173, 0.3)'
+                  }}
+                >
+                  {extraSaleSaving ? 'Saving...' : '💾 Save Extra Sale'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

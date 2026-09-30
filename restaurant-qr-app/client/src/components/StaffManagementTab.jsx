@@ -47,6 +47,11 @@ const StaffManagementTab = () => {
       name: '', username: '', password: '', phone: '', email: '', staffRole: 'staff', isActive: true,
       salaryType: 'DAILY', dailyRate: 0, hourlyRate: 0, weeklyRate: 0, monthlyRate: 0,
       weeklyOff: 'Sunday', joiningDate: new Date().toISOString().split('T')[0], salaryStatus: 'ACTIVE',
+      scheduleType: 'SINGLE',
+      shifts: [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: '09:00', endTime: '18:00' }],
+      shiftStartTime: '09:00',
+      shiftEndTime: '18:00',
+      leanTimeMinutes: 30,
       attendancePin: ''
     });
     setEditingId(null);
@@ -54,6 +59,10 @@ const StaffManagementTab = () => {
   };
 
   const handleOpenEdit = (staff) => {
+    const isSplit = staff.scheduleType === 'SPLIT' || (staff.shifts && staff.shifts.length > 1);
+    const parsedShifts = (staff.shifts && staff.shifts.length > 0)
+      ? staff.shifts
+      : [{ shiftNumber: 1, shiftLabel: 'Shift 1', startTime: staff.shiftStartTime || '09:00', endTime: staff.shiftEndTime || '18:00' }];
     setForm({
       name: staff.name,
       username: staff.username || '',
@@ -70,6 +79,11 @@ const StaffManagementTab = () => {
       weeklyOff: staff.weeklyOff || 'Sunday',
       joiningDate: staff.joiningDate ? new Date(staff.joiningDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       salaryStatus: staff.salaryStatus || 'ACTIVE',
+      scheduleType: isSplit ? 'SPLIT' : 'SINGLE',
+      shifts: parsedShifts,
+      shiftStartTime: staff.shiftStartTime || '09:00',
+      shiftEndTime: staff.shiftEndTime || '18:00',
+      leanTimeMinutes: staff.leanTimeMinutes !== undefined ? staff.leanTimeMinutes : 30,
       attendancePin: staff.attendancePin || ''
     });
     setEditingId(staff._id);
@@ -312,7 +326,7 @@ const StaffManagementTab = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Daily Wage (₹) *</label>
-                    <input type="number" required min="0" value={form.dailyRate} onChange={fld('dailyRate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
+                    <input type="number" required min="0" value={form.dailyRate === '' ? '' : (form.dailyRate ?? '')} onChange={(e) => setForm({ ...form, dailyRate: e.target.value === '' ? '' : Number(e.target.value) })} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>4-Digit Attendance PIN</label>
@@ -320,7 +334,7 @@ const StaffManagementTab = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Weekly Off</label>
                     <select value={form.weeklyOff} onChange={fld('weeklyOff')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}>
@@ -337,6 +351,140 @@ const StaffManagementTab = () => {
                     <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '4px', fontWeight: 'bold' }}>Joining Date</label>
                     <input type="date" required value={form.joiningDate} onChange={fld('joiningDate')} style={{ width: '100%', padding: '8px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '8px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
                   </div>
+                </div>
+
+                {/* Multi-Shift Schedule Configuration */}
+                <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '10px', border: '1px solid var(--color-border)', marginTop: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '6px', fontWeight: 'bold' }}>
+                    Shift Schedule Type
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, scheduleType: 'SINGLE' })}
+                      style={{
+                        padding: '6px',
+                        borderRadius: '6px',
+                        border: form.scheduleType === 'SINGLE' ? '2px solid var(--color-primary, #D47F46)' : '1px solid var(--color-border)',
+                        background: form.scheduleType === 'SINGLE' ? 'rgba(212, 127, 70, 0.12)' : 'var(--bg-primary)',
+                        color: form.scheduleType === 'SINGLE' ? 'var(--color-primary, #D47F46)' : 'var(--color-text-secondary)',
+                        fontWeight: 'bold',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Single Shift
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = (form.shifts && form.shifts.length > 0) ? form.shifts : [
+                          { shiftNumber: 1, shiftLabel: 'Lunch Shift', startTime: '11:00', endTime: '15:30' },
+                          { shiftNumber: 2, shiftLabel: 'Dinner Shift', startTime: '19:00', endTime: '23:30' }
+                        ];
+                        setForm({ ...form, scheduleType: 'SPLIT', shifts: cur });
+                      }}
+                      style={{
+                        padding: '6px',
+                        borderRadius: '6px',
+                        border: form.scheduleType === 'SPLIT' ? '2px solid var(--color-primary, #D47F46)' : '1px solid var(--color-border)',
+                        background: form.scheduleType === 'SPLIT' ? 'rgba(212, 127, 70, 0.12)' : 'var(--bg-primary)',
+                        color: form.scheduleType === 'SPLIT' ? 'var(--color-primary, #D47F46)' : 'var(--color-text-secondary)',
+                        fontWeight: 'bold',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Split / Multi-Shift
+                    </button>
+                  </div>
+
+                  {form.scheduleType === 'SINGLE' ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginBottom: '3px' }}>Shift Start</label>
+                        <input type="time" value={form.shiftStartTime || '09:00'} onChange={fld('shiftStartTime')} style={{ width: '100%', padding: '6px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginBottom: '3px' }}>Shift End</label>
+                        <input type="time" value={form.shiftEndTime || '18:00'} onChange={fld('shiftEndTime')} style={{ width: '100%', padding: '6px', background: 'var(--bg-primary)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text-primary)', boxSizing: 'border-box' }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', fontWeight: 'bold' }}>
+                          Shifts ({(form.shifts || []).length}/4)
+                        </span>
+                        {(form.shifts || []).length < 4 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const n = (form.shifts || []).length + 1;
+                              setForm({
+                                ...form,
+                                shifts: [...(form.shifts || []), { shiftNumber: n, shiftLabel: `Shift ${n}`, startTime: '19:00', endTime: '23:30' }]
+                              });
+                            }}
+                            style={{ background: 'transparent', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', borderRadius: '4px', padding: '2px 6px', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 'bold' }}
+                          >
+                            + Add Shift
+                          </button>
+                        )}
+                      </div>
+
+                      {(form.shifts || []).map((sh, idx) => (
+                        <div key={idx} style={{ background: 'var(--bg-primary)', padding: '8px', borderRadius: '6px', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <input
+                              type="text"
+                              value={sh.shiftLabel || `Shift ${idx + 1}`}
+                              onChange={(e) => {
+                                const up = [...form.shifts];
+                                up[idx] = { ...up[idx], shiftLabel: e.target.value };
+                                setForm({ ...form, shifts: up });
+                              }}
+                              style={{ width: '110px', padding: '2px 4px', fontSize: '0.75rem', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-card)', color: 'var(--color-text-primary)' }}
+                            />
+                            {form.shifts.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const up = form.shifts.filter((_, i) => i !== idx).map((s, i) => ({ ...s, shiftNumber: i + 1 }));
+                                  setForm({ ...form, shifts: up });
+                                }}
+                                style={{ background: 'transparent', border: 'none', color: '#e74c3c', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 'bold' }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                            <input
+                              type="time"
+                              value={sh.startTime}
+                              onChange={(e) => {
+                                const up = [...form.shifts];
+                                up[idx] = { ...up[idx], startTime: e.target.value };
+                                setForm({ ...form, shifts: up });
+                              }}
+                              style={{ width: '100%', padding: '4px', fontSize: '0.75rem', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-card)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+                            />
+                            <input
+                              type="time"
+                              value={sh.endTime}
+                              onChange={(e) => {
+                                const up = [...form.shifts];
+                                up[idx] = { ...up[idx], endTime: e.target.value };
+                                setForm({ ...form, shifts: up });
+                              }}
+                              style={{ width: '100%', padding: '4px', fontSize: '0.75rem', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--bg-card)', color: 'var(--color-text-primary)', boxSizing: 'border-box' }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -294,9 +294,10 @@ const createOrder = async (req, res, next) => {
     }
 
     // 4. Table Validation
-    const activeTableNumber = String(tableNumber).trim();
+    const isExtraSale = (String(orderSource).toUpperCase() === 'EXTRA_SALE' || String(source).toUpperCase() === 'EXTRA_SALE');
+    const activeTableNumber = isExtraSale ? 'EXTRA-SALE' : String(tableNumber || 'Takeaway').trim();
     let validatedTable = req.resolvedTable;
-    if (activeTableNumber !== 'Takeaway' && activeTableNumber !== 'Walk-in') {
+    if (!isExtraSale && activeTableNumber !== 'Takeaway' && activeTableNumber !== 'Walk-in') {
       if (!validatedTable) {
         const { resolveAndSelfHealTable } = require('../utils/tableHelper');
         validatedTable = await resolveAndSelfHealTable(activeCafeId, resolvedBranch.branchId, activeTableNumber);
@@ -308,8 +309,8 @@ const createOrder = async (req, res, next) => {
 
     // Extract customer details (handles both flat and nested 'customer' payload structure)
     const customerObj = req.body.customer || {};
-    const isStaffOrder = (source === 'STAFF' || orderSource === 'STAFF' || (req.user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'].includes(req.user.role)));
-    const defaultName = isStaffOrder ? (req.user?.name || 'Staff') : 'Guest Customer';
+    const isStaffOrder = isExtraSale || (source === 'STAFF' || orderSource === 'STAFF' || (req.user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'].includes(req.user.role)));
+    const defaultName = isExtraSale ? 'Extra Sale' : (isStaffOrder ? (req.user?.name || 'Staff') : 'Guest Customer');
     const finalCustomerName = (customerName || customerObj.name || defaultName).trim();
     const finalCustomerEmail = (customerEmail || customerObj.email || (isStaffOrder ? 'staff@cafesystem.local' : '')).trim();
     const finalCustomerPhone = (customerPhone || customerObj.phone || '').trim();
@@ -318,44 +319,56 @@ const createOrder = async (req, res, next) => {
     let computedTotal = 0;
     const validatedItems = [];
 
-    for (const item of items) {
-      const itemId = item.id || item._id;
-      if (!mongoose.isValidObjectId(itemId)) {
-        return res.status(400).json({ success: false, message: `Invalid item ID: ${itemId}` });
-      }
-      if (!item.quantity || Number(item.quantity) <= 0) {
-        return res.status(400).json({ success: false, message: `Invalid quantity for item ${item.name || 'Unnamed'}` });
-      }
-
-      // Find the menu item bypassing branch filter
-      let dbItem = await MenuItem.findOne({ _id: itemId, cafeId: activeCafeId }, null, { bypassBranchFilter: true }).lean();
-
-      if (!dbItem) {
-        return res.status(400).json({ success: false, message: `Menu item "${item.name || itemId}" not found` });
-      }
-
-      if (dbItem.available === false || dbItem.isHidden === true) {
-        return res.status(400).json({ success: false, message: `Menu item "${dbItem.name}" is currently out of stock or unavailable` });
-      }
-
-      const itemPrice = dbItem.price;
-      const itemQty = Number(item.quantity);
-      computedTotal += itemPrice * itemQty;
-
+    if (isExtraSale) {
+      const extraSaleAmount = Number(totalAmount) || 0;
+      computedTotal = extraSaleAmount;
       validatedItems.push({
-        id: String(dbItem._id),
-        name: dbItem.name,
-        price: itemPrice,
-        quantity: itemQty,
-        image: dbItem.image || dbItem.imageUrl || '/images/default-food.png'
+        id: String(new mongoose.Types.ObjectId()),
+        name: (items && items[0]?.name) || specialInstructions || 'Extra Sale / Tip',
+        price: extraSaleAmount,
+        quantity: 1,
+        image: '/images/default-food.png'
       });
+    } else {
+      for (const item of items) {
+        const itemId = item.id || item._id;
+        if (!mongoose.isValidObjectId(itemId)) {
+          return res.status(400).json({ success: false, message: `Invalid item ID: ${itemId}` });
+        }
+        if (!item.quantity || Number(item.quantity) <= 0) {
+          return res.status(400).json({ success: false, message: `Invalid quantity for item ${item.name || 'Unnamed'}` });
+        }
+
+        // Find the menu item bypassing branch filter
+        let dbItem = await MenuItem.findOne({ _id: itemId, cafeId: activeCafeId }, null, { bypassBranchFilter: true }).lean();
+
+        if (!dbItem) {
+          return res.status(400).json({ success: false, message: `Menu item "${item.name || itemId}" not found` });
+        }
+
+        if (dbItem.available === false || dbItem.isHidden === true) {
+          return res.status(400).json({ success: false, message: `Menu item "${dbItem.name}" is currently out of stock or unavailable` });
+        }
+
+        const itemPrice = dbItem.price;
+        const itemQty = Number(item.quantity);
+        computedTotal += itemPrice * itemQty;
+
+        validatedItems.push({
+          id: String(dbItem._id),
+          name: dbItem.name,
+          price: itemPrice,
+          quantity: itemQty,
+          image: dbItem.image || dbItem.imageUrl || '/images/default-food.png'
+        });
+      }
     }
 
     // 7. Payment Config tax and platformCharge
     const paymentConfig = await PaymentConfig.findOne({ cafeId: activeCafeId, branchId: resolvedBranch.branchId }).lean()
       || await PaymentConfig.findOne({ cafeId: activeCafeId }).lean();
-    const taxRate = paymentConfig && paymentConfig.taxRate !== undefined ? Number(paymentConfig.taxRate) : 0;
-    const platformCharge = paymentConfig && paymentConfig.platformCharge !== undefined ? Number(paymentConfig.platformCharge) : 0;
+    const taxRate = (!isExtraSale && paymentConfig && paymentConfig.taxRate !== undefined) ? Number(paymentConfig.taxRate) : 0;
+    const platformCharge = (!isExtraSale && paymentConfig && paymentConfig.platformCharge !== undefined) ? Number(paymentConfig.platformCharge) : 0;
 
     const finalSubtotal = computedTotal;
     const finalTax = Number((finalSubtotal * (taxRate / 100)).toFixed(2));
@@ -391,12 +404,17 @@ const createOrder = async (req, res, next) => {
     // Normalize source and orderSource to keep them perfectly synchronized
     let normalizedSource = 'QR';
     let normalizedOrderSource = 'QR';
-    const staffSourceValues = ['STAFF', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN'];
-    if (staffSourceValues.includes(String(source).toUpperCase()) || staffSourceValues.includes(String(orderSource).toUpperCase())) {
+    if (isExtraSale) {
       normalizedSource = 'STAFF';
-      normalizedOrderSource = orderSource ? String(orderSource).toUpperCase() : 'STAFF';
-      if (!['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF'].includes(normalizedOrderSource)) {
-        normalizedOrderSource = 'STAFF';
+      normalizedOrderSource = 'EXTRA_SALE';
+    } else {
+      const staffSourceValues = ['STAFF', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN'];
+      if (staffSourceValues.includes(String(source).toUpperCase()) || staffSourceValues.includes(String(orderSource).toUpperCase())) {
+        normalizedSource = 'STAFF';
+        normalizedOrderSource = orderSource ? String(orderSource).toUpperCase() : 'STAFF';
+        if (!['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF'].includes(normalizedOrderSource)) {
+          normalizedOrderSource = 'STAFF';
+        }
       }
     }
 
@@ -432,13 +450,13 @@ const createOrder = async (req, res, next) => {
       tableNumber: activeTableNumber,
       items: validatedItems,
       totalAmount: finalGrandTotal,
-      status: 'Placed',
+      status: isExtraSale ? 'Completed' : 'Placed',
       customerName: finalCustomerName,
       customerEmail: finalCustomerEmail,
       customerPhone: finalCustomerPhone,
       specialInstructions: specialInstructions || '',
-      paymentStatus: paymentStatus || 'Pending',
-      paymentMethod: paymentMethod || 'Pending',
+      paymentStatus: isExtraSale ? 'Paid' : (paymentStatus || 'Pending'),
+      paymentMethod: paymentMethod || (isExtraSale ? 'Cash' : 'Pending'),
       orderSource: normalizedOrderSource,
       createdBy: createdBy || '',
       createdByRole: createdByRole || '',
