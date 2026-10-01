@@ -229,6 +229,27 @@ const formatESCPOSTicket = (order, type = 'POS', cafe = null, branch = null) => 
   return new Uint8Array(bytes);
 };
 
+// Global in-flight lock to prevent duplicate UI print triggers
+const inFlightPrints = new Map();
+function shouldTriggerPrint(orderId, type) {
+  if (!orderId) return true;
+  const key = `${String(orderId)}_${type}`;
+  const now = Date.now();
+  if (inFlightPrints.has(key)) {
+    const last = inFlightPrints.get(key);
+    if (now - last < 3500) {
+      console.log(`[PRINT] ⚠️ Ignoring duplicate UI print trigger for order ${orderId} (${type})`);
+      return false;
+    }
+  }
+  inFlightPrints.set(key, now);
+  if (inFlightPrints.size > 200) {
+    const oldest = inFlightPrints.keys().next().value;
+    inFlightPrints.delete(oldest);
+  }
+  return true;
+}
+
 /**
  * ─────────────────────────────────────────────────────────────
  * Sends print job directly to local network printer bridge (HTTP / Port 8090)
@@ -262,7 +283,7 @@ export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null
   for (const url of candidateUrls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 400);
+      const timeoutId = setTimeout(() => controller.abort(), 1500);
 
       const res = await fetch(url, {
         method: 'POST',
@@ -334,6 +355,8 @@ const showPrintToast = (message) => {
  */
 export const printPOSReceipt = async (order, user = null, cafe = null, branch = null) => {
   if (!order) return;
+  const orderId = order._id || order.id || order.invoiceId;
+  if (!shouldTriggerPrint(orderId, 'POS')) return;
 
   showPrintToast('🖨️ Printing POS Bill on Thermal Printer...');
 
@@ -357,9 +380,9 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
   }
 
   // 3. Send to Render Cloud Socket Tunnel to trigger counter printer (Preserves 100% cloud printing)
-  if (order._id) {
+  if (order._id || order.id) {
     try {
-      await API.post(`/orders/${order._id}/print`, { type: 'POS' });
+      await API.post(`/orders/${order._id || order.id}/print`, { type: 'POS' });
       console.log('[PRINT] POS print job emitted to cloud printer tunnel');
     } catch (err) {
       console.warn('[PRINT] Cloud print notice:', err.message);
@@ -375,6 +398,8 @@ export const printPOSReceipt = async (order, user = null, cafe = null, branch = 
  */
 export const printKOT = async (order, user = null, cafe = null, branch = null) => {
   if (!order) return;
+  const orderId = order._id || order.id || order.invoiceId;
+  if (!shouldTriggerPrint(orderId, 'KOT')) return;
 
   showPrintToast('🍳 Printing KOT Kitchen Slip on Thermal Printer...');
 
@@ -398,9 +423,9 @@ export const printKOT = async (order, user = null, cafe = null, branch = null) =
   }
 
   // 3. Send to Render Cloud Socket Tunnel to trigger kitchen printer (Preserves 100% cloud printing)
-  if (order._id) {
+  if (order._id || order.id) {
     try {
-      await API.post(`/orders/${order._id}/print`, { type: 'KOT' });
+      await API.post(`/orders/${order._id || order.id}/print`, { type: 'KOT' });
       console.log('[PRINT] KOT print job emitted to cloud printer tunnel');
     } catch (err) {
       console.warn('[PRINT] Cloud KOT print notice:', err.message);

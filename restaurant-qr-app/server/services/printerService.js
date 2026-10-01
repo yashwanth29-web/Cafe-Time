@@ -251,6 +251,9 @@ function compileReceiptBuffer(orderData, type = 'POS') {
   return Buffer.from(commands.join(''), 'latin1');
 }
 
+// Global in-memory deduplication cache for direct TCP prints
+const recentDirectPrints = new Map();
+
 /**
  * printReceipt(orderData, type)
  * Connects to the network printer via TCP socket and prints a receipt.
@@ -262,6 +265,21 @@ function compileReceiptBuffer(orderData, type = 'POS') {
 async function printReceipt(orderData, type = 'POS') {
   const printerIp = process.env.PRINTER_IP || '192.168.0.101';
   const printerPort = parseInt(process.env.PRINTER_PORT || '9100', 10);
+
+  const orderId = String(orderData._id || orderData.id || orderData.invoiceId || orderData.billNo || '');
+  if (orderId) {
+    const key = `${orderId}_${type}`;
+    const now = Date.now();
+    if (recentDirectPrints.has(key) && (now - recentDirectPrints.get(key) < 5000)) {
+      console.log(`[PRINTER SERVICE] ⚠️ Skipped duplicate direct TCP print for order ${orderId} (${type}) within 5s`);
+      return true;
+    }
+    recentDirectPrints.set(key, now);
+    if (recentDirectPrints.size > 200) {
+      const oldestKey = recentDirectPrints.keys().next().value;
+      recentDirectPrints.delete(oldestKey);
+    }
+  }
 
   console.log(`[PRINTER SERVICE] Initiating print job (${type}) for order ${orderData.invoiceId || orderData._id || 'N/A'} to ${printerIp}:${printerPort}`);
 

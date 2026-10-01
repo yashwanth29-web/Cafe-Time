@@ -606,6 +606,9 @@ const getOrderById = async (req, res, next) => {
   }
 };
 
+// Global in-memory print debounce cache to prevent duplicate triggers
+const printLockCache = new Map();
+
 // @desc    Print order receipt (POS or KOT) on-demand
 // @route   POST /api/orders/:id/print
 // @access  Private (Staff/Owner)
@@ -613,10 +616,23 @@ const printOrderReceipt = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { type } = req.body; // 'KOT' or 'POS' (default 'POS')
+    const jobType = type || 'POS';
 
     const order = await Order.findOne({ _id: id }, null, { bypassBranchFilter: true }).lean();
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const orderKey = `${String(order._id || id)}_${jobType}`;
+    const now = Date.now();
+    if (printLockCache.has(orderKey) && (now - printLockCache.get(orderKey) < 4000)) {
+      console.log(`[ORDER CONTROLLER] ⚠️ Debounced duplicate print request for order ${orderKey}`);
+      return res.status(200).json({ success: true, message: `Print (${jobType}) already processing` });
+    }
+    printLockCache.set(orderKey, now);
+    if (printLockCache.size > 200) {
+      const oldest = printLockCache.keys().next().value;
+      printLockCache.delete(oldest);
     }
 
     const formattedOrder = await appendLegacyFallback(order);
@@ -626,19 +642,19 @@ const printOrderReceipt = async (req, res, next) => {
       const { getIO } = require('../config/socket');
       const io = getIO();
       if (io) {
-        io.to(`cafe:${order.cafeId}`).emit('print:job', { order: formattedOrder, type: type || 'POS' });
-        io.to(`cafe_${order.cafeId}`).emit('print:job', { order: formattedOrder, type: type || 'POS' });
+        // Emit once to normalized room
+        io.to(`cafe:${order.cafeId}`).emit('print:job', { order: formattedOrder, type: jobType });
       }
     } catch (sockErr) {
       console.warn('Socket print event warning:', sockErr.message);
     }
 
-    // 2. Try direct local network printer (if running locally on LAN)
-    printReceipt(formattedOrder, type || 'POS').catch(err => {
+    // 2. Direct local network printer (guarded with deduplication in printerService)
+    printReceipt(formattedOrder, jobType).catch(err => {
       console.warn('Local printReceipt notice:', err.message);
     });
 
-    return res.status(200).json({ success: true, message: `Receipt (${type || 'POS'}) sent to printer successfully` });
+    return res.status(200).json({ success: true, message: `Receipt (${jobType}) sent to printer successfully` });
   } catch (error) {
     error.controllerName = 'orderController';
     error.serviceName = 'printOrderReceipt';

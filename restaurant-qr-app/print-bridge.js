@@ -43,7 +43,7 @@ const CMD_FONT_LARGE = GS + '!\x11'; // Double height and double width
 const CMD_FEED_5 = ESC + 'd\x05';
 const CMD_CUT = GS + 'V\x42\x00';
 
-// Global In-Memory De-duplication Cache (prevents duplicate prints within 3 seconds)
+// Global In-Memory De-duplication Cache (prevents duplicate prints within 5 seconds)
 const recentlyPrinted = new Map();
 function shouldPrint(orderId, type) {
   if (!orderId) return true;
@@ -51,8 +51,8 @@ function shouldPrint(orderId, type) {
   const now = Date.now();
   if (recentlyPrinted.has(key)) {
     const lastTime = recentlyPrinted.get(key);
-    if (now - lastTime < 3000) {
-      console.log(`[BRIDGE] ⚠️ Ignored duplicate print trigger for order ${orderId} (${type}) within 3s`);
+    if (now - lastTime < 5000) {
+      console.log(`[BRIDGE] ⚠️ Ignored duplicate print trigger for order ${orderId} (${type}) within 5s`);
       return false;
     }
   }
