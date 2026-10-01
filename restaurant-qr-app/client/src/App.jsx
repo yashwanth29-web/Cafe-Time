@@ -74,6 +74,7 @@ function HomeRoute({ cart, addToCart, increaseQuantity, decreaseQuantity }) {
 }
 
 function AppContent() {
+  const { user } = useAuth();
   const [cart, setCart] = useState([]);
   const [searchParams] = useSearchParams();
   const location = useLocation();
