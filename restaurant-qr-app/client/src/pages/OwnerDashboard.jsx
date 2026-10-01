@@ -2076,44 +2076,130 @@ const OwnerDashboard = () =>{
     }
   };
 
-const exportStaffToCSV = () => {
+const exportStaffPayrollExcel = () => {
   if (!staff || staff.length === 0) {
     alert("No staff data to export.");
     return;
   }
-  const headers = ['Employee ID', 'Name', 'Role', 'Email', 'Phone', 'Branch', 'Salary Type', 'Daily Wage', 'Weekly Wage', 'Monthly Wage', 'Current Month Salary', 'Orders Today', 'Status', 'Joined Date'];
-  const csvRows = [headers.join(',')];
-  staff.forEach(member => {
-    const branchName = member.assignedBranch || 'Unassigned';
-    const row = [
-      member.employeeId || 'N/A',
-      `"${member.name || ''}"`,
-      member.staffRole || '',
-      member.email || '',
-      member.phone || '',
-      `"${branchName}"`,
-      member.salaryType || 'DAILY',
-      member.dailyRate || 0,
-      member.weeklyRate || 0,
-      member.monthlyRate || 0,
-      member.currentMonthSalary ?? member.currentWeekSalary ?? 0,
-      member.ordersHandledToday || 0,
-      member.isActive ? 'Active' : 'Inactive',
-      new Date(member.createdAt).toLocaleDateString()
-    ];
-    csvRows.push(row.join(','));
-  });
-  const csvData = csvRows.join('\n');
-  const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `Staff_Roster_${new Date().toISOString().split('T')[0]}.csv`;
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  try {
+    const wb = XLSX.utils.book_new();
+    const now = new Date();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const curMonthName = monthNames[now.getMonth()];
+    const curYear = now.getFullYear();
+
+    // ── SHEET 1: MASTER STAFF & SALARY LEDGER ──
+    const masterRows = staff.map((member, idx) => {
+      const grossEarned = member.totalEarnedAllTime ?? member.currentMonthSalary ?? ((member.workingDays || 0) * (member.dailyRate || 0));
+      const totalPaid = member.totalPaidAllTime || 0;
+      const remBalance = member.remainingSalaryBalance !== undefined 
+        ? member.remainingSalaryBalance 
+        : Math.max(0, grossEarned - totalPaid);
+
+      return {
+        "S.No": idx + 1,
+        "Employee ID": member.employeeId || `EMP-${String(member._id || '').slice(-6).toUpperCase()}`,
+        "Staff Name": member.name || "N/A",
+        "Username": member.username ? `@${member.username}` : "N/A",
+        "Role / Designation": member.staffRole || member.role || "Staff",
+        "Assigned Branch": member.assignedBranch || "Main",
+        "Phone / Contact": member.phone || "N/A",
+        "Email": member.email || "N/A",
+        "Attendance PIN": member.attendancePin || "N/A",
+        "Shift Timing": `${member.shiftStartTime || '09:00'} - ${member.shiftEndTime || '18:00'}`,
+        "Grace Time (Mins)": member.leanTimeMinutes !== undefined ? member.leanTimeMinutes : 30,
+        "Daily Wage Rate (₹)": Number(member.dailyRate || 0),
+        "Days Worked (Total Shifts)": Number(member.workingDays || 0),
+        "Total Gross Salary Earned (₹)": Number(Number(grossEarned).toFixed(2)),
+        "Total Salary Paid / Advances (₹)": Number(Number(totalPaid).toFixed(2)),
+        "Net Unpaid Balance Due (₹)": Number(Number(remBalance).toFixed(2)),
+        "Employment Status": member.isActive !== false ? "Active" : "Inactive",
+        "Joined Date": member.createdAt ? new Date(member.createdAt).toLocaleDateString('en-IN') : "N/A"
+      };
+    });
+
+    const wsMaster = XLSX.utils.json_to_sheet(masterRows);
+    XLSX.utils.book_append_sheet(wb, wsMaster, "Staff Salary Ledger");
+
+    // ── SHEET 2: SALARY PAYMENT & ADVANCE HISTORY ──
+    const paymentRows = [];
+    staff.forEach(member => {
+      const empId = member.employeeId || `EMP-${String(member._id || '').slice(-6).toUpperCase()}`;
+      const payments = Array.isArray(member.salaryPayments) ? member.salaryPayments : [];
+      payments.forEach((p, pIdx) => {
+        paymentRows.push({
+          "Receipt #": `PAY-${pIdx + 1}`,
+          "Employee ID": empId,
+          "Staff Name": member.name || "N/A",
+          "Payment Date": p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-IN') : (p.date ? new Date(p.date).toLocaleDateString('en-IN') : "N/A"),
+          "Amount Paid (₹)": Number(p.amount || 0),
+          "Payment Mode": p.paymentMethod || p.method || "Cash",
+          "Notes / Remarks": p.notes || p.remarks || "Salary disbursement"
+        });
+      });
+    });
+
+    if (paymentRows.length === 0) {
+      paymentRows.push({
+        "Receipt #": "-",
+        "Employee ID": "-",
+        "Staff Name": "No payment disbursements recorded yet",
+        "Payment Date": "-",
+        "Amount Paid (₹)": 0,
+        "Payment Mode": "-",
+        "Notes / Remarks": "-"
+      });
+    }
+    const wsPayments = XLSX.utils.json_to_sheet(paymentRows);
+    XLSX.utils.book_append_sheet(wb, wsPayments, "Payment Disbursements");
+
+    // ── SHEET 3: ATTENDANCE & SHIFT PUNCH LOGS ──
+    const punchRows = [];
+    const sourceRecords = Array.isArray(attendanceRecords) && attendanceRecords.length > 0 
+      ? attendanceRecords 
+      : staff.flatMap(s => (s.attendances || []).map(a => ({ ...a, staffName: s.name, empId: s.employeeId || `EMP-${String(s._id || '').slice(-6).toUpperCase()}` })));
+
+    (sourceRecords || []).forEach(record => {
+      const sName = record.staffName || record.user?.name || record.userName || "Staff";
+      const sId = record.empId || record.user?.employeeId || record.employeeId || "N/A";
+      const checkInStr = record.checkInTime ? new Date(record.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : "N/A";
+      const checkOutStr = record.checkOutTime ? new Date(record.checkOutTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : "Not punched out";
+
+      punchRows.push({
+        "Punch Date": record.date || (record.checkInTime ? new Date(record.checkInTime).toLocaleDateString('en-IN') : "N/A"),
+        "Employee ID": sId,
+        "Staff Name": sName,
+        "Check-In Time": checkInStr,
+        "Check-Out Time": checkOutStr,
+        "Hours Worked": Number(record.workingHours || 0),
+        "Punctuality Status": record.status === 'Late' ? 'Late Arrival' : 'On Time'
+      });
+    });
+
+    if (punchRows.length === 0) {
+      punchRows.push({
+        "Punch Date": "-",
+        "Employee ID": "-",
+        "Staff Name": "No punch logs recorded yet",
+        "Check-In Time": "-",
+        "Check-Out Time": "-",
+        "Hours Worked": 0,
+        "Punctuality Status": "-"
+      });
+    }
+    const wsPunches = XLSX.utils.json_to_sheet(punchRows);
+    XLSX.utils.book_append_sheet(wb, wsPunches, "Shift Attendance Logs");
+
+    // Auto-download file
+    const filename = `DrCafe_Complete_Staff_Payroll_Ledger_${curMonthName}_${curYear}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  } catch (err) {
+    console.error('Error generating staff Excel ledger:', err);
+    alert('Failed to generate Excel sheet. Please try again.');
+  }
 };
+
+const exportStaffToCSV = exportStaffPayrollExcel;
 
  const handleDeleteStaff = async (id) =>{
  if (!window.confirm('Are you sure you want to remove this staff member?')) {
@@ -5401,10 +5487,10 @@ const exportStaffToCSV = () => {
             />
           </div>
 
-          {/* Export CSV Button */}
+          {/* Export Excel / CSV Button */}
           <button
             type="button"
-            onClick={exportStaffToCSV}
+            onClick={exportStaffPayrollExcel}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -5413,14 +5499,15 @@ const exportStaffToCSV = () => {
               color: '#27ae60',
               border: '1px solid rgba(46, 204, 113, 0.4)',
               borderRadius: '8px',
-              padding: '6px 10px',
+              padding: '6px 12px',
               fontSize: '11.5px',
-              fontWeight: 700,
+              fontWeight: 800,
               cursor: 'pointer',
               transition: 'all 0.2s ease'
             }}
+            title="Download Complete Multi-Sheet Excel: Staff Profiles, Salary Ledger, Advances & Attendance Logs"
           >
-            <span>📥</span> Export CSV
+            <span>📊</span> Export Staff & Payroll (.xlsx)
           </button>
 
           {/* Add Staff Button */}
@@ -8182,7 +8269,37 @@ const exportStaffToCSV = () => {
                 ➕ EXTRA SALE
               </span>
             ) : (
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>· Table {order?.tableNumber || 'N/A'}</span>
+              <>
+                <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 700 }}>· Table {order?.tableNumber || 'N/A'}</span>
+                {(order?.orderSource === 'QR' || (!order?.createdByRole && !order?.createdBy && order?.orderSource !== 'MANUAL' && order?.orderSource !== 'STAFF') || (order?.createdByRole && order?.createdByRole.toLowerCase() === 'customer')) ? (
+                  <span style={{
+                    background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                    color: '#ffffff',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 900,
+                    letterSpacing: '0.4px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '3px'
+                  }}>
+                    📱 CUSTOMER
+                  </span>
+                ) : (
+                  <span style={{
+                    background: 'rgba(212, 127, 70, 0.14)',
+                    color: '#c05621',
+                    border: '1px solid rgba(212, 127, 70, 0.35)',
+                    padding: '2px 7px',
+                    borderRadius: '6px',
+                    fontSize: '10.5px',
+                    fontWeight: 800
+                  }}>
+                    🧑‍🍳 STAFF {order?.createdBy ? `(${order.createdBy})` : ''}
+                  </span>
+                )}
+              </>
             )}
           </div>
           <span style={{

@@ -453,28 +453,6 @@ const OrderHistory = ({ cafeId }) => {
             ⏳ Active Orders Tracker
           </h3>
 
-          {isStaffUser && (
-            <div style={{ marginBottom: '14px', textAlign: 'center' }}>
-              <Link
-                to="/staff/workspace"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  background: 'var(--color-primary)',
-                  color: 'var(--color-text-primary)',
-                  textDecoration: 'none'
-                }}
-              >
-                ← Back to Staff Workspace
-              </Link>
-            </div>
-          )}
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {activeOrders.map((order) => {
               const isServed = order.status === 'Ready' || order.status === 'Delivered' || order.status === 'Completed';

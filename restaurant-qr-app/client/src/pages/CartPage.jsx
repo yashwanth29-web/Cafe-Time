@@ -10,11 +10,7 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
   const navigate = useNavigate();
   const { user } = useAuth();
   const searchParams = new URLSearchParams(window.location.search);
-  const isStaff = Boolean(
-    searchParams.get('source') === 'staff' ||
-    sessionStorage.getItem('orderSource') === 'staff' ||
-    (user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()))
-  );
+  const isStaffPOS = searchParams.get('source') === 'staff';
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -351,18 +347,19 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
         tableId: resolvedTableNumber ? `T${String(resolvedTableNumber).replace(/^(table[- ]?|t)/i, '')}` : 'Takeaway',
         tableNumber: resolvedTableNumber,
         customer: {
-          name: isStaff ? (user?.name || 'Staff') : 'Guest Customer',
-          email: isStaff ? (user?.email || 'staff@cafesystem.local') : '',
-          phone: isStaff ? (user?.phone || '0000000000') : ''
+          name: customerName || (isStaffPOS ? (user?.name || 'Staff') : 'Guest Customer'),
+          email: customerEmail || (isStaffPOS ? (user?.email || 'staff@cafesystem.local') : ''),
+          phone: customerPhone || (isStaffPOS ? (user?.phone || '0000000000') : '')
         },
         items: itemsPayload,
         totalAmount: grandTotal,
-        customerName: isStaff ? (user?.name || 'Staff') : 'Guest Customer',
-        customerEmail: isStaff ? (user?.email || 'staff@cafesystem.local') : '',
-        customerPhone: isStaff ? (user?.phone || '0000000000') : '',
+        customerName: customerName || (isStaffPOS ? (user?.name || 'Staff') : 'Guest Customer'),
+        customerEmail: customerEmail || (isStaffPOS ? (user?.email || 'staff@cafesystem.local') : ''),
+        customerPhone: customerPhone || (isStaffPOS ? (user?.phone || '0000000000') : ''),
         specialInstructions,
-        source: isStaff ? 'STAFF' : 'QR',
-        staffId: isStaff && user ? user._id : undefined
+        source: isStaffPOS ? 'STAFF' : 'QR',
+        orderSource: isStaffPOS ? 'STAFF' : 'QR',
+        staffId: isStaffPOS && user ? user._id : undefined
       };
 
       const response = await placeOrder(orderPayload);
@@ -371,15 +368,12 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
         clearCart();
         sessionStorage.removeItem('orderSource');
 
-        if (isStaff && response.data) {
+        if (isStaffPOS && response.data) {
           try {
             printKOT(response.data, user, cafeInfo, null);
           } catch (printErr) {
             console.error('Error auto-printing KOT:', printErr);
           }
-        }
-
-        if (isStaff) {
           navigate('/staff/workspace');
           return;
         }
@@ -388,13 +382,16 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
 
         // Add to activeOrderIds ONLY in sessionStorage (no cross-day localStorage pollution)
         const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-        if (!activeIds.includes(newOrder._id)) {
+        if (newOrder && newOrder._id && !activeIds.includes(newOrder._id)) {
           activeIds.unshift(newOrder._id);
           sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
         }
 
-        // Navigate directly to history with newOrder in state for INSTANT, zero-flicker rendering
-        navigate('/history', { state: { newOrder } });
+        // Navigate directly to customer order tracking page (/history) with newOrder
+        const historyUrl = resolvedTableNumber && resolvedTableNumber !== 'Takeaway'
+          ? `/history?table=${encodeURIComponent(resolvedTableNumber)}&cafeId=${encodeURIComponent(resolvedCafeId)}&branchId=${encodeURIComponent(resolvedBranchId)}`
+          : '/history';
+        navigate(historyUrl, { state: { newOrder } });
       } else {
         setErrorMsg(response.message || 'Failed to place order. Please try again.');
       }
@@ -411,7 +408,7 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
     const currentTable = tableNumber || sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber');
     const currentCafe = cafeId || sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId');
     const currentBranch = branchId || sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId');
-    const isStaffOrder = sessionStorage.getItem('orderSource') === 'staff' || isStaff;
+    const isStaffOrder = searchParams.get('source') === 'staff' || isStaffPOS;
 
     if (currentTable) params.set('table', currentTable);
     if (isStaffOrder) params.set('source', 'staff');

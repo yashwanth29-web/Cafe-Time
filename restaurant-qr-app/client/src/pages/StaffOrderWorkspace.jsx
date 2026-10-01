@@ -1911,20 +1911,51 @@ const StaffOrderWorkspace = () => {
                     {/* Header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <strong style={{ fontSize: '1.05rem', color: 'var(--color-text-primary)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: '1.15rem', color: 'var(--color-text-primary)' }}>
                             {order.orderSource === 'EXTRA_SALE' ? '➕ Extra Sale / Tip' : `Table ${order.tableNumber}`}
                           </strong>
-                          {order.orderSource === 'EXTRA_SALE' && (
+                          {order.orderSource === 'EXTRA_SALE' ? (
                             <span style={{
                               background: 'linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%)',
                               color: '#fff',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '10px',
+                              padding: '2px 7px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
                               fontWeight: 800
                             }}>
                               EXTRA SALE
+                            </span>
+                          ) : (order.orderSource === 'QR' || (!order.createdByRole && !order.createdBy && order.orderSource !== 'MANUAL' && order.orderSource !== 'STAFF') || (order.createdByRole && order.createdByRole.toLowerCase() === 'customer')) ? (
+                            <span style={{
+                              background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                              color: '#ffffff',
+                              padding: '3px 9px',
+                              borderRadius: '6px',
+                              fontSize: '11.5px',
+                              fontWeight: 900,
+                              letterSpacing: '0.4px',
+                              boxShadow: '0 2px 6px rgba(2, 132, 199, 0.35)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              📱 CUSTOMER
+                            </span>
+                          ) : (
+                            <span style={{
+                              background: 'rgba(212, 127, 70, 0.14)',
+                              color: '#c05621',
+                              border: '1px solid rgba(212, 127, 70, 0.35)',
+                              padding: '2px 7px',
+                              borderRadius: '6px',
+                              fontSize: '10.5px',
+                              fontWeight: 800,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}>
+                              🧑‍🍳 STAFF {order.createdBy ? `(${order.createdBy})` : ''}
                             </span>
                           )}
                         </div>
