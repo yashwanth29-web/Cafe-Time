@@ -10727,8 +10727,33 @@ const exportStaffToCSV = exportStaffPayrollExcel;
                     {expenses
                       .filter((e) => {
                         if (expenseDateFilter === 'all') return true;
-                        const tag = e.periodTag === 'Daily' ? 'Today' : (e.periodTag || 'Today');
-                        return tag === expenseDateFilter;
+                        if (expenseDateFilter === 'One-Time') {
+                          return (e.periodTag || '').toLowerCase() === 'one-time';
+                        }
+                        const rawDate = e.date || e.createdAt;
+                        if (!rawDate) return false;
+                        const itemDate = new Date(rawDate);
+                        const now = new Date();
+                        const itemMidnight = new Date(itemDate.getFullYear(), itemDate.getMonth(), itemDate.getDate()).getTime();
+                        const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+                        if (expenseDateFilter === 'Today') {
+                          return itemMidnight === todayMidnight;
+                        }
+                        if (expenseDateFilter === 'Weekly') {
+                          const sevenDaysAgo = todayMidnight - (6 * 24 * 60 * 60 * 1000);
+                          return itemMidnight >= sevenDaysAgo && itemMidnight <= todayMidnight;
+                        }
+                        if (expenseDateFilter === '15 Days') {
+                          const fifteenDaysAgo = todayMidnight - (14 * 24 * 60 * 60 * 1000);
+                          return itemMidnight >= fifteenDaysAgo && itemMidnight <= todayMidnight;
+                        }
+                        if (expenseDateFilter === 'Monthly') {
+                          const thirtyDaysAgo = todayMidnight - (29 * 24 * 60 * 60 * 1000);
+                          const isSameMonth = itemDate.getFullYear() === now.getFullYear() && itemDate.getMonth() === now.getMonth();
+                          return isSameMonth || (itemMidnight >= thirtyDaysAgo && itemMidnight <= todayMidnight);
+                        }
+                        return true;
                       })
                       .map((item) => (
                         <tr key={item._id} style={{ borderBottom: '1px solid var(--color-border)' }}>
