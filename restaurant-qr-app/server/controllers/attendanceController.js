@@ -861,7 +861,7 @@ const getTodayStatus = async (req, res) => {
  */
 const getStaffHistory = async (req, res) => {
   const staffId = req.query.staffId || req.user._id;
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const monthQuery = req.query.month; // e.g. '2026-10' or 'all'
 
   try {
     const staff = await User.findById(staffId).setOptions({ bypassBranchFilter: true });
@@ -877,34 +877,76 @@ const getStaffHistory = async (req, res) => {
 
     const SalaryHistory = require('../models/SalaryHistory');
 
-    // Run history, wage totals, and payment queries in parallel for high speed
+    // Calculate monthly date boundaries based on IST
+    const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    const curYear = nowIST.getUTCFullYear();
+    const curMonth = nowIST.getUTCMonth(); // 0-indexed
+    const currentMonthPrefix = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
+    const selectedMonthPrefix = monthQuery && monthQuery !== 'all' ? monthQuery : currentMonthPrefix;
+
+    const [tYear, tMonth] = selectedMonthPrefix.split('-').map(Number);
+    const startOfMonth = new Date(Date.UTC(tYear, tMonth - 1, 1, 0, 0, 0));
+    const endOfMonth = new Date(Date.UTC(tYear, tMonth, 0, 23, 59, 59, 999));
+
+    const isCurrentMonth = selectedMonthPrefix === currentMonthPrefix;
+    const daysInSelectedMonth = new Date(tYear, tMonth, 0).getDate();
+    const daysPassed = isCurrentMonth ? nowIST.getUTCDate() : daysInSelectedMonth;
+
+    const dateFilter = monthQuery === 'all' 
+      ? { staffId }
+      : { 
+          staffId, 
+          $or: [
+            { date: { $regex: `^${selectedMonthPrefix}` } },
+            { checkInTime: { $gte: startOfMonth, $lte: endOfMonth } }
+          ]
+        };
+
+    // Run history, wage totals, and payment queries in parallel
     const [history, allStaffRecords, paidRecords] = await Promise.all([
-      Attendance.find({
-        staffId,
-        checkInTime: { $gte: thirtyDaysAgo }
-      }).sort({ checkInTime: -1 }).lean(),
-      Attendance.find({ staffId }).select('dailyWageEarned status').lean(),
+      Attendance.find(dateFilter).sort({ checkInTime: -1, date: -1 }).lean(),
+      Attendance.find({ staffId }).select('dailyWageEarned status date checkInTime').lean(),
       SalaryHistory.find({
         employeeId: staffId,
         paymentStatus: 'Paid'
-      }).select('finalSalary paidAmount amountPaid amount').lean()
+      }).select('finalSalary paidAmount amountPaid amount month paymentDate').lean()
     ]);
 
-    // Calculate monthly stats based on current calendar month
-    const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-    const currentMonthPrefix = `${nowIST.getUTCFullYear()}-${String(nowIST.getUTCMonth() + 1).padStart(2, '0')}`;
-    const daysPassedInMonth = nowIST.getUTCDate(); // e.g. 24 on Sept 24th
-
-    // Filter records for current month
-    const currentMonthRecords = history.filter(r => r.date && r.date.startsWith(currentMonthPrefix));
-    const activeDays = currentMonthRecords.length > 0 ? currentMonthRecords.length : history.length;
-    const absentDays = Math.max(0, daysPassedInMonth - activeDays);
+    // Unique present days in selected month
+    const uniqueDatesPresent = new Set(history.map(r => r.date || (r.checkInTime ? new Date(r.checkInTime).toISOString().slice(0, 10) : '')));
+    uniqueDatesPresent.delete('');
+    const presentDaysCount = uniqueDatesPresent.size;
+    const absentDays = Math.max(0, daysPassed - presentDaysCount);
 
     const totalWorkingMinutes = history.reduce((sum, record) => sum + (record.totalDuration || 0), 0);
     const totalHours = Number((totalWorkingMinutes / 60).toFixed(1));
     const lateCount = history.filter(r => r.status === 'Late').length;
-    
-    // Calculate all-time earned vs paid to get accurate Unpaid Salary Balance
+
+    // Wage earned in this selected month
+    const totalEarnedThisMonth = Number(history.reduce((sum, record) => {
+      let wage = record.dailyWageEarned;
+      if (wage === undefined || wage === null) {
+        wage = (record.status === 'Half Day' ? (staff?.dailyRate || 0) * 0.5 : (staff?.dailyRate || 0));
+      }
+      return sum + Number(wage || 0);
+    }, 0).toFixed(2));
+
+    // Paid in this selected month
+    const totalPaidThisMonth = Number(paidRecords.filter(ph => {
+      if (ph.month && ph.month.startsWith(selectedMonthPrefix)) return true;
+      if (ph.paymentDate) {
+        const pDate = new Date(ph.paymentDate).toISOString().slice(0, 7);
+        return pDate === selectedMonthPrefix;
+      }
+      return false;
+    }).reduce((sum, ph) => {
+      const amt = ph.finalSalary !== undefined ? ph.finalSalary : (ph.paidAmount || ph.amountPaid || ph.amount || 0);
+      return sum + Number(amt || 0);
+    }, 0).toFixed(2));
+
+    const unpaidThisMonth = Math.max(0, Number((totalEarnedThisMonth - totalPaidThisMonth).toFixed(2)));
+
+    // Calculate all-time earned vs paid
     const totalEarnedAllTime = Number(allStaffRecords.reduce((sum, record) => {
       let wage = record.dailyWageEarned;
       if (wage === undefined || wage === null) {
@@ -919,21 +961,27 @@ const getStaffHistory = async (req, res) => {
     }, 0).toFixed(2));
 
     const unpaidSalaryBalance = Math.max(0, Number((totalEarnedAllTime - totalPaidAllTime).toFixed(2)));
+    const attendancePercentage = Math.round((presentDaysCount / Math.max(1, daysPassed)) * 100);
 
-    const attendancePercentage = Math.round((activeDays / Math.max(1, daysPassedInMonth)) * 100);
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthDisplayName = `${monthNames[tMonth - 1] || ''} ${tYear}`;
 
     return res.status(200).json({
       success: true,
       history,
+      selectedMonth: selectedMonthPrefix,
+      monthDisplayName,
       summary: {
         totalWorkingHours: totalHours,
         attendancePercentage,
         lateDays: lateCount,
-        presentDays: activeDays,
+        presentDays: presentDaysCount,
         absentDays: absentDays,
-        daysPassedInMonth: daysPassedInMonth,
-        salaryEarnedThisMonth: unpaidSalaryBalance,
-        unpaidSalaryBalance: unpaidSalaryBalance,
+        daysPassedInMonth: daysPassed,
+        salaryEarnedThisMonth: totalEarnedThisMonth,
+        paidThisMonth: totalPaidThisMonth,
+        unpaidThisMonth: unpaidThisMonth,
+        unpaidSalaryBalance: unpaidThisMonth,
         totalEarnedAllTime: totalEarnedAllTime,
         totalPaidAllTime: totalPaidAllTime
       }

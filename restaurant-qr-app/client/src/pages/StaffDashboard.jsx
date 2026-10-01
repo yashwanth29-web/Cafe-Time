@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useBranch } from '../context/BranchContext';
 import {
@@ -19,6 +20,10 @@ const StaffDashboard = () => {
   const { activeBranchId } = useBranch();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
+
+  const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  const curMonthPrefix = `${nowIST.getUTCFullYear()}-${String(nowIST.getUTCMonth() + 1).padStart(2, '0')}`;
+  const [selectedMonth, setSelectedMonth] = useState(curMonthPrefix);
 
   // Sub-view toggle: 'attendance' (Mark Attendance & Shift Wages) vs 'cafe_photos' (Submit Cafe Photos)
   const [activeTab, setActiveTab] = useState(() => tabParam === 'report' ? 'cafe_photos' : 'attendance');
@@ -202,8 +207,79 @@ const StaffDashboard = () => {
     }
   }, []);
 
+  const generateMonthOptions = () => {
+    const list = [];
+    const now = new Date();
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+      list.push({ val, label: i === 0 ? `This Month (${label})` : label });
+    }
+    list.push({ val: 'all', label: 'All Time History' });
+    return list;
+  };
+
+  const handleExportStaffExcel = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Shift & Attendance Logs
+      const shiftRows = historyData.map((h, i) => {
+        const wage = h.dailyWageEarned !== undefined ? h.dailyWageEarned : (activeStaffMember?.dailyRate || 0);
+        const penalty = h.totalPenaltyAmount || 0;
+        return {
+          "Sl No": i + 1,
+          "Date": h.date || (h.checkInTime ? new Date(h.checkInTime).toLocaleDateString('en-IN') : ''),
+          "Staff Name": activeStaffMember?.name || '',
+          "Staff Role": activeStaffMember?.role || '',
+          "Check In Time": h.checkInTime ? new Date(h.checkInTime).toLocaleTimeString('en-IN') : '-',
+          "Check Out Time": h.checkOutTime ? new Date(h.checkOutTime).toLocaleTimeString('en-IN') : (h.activeSessionNumber ? 'Shift In Progress' : '-'),
+          "Duration (Mins)": h.totalDuration || 0,
+          "Hours Worked": Number(((h.totalDuration || 0) / 60).toFixed(1)),
+          "Status": h.status || 'Present',
+          "Base Rate (₹)": activeStaffMember?.dailyRate || 0,
+          "Late Cut (₹)": penalty,
+          "Net Wage Earned (₹)": wage
+        };
+      });
+
+      if (shiftRows.length === 0) {
+        shiftRows.push({ "Status": "No records found for this period" });
+      }
+
+      const wsShifts = XLSX.utils.json_to_sheet(shiftRows);
+      XLSX.utils.book_append_sheet(wb, wsShifts, "Shift & Wage Logs");
+
+      // Sheet 2: Monthly Summary
+      const summaryRows = [{
+        "Staff Name": activeStaffMember?.name || '',
+        "Staff ID": activeStaffMember?._id || '',
+        "Role": activeStaffMember?.role || '',
+        "Period": summary?.monthDisplayName || selectedMonth,
+        "Present Days": summary?.presentDays || 0,
+        "Absent Days": summary?.absentDays || 0,
+        "Late Days": summary?.lateDays || 0,
+        "Total Working Hours": summary?.totalWorkingHours || 0,
+        "Total Wages Earned (₹)": summary?.salaryEarnedThisMonth || 0,
+        "Paid by Owner (₹)": summary?.paidThisMonth || 0,
+        "Unpaid Due (₹)": summary?.unpaidThisMonth || 0
+      }];
+
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Monthly Summary");
+
+      const sanitizedName = (activeStaffMember?.name || 'Staff').replace(/[^a-zA-Z0-9]/g, '_');
+      const filename = `Staff_Ledger_${sanitizedName}_${selectedMonth}.xlsx`;
+      XLSX.writeFile(wb, filename);
+    } catch (err) {
+      console.error('Error exporting staff Excel:', err);
+      alert('Failed to export Excel. Please try again.');
+    }
+  };
+
   // Fetch initial data & branch kiosk staff roster
-  const fetchData = useCallback(async (isSilent = false, overrideStaffId = null) => {
+  const fetchData = useCallback(async (isSilent = false, overrideStaffId = null, overrideMonth = null) => {
     try {
       if (!isSilent) setLoading(true);
       setErrorMsg('');
@@ -222,6 +298,7 @@ const StaffDashboard = () => {
 
       const branchParam = activeBranchId || user?.assignedBranch || 'default';
       let resolvedTargetId = overrideStaffId || selectedStaffId || user?._id;
+      const resolvedMonth = overrideMonth || selectedMonth;
 
       // 2. Fetch Kiosk roster and Attendance concurrently in parallel
       const [kioskRes, todayRes, historyRes] = await Promise.all([
@@ -230,7 +307,7 @@ const StaffDashboard = () => {
           return { success: false };
         }),
         getTodayAttendanceStatus({ ...(coords || {}), staffId: resolvedTargetId }),
-        getStaffAttendanceHistory({ staffId: resolvedTargetId })
+        getStaffAttendanceHistory({ staffId: resolvedTargetId, month: resolvedMonth })
       ]);
 
       if (kioskRes && kioskRes.success && Array.isArray(kioskRes.staff)) {
@@ -262,7 +339,7 @@ const StaffDashboard = () => {
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [activeBranchId, user, selectedStaffId, coords]);
+  }, [activeBranchId, user, selectedStaffId, coords, selectedMonth]);
 
   // Initial load
   useEffect(() => {
@@ -330,7 +407,7 @@ const StaffDashboard = () => {
     try {
       const [todayRes, historyRes] = await Promise.all([
         getTodayAttendanceStatus({ ...(coords || {}), staffId }),
-        getStaffAttendanceHistory({ staffId })
+        getStaffAttendanceHistory({ staffId, month: selectedMonth })
       ]);
       if (todayRes && todayRes.success) {
         setTodayStatus(todayRes);
@@ -350,6 +427,19 @@ const StaffDashboard = () => {
       setLoading(false);
     }
   };
+
+  // Re-fetch history when selectedMonth changes
+  useEffect(() => {
+    const targetId = selectedStaffId || user?._id;
+    if (targetId) {
+      getStaffAttendanceHistory({ staffId: targetId, month: selectedMonth }).then((res) => {
+        if (res && res.success) {
+          setHistoryData(res.history || []);
+          setSummary(res.summary || { totalWorkingHours: 0, attendancePercentage: 0, lateDays: 0, presentDays: 0 });
+        }
+      }).catch(err => console.error('Month change history fetch error:', err));
+    }
+  }, [selectedMonth]);
 
   // Update live shift duration timer
   useEffect(() => {
@@ -1385,7 +1475,7 @@ const StaffDashboard = () => {
             </div>
           </div>
 
-          {/* ─── PAST 30 DAYS SHIFT & WAGE LOGS TABLE ─── */}
+          {/* ─── MONTHLY SHIFT & WAGE LOGS TABLE ─── */}
           <div style={{
             background: 'var(--bg-card)',
             border: '1px solid var(--color-border)',
@@ -1393,18 +1483,61 @@ const StaffDashboard = () => {
             padding: '20px',
             boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-                  Past 30 Days Shift & Wage Logs ({activeStaffMember?.name})
+                  Shift & Wage Logs ({activeStaffMember?.name || 'Staff'}) — {summary?.monthDisplayName || (selectedMonth === 'all' ? 'All Time' : selectedMonth)}
                 </h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-                  Detailed record of check-in, check-out, duration, and calculated day wages
+                  Detailed record of check-in, check-out, working hours, and daily wages earned
                 </p>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                {historyData.length} records found
-              </span>
+
+              {/* Controls: Month Selector and Excel Download */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--color-border)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  {generateMonthOptions().map(opt => (
+                    <option key={opt.val} value={opt.val}>{opt.label}</option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={handleExportStaffExcel}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#27ae60',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(39, 174, 96, 0.3)'
+                  }}
+                  title="Download full monthly staff attendance and payroll ledger to Excel"
+                >
+                  <span>📥</span>
+                  <span>Export to Excel (.xlsx)</span>
+                </button>
+              </div>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
