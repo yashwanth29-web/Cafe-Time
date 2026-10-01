@@ -22,25 +22,29 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    // Auto-clean legacy localStorage customer & order caching
-    try {
-      localStorage.removeItem('cachedActiveOrders');
-      Object.keys(localStorage).forEach(k => {
-        if (k.startsWith('activeOrderIds_') || k.startsWith('completedOrderIds_') || k === 'activeOrderIds' || k === 'completedOrderIds') {
-          localStorage.removeItem(k);
-        }
-      });
-    } catch (e) {}
-
     // Never show customer order tracking banner in staff take-order mode
     if (isStaffMode) {
       sessionStorage.setItem('orderSource', 'staff');
       setHasHistory(false);
     } else {
-      const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+      const localActive = JSON.parse(localStorage.getItem('customer_active_order_ids') || '[]');
+      const sessionActive = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+      const activeIds = Array.from(new Set([...localActive, ...sessionActive]));
       setHasHistory(activeIds.length > 0);
     }
   }, [isStaffMode]);
+
+  const getHistoryUrl = () => {
+    const params = new URLSearchParams();
+    const t = searchParams.get('table') || sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber');
+    const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || localStorage.getItem('customerCafeId');
+    const b = searchParams.get('branchId') || sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId');
+    if (t) params.set('table', t);
+    if (c) params.set('cafeId', c);
+    if (b && b !== 'default') params.set('branchId', b);
+    const qs = params.toString();
+    return qs ? `/history?${qs}` : '/history';
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -212,6 +216,53 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
         }
       </div>
 
+      {/* Active Order Notice Banner for Customers */}
+      {!isStaffMode && hasHistory && (
+        <div style={{
+          marginBottom: '16px',
+          padding: '12px 16px',
+          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(59, 130, 246, 0.18) 100%)',
+          border: '1.5px solid rgba(59, 130, 246, 0.45)',
+          borderRadius: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px',
+          boxShadow: '0 4px 14px rgba(37, 99, 235, 0.12)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <span style={{ fontSize: '20px', flexShrink: 0 }}>⏳</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: '13.5px', color: 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Active Order in Progress
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
+                Track live cooking status & view bill
+              </div>
+            </div>
+          </div>
+          <Link
+            to={getHistoryUrl()}
+            style={{
+              background: '#2563eb',
+              color: '#ffffff',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              fontWeight: 800,
+              fontSize: '12px',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              flexShrink: 0,
+              boxShadow: '0 2px 6px rgba(37, 99, 235, 0.35)'
+            }}
+          >
+            Track Order 🧾 →
+          </Link>
+        </div>
+      )}
+
       {/* Combos Slider */}
       {!searchQuery && selectedCategory !== 'Combos' && menuItems.some(i => (i.isCombo || i.category === 'Combos') && i.available) && (
         <div style={{ marginBottom: '16px' }}>
@@ -345,9 +396,13 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
       }
 
       {!isStaffMode && hasHistory && totalItems === 0 && (
-        <div className="sticky-cart-banner" style={{ background: 'var(--color-primary)' }}>
-          <Link to="/history" className="sticky-cart-banner-content" style={{ justifyContent: 'center' }}>
-            <span style={{ fontWeight: 800, fontSize: '15px' }}>🧾 View My Orders & Tracker</span>
+        <div className="sticky-cart-banner" style={{ background: '#2563eb', boxShadow: '0 8px 24px rgba(37, 99, 235, 0.35)' }}>
+          <Link to={getHistoryUrl()} className="sticky-cart-banner-content" style={{ justifyContent: 'space-between', color: '#ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>🧾</span>
+              <span style={{ fontWeight: 800, fontSize: '15px' }}>View Active Orders & Tracker</span>
+            </div>
+            <span style={{ fontWeight: 800, fontSize: '13px', background: 'rgba(255,255,255,0.25)', padding: '5px 12px', borderRadius: '16px' }}>Track Live ⏳ →</span>
           </Link>
         </div>
       )}

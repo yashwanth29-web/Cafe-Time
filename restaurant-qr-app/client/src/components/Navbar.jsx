@@ -56,6 +56,30 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
     return paramStr ? `/?${paramStr}` : '/menu';
   };
 
+  const [hasActiveOrders, setHasActiveOrders] = useState(false);
+
+  useEffect(() => {
+    if (isStaffMode) {
+      setHasActiveOrders(false);
+      return;
+    }
+    const localActive = JSON.parse(localStorage.getItem('customer_active_order_ids') || '[]');
+    const sessionActive = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+    setHasActiveOrders(localActive.length > 0 || sessionActive.length > 0);
+  }, [isStaffMode, location.pathname]);
+
+  const getHistoryLink = () => {
+    const params = new URLSearchParams();
+    const t = tableNumber || searchParams.get('table');
+    if (t) params.set('table', t);
+    const c = cafeId || searchParams.get('cafeId');
+    if (c) params.set('cafeId', c);
+    const b = searchParams.get('branchId') || sessionStorage.getItem('branchId');
+    if (b && b !== 'default') params.set('branchId', b);
+    const qs = params.toString();
+    return qs ? `/history?${qs}` : '/history';
+  };
+
   const getCartLink = () => {
     const params = new URLSearchParams();
     if (isStaffMode) params.set('source', 'staff');
@@ -89,6 +113,29 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
             <span style={{ fontSize: '12px', lineHeight: 1 }}>✖</span>
             <span className="navbar-exit-text">Exit</span>
           </button>
+        )}
+
+        {!isStaffMode && hasActiveOrders && location.pathname !== '/history' && location.pathname !== '/order-history' && (
+          <Link
+            to={getHistoryLink()}
+            style={{
+              background: '#2563eb',
+              color: '#ffffff',
+              padding: '6px 10px',
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 800,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              flexShrink: 0
+            }}
+            title="Track Your Active Order"
+          >
+            <span>⏳</span>
+            <span className="navbar-track-text">Track Order</span>
+          </Link>
         )}
 
         {tableNumber && (

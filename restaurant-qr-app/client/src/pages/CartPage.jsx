@@ -403,10 +403,14 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
         // ==========================================
         const newOrder = response.data;
 
-        // Add to activeOrderIds ONLY in sessionStorage (no cross-day localStorage pollution)
-        const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+        // Persist to both localStorage and sessionStorage so orders remain accessible if tab is closed/reloaded
+        const localActive = JSON.parse(localStorage.getItem('customer_active_order_ids') || '[]');
+        const sessionActive = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+        const activeIds = Array.from(new Set([...localActive, ...sessionActive]));
+
         if (newOrder && newOrder._id && !activeIds.includes(newOrder._id)) {
           activeIds.unshift(newOrder._id);
+          localStorage.setItem('customer_active_order_ids', JSON.stringify(activeIds));
           sessionStorage.setItem('activeOrderIds', JSON.stringify(activeIds));
         }
 

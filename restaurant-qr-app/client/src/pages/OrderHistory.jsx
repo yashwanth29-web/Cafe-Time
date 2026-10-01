@@ -56,8 +56,12 @@ const OrderHistory = ({ cafeId }) => {
     try {
       const res = await cancelOrder(orderId, 'Cancelled by customer');
       if (res && res.success) {
-        const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+        const localActive = JSON.parse(localStorage.getItem('customer_active_order_ids') || '[]');
+        const sessionActive = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+        const activeIds = Array.from(new Set([...localActive, ...sessionActive]));
         const updated = activeIds.filter(id => id !== orderId);
+
+        localStorage.setItem('customer_active_order_ids', JSON.stringify(updated));
         sessionStorage.setItem('activeOrderIds', JSON.stringify(updated));
 
         setActiveOrders(prev => prev.filter(o => o._id !== orderId));
@@ -86,21 +90,6 @@ const OrderHistory = ({ cafeId }) => {
   const [reviewRatings, setReviewRatings] = useState({});
   const [reviewTexts, setReviewTexts] = useState({});
   const [submittingReview, setSubmittingReview] = useState({});
-
-  // Auto-clean legacy localStorage customer & order caching on mount
-  useEffect(() => {
-    try {
-      localStorage.removeItem('customerName');
-      localStorage.removeItem('customerEmail');
-      localStorage.removeItem('customerPhone');
-      localStorage.removeItem('cachedActiveOrders');
-      Object.keys(localStorage).forEach(k => {
-        if (k.startsWith('activeOrderIds_') || k.startsWith('completedOrderIds_') || k === 'activeOrderIds' || k === 'completedOrderIds') {
-          localStorage.removeItem(k);
-        }
-      });
-    } catch (e) {}
-  }, []);
 
   // Fetch Cafe Details on mount
   useEffect(() => {
@@ -185,8 +174,13 @@ const OrderHistory = ({ cafeId }) => {
   // Fetch active orders on mount
   useEffect(() => {
     const fetchActiveOrders = async () => {
-      const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
-      const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
+      const localActive = JSON.parse(localStorage.getItem('customer_active_order_ids') || '[]');
+      const sessionActive = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
+      const activeIds = Array.from(new Set([...localActive, ...sessionActive]));
+
+      const localComp = JSON.parse(localStorage.getItem('customer_completed_order_ids') || '[]');
+      const sessionComp = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
+      const completedIds = Array.from(new Set([...localComp, ...sessionComp]));
       
       if (activeIds.length === 0 && completedIds.length === 0 && !newOrderFromNav) {
         setSuccess(false);
@@ -226,7 +220,9 @@ const OrderHistory = ({ cafeId }) => {
         } catch(e) {}
       }
 
+      localStorage.setItem('customer_active_order_ids', JSON.stringify(updatedIds));
       sessionStorage.setItem('activeOrderIds', JSON.stringify(updatedIds));
+      localStorage.setItem('customer_completed_order_ids', JSON.stringify(updatedCompIds));
       sessionStorage.setItem('completedOrderIds', JSON.stringify(updatedCompIds));
 
       if (fetchedActive.length > 0 || fetchedCompleted.length > 0) {
