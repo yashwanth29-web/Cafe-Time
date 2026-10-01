@@ -115,12 +115,12 @@ function AppContent() {
 
   // Save source param to session storage if present
   useEffect(() => {
-    if (sourceParam) {
-      sessionStorage.setItem('orderSource', sourceParam);
-    } else if (tableParam || cafeIdParam) {
+    if (sourceParam === 'staff') {
+      sessionStorage.setItem('orderSource', 'staff');
+    } else if (!sourceParam && (!user || !['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()))) {
       sessionStorage.removeItem('orderSource');
     }
-  }, [sourceParam, tableParam, cafeIdParam]);
+  }, [sourceParam, user]);
 
   // Sync tableNumber state when search parameter changes reactively
   useEffect(() => {

@@ -12,7 +12,8 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
   const searchParams = new URLSearchParams(location.search);
   const isStaffMode = Boolean(
     searchParams.get('source') === 'staff' ||
-    sessionStorage.getItem('orderSource') === 'staff'
+    sessionStorage.getItem('orderSource') === 'staff' ||
+    (user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()))
   );
 
   useEffect(() => {
@@ -37,7 +38,7 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
     sessionStorage.removeItem('orderSource');
     if (user?.role?.toLowerCase() === 'manager') {
       navigate('/manager/dashboard');
-    } else if (user?.role?.toLowerCase() === 'owner' || user?.role?.toLowerCase() === 'admin') {
+    } else if (user?.role?.toLowerCase() === 'owner' || user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super_admin') {
       navigate('/owner/dashboard');
     } else {
       navigate('/staff/workspace');
@@ -53,6 +54,19 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
     if (cafeId) currentParams.set('cafeId', cafeId);
     const paramStr = currentParams.toString();
     return paramStr ? `/?${paramStr}` : '/menu';
+  };
+
+  const getCartLink = () => {
+    const params = new URLSearchParams();
+    if (isStaffMode) params.set('source', 'staff');
+    const t = tableNumber || searchParams.get('table');
+    if (t) params.set('table', t);
+    const c = cafeId || searchParams.get('cafeId');
+    if (c) params.set('cafeId', c);
+    const b = searchParams.get('branchId') || sessionStorage.getItem('branchId');
+    if (b) params.set('branchId', b);
+    const qs = params.toString();
+    return qs ? `/cart?${qs}` : '/cart';
   };
 
   return (
@@ -84,7 +98,7 @@ const Navbar = ({ tableNumber, cafeId, cartItemCount }) => {
           </div>
         )}
         
-        <Link to="/cart" className="nav-cart-icon" aria-label="View Cart">
+        <Link to={getCartLink()} className="nav-cart-icon" aria-label="View Cart">
           🛒
           {cartItemCount > 0 && (
             <span className="nav-cart-badge">{cartItemCount}</span>

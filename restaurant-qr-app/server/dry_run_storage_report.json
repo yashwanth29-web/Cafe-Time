@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-30T08:54:07.883Z",
+  "timestamp": "2026-10-01T12:12:51.977Z",
   "dryRun": true,
   "expiredWorkReports": [
     {
@@ -56,6 +56,28 @@
         "6ab7596da68edba3b6ee0ad6"
       ],
       "gridFsFileId": "6ab7596da68edba3b6ee0ad6"
+    },
+    {
+      "reportId": "6abbd0a8dc069b3ceb98953f",
+      "staffName": "Barghavi",
+      "createdAt": "2026-09-29T14:52:24.030Z",
+      "photos": [],
+      "gridFsFileIds": [
+        "6abbd0a5dc069b3ceb98953d"
+      ],
+      "gridFsFileId": "6abbd0a5dc069b3ceb98953d"
+    },
+    {
+      "reportId": "6abcde0436aa259c133ca9e4",
+      "staffName": "king",
+      "createdAt": "2026-09-30T10:01:40.100Z",
+      "photos": [
+        "/uploads/report-1790762498694-195018661.jpg"
+      ],
+      "gridFsFileIds": [
+        "6abcde0236aa259c133ca9e1"
+      ],
+      "gridFsFileId": "6abcde0236aa259c133ca9e1"
     }
   ]
 }

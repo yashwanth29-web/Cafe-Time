@@ -23,6 +23,19 @@ const OrderHistory = ({ cafeId }) => {
   });
   const [completedOrders, setCompletedOrders] = useState([]);
 
+  // If a logged-in staff user visits /history, instantly redirect to staff workspace
+  useEffect(() => {
+    if (isStaffUser) {
+      if (user?.role?.toLowerCase() === 'manager') {
+        navigate('/manager/dashboard', { replace: true });
+      } else if (user?.role?.toLowerCase() === 'owner' || user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super_admin') {
+        navigate('/owner/dashboard', { replace: true });
+      } else {
+        navigate('/staff/workspace', { replace: true });
+      }
+    }
+  }, [isStaffUser, user, navigate]);
+
   const getMenuUrl = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const c = searchParams.get('cafeId') || sessionStorage.getItem('cafeId') || '';

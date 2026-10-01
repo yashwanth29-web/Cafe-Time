@@ -3840,6 +3840,7 @@ const StaffOrderWorkspace = () => {
                     key={tNum}
                     onClick={() => {
                       setShowTakeOrderModal(false);
+                      sessionStorage.setItem('orderSource', 'staff');
                       window.location.href = `/?table=${tNum}&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
                     }}
                     style={{
@@ -3869,6 +3870,7 @@ const StaffOrderWorkspace = () => {
               <button
                 onClick={() => {
                   setShowTakeOrderModal(false);
+                  sessionStorage.setItem('orderSource', 'staff');
                   window.location.href = `/?table=Takeaway&source=staff&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
                 }}
                 style={{

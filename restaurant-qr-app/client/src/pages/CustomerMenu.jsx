@@ -11,7 +11,7 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
   const searchParams = new URLSearchParams(window.location.search);
   const isStaffMode = searchParams.get('source') === 'staff' ||
     sessionStorage.getItem('orderSource') === 'staff' ||
-    Boolean(user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff'].includes(user?.role?.toLowerCase()));
+    Boolean(user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()));
 
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState(['All']);
@@ -34,6 +34,7 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
 
     // Never show customer order tracking banner in staff take-order mode
     if (isStaffMode) {
+      sessionStorage.setItem('orderSource', 'staff');
       setHasHistory(false);
     } else {
       const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
@@ -351,22 +352,35 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
         </div>
       )}
       
-      {totalItems > 0 &&
-      <div className="sticky-cart-banner">
-          <Link to="/cart" className="sticky-cart-banner-content">
-            <div className="sticky-cart-info">
-              <span className="sticky-cart-count">
-                {totalItems} {totalItems === 1 ? 'item' : 'items'} added
-              </span>
-              <span className="sticky-cart-price">₹{totalPrice.toFixed(2)}</span>
-            </div>
-            <div className="sticky-cart-action">
-              <span>View Cart</span>
-              <span>🛒 →</span>
-            </div>
-          </Link>
-        </div>
-      }
+      {totalItems > 0 && (() => {
+        const cartParams = new URLSearchParams();
+        if (isStaffMode) cartParams.set('source', 'staff');
+        const t = searchParams.get('table');
+        if (t) cartParams.set('table', t);
+        const c = searchParams.get('cafeId');
+        if (c) cartParams.set('cafeId', c);
+        const b = searchParams.get('branchId');
+        if (b) cartParams.set('branchId', b);
+        const qs = cartParams.toString();
+        const cartUrl = qs ? `/cart?${qs}` : '/cart';
+
+        return (
+          <div className="sticky-cart-banner">
+            <Link to={cartUrl} className="sticky-cart-banner-content">
+              <div className="sticky-cart-info">
+                <span className="sticky-cart-count">
+                  {totalItems} {totalItems === 1 ? 'item' : 'items'} added
+                </span>
+                <span className="sticky-cart-price">₹{totalPrice.toFixed(2)}</span>
+              </div>
+              <div className="sticky-cart-action">
+                <span>View Cart</span>
+                <span>🛒 →</span>
+              </div>
+            </Link>
+          </div>
+        );
+      })()}
     </div>);
 
 };

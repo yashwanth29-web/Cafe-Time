@@ -10,7 +10,11 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
   const navigate = useNavigate();
   const { user } = useAuth();
   const searchParams = new URLSearchParams(window.location.search);
-  const isStaffPOS = searchParams.get('source') === 'staff';
+  const isStaffPOS = Boolean(
+    searchParams.get('source') === 'staff' ||
+    sessionStorage.getItem('orderSource') === 'staff' ||
+    (user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()))
+  );
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -168,8 +172,13 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
     });
   };
 
-  // Fetch active orders on mount
+  // Fetch active orders on mount (customer QR mode only)
   useEffect(() => {
+    if (isStaffPOS) {
+      sessionStorage.setItem('orderSource', 'staff');
+      setSuccess(false);
+      return;
+    }
     const fetchActiveOrders = async () => {
       const activeIds = JSON.parse(sessionStorage.getItem('activeOrderIds') || '[]');
       const completedIds = JSON.parse(sessionStorage.getItem('completedOrderIds') || '[]');
@@ -347,15 +356,15 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
         tableId: resolvedTableNumber ? `T${String(resolvedTableNumber).replace(/^(table[- ]?|t)/i, '')}` : 'Takeaway',
         tableNumber: resolvedTableNumber,
         customer: {
-          name: customerName || (isStaffPOS ? (user?.name || 'Staff') : 'Guest Customer'),
-          email: customerEmail || (isStaffPOS ? (user?.email || 'staff@cafesystem.local') : ''),
-          phone: customerPhone || (isStaffPOS ? (user?.phone || '0000000000') : '')
+          name: isStaffPOS ? (user?.name || 'Staff') : (customerName || 'Guest Customer'),
+          email: isStaffPOS ? (user?.email || 'staff@cafesystem.local') : (customerEmail || ''),
+          phone: isStaffPOS ? (user?.phone || '0000000000') : (customerPhone || '')
         },
         items: itemsPayload,
         totalAmount: grandTotal,
-        customerName: customerName || (isStaffPOS ? (user?.name || 'Staff') : 'Guest Customer'),
-        customerEmail: customerEmail || (isStaffPOS ? (user?.email || 'staff@cafesystem.local') : ''),
-        customerPhone: customerPhone || (isStaffPOS ? (user?.phone || '0000000000') : ''),
+        customerName: isStaffPOS ? (user?.name || 'Staff') : (customerName || 'Guest Customer'),
+        customerEmail: isStaffPOS ? (user?.email || 'staff@cafesystem.local') : (customerEmail || ''),
+        customerPhone: isStaffPOS ? (user?.phone || '0000000000') : (customerPhone || ''),
         specialInstructions,
         source: isStaffPOS ? 'STAFF' : 'QR',
         orderSource: isStaffPOS ? 'STAFF' : 'QR',
@@ -368,16 +377,30 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
         clearCart();
         sessionStorage.removeItem('orderSource');
 
-        if (isStaffPOS && response.data) {
-          try {
-            printKOT(response.data, user, cafeInfo, null);
-          } catch (printErr) {
-            console.error('Error auto-printing KOT:', printErr);
+        // ==========================================
+        // 1. STAFF ORDER FLOW -> RETURN TO WORKSPACE
+        // ==========================================
+        if (isStaffPOS) {
+          if (response.data) {
+            try {
+              printKOT(response.data, user, cafeInfo, null);
+            } catch (printErr) {
+              console.error('Error auto-printing KOT:', printErr);
+            }
           }
-          navigate('/staff/workspace');
+          if (user?.role?.toLowerCase() === 'manager') {
+            navigate('/manager/dashboard');
+          } else if (user?.role?.toLowerCase() === 'owner' || user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super_admin') {
+            navigate('/owner/dashboard');
+          } else {
+            navigate('/staff/workspace');
+          }
           return;
         }
 
+        // ==========================================
+        // 2. CUSTOMER QR FLOW -> REMAIN ON TRACKER
+        // ==========================================
         const newOrder = response.data;
 
         // Add to activeOrderIds ONLY in sessionStorage (no cross-day localStorage pollution)
@@ -426,6 +449,24 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
           <div className="cart-empty-icon">🛒</div>
           <p className="cart-empty-text">Your cart is currently empty.</p>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '12px' }}>
+            {isStaffPOS && (
+              <button
+                onClick={() => {
+                  sessionStorage.removeItem('orderSource');
+                  if (user?.role?.toLowerCase() === 'manager') {
+                    navigate('/manager/dashboard');
+                  } else if (user?.role?.toLowerCase() === 'owner' || user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'super_admin') {
+                    navigate('/owner/dashboard');
+                  } else {
+                    navigate('/staff/workspace');
+                  }
+                }}
+                className="btn btn-secondary"
+                style={{ cursor: 'pointer', background: 'var(--bg-secondary)', fontWeight: 700 }}
+              >
+                🏠 Return to Workspace
+              </button>
+            )}
             <button
               onClick={handleOpenAddItemsModal}
               style={{
@@ -690,7 +731,7 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
                   Placing order...
                 </>
               ) : (
-                'Place Order'
+                isStaffPOS ? 'Place Staff Order & Print KOT 🖨️' : 'Place Order'
               )}
             </button>
           </div>
