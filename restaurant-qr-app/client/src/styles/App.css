@@ -28,6 +28,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg-primary: #121815;
   --bg-secondary: #1C2420;
   --bg-card: #1E2723;
@@ -1368,6 +1369,19 @@ select.form-input option {
 textarea.form-input {
   line-height: 1.5;
   resize: vertical;
+}
+
+input[type="time"],
+input[type="date"],
+input[type="datetime-local"] {
+  color-scheme: inherit;
+}
+
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  cursor: pointer;
 }
 
 /* Form Row Grid */
