@@ -271,7 +271,22 @@ const StaffDashboard = () => {
 
       const sanitizedName = (activeStaffMember?.name || 'Staff').replace(/[^a-zA-Z0-9]/g, '_');
       const filename = `Staff_Ledger_${sanitizedName}_${selectedMonth}.xlsx`;
-      XLSX.writeFile(wb, filename);
+      try {
+        XLSX.writeFile(wb, filename);
+      } catch (writeErr) {
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 500);
+      }
     } catch (err) {
       console.error('Error exporting staff Excel:', err);
       alert('Failed to export Excel. Please try again.');
