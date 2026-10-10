@@ -426,8 +426,8 @@ export const deleteInventoryItem = async (id) => {
   return response.data;
 };
 
-export const getInventoryLogs = async () => {
-  const response = await API.get('/inventory/logs');
+export const getInventoryLogs = async (params = {}) => {
+  const response = await API.get('/inventory/logs', { params });
   return response.data;
 };
 

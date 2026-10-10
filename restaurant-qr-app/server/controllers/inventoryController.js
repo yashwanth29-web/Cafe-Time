@@ -374,14 +374,30 @@ const getInventoryLogs = async (req, res, next) => {
       query.branchId = queryBranch;
     }
 
+    // Filter by manual stock movements only (excluding automatic recipe order deductions)
+    if (req.query.manualOnly === 'true' || req.query.excludeOrders === 'true') {
+      query.orderId = null;
+      query.type = { $ne: 'Deduction' };
+      query.reason = { $not: /sold|order deduction|auto-deduct|restored from/i };
+    } else if (req.query.type) {
+      query.type = req.query.type;
+    }
+
     if (req.query.date) {
       const targetDate = new Date(req.query.date);
       const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
       const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
       query.createdAt = { $gte: startOfDay, $lte: endOfDay };
+    } else if (req.query.days) {
+      const daysCount = parseInt(req.query.days, 10) || 7;
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - (daysCount - 1));
+      cutoff.setHours(0, 0, 0, 0);
+      query.createdAt = { $gte: cutoff };
     }
 
-    const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).limit(1000).lean();
+    const limit = parseInt(req.query.limit, 10) || 1000;
+    const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).limit(limit).lean();
     return res.status(200).json({ success: true, count: logs.length, data: logs });
   } catch (error) {
     error.controllerName = 'inventoryController';

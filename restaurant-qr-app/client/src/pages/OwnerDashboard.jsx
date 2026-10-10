@@ -1265,6 +1265,15 @@ const OwnerDashboard = () =>{
     });
   }, [inventoryLogs, movementDayFilter, movementSearch]);
 
+  const totalMovementCost = useMemo(() => {
+    return (filteredMovementLogs || []).reduce((acc, log) => {
+      const qtyChangedNum = Number(log.quantityChanged) || 0;
+      const isPositive = log.type === 'Purchase' || log.type === 'Initial' || qtyChangedNum > 0;
+      const costNum = Math.abs(Number(log.cost) || 0);
+      return acc + (isPositive && costNum > 0 ? costNum : 0);
+    }, 0);
+  }, [filteredMovementLogs]);
+
  const [imageUploading, setImageUploading] = useState(false);
 
  const handleImageUpload = async (file, isEditing = false) =>{
@@ -2657,7 +2666,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     try {
       const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
         getInventory(),
-        getInventoryLogs(),
+        getInventoryLogs({ manualOnly: true }),
         getWastageReport(),
         getConsumptionReport()
       ]);
@@ -8095,8 +8104,13 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
         📅 Select Day (Past 7 Days):
       </div>
-      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-        Showing <strong>{filteredMovementLogs.length}</strong> movements
+      <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <span>Showing <strong>{filteredMovementLogs.length}</strong> movements</span>
+        {totalMovementCost > 0 && (
+          <span style={{ background: 'rgba(111, 78, 55, 0.12)', color: 'var(--color-primary)', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>
+            Total Cost: ₹{totalMovementCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        )}
       </div>
     </div>
     
@@ -8248,6 +8262,19 @@ const exportStaffToCSV = exportStaffPayrollExcel;
           </tr>
         )}
       </tbody>
+      {filteredMovementLogs.length > 0 && (
+        <tfoot>
+          <tr style={{ background: 'var(--bg-secondary)', borderTop: '2px solid var(--color-border)', fontWeight: 800 }}>
+            <td colSpan="4" style={{ padding: '12px', textAlign: 'right', color: 'var(--color-text-primary)', fontSize: '13px' }}>
+              Total Cost ({movementDayFilter === 'all' ? 'All 7 Days' : (past7Days.find(d => d.key === movementDayFilter)?.label || 'Selected Day')}):
+            </td>
+            <td style={{ padding: '12px', textAlign: 'right', color: 'var(--color-primary)', fontSize: '14px', fontWeight: 800 }}>
+              ₹{totalMovementCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+            <td style={{ padding: '12px' }}></td>
+          </tr>
+        </tfoot>
+      )}
     </table>
   </div>
 </div>
