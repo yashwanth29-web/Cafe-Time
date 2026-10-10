@@ -2266,7 +2266,8 @@ const getDashboardStats = async (req, res) => {
             $or: [
               { paymentStatus: 'Paid' },
               { status: { $in: ['Ready', 'Delivered', 'Completed'] } }
-            ]
+            ],
+            createdAt: { $gte: startOfMonth }
           } 
         },
         { $unwind: '$items' },
@@ -2530,6 +2531,12 @@ const getDashboardStats = async (req, res) => {
         totalAmount: item.revenue,
         lastSoldDate: item.lastSoldDate
       })),
+      allSoldItemsMonth: (allSalesItemsOverall || []).map(item => ({
+        name: item._id,
+        quantity: item.quantity,
+        totalAmount: item.revenue,
+        lastSoldDate: item.lastSoldDate
+      })),
       allSoldItemsOverall: (allSalesItemsOverall || []).map(item => ({
         name: item._id,
         quantity: item.quantity,
@@ -2559,6 +2566,114 @@ const getDashboardStats = async (req, res) => {
   } catch (error) {
     console.error('Error calculating dashboard stats:', error);
     res.status(500).json({ success: false, message: 'Server Error calculating stats' });
+  }
+};
+
+/**
+ * Get Sold Items Feed dynamically:
+ * - period = 'today': Sold today
+ * - period = 'month': Sold in current active month
+ * - period = 'date' & date = 'YYYY-MM-DD': Sold on that specific date
+ */
+const getSoldItems = async (req, res) => {
+  try {
+    const cafeId = req.user?.cafeId;
+    if (!cafeId) return res.status(400).json({ success: false, message: 'No cafe assignment found.' });
+
+    const period = req.query.period || 'today';
+    const dateStr = req.query.date;
+    const branchId = req.query.branchId || null;
+
+    const orderMatchQuery = { cafeId };
+
+    if (branchId && branchId !== 'all') {
+      const branchDoc = await getCachedBranch(`mode:${branchId}:${cafeId}`, () => Branch.findOne({ 
+        $or: [
+          { branchId: branchId },
+          { _id: mongoose.isValidObjectId(branchId) ? branchId : undefined }
+        ],
+        cafeId
+      }).lean());
+      
+      if (branchDoc) {
+        orderMatchQuery.branchId = { 
+          $in: [
+            branchDoc.branchId, 
+            String(branchDoc._id),
+            branchDoc._id
+          ] 
+        };
+      } else {
+        orderMatchQuery.branchId = branchId;
+      }
+    }
+
+    // Indian Standard Time (UTC+5:30) date boundaries
+    const now = new Date();
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const year = istTime.getUTCFullYear();
+    const month = istTime.getUTCMonth();
+    const todayDate = istTime.getUTCDate();
+
+    let dateMatch = {};
+    if (period === 'today') {
+      const startOfToday = new Date(Date.UTC(year, month, todayDate) - (5.5 * 60 * 60 * 1000));
+      const endOfToday = new Date(Date.UTC(year, month, todayDate + 1) - (5.5 * 60 * 60 * 1000));
+      dateMatch = { createdAt: { $gte: startOfToday, $lt: endOfToday } };
+    } else if (period === 'month' || period === 'overall') {
+      const startOfMonth = new Date(Date.UTC(year, month, 1) - (5.5 * 60 * 60 * 1000));
+      const endOfMonth = new Date(Date.UTC(year, month + 1, 1) - (5.5 * 60 * 60 * 1000));
+      dateMatch = { createdAt: { $gte: startOfMonth, $lt: endOfMonth } };
+    } else if (period === 'date' && dateStr) {
+      const parts = dateStr.split('-').map(Number);
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        const [dYear, dMonth, dDay] = parts;
+        const startOfDay = new Date(Date.UTC(dYear, dMonth - 1, dDay) - (5.5 * 60 * 60 * 1000));
+        const endOfDay = new Date(Date.UTC(dYear, dMonth - 1, dDay + 1) - (5.5 * 60 * 60 * 1000));
+        dateMatch = { createdAt: { $gte: startOfDay, $lt: endOfDay } };
+      }
+    }
+
+    const itemsAgg = await Order.aggregate([
+      {
+        $match: {
+          ...orderMatchQuery,
+          status: { $nin: ['Cancelled', 'cancelled', 'Failed', 'Expired'] },
+          $or: [
+            { paymentStatus: 'Paid' },
+            { status: { $in: ['Ready', 'Delivered', 'Completed'] } }
+          ],
+          ...dateMatch
+        }
+      },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: '$items.name',
+          quantity: { $sum: '$items.quantity' },
+          totalAmount: { $sum: { $multiply: ['$items.quantity', '$items.price'] } },
+          lastSoldDate: { $max: '$createdAt' }
+        }
+      },
+      { $sort: { quantity: -1 } }
+    ]);
+
+    const formatted = itemsAgg.map(i => ({
+      name: i._id || 'Unknown Item',
+      quantity: i.quantity || 0,
+      totalAmount: i.totalAmount || 0,
+      lastSoldDate: i.lastSoldDate
+    }));
+
+    return res.status(200).json({
+      success: true,
+      period,
+      date: dateStr || null,
+      data: formatted
+    });
+  } catch (error) {
+    console.error('Error fetching sold items:', error);
+    return res.status(500).json({ success: false, message: 'Server error retrieving sold items' });
   }
 };
 
@@ -2995,6 +3110,7 @@ const initializeTenantAssets = async (req, res) => {
 
 module.exports = {
   getDashboardStats,
+  getSoldItems,
   createStaff,
   getStaff,
   updateStaff,

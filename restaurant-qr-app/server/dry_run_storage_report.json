@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-01T12:37:48.959Z",
+  "timestamp": "2026-10-10T07:14:07.608Z",
   "dryRun": true,
   "expiredWorkReports": [
     {
@@ -78,6 +78,18 @@
         "6abcde0236aa259c133ca9e1"
       ],
       "gridFsFileId": "6abcde0236aa259c133ca9e1"
+    },
+    {
+      "reportId": "6abe55226b1b038be605db1b",
+      "staffName": "king",
+      "createdAt": "2026-10-01T12:42:10.024Z",
+      "photos": [
+        "/uploads/report-1790858529645-668176999.jpg"
+      ],
+      "gridFsFileIds": [
+        "6abe55216b1b038be605db19"
+      ],
+      "gridFsFileId": "6abe55216b1b038be605db19"
     }
   ]
 }

@@ -22,6 +22,7 @@ const {
   updateCafeTheme,
   getReports,
   getDashboardStats,
+  getSoldItems,
   initializeTenantAssets,
   resetStaffPassword,
   recordStaffPayment
@@ -98,5 +99,8 @@ router.get('/reports', restrictTo('admin', 'owner'), getReports);
 
 // Dashboard Stats Route
 router.get('/dashboard-stats', restrictTo('admin', 'owner'), getDashboardStats);
+
+// Sold Items Route (Today / Specific Date / Active Month)
+router.get('/sold-items', restrictTo('admin', 'owner', 'manager'), getSoldItems);
 
 module.exports = router;

@@ -41,7 +41,8 @@ import {
  getReviews,
  getAssetUrl,
  getReports,
- getDashboardStats,
+  getDashboardStats,
+  getSoldItems,
  generatePayroll,
  getPayrollList,
  updatePayroll,
@@ -483,8 +484,29 @@ const OwnerDashboard = () =>{
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
 
   // Feature 1: All Sold Items Feed States
-  const [soldItemsPeriod, setSoldItemsPeriod] = useState('today'); // 'today' | 'overall'
+  const [soldItemsPeriod, setSoldItemsPeriod] = useState('today'); // 'today' | 'date' | 'overall'
   const [soldItemsSearch, setSoldItemsSearch] = useState('');
+  const [soldItemsData, setSoldItemsData] = useState([]);
+  const [soldItemsLoading, setSoldItemsLoading] = useState(false);
+
+  // Date picker state — always defaults to today
+  const getTodayStr = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  const [soldItemsDate, setSoldItemsDate] = useState(getTodayStr);
+
+  // Current month min (1st) and max (today) for the date picker
+  const soldItemsMonthMin = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  }, []);
+  const soldItemsMonthMax = useMemo(() => getTodayStr(), []);
+
+
 
   // Feature 4: Current Active Month Limits
   const currentMonthMinDate = useMemo(() => {
@@ -545,6 +567,48 @@ const OwnerDashboard = () =>{
     return !getBranchCache(activeId).hasLoaded.statsData;
   });
   const [statsError, setStatsError] = useState('');
+
+  // Fetch real sold items feed from backend for today, selected date, or whole month
+  const fetchSoldItemsFeed = useCallback(async (period, dateVal, targetBranch = activeBranchId) => {
+    setSoldItemsLoading(true);
+    try {
+      const params = {
+        period,
+        branchId: targetBranch === 'all' ? undefined : targetBranch
+      };
+      if (period === 'date' && dateVal) {
+        params.date = dateVal;
+      }
+      const res = await getSoldItems(params);
+      if (res && res.success) {
+        setSoldItemsData(Array.isArray(res.data) ? res.data : []);
+      }
+    } catch (err) {
+      console.error('Failed to load sold items feed:', err);
+    } finally {
+      setSoldItemsLoading(false);
+    }
+  }, [activeBranchId]);
+
+  useEffect(() => {
+    if (soldItemsPeriod === 'today') {
+      if (Array.isArray(statsData?.allSoldItemsToday) && statsData.allSoldItemsToday.length > 0) {
+        setSoldItemsData(statsData.allSoldItemsToday);
+      } else {
+        fetchSoldItemsFeed('today', null, activeBranchId);
+      }
+    } else if (soldItemsPeriod === 'date') {
+      if (soldItemsDate) {
+        fetchSoldItemsFeed('date', soldItemsDate, activeBranchId);
+      }
+    } else if (soldItemsPeriod === 'overall') {
+      if (Array.isArray(statsData?.allSoldItemsMonth) && statsData.allSoldItemsMonth.length > 0) {
+        setSoldItemsData(statsData.allSoldItemsMonth);
+      } else {
+        fetchSoldItemsFeed('month', null, activeBranchId);
+      }
+    }
+  }, [soldItemsPeriod, soldItemsDate, activeBranchId, statsData?.allSoldItemsToday, statsData?.allSoldItemsMonth, fetchSoldItemsFeed]);
 
   // ── Other Expenses State ──
   const [expenses, setExpenses] = useState([]);
@@ -3469,73 +3533,27 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 
   const { topSelling, slowSelling } = rankedItems;
 
-  // Feature 1: All Sold Items Feed (Today vs Overall)
+  // Feature 1: All Sold Items Feed (Today vs Specific Date vs Current Month Overall)
   const allSoldItemsList = useMemo(() => {
-    const serverItems = soldItemsPeriod === 'today' 
-      ? statsData?.allSoldItemsToday 
-      : statsData?.allSoldItemsOverall;
+    let list = Array.isArray(soldItemsData) ? [...soldItemsData] : [];
 
-    let list = [];
-
-    if (Array.isArray(serverItems) && serverItems.length > 0) {
-      list = serverItems.map((item) => ({
-        name: item.name || 'Unknown Item',
-        quantity: Number(item.quantity) || 0,
-        totalAmount: Number(item.totalAmount) || 0,
-        lastSoldDate: item.lastSoldDate ? new Date(item.lastSoldDate) : null
-      }));
-    } else {
-      // Fallback: calculate from client-side orders
-      const targetOrders = soldItemsPeriod === 'today' 
-        ? (todayOrders.length > 0 ? todayOrders : (orders || []).filter(o => {
-            if (o.status === 'Cancelled' || o.status === 'cancelled') return false;
-            const now = new Date();
-            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            return new Date(o.createdAt) >= startOfToday;
-          }))
-        : (completedOrders.length > 0 ? completedOrders : (orders || []).filter(o => o.status !== 'Cancelled' && o.status !== 'cancelled'));
-
-      const itemMap = {};
-
-      (targetOrders || []).forEach((order) => {
-        const orderDate = new Date(order.createdAt || order.updatedAt);
-        if (Array.isArray(order.items) && order.items.length > 0) {
-          order.items.forEach((item) => {
-            const name = item.name || 'Unknown Item';
-            const qty = Number(item.quantity) || 0;
-            const price = Number(item.price) || 0;
-            const itemTotal = qty * price;
-
-            if (!itemMap[name]) {
-              itemMap[name] = {
-                name,
-                quantity: 0,
-                totalAmount: 0,
-                lastSoldDate: orderDate
-              };
-            }
-
-            itemMap[name].quantity += qty;
-            itemMap[name].totalAmount += itemTotal;
-            if (orderDate > itemMap[name].lastSoldDate) {
-              itemMap[name].lastSoldDate = orderDate;
-            }
-          });
-        }
-      });
-
-      list = Object.values(itemMap);
+    // Fallback to statsData if soldItemsData hasn't loaded yet
+    if (list.length === 0) {
+      if (soldItemsPeriod === 'today' && Array.isArray(statsData?.allSoldItemsToday)) {
+        list = [...statsData.allSoldItemsToday];
+      } else if (soldItemsPeriod === 'overall' && Array.isArray(statsData?.allSoldItemsMonth)) {
+        list = [...statsData.allSoldItemsMonth];
+      }
     }
 
     if (soldItemsSearch && soldItemsSearch.trim()) {
       const q = soldItemsSearch.toLowerCase().trim();
-      list = list.filter((i) => i.name.toLowerCase().includes(q));
+      list = list.filter((i) => (i.name || '').toLowerCase().includes(q));
     }
 
-    // Sort by highest quantity sold
-    list.sort((a, b) => b.quantity - a.quantity);
+    list.sort((a, b) => (Number(b.quantity) || 0) - (Number(a.quantity) || 0));
     return list;
-  }, [soldItemsPeriod, statsData, todayOrders, completedOrders, orders, soldItemsSearch]);
+  }, [soldItemsData, soldItemsPeriod, statsData?.allSoldItemsToday, statsData?.allSoldItemsMonth, soldItemsSearch]);
 
   // Feature 4: Orders Monitor Summary Calculations
   const monitorSummary = useMemo(() => {
@@ -4809,52 +4827,102 @@ const exportStaffToCSV = exportStaffPayrollExcel;
         <span>📋</span> All Sold Items
       </h4>
       <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'block', marginTop: '3px' }}>
-        Summary of dishes sold {soldItemsPeriod === 'today' ? "today" : "all-time overall"}
+        {soldItemsPeriod === 'today'
+          ? 'Summary of dishes sold today'
+          : soldItemsPeriod === 'date'
+          ? (() => {
+              const parts = (soldItemsDate || '').split('-');
+              const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date();
+              return `Sales on ${d.toLocaleDateString('default', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+            })()
+          : `All sales this month (${new Date().toLocaleString('default', { month: 'long', year: 'numeric' })})`}
       </span>
     </div>
 
-    {/* Toggle: Today vs Overall */}
-    <div style={{
-      display: 'inline-flex',
-      background: 'var(--bg-secondary)',
-      border: '1px solid var(--color-border)',
-      borderRadius: '20px',
-      padding: '3px'
-    }}>
-      <button
-        type="button"
-        onClick={() => setSoldItemsPeriod('today')}
-        style={{
-          border: 'none',
-          padding: '6px 16px',
-          borderRadius: '16px',
-          fontSize: '12px',
-          fontWeight: 700,
-          cursor: 'pointer',
-          background: soldItemsPeriod === 'today' ? 'var(--color-primary)' : 'transparent',
-          color: soldItemsPeriod === 'today' ? '#ffffff' : 'var(--color-text-secondary)',
-          transition: 'all 0.2s ease'
-        }}
-      >
-        Today
-      </button>
-      <button
-        type="button"
-        onClick={() => setSoldItemsPeriod('overall')}
-        style={{
-          border: 'none',
-          padding: '6px 16px',
-          borderRadius: '16px',
-          fontSize: '12px',
-          fontWeight: 700,
-          cursor: 'pointer',
-          background: soldItemsPeriod === 'overall' ? 'var(--color-primary)' : 'transparent',
-          color: soldItemsPeriod === 'overall' ? '#ffffff' : 'var(--color-text-secondary)',
-          transition: 'all 0.2s ease'
-        }}
-      >
-        Overall
-      </button>
+    {/* Toggle: Today | Pick Date | Overall (this month) */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      <div style={{
+        display: 'inline-flex',
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '20px',
+        padding: '3px'
+      }}>
+        <button
+          type="button"
+          onClick={() => setSoldItemsPeriod('today')}
+          style={{
+            border: 'none',
+            padding: '6px 16px',
+            borderRadius: '16px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: soldItemsPeriod === 'today' ? 'var(--color-primary)' : 'transparent',
+            color: soldItemsPeriod === 'today' ? '#ffffff' : 'var(--color-text-secondary)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          Today
+        </button>
+        <button
+          type="button"
+          onClick={() => { setSoldItemsPeriod('date'); setSoldItemsDate(getTodayStr()); }}
+          style={{
+            border: 'none',
+            padding: '6px 16px',
+            borderRadius: '16px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: soldItemsPeriod === 'date' ? 'var(--color-primary)' : 'transparent',
+            color: soldItemsPeriod === 'date' ? '#ffffff' : 'var(--color-text-secondary)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          📅 Pick Date
+        </button>
+        <button
+          type="button"
+          onClick={() => setSoldItemsPeriod('overall')}
+          style={{
+            border: 'none',
+            padding: '6px 16px',
+            borderRadius: '16px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: soldItemsPeriod === 'overall' ? 'var(--color-primary)' : 'transparent',
+            color: soldItemsPeriod === 'overall' ? '#ffffff' : 'var(--color-text-secondary)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          This Month
+        </button>
+      </div>
+
+      {/* Date Picker — only within current month, shown when 'date' is active */}
+      {soldItemsPeriod === 'date' && (
+        <input
+          type="date"
+          value={soldItemsDate}
+          min={soldItemsMonthMin}
+          max={soldItemsMonthMax}
+          onChange={(e) => setSoldItemsDate(e.target.value)}
+          style={{
+            padding: '5px 10px',
+            borderRadius: '10px',
+            border: '1.5px solid var(--color-primary)',
+            background: 'var(--bg-secondary)',
+            color: 'var(--color-text-primary)',
+            fontSize: '12px',
+            fontWeight: 600,
+            fontFamily: 'inherit',
+            outline: 'none',
+            cursor: 'pointer'
+          }}
+        />
+      )}
     </div>
   </div>
 
@@ -4906,13 +4974,30 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       <thead>
         <tr style={{ borderBottom: '2px solid var(--color-border)', color: 'var(--color-text-secondary)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           <th style={{ padding: '10px 12px', fontWeight: 700 }}>Item Name</th>
-          <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'center' }}>Qty {soldItemsPeriod === 'today' ? '(Today)' : '(Overall)'}</th>
+          <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'center' }}>Qty {soldItemsPeriod === 'today' ? '(Today)' : soldItemsPeriod === 'date' ? '(Date)' : '(Month)'}</th>
           <th style={{ padding: '10px 12px', fontWeight: 700 }}>Date & Time</th>
           <th style={{ padding: '10px 12px', fontWeight: 700, textAlign: 'right' }}>Total Amount</th>
         </tr>
       </thead>
       <tbody>
-        {allSoldItemsList.length > 0 ? (
+        {soldItemsLoading ? (
+          <tr>
+            <td colSpan="4" style={{ padding: '36px 12px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '18px',
+                  height: '18px',
+                  border: '2.5px solid var(--color-primary)',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite'
+                }} />
+                <span style={{ fontWeight: 600 }}>Loading sales data...</span>
+              </div>
+            </td>
+          </tr>
+        ) : allSoldItemsList.length > 0 ? (
           allSoldItemsList.map((item, idx) => (
             <tr
               key={item.name + idx}
@@ -4948,18 +5033,55 @@ const exportStaffToCSV = exportStaffPayrollExcel;
                 })()}
               </td>
               <td style={{ padding: '12px', textAlign: 'right', fontWeight: 800, color: 'var(--color-primary)' }}>
-                ₹{item.totalAmount.toFixed(2)}
+                ₹{Number(item.totalAmount || 0).toFixed(2)}
               </td>
             </tr>
           ))
         ) : (
           <tr>
             <td colSpan="4" style={{ padding: '30px 12px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              {soldItemsSearch ? `No sold items match "${soldItemsSearch}".` : `No items sold ${soldItemsPeriod === 'today' ? 'today yet' : 'so far'}.`}
+              {soldItemsSearch
+                ? `No sold items match "${soldItemsSearch}".`
+                : soldItemsPeriod === 'date'
+                ? (() => {
+                    const parts = (soldItemsDate || '').split('-');
+                    const d = parts.length === 3 ? new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])) : new Date();
+                    return `No items sold on ${d.toLocaleDateString('default', { day: 'numeric', month: 'long' })}.`;
+                  })()
+                : soldItemsPeriod === 'today'
+                ? 'No items sold today yet.'
+                : `No items sold this month yet.`}
             </td>
           </tr>
         )}
       </tbody>
+      {!soldItemsLoading && allSoldItemsList.length > 0 && (
+        <tfoot>
+          <tr style={{ background: 'var(--bg-secondary)', fontWeight: 800, borderTop: '2px solid var(--color-border)' }}>
+            <td style={{ padding: '12px', color: 'var(--color-text-primary)' }}>
+              Total ({allSoldItemsList.length} unique dishes)
+            </td>
+            <td style={{ padding: '12px', textAlign: 'center' }}>
+              <span style={{
+                background: 'rgba(46, 204, 113, 0.15)',
+                color: '#27ae60',
+                padding: '4px 12px',
+                borderRadius: '12px',
+                fontWeight: 800,
+                fontSize: '12.5px'
+              }}>
+                {allSoldItemsList.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0)} pcs
+              </span>
+            </td>
+            <td style={{ padding: '12px', color: 'var(--color-text-secondary)', fontSize: '12px' }}>
+              {soldItemsPeriod === 'today' ? 'Today total' : soldItemsPeriod === 'date' ? 'Day total' : 'Month total'}
+            </td>
+            <td style={{ padding: '12px', textAlign: 'right', color: 'var(--color-primary)', fontSize: '14px', fontWeight: 900 }}>
+              ₹{allSoldItemsList.reduce((sum, i) => sum + (Number(i.totalAmount) || 0), 0).toFixed(2)}
+            </td>
+          </tr>
+        </tfoot>
+      )}
     </table>
   </div>
 </div>

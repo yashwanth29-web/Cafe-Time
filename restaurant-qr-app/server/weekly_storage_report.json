@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-10-01T12:37:49.411Z",
-  "totalGridFsFiles": 201,
-  "totalGridFsSizeMB": 57.132,
+  "timestamp": "2026-10-10T07:14:11.445Z",
+  "totalGridFsFiles": 317,
+  "totalGridFsSizeMB": 63.426,
   "orphanedFiles": [
     {
       "fileId": "6a335227d30565d9c9c73ea4",
@@ -322,6 +322,12 @@
       "length": 330448
     },
     {
+      "fileId": "6aaa63c0839574f12a891c76",
+      "filename": "dish-1789551552659-557511098.jpg",
+      "uploadDate": "2026-09-16T09:39:14.060Z",
+      "length": 195041
+    },
+    {
       "fileId": "6aaa6c3216c7f8cdbcf9ba9d",
       "filename": "dish-1789553714240-672486162.png",
       "uploadDate": "2026-09-16T10:15:16.634Z",
@@ -332,6 +338,18 @@
       "filename": "dish-1789556887039-961603686.jpg",
       "uploadDate": "2026-09-16T11:08:08.442Z",
       "length": 147075
+    },
+    {
+      "fileId": "6aaa78a6839574f12a891cbf",
+      "filename": "dish-1789556902082-921426137.jpg",
+      "uploadDate": "2026-09-16T11:08:23.483Z",
+      "length": 188042
+    },
+    {
+      "fileId": "6aaa78e4839574f12a891cc7",
+      "filename": "dish-1789556964668-754442082.jpg",
+      "uploadDate": "2026-09-16T11:09:26.090Z",
+      "length": 127543
     },
     {
       "fileId": "6aaa7a36839574f12a891ccb",
@@ -410,9 +428,105 @@
       "filename": "attendance-cam-1790755419443-810480064.jpg",
       "uploadDate": "2026-09-30T08:03:39.708Z",
       "length": 5699
+    },
+    {
+      "fileId": "6ac0e9daa7e78947659cf648",
+      "filename": "attendance-cam-1791027673817-669732315.jpg",
+      "uploadDate": "2026-10-03T11:41:14.756Z",
+      "length": 18939
+    },
+    {
+      "fileId": "6ac22a962a304574d19c68fc",
+      "filename": "attendance-cam-1791109781816-911397900.jpg",
+      "uploadDate": "2026-10-04T10:29:42.755Z",
+      "length": 16039
+    },
+    {
+      "fileId": "6ac22f152a304574d19c6b34",
+      "filename": "attendance-cam-1791110933571-32867453.jpg",
+      "uploadDate": "2026-10-04T10:48:54.293Z",
+      "length": 12665
+    },
+    {
+      "fileId": "6ac37ee92a304574d19ca50d",
+      "filename": "attendance-cam-1791196905544-266443804.jpg",
+      "uploadDate": "2026-10-05T10:41:46.485Z",
+      "length": 16033
+    },
+    {
+      "fileId": "6ac380762a304574d19ca5a5",
+      "filename": "attendance-cam-1791197301883-808513183.jpg",
+      "uploadDate": "2026-10-05T10:48:22.814Z",
+      "length": 14723
+    },
+    {
+      "fileId": "6ac4d3ce2a304574d19ce3be",
+      "filename": "attendance-cam-1791284174364-70687692.jpg",
+      "uploadDate": "2026-10-06T10:56:15.075Z",
+      "length": 11571
+    },
+    {
+      "fileId": "6ac61f012a304574d19d18a6",
+      "filename": "attendance-cam-1791368961523-342544821.jpg",
+      "uploadDate": "2026-10-07T10:29:22.465Z",
+      "length": 14626
+    },
+    {
+      "fileId": "6ac73d1c0561327feaef9445",
+      "filename": "dish-1791442204518-453065109.jpg",
+      "uploadDate": "2026-10-08T06:50:05.486Z",
+      "length": 28389
+    },
+    {
+      "fileId": "6ac774262a304574d19d5394",
+      "filename": "attendance-cam-1791456294202-162200936.jpg",
+      "uploadDate": "2026-10-08T10:44:55.145Z",
+      "length": 16444
+    },
+    {
+      "fileId": "6ac78dca2a304574d19d5bdd",
+      "filename": "attendance-cam-1791462858288-960675305.jpg",
+      "uploadDate": "2026-10-08T12:34:19.243Z",
+      "length": 12522
+    },
+    {
+      "fileId": "6ac7afa10561327feaefb481",
+      "filename": "dish-1791471520831-677784062.jpg",
+      "uploadDate": "2026-10-08T14:58:41.780Z",
+      "length": 22595
+    },
+    {
+      "fileId": "6ac7b0dd0561327feaefb506",
+      "filename": "dish-1791471837618-828535089.jpg",
+      "uploadDate": "2026-10-08T15:03:58.319Z",
+      "length": 5132
+    },
+    {
+      "fileId": "6ac7b2110561327feaefb596",
+      "filename": "dish-1791472145112-962273606.webp",
+      "uploadDate": "2026-10-08T15:09:06.369Z",
+      "length": 100530
+    },
+    {
+      "fileId": "6ac7b28e0561327feaefb5cf",
+      "filename": "dish-1791472270292-919490620.jpg",
+      "uploadDate": "2026-10-08T15:11:11.262Z",
+      "length": 32170
+    },
+    {
+      "fileId": "6ac7b6890561327feaefb788",
+      "filename": "dish-1791473288827-388361523.jpg",
+      "uploadDate": "2026-10-08T15:28:10.039Z",
+      "length": 73354
+    },
+    {
+      "fileId": "6ac8c04b2a304574d19d94ad",
+      "filename": "attendance-cam-1791541323433-314839030.jpg",
+      "uploadDate": "2026-10-09T10:22:04.376Z",
+      "length": 16163
     }
   ],
-  "reclaimableSpaceMB": 7.765,
+  "reclaimableSpaceMB": 8.644,
   "chunkIntegrity": {
     "totalOrphanedChunks": 0,
     "orphanedChunkFileIds": []

@@ -705,6 +705,11 @@ export const getDashboardStats = async (params) => {
   return response.data;
 };
 
+export const getSoldItems = async (params) => {
+  const response = await API.get('/admin/sold-items', { params });
+  return response.data;
+};
+
 // Expense Management APIs
 export const getExpenseFinancialSummary = async (params) => {
   const response = await API.get('/expenses/financial-summary', { params });

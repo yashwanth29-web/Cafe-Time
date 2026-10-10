@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-10-01T12:37:49.103Z",
+  "timestamp": "2026-10-10T07:14:09.642Z",
   "expiredWorkReportAttachments": 0,
-  "expiredAttendanceImages": 4,
-  "lastCleanup": "2026-10-01T12:37:49.000Z",
+  "expiredAttendanceImages": 64,
+  "lastCleanup": "2026-10-10T07:14:08.065Z",
   "lastWeeklyAudit": "2026-09-17T16:21:49.414Z"
 }
