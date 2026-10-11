@@ -1446,6 +1446,10 @@ const StaffOrderWorkspace = () => {
   const canServe = true;
   const canCollect = true;
 
+  // Stock entry & adjustment buttons toggle:
+  // Hidden from staff workspace table UI. Change to true (or role-based check) to restore '+ Add Stock' & '- Reduce Stock' buttons anytime.
+  const showStockEntryButtons = false;
+
   // Table filter state for Live Queue
   const [selectedTableFilter, setSelectedTableFilter] = useState('all');
 
@@ -2959,7 +2963,7 @@ const StaffOrderWorkspace = () => {
                 📦 Ingredient Stock Levels
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: 'var(--color-text-secondary)' }}>
-                Staff access: add ingredients, update stock, log purchases & record kitchen wastage.
+                Staff access: view ingredients, monitor stock levels & update dish details.
               </p>
             </div>
             <button
@@ -3154,54 +3158,59 @@ const StaffOrderWorkspace = () => {
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap' }}>
-                            <button
-                              onClick={() => {
-                                setSelectedInventoryItem(inv);
-                                setPurchaseForm({ quantityAdded: '', costPrice: inv.costPrice || '', supplier: inv.supplier || '', notes: '' });
-                                setShowPurchaseModal(true);
-                              }}
-                              style={{
-                                background: 'rgba(39, 174, 96, 0.12)',
-                                color: '#27ae60',
-                                border: '1.5px solid rgba(39, 174, 96, 0.35)',
-                                padding: '6px 12px',
-                                borderRadius: '20px',
-                                fontSize: '12px',
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                transition: 'all 0.15s ease'
-                              }}
-                              title="Add incoming stock"
-                            >
-                              ＋ Add Stock
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedInventoryItem(inv);
-                                setWastageForm({ quantityWasted: '', type: 'Adjustment', reason: '' });
-                                setShowWastageModal(true);
-                              }}
-                              style={{
-                                background: 'rgba(231, 76, 60, 0.1)',
-                                color: '#e74c3c',
-                                border: '1.5px solid rgba(231, 76, 60, 0.35)',
-                                padding: '6px 12px',
-                                borderRadius: '20px',
-                                fontSize: '12px',
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                transition: 'all 0.15s ease'
-                              }}
-                              title="Reduce or adjust stock count"
-                            >
-                              － Reduce Stock
-                            </button>
+                            {/* Stock Entry (+ Add Stock) & Reduction (- Reduce Stock) UI - Controlled by showStockEntryButtons toggle */}
+                            {showStockEntryButtons && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setSelectedInventoryItem(inv);
+                                    setPurchaseForm({ quantityAdded: '', costPrice: inv.costPrice || '', supplier: inv.supplier || '', notes: '' });
+                                    setShowPurchaseModal(true);
+                                  }}
+                                  style={{
+                                    background: 'rgba(39, 174, 96, 0.12)',
+                                    color: '#27ae60',
+                                    border: '1.5px solid rgba(39, 174, 96, 0.35)',
+                                    padding: '6px 12px',
+                                    borderRadius: '20px',
+                                    fontSize: '12px',
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  title="Add incoming stock"
+                                >
+                                  ＋ Add Stock
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedInventoryItem(inv);
+                                    setWastageForm({ quantityWasted: '', type: 'Adjustment', reason: '' });
+                                    setShowWastageModal(true);
+                                  }}
+                                  style={{
+                                    background: 'rgba(231, 76, 60, 0.1)',
+                                    color: '#e74c3c',
+                                    border: '1.5px solid rgba(231, 76, 60, 0.35)',
+                                    padding: '6px 12px',
+                                    borderRadius: '20px',
+                                    fontSize: '12px',
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  title="Reduce or adjust stock count"
+                                >
+                                  － Reduce Stock
+                                </button>
+                              </>
+                            )}
                             <button
                               onClick={() => {
                                 const qty = inv.quantity !== undefined ? inv.quantity : (inv.stock || 0);
