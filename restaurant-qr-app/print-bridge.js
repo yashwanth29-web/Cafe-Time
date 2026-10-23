@@ -20,6 +20,7 @@ const CAFE_ID = process.env.CAFE_ID || 'CP007';
 // Target cloud endpoints to listen for real-time print events (both URLs supported simultaneously)
 const CLOUD_URLS = [
   process.env.CLOUD_URL,
+  'https://cafe-time-app-7x3wo.ondigitalocean.app',
   'https://cafe-time.onrender.com',
   'https://cafe-time-iqqb.onrender.com'
 ].filter(Boolean);
