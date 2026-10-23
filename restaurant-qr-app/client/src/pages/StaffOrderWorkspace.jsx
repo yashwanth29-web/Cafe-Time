@@ -779,12 +779,12 @@ const StaffOrderWorkspace = () => {
     }
   }, [tabParam, fetchInventory, fetchMenu, activeBranchId]);
 
-  // Fast 3-second fail-safe auto-refresh for Live Queue
+  // 30-second fail-safe auto-refresh for Live Queue (Socket.IO handles instant real-time events)
   useEffect(() => {
     if (tabParam !== 'orders') return;
     const liveQueueInterval = setInterval(() => {
       fetchWorkspaceOrders(true);
-    }, 3000);
+    }, 30000);
     return () => clearInterval(liveQueueInterval);
   }, [tabParam, fetchWorkspaceOrders]);
 

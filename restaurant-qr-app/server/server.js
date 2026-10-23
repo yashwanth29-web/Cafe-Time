@@ -240,6 +240,11 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/cash-register', cashRegisterRoutes);
 
 
+// Lightweight health check endpoint for external pingers / uptime monitors
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ success: true, message: 'Server is running perfectly' });
