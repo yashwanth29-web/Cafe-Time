@@ -2387,17 +2387,17 @@ const getDashboardStats = async (req, res) => {
       };
     });
 
-    // Top Selling: only items with sales > 0 today, top 10
+    // Top Selling: only items with sales > 0 today, top 5
     const formattedTopSelling = (allSalesItems || [])
       .filter(item => item.quantity > 0)
-      .slice(0, 10)
+      .slice(0, 5)
       .map(item => ({
         name: item._id,
         quantity: item.quantity,
         revenue: item.revenue
       }));
 
-    // Slow Selling: only dishes not sold even one time today (0 sales)
+    // Slow Selling: only dishes not sold even one time today (0 sales), top 5
     const activeMenuItems = (allMenuItems || []).filter(m => m.isHidden !== true);
     const slowSellingList = activeMenuItems
       .filter(m => !salesMap[m.name] || (salesMap[m.name]?.quantity || 0) === 0)
@@ -2408,7 +2408,7 @@ const getDashboardStats = async (req, res) => {
         category: m.category
       }));
 
-    const formattedSlowSelling = slowSellingList.slice(0, 10);
+    const formattedSlowSelling = slowSellingList.slice(0, 5);
     
     const inventoryValue = inventoryValueAgg.length > 0 ? inventoryValueAgg[0].totalValue : 0;
     
@@ -2466,10 +2466,15 @@ const getDashboardStats = async (req, res) => {
     // Compute Today's and Monthly Gross Profit using cached allMenuItems
     const menuCostMapById = {};
     const menuCostMapByName = {};
+    const menuCategoryMapByName = {};
     allMenuItems.forEach(m => {
       const cost = Number(m.makingCost) || 0;
       if (m._id) menuCostMapById[String(m._id)] = cost;
-      if (m.name) menuCostMapByName[m.name.toLowerCase().trim()] = cost;
+      if (m.name) {
+        const nKey = m.name.toLowerCase().trim();
+        menuCostMapByName[nKey] = cost;
+        if (m.category) menuCategoryMapByName[nKey] = m.category.trim();
+      }
     });
 
     const profitOrders = await Order.find({
@@ -2529,19 +2534,22 @@ const getDashboardStats = async (req, res) => {
         name: item._id,
         quantity: item.quantity,
         totalAmount: item.revenue,
-        lastSoldDate: item.lastSoldDate
+        lastSoldDate: item.lastSoldDate,
+        category: menuCategoryMapByName[String(item._id || '').toLowerCase().trim()] || 'Uncategorized'
       })),
       allSoldItemsMonth: (allSalesItemsOverall || []).map(item => ({
         name: item._id,
         quantity: item.quantity,
         totalAmount: item.revenue,
-        lastSoldDate: item.lastSoldDate
+        lastSoldDate: item.lastSoldDate,
+        category: menuCategoryMapByName[String(item._id || '').toLowerCase().trim()] || 'Uncategorized'
       })),
       allSoldItemsOverall: (allSalesItemsOverall || []).map(item => ({
         name: item._id,
         quantity: item.quantity,
         totalAmount: item.revenue,
-        lastSoldDate: item.lastSoldDate
+        lastSoldDate: item.lastSoldDate,
+        category: menuCategoryMapByName[String(item._id || '').toLowerCase().trim()] || 'Uncategorized'
       })),
       weeklySalesData,
       recentOrders: formattedRecentOrders,
@@ -2634,35 +2642,46 @@ const getSoldItems = async (req, res) => {
       }
     }
 
-    const itemsAgg = await Order.aggregate([
-      {
-        $match: {
-          ...orderMatchQuery,
-          status: { $nin: ['Cancelled', 'cancelled', 'Failed', 'Expired'] },
-          $or: [
-            { paymentStatus: 'Paid' },
-            { status: { $in: ['Ready', 'Delivered', 'Completed'] } }
-          ],
-          ...dateMatch
-        }
-      },
-      { $unwind: '$items' },
-      {
-        $group: {
-          _id: '$items.name',
-          quantity: { $sum: '$items.quantity' },
-          totalAmount: { $sum: { $multiply: ['$items.quantity', '$items.price'] } },
-          lastSoldDate: { $max: '$createdAt' }
-        }
-      },
-      { $sort: { quantity: -1 } }
+    const [itemsAgg, allMenuItems] = await Promise.all([
+      Order.aggregate([
+        {
+          $match: {
+            ...orderMatchQuery,
+            status: { $nin: ['Cancelled', 'cancelled', 'Failed', 'Expired'] },
+            $or: [
+              { paymentStatus: 'Paid' },
+              { status: { $in: ['Ready', 'Delivered', 'Completed'] } }
+            ],
+            ...dateMatch
+          }
+        },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: '$items.name',
+            quantity: { $sum: '$items.quantity' },
+            totalAmount: { $sum: { $multiply: ['$items.quantity', '$items.price'] } },
+            lastSoldDate: { $max: '$createdAt' }
+          }
+        },
+        { $sort: { quantity: -1 } }
+      ]),
+      MenuItem.find({ cafeId }).select('name category').lean()
     ]);
+
+    const catMap = {};
+    (allMenuItems || []).forEach(m => {
+      if (m.name && m.category) {
+        catMap[m.name.toLowerCase().trim()] = m.category.trim();
+      }
+    });
 
     const formatted = itemsAgg.map(i => ({
       name: i._id || 'Unknown Item',
       quantity: i.quantity || 0,
       totalAmount: i.totalAmount || 0,
-      lastSoldDate: i.lastSoldDate
+      lastSoldDate: i.lastSoldDate,
+      category: catMap[String(i._id || '').toLowerCase().trim()] || 'Uncategorized'
     }));
 
     return res.status(200).json({

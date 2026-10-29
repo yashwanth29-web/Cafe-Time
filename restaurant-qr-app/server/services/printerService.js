@@ -117,6 +117,7 @@ function compileReceiptBuffer(orderData, type = 'POS') {
     const tableStr = `TABLE: ${orderData.tableNumber || 'N/A'}`.padEnd(24);
     const tokenStr = `TOKEN: #${orderData.kotId || String(orderData.invoiceId || orderData._id || '').slice(-4).toUpperCase()}`;
     commands.push(tableStr + tokenStr + LF);
+    commands.push(padLine(`DATE: ${dateStr}`, `TIME: ${timeStr}`, 48) + LF);
     
     if (orderData.customerName) {
       commands.push(`CUSTOMER: ${orderData.customerName}` + LF);

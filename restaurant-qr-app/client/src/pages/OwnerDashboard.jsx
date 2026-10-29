@@ -486,6 +486,7 @@ const OwnerDashboard = () =>{
   // Feature 1: All Sold Items Feed States
   const [soldItemsPeriod, setSoldItemsPeriod] = useState('today'); // 'today' | 'date' | 'overall'
   const [soldItemsSearch, setSoldItemsSearch] = useState('');
+  const [soldItemsCategoryFilter, setSoldItemsCategoryFilter] = useState('all');
   const [soldItemsData, setSoldItemsData] = useState([]);
   const [soldItemsLoading, setSoldItemsLoading] = useState(false);
 
@@ -3494,8 +3495,8 @@ const exportStaffToCSV = exportStaffPayrollExcel;
   const rankedItems = useMemo(() => {
     if (statsData && statsData.topSellingItems !== undefined) {
       return {
-        topSelling: statsData.topSellingItems || [],
-        slowSelling: (statsData.slowSellingItems || []).filter(item => (item.quantity || 0) === 0)
+        topSelling: (statsData.topSellingItems || []).slice(0, 5),
+        slowSelling: (statsData.slowSellingItems || []).filter(item => (item.quantity || 0) === 0).slice(0, 5)
       };
     }
     const itemCounts = {};
@@ -3515,7 +3516,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     });
 
     const soldList = Object.values(itemCounts).filter(i => i.quantity > 0).sort((a, b) => b.quantity - a.quantity);
-    const topSelling = soldList.slice(0, 10);
+    const topSelling = soldList.slice(0, 5);
 
     const allMenuMap = {};
     (menuItems || []).forEach(m => {
@@ -3535,7 +3536,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     // Strictly items that were not sold even one time (0 sales)
     const slowSelling = combinedList
       .filter(i => (i.quantity || 0) === 0)
-      .slice(0, 10);
+      .slice(0, 5);
 
     return { topSelling, slowSelling };
   }, [todayOrders, menuItems, statsData]);
@@ -3543,7 +3544,17 @@ const exportStaffToCSV = exportStaffPayrollExcel;
   const { topSelling, slowSelling } = rankedItems;
 
   // Feature 1: All Sold Items Feed (Today vs Specific Date vs Current Month Overall)
-  const allSoldItemsList = useMemo(() => {
+  const menuCategoryLookup = useMemo(() => {
+    const map = new Map();
+    (menuItems || []).forEach((m) => {
+      if (m.name && m.category) {
+        map.set(m.name.trim().toLowerCase(), m.category.trim());
+      }
+    });
+    return map;
+  }, [menuItems]);
+
+  const rawSoldItemsList = useMemo(() => {
     let list = Array.isArray(soldItemsData) ? [...soldItemsData] : [];
 
     // Fallback to statsData if soldItemsData hasn't loaded yet
@@ -3555,14 +3566,65 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       }
     }
 
-    if (soldItemsSearch && soldItemsSearch.trim()) {
-      const q = soldItemsSearch.toLowerCase().trim();
-      list = list.filter((i) => (i.name || '').toLowerCase().includes(q));
+    return list.map((item) => {
+      const cat = item.category || menuCategoryLookup.get((item.name || '').trim().toLowerCase()) || 'Other';
+      return {
+        ...item,
+        category: cat
+      };
+    });
+  }, [soldItemsData, soldItemsPeriod, statsData?.allSoldItemsToday, statsData?.allSoldItemsMonth, menuCategoryLookup]);
+
+  const soldItemsCategoriesSummary = useMemo(() => {
+    const catMap = {};
+    let totalQty = 0;
+    let totalAmount = 0;
+
+    rawSoldItemsList.forEach((item) => {
+      const cat = item.category || 'Other';
+      const q = Number(item.quantity) || 0;
+      const amt = Number(item.totalAmount) || 0;
+
+      if (!catMap[cat]) {
+        catMap[cat] = { name: cat, totalQty: 0, totalAmount: 0, itemsCount: 0 };
+      }
+      catMap[cat].totalQty += q;
+      catMap[cat].totalAmount += amt;
+      catMap[cat].itemsCount += 1;
+
+      totalQty += q;
+      totalAmount += amt;
+    });
+
+    // Sort categories: high-selling category first (by totalQty descending)
+    const sortedCategories = Object.values(catMap).sort((a, b) => b.totalQty - a.totalQty);
+
+    return {
+      catMap,
+      sortedCategories,
+      totalQty,
+      totalAmount
+    };
+  }, [rawSoldItemsList]);
+
+  const allSoldItemsList = useMemo(() => {
+    let list = [...rawSoldItemsList];
+
+    // Filter by category if selected
+    if (soldItemsCategoryFilter && soldItemsCategoryFilter !== 'all') {
+      list = list.filter((i) => (i.category || '').toLowerCase() === soldItemsCategoryFilter.toLowerCase());
     }
 
+    // Filter by search query (checks dish name and category)
+    if (soldItemsSearch && soldItemsSearch.trim()) {
+      const q = soldItemsSearch.toLowerCase().trim();
+      list = list.filter((i) => (i.name || '').toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q));
+    }
+
+    // Keep highest selling items first
     list.sort((a, b) => (Number(b.quantity) || 0) - (Number(a.quantity) || 0));
     return list;
-  }, [soldItemsData, soldItemsPeriod, statsData?.allSoldItemsToday, statsData?.allSoldItemsMonth, soldItemsSearch]);
+  }, [rawSoldItemsList, soldItemsCategoryFilter, soldItemsSearch]);
 
   // Feature 4: Orders Monitor Summary Calculations
   const monitorSummary = useMemo(() => {
@@ -4773,7 +4835,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 </div>
 <div className="ranked-list-container">
   {topSelling.length > 0 ? (
-    topSelling.map((item, index) => (
+    topSelling.slice(0, 5).map((item, index) => (
       <div key={item.name} className="ranked-list-item">
         <div className="ranked-list-left">
           <div className={`ranked-badge ranked-badge-${Math.min(index + 1, 3)}`}>{index + 1}</div>
@@ -4797,7 +4859,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 </div>
 <div className="ranked-list-container">
   {slowSelling.length > 0 ? (
-    slowSelling.map((item, index) => (
+    slowSelling.slice(0, 5).map((item, index) => (
       <div key={item.name} className="ranked-list-item">
         <div className="ranked-list-left">
           <div className={`ranked-badge ${index === 0 ? 'ranked-badge-3' : 'ranked-badge-default'}`}>{index + 1}</div>
@@ -4935,12 +4997,112 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     </div>
   </div>
 
+  {/* Category Filter Pills (High-selling categories show first) */}
+  {soldItemsCategoriesSummary.sortedCategories.length > 0 && (
+    <div style={{ marginBottom: '16px' }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        overflowX: 'auto',
+        paddingBottom: '8px',
+        scrollbarWidth: 'thin'
+      }}>
+        <span style={{
+          fontSize: '12px',
+          fontWeight: 800,
+          color: 'var(--color-text-secondary)',
+          flexShrink: 0,
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          marginRight: '2px'
+        }}>
+          🏷️ Category:
+        </span>
+
+        {/* 'All' button */}
+        <button
+          type="button"
+          onClick={() => setSoldItemsCategoryFilter('all')}
+          style={{
+            flexShrink: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: soldItemsCategoryFilter === 'all' ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+            background: soldItemsCategoryFilter === 'all' ? 'var(--color-primary)' : 'var(--bg-secondary)',
+            color: soldItemsCategoryFilter === 'all' ? '#ffffff' : 'var(--color-text-primary)',
+            transition: 'all 0.15s ease',
+            boxShadow: soldItemsCategoryFilter === 'all' ? '0 2px 8px rgba(255,107,8,0.25)' : 'none'
+          }}
+        >
+          <span>All</span>
+          <span style={{
+            fontSize: '11px',
+            fontWeight: 800,
+            padding: '1px 6px',
+            borderRadius: '10px',
+            background: soldItemsCategoryFilter === 'all' ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
+            color: soldItemsCategoryFilter === 'all' ? '#ffffff' : 'var(--color-text-secondary)'
+          }}>
+            {soldItemsCategoriesSummary.totalQty}
+          </span>
+        </button>
+
+        {/* Sorted Categories: Highest-selling first */}
+        {soldItemsCategoriesSummary.sortedCategories.map((cat) => {
+          const isSelected = (soldItemsCategoryFilter || '').toLowerCase() === cat.name.toLowerCase();
+          return (
+            <button
+              key={cat.name}
+              type="button"
+              onClick={() => setSoldItemsCategoryFilter(isSelected ? 'all' : cat.name)}
+              style={{
+                flexShrink: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '20px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: isSelected ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                background: isSelected ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                color: isSelected ? '#ffffff' : 'var(--color-text-primary)',
+                transition: 'all 0.15s ease',
+                boxShadow: isSelected ? '0 2px 8px rgba(255,107,8,0.25)' : 'none'
+              }}
+            >
+              <span>{cat.name}</span>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 800,
+                padding: '1px 6px',
+                borderRadius: '10px',
+                background: isSelected ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.06)',
+                color: isSelected ? '#ffffff' : 'var(--color-text-secondary)'
+              }}>
+                {cat.totalQty}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  )}
+
   {/* Search Bar */}
   <div style={{ marginBottom: '16px' }}>
     <div style={{ position: 'relative' }}>
       <input
         type="text"
-        placeholder="🔍 Search sold dish name..."
+        placeholder={soldItemsCategoryFilter !== 'all' ? `🔍 Search dishes in ${soldItemsCategoryFilter}...` : "🔍 Search sold dish or category name..."}
         value={soldItemsSearch}
         onChange={(e) => setSoldItemsSearch(e.target.value)}
         style={{
@@ -4976,6 +5138,40 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       )}
     </div>
   </div>
+
+  {/* Active Category Filter Tag Banner (if filtered) */}
+  {soldItemsCategoryFilter !== 'all' && (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      background: 'rgba(255, 107, 8, 0.07)',
+      border: '1px solid rgba(255, 107, 8, 0.25)',
+      borderRadius: '8px',
+      padding: '8px 12px',
+      marginBottom: '14px',
+      fontSize: '12.5px'
+    }}>
+      <span style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>
+        Filtered by Category: <strong style={{ color: 'var(--color-primary)' }}>{soldItemsCategoryFilter}</strong> ({allSoldItemsList.length} items found)
+      </span>
+      <button
+        type="button"
+        onClick={() => setSoldItemsCategoryFilter('all')}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: 'var(--color-primary)',
+          fontWeight: 700,
+          cursor: 'pointer',
+          fontSize: '12px',
+          textDecoration: 'underline'
+        }}
+      >
+        Clear Filter
+      </button>
+    </div>
+  )}
 
   {/* Table / List */}
   <div style={{ overflowX: 'auto' }}>
@@ -5019,7 +5215,23 @@ const exportStaffToCSV = exportStaffPayrollExcel;
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
               <td style={{ padding: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                {item.name}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span>{item.name}</span>
+                  {item.category && item.category !== 'Uncategorized' && item.category !== 'Other' && (
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: 'var(--color-primary)',
+                      background: 'rgba(255, 107, 8, 0.08)',
+                      border: '1px solid rgba(255, 107, 8, 0.22)',
+                      padding: '1px 8px',
+                      borderRadius: '10px',
+                      letterSpacing: '0.2px'
+                    }}>
+                      {item.category}
+                    </span>
+                  )}
+                </div>
               </td>
               <td style={{ padding: '12px', textAlign: 'center' }}>
                 <span style={{
@@ -5050,7 +5262,9 @@ const exportStaffToCSV = exportStaffPayrollExcel;
           <tr>
             <td colSpan="4" style={{ padding: '30px 12px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '13px' }}>
               {soldItemsSearch
-                ? `No sold items match "${soldItemsSearch}".`
+                ? `No sold items match "${soldItemsSearch}"${soldItemsCategoryFilter !== 'all' ? ` in category "${soldItemsCategoryFilter}"` : ''}.`
+                : soldItemsCategoryFilter !== 'all'
+                ? `No items sold in category "${soldItemsCategoryFilter}".`
                 : soldItemsPeriod === 'date'
                 ? (() => {
                     const parts = (soldItemsDate || '').split('-');
