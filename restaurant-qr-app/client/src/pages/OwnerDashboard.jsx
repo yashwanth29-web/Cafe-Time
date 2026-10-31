@@ -3580,6 +3580,27 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     let totalQty = 0;
     let totalAmount = 0;
 
+    // Pre-populate with all known categories from menu / database so category filters are always accessible
+    const knownCategories = new Set();
+    if (Array.isArray(categories) && categories.length > 0) {
+      categories.forEach((c) => {
+        const name = typeof c === 'string' ? c.trim() : (c?.name || '').trim();
+        if (name) knownCategories.add(name);
+      });
+    }
+    (menuItems || []).forEach((item) => {
+      if (item.category && item.category.trim()) {
+        knownCategories.add(item.category.trim());
+      }
+    });
+    if (knownCategories.size === 0) {
+      (PRESET_CATEGORIES || []).forEach((c) => knownCategories.add(c));
+    }
+
+    knownCategories.forEach((cat) => {
+      catMap[cat] = { name: cat, totalQty: 0, totalAmount: 0, itemsCount: 0 };
+    });
+
     rawSoldItemsList.forEach((item) => {
       const cat = item.category || 'Other';
       const q = Number(item.quantity) || 0;
@@ -3596,8 +3617,13 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       totalAmount += amt;
     });
 
-    // Sort categories: high-selling category first (by totalQty descending)
-    const sortedCategories = Object.values(catMap).sort((a, b) => b.totalQty - a.totalQty);
+    // Sort categories: high-selling category first, then 0-sales categories alphabetically
+    const sortedCategories = Object.values(catMap).sort((a, b) => {
+      if (b.totalQty !== a.totalQty) {
+        return b.totalQty - a.totalQty;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
     return {
       catMap,
@@ -3605,7 +3631,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       totalQty,
       totalAmount
     };
-  }, [rawSoldItemsList]);
+  }, [rawSoldItemsList, categories, menuItems]);
 
   const allSoldItemsList = useMemo(() => {
     let list = [...rawSoldItemsList];
@@ -4997,7 +5023,49 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     </div>
   </div>
 
-  {/* Category Filter Pills (High-selling categories show first) */}
+  {/* Search Bar */}
+  <div style={{ marginBottom: '14px' }}>
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        placeholder={soldItemsCategoryFilter !== 'all' ? `🔍 Search dishes in ${soldItemsCategoryFilter}...` : "🔍 Search sold dish or category name..."}
+        value={soldItemsSearch}
+        onChange={(e) => setSoldItemsSearch(e.target.value)}
+        style={{
+          width: '100%',
+          padding: '10px 36px 10px 14px',
+          borderRadius: '10px',
+          border: '1px solid var(--color-border)',
+          background: 'var(--bg-secondary)',
+          color: 'var(--color-text-primary)',
+          fontSize: '13px',
+          outline: 'none',
+          boxSizing: 'border-box'
+        }}
+      />
+      {soldItemsSearch && (
+        <button
+          type="button"
+          onClick={() => setSoldItemsSearch('')}
+          style={{
+            position: 'absolute',
+            right: '12px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--color-text-secondary)',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  </div>
+
+  {/* Category Filter Pills (Down to search bar) */}
   {soldItemsCategoriesSummary.sortedCategories.length > 0 && (
     <div style={{ marginBottom: '16px' }}>
       <div style={{
@@ -5096,48 +5164,6 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       </div>
     </div>
   )}
-
-  {/* Search Bar */}
-  <div style={{ marginBottom: '16px' }}>
-    <div style={{ position: 'relative' }}>
-      <input
-        type="text"
-        placeholder={soldItemsCategoryFilter !== 'all' ? `🔍 Search dishes in ${soldItemsCategoryFilter}...` : "🔍 Search sold dish or category name..."}
-        value={soldItemsSearch}
-        onChange={(e) => setSoldItemsSearch(e.target.value)}
-        style={{
-          width: '100%',
-          padding: '10px 36px 10px 14px',
-          borderRadius: '10px',
-          border: '1px solid var(--color-border)',
-          background: 'var(--bg-secondary)',
-          color: 'var(--color-text-primary)',
-          fontSize: '13px',
-          outline: 'none',
-          boxSizing: 'border-box'
-        }}
-      />
-      {soldItemsSearch && (
-        <button
-          type="button"
-          onClick={() => setSoldItemsSearch('')}
-          style={{
-            position: 'absolute',
-            right: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--color-text-secondary)',
-            cursor: 'pointer',
-            fontSize: '14px'
-          }}
-        >
-          ✕
-        </button>
-      )}
-    </div>
-  </div>
 
   {/* Active Category Filter Tag Banner (if filtered) */}
   {soldItemsCategoryFilter !== 'all' && (
