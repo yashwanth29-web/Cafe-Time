@@ -126,9 +126,10 @@ function compileReceiptBuffer(orderData, type = 'POS') {
     : 'BRANCH: CP007-B1';
   const addressText = orderData.branchAddress ? orderData.branchAddress.toUpperCase() : 'MANGALAGIRI';
   const gstinText = orderData.cafeGstNumber ? `GSTIN: ${orderData.cafeGstNumber}` : '';
-  const dateObj = orderData.createdAt ? new Date(orderData.createdAt) : new Date();
-  const dateStr = dateObj.toLocaleDateString('en-GB'); // DD/MM/YYYY
-  const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const rawDate = orderData.createdAt || orderData.orderTime || orderData.updatedAt;
+  const dateObj = rawDate ? new Date(rawDate) : new Date();
+  const dateStr = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const timeStr = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const totalAmount = parseFloat(orderData.grandTotal !== undefined ? orderData.grandTotal : (orderData.totalAmount || 0));
   const rawSubtotal = totalAmount / 1.05; // 5% inclusive GST base
@@ -151,10 +152,11 @@ function compileReceiptBuffer(orderData, type = 'POS') {
     // KOT Meta (Table & Token prominently)
     commands.push(CMD_ALIGN_LEFT);
     commands.push(CMD_BOLD_ON);
-    const tableStr = `TABLE: ${orderData.tableNumber || 'N/A'}`.padEnd(24);
+    const tableStr = `TABLE: ${orderData.tableNumber || 'N/A'}`.padEnd(20);
     const tokenStr = `TOKEN: #${orderData.kotId || String(orderData.invoiceId || orderData._id || '').slice(-4).toUpperCase()}`;
     commands.push(tableStr + tokenStr + LF);
-    commands.push(padLine(`DATE: ${dateStr}`, `TIME: ${timeStr}`, 48) + LF);
+    commands.push(`TIME : ${timeStr}` + LF);
+    commands.push(`DATE : ${dateStr}` + LF);
     
     if (orderData.customerName) {
       commands.push(`CUSTOMER: ${orderData.customerName}` + LF);

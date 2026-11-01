@@ -194,14 +194,16 @@ const formatESCPOSTicket = (order, type = 'POS', cafe = null, branch = null) => 
 
   bytes.push(...ESC_ALIGN_LEFT);
   const orderNum = order.orderNumber || (order._id ? order._id.slice(-6).toUpperCase() : 'N/A');
-  const orderDate = new Date(order.createdAt || Date.now());
+  const rawDate = order.createdAt || order.orderTime || order.updatedAt;
+  const orderDate = rawDate ? new Date(rawDate) : new Date();
   const dateStr = orderDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const timeStr = orderDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   write(`Order #: ${orderNum}\n`);
   write(`Table #: ${order.tableNumber || order.table || 'Counter'}\n`);
   if (type === 'KOT') {
     bytes.push(...ESC_BOLD_ON);
-    write(`TIME: ${timeStr}  |  DATE: ${dateStr}\n`);
+    write(`TIME: ${timeStr}\n`);
+    write(`DATE: ${dateStr}\n`);
     bytes.push(...ESC_BOLD_OFF);
   } else {
     write(`Date: ${dateStr}   Time: ${timeStr}\n`);

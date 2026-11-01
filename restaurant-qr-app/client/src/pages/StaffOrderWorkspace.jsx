@@ -1964,7 +1964,7 @@ const StaffOrderWorkspace = () => {
                           )}
                         </div>
                         <span style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-                          #{String(order?._id || order?.id || '').slice(-6).toUpperCase() || 'N/A'} · placed {ageMinutes}m ago
+                          #{String(order?._id || order?.id || '').slice(-6).toUpperCase() || 'N/A'} · {order.createdAt ? new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''} ({ageMinutes}m ago)
                         </span>
                       </div>
                       <span style={{
