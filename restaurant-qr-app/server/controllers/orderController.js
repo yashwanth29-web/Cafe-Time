@@ -189,9 +189,6 @@ const appendLegacyFallback = async (order, branchMap = null) => {
 // @route   POST /api/orders
 // @access  Public
 const createOrder = async (req, res, next) => {
-  let session = null;
-  let useTransaction = false;
-
   try {
     console.log(`[ORDER CONTROLLER] Body entering createOrder controller:`, req.body);
     const { 
@@ -391,16 +388,6 @@ const createOrder = async (req, res, next) => {
     const newOrderId = new mongoose.Types.ObjectId();
     const uniqueId = String(newOrderId).slice(-8).toUpperCase();
 
-    // 9. Transaction session instantiation
-    try {
-      session = await mongoose.startSession();
-      session.startTransaction();
-      useTransaction = true;
-    } catch (sessionErr) {
-      session = null;
-      useTransaction = false;
-    }
-
     // Normalize source and orderSource to keep them perfectly synchronized
     let normalizedSource = 'QR';
     let normalizedOrderSource = 'QR';
@@ -467,13 +454,7 @@ const createOrder = async (req, res, next) => {
       staffId: staffId || null
     });
 
-    const savedOrder = await newOrder.save(useTransaction ? { session } : undefined);
-
-    // If session transaction is active, commit the transaction!
-    if (useTransaction && session) {
-      await session.commitTransaction();
-      session.endSession();
-    }
+    const savedOrder = await newOrder.save();
 
     // 10. Auto update menu availability from inventory (run asynchronously in background)
     const activeBId = resolvedBranch ? resolvedBranch.branchId : 'default';
@@ -487,10 +468,6 @@ const createOrder = async (req, res, next) => {
 
     return res.status(201).json({ success: true, data: formattedOrder });
   } catch (error) {
-    if (useTransaction && session) {
-      await session.abortTransaction();
-      session.endSession();
-    }
     error.controllerName = 'orderController';
     error.serviceName = 'createOrder';
     next(error);
