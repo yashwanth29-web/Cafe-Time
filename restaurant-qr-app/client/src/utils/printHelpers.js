@@ -177,21 +177,28 @@ const formatESCPOSTicket = (order, type = 'POS', cafe = null, branch = null) => 
   write(`${cafeName}\n`);
   bytes.push(...ESC_BOLD_OFF);
 
-  const branchAddress = order.branchAddress || branch?.address || cafe?.address || 'mangalagiri, Andhra Pradesh';
-  write(`${branchAddress}\n`);
-  if (order.cafeSupportNumber || cafe?.phone) {
-    write(`Ph: ${order.cafeSupportNumber || cafe?.phone}\n`);
-  }
-  if (order.cafeGstNumber || cafe?.gstNumber) {
-    write(`GSTIN: ${order.cafeGstNumber || cafe?.gstNumber}\n`);
+  const gstinNum = order.cafeGstNumber || cafe?.gstNumber || '37AAYFD2135K1ZZ';
+  write(`GSTIN: ${gstinNum}\n`);
+
+  if (type === 'KOT') {
+    write('--------------------------------\n');
+    bytes.push(...ESC_BOLD_ON);
+    write('*** KITCHEN ORDER TICKET (KOT) ***\n');
+    bytes.push(...ESC_BOLD_OFF);
+  } else {
+    const branchAddress = order.branchAddress || branch?.address || cafe?.address || 'mangalagiri, Andhra Pradesh';
+    write(`${branchAddress}\n`);
+    if (order.cafeSupportNumber || cafe?.phone) {
+      write(`Ph: ${order.cafeSupportNumber || cafe?.phone}\n`);
+    }
+    write('--------------------------------\n');
+    bytes.push(...ESC_BOLD_ON);
+    write('*** TAX INVOICE / RECEIPT ***\n');
+    bytes.push(...ESC_BOLD_OFF);
   }
   write('--------------------------------\n');
 
   // 2. Title & Metadata
-  bytes.push(...ESC_BOLD_ON);
-  write(type === 'KOT' ? '*** KITCHEN ORDER TICKET (KOT) ***\n' : '*** TAX INVOICE / RECEIPT ***\n');
-  bytes.push(...ESC_BOLD_OFF);
-
   bytes.push(...ESC_ALIGN_LEFT);
   const orderNum = order.orderNumber || (order._id ? order._id.slice(-6).toUpperCase() : 'N/A');
   const rawDate = order.createdAt || order.orderTime || order.updatedAt;
@@ -287,7 +294,7 @@ export const sendDirectToPrinterBridge = async (order, type = 'POS', cafe = null
       branchName: order.branchName || branch?.branchName || 'CP007-B1',
       branchAddress: order.branchAddress || branch?.address || cafe?.address || 'mangalagiri, Andhra Pradesh',
       cafeSupportNumber: order.cafeSupportNumber || cafe?.phone || cafe?.contact || '',
-      cafeGstNumber: order.cafeGstNumber || cafe?.gstNumber || ''
+      cafeGstNumber: order.cafeGstNumber || cafe?.gstNumber || '37AAYFD2135K1ZZ'
     }
   };
 

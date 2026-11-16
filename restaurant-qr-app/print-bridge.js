@@ -125,7 +125,7 @@ function compileReceiptBuffer(orderData, type = 'POS') {
     ? `BRANCH: ${orderData.branchName.toUpperCase()}` 
     : 'BRANCH: CP007-B1';
   const addressText = orderData.branchAddress ? orderData.branchAddress.toUpperCase() : 'MANGALAGIRI';
-  const gstinText = orderData.cafeGstNumber ? `GSTIN: ${orderData.cafeGstNumber}` : '';
+  const gstinText = `GSTIN: ${orderData.cafeGstNumber || '37AAYFD2135K1ZZ'}`;
   const rawDate = orderData.createdAt || orderData.orderTime || orderData.updatedAt;
   const dateObj = rawDate ? new Date(rawDate) : new Date();
   const dateStr = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -144,8 +144,11 @@ function compileReceiptBuffer(orderData, type = 'POS') {
     commands.push(CMD_BOLD_ON);
     commands.push(`*** ${cafeTitle} ***` + LF);
     commands.push(CMD_FONT_NORMAL);
+    commands.push(CMD_BOLD_OFF);
+    commands.push(gstinText + LF);
+    commands.push('-'.repeat(48) + LF);
     commands.push(CMD_BOLD_ON);
-    commands.push('KOT' + LF);
+    commands.push('*** KITCHEN ORDER TICKET (KOT) ***' + LF);
     commands.push(CMD_BOLD_OFF);
     commands.push('-'.repeat(48) + LF);
 
@@ -222,9 +225,10 @@ function compileReceiptBuffer(orderData, type = 'POS') {
     } else {
       commands.push(branchText + LF);
     }
-    if (gstinText) {
-      commands.push(gstinText + LF);
+    if (orderData.cafeSupportNumber) {
+      commands.push(`Ph: ${orderData.cafeSupportNumber}` + LF);
     }
+    commands.push(gstinText + LF);
     commands.push('-'.repeat(48) + LF);
     commands.push(CMD_BOLD_ON);
     commands.push('*** TAX INVOICE ***' + LF);

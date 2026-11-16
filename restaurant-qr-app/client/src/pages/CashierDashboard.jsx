@@ -354,14 +354,12 @@ const CashierDashboard = () =>{
           <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', letterSpacing: '1px' }}>
             {((cafeInfo?.name || selectedOrder.cafeName || 'DR. CAFE CHAI')).toUpperCase()}
           </h2>
-          <p style={{ margin: '4px 0 2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>
+          <p style={{ margin: '3px 0', fontSize: '0.85rem', fontWeight: 'bold', color: '#6F4E37', letterSpacing: '0.5px' }}>
+            GSTIN: {cafeInfo?.gstNumber || selectedOrder.cafeGstNumber || '37AAYFD2135K1ZZ'}
+          </p>
+          <p style={{ margin: '3px 0 2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>
             BRANCH: {(currentBranch?.branchName || selectedOrder.branchName || 'CP007-B1').toUpperCase()}, {(currentBranch?.address || selectedOrder.branchAddress || cafeInfo?.address || 'MANGALAGIRI').toUpperCase()}
           </p>
-          {(cafeInfo?.gstNumber || selectedOrder.cafeGstNumber) && (
-            <p style={{ margin: '2px 0', fontSize: '0.8rem', fontWeight: 'bold' }}>
-              GSTIN: {cafeInfo?.gstNumber || selectedOrder.cafeGstNumber}
-            </p>
-          )}
         </div>
 
         {/* Invoice Title */}
