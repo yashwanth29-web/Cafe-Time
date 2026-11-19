@@ -1,5 +1,6 @@
 const http = require('http');
 const net = require('net');
+const os = require('os');
 
 let ioClient;
 try {
@@ -12,17 +13,15 @@ try {
   }
 }
 
-const PRINTER_IP = process.env.PRINTER_IP || '192.168.0.101';
+let currentPrinterIp = process.env.PRINTER_IP || '192.168.0.101';
 const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
 const BRIDGE_PORT = parseInt(process.env.BRIDGE_PORT || '8090', 10);
 const CAFE_ID = process.env.CAFE_ID || 'CP007';
 
-// Target cloud endpoints to listen for real-time print events (both URLs supported simultaneously)
+// Target cloud endpoints to listen for real-time print events (DigitalOcean primary)
 const CLOUD_URLS = [
   process.env.CLOUD_URL,
-  'https://cafe-time-app-7x3wo.ondigitalocean.app',
-  'https://cafe-time.onrender.com',
-  'https://cafe-time-iqqb.onrender.com'
+  'https://cafe-time-app-7x3wo.ondigitalocean.app'
 ].filter(Boolean);
 
 // Unique set of URLs
@@ -318,6 +317,97 @@ function sendToPrinter(ip, port, buffer) {
   });
 }
 
+function checkPrinterPort(ip, port = 9100, timeout = 400) {
+  return new Promise((resolve) => {
+    const s = new net.Socket();
+    s.setTimeout(timeout);
+    s.once('connect', () => {
+      s.destroy();
+      resolve(ip);
+    });
+    s.once('timeout', () => {
+      s.destroy();
+      resolve(null);
+    });
+    s.once('error', () => {
+      s.destroy();
+      resolve(null);
+    });
+    s.connect(port, ip);
+  });
+}
+
+function getLocalSubnets() {
+  const subnets = new Set();
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const name in interfaces) {
+      for (const iface of interfaces[name]) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          const parts = iface.address.split('.');
+          if (parts.length === 4) {
+            subnets.add(`${parts[0]}.${parts[1]}.${parts[2]}`);
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  if (!subnets.has('192.168.0')) subnets.add('192.168.0');
+  if (!subnets.has('192.168.1')) subnets.add('192.168.1');
+  return Array.from(subnets);
+}
+
+let isScanning = false;
+async function autoDiscoverPrinter() {
+  if (isScanning) return null;
+  isScanning = true;
+  console.log(`[AUTOSCAN] 🔍 Scanning local Wi-Fi for thermal printer on port ${PRINTER_PORT}...`);
+
+  const subnets = getLocalSubnets();
+  for (const subnet of subnets) {
+    const ipList = [];
+    for (let i = 100; i <= 120; i++) ipList.push(`${subnet}.${i}`);
+    for (let i = 2; i <= 254; i++) {
+      if (i < 100 || i > 120) ipList.push(`${subnet}.${i}`);
+    }
+
+    const chunkSize = 25;
+    for (let i = 0; i < ipList.length; i += chunkSize) {
+      const chunk = ipList.slice(i, i + chunkSize);
+      const results = await Promise.all(chunk.map(ip => checkPrinterPort(ip, PRINTER_PORT, 500)));
+      const found = results.find(Boolean);
+      if (found) {
+        console.log(`[AUTOSCAN] 🎯 Found printer at ${found}!`);
+        currentPrinterIp = found;
+        isScanning = false;
+        return found;
+      }
+    }
+  }
+
+  console.warn(`[AUTOSCAN] ⚠️ No printer found on port ${PRINTER_PORT} on local network.`);
+  isScanning = false;
+  return null;
+}
+
+async function printOrderWithFallback(buffer, type, orderId) {
+  try {
+    await sendToPrinter(currentPrinterIp, PRINTER_PORT, buffer);
+    console.log(`[BRIDGE] ✅ Printed successfully to RETSOL RTP-81 (${currentPrinterIp}:${PRINTER_PORT})!`);
+    return currentPrinterIp;
+  } catch (err) {
+    console.warn(`[BRIDGE] ⚠️ Print failed to ${currentPrinterIp}:${PRINTER_PORT} (${err.message}). Attempting auto-discovery...`);
+    const foundIp = await autoDiscoverPrinter();
+    if (foundIp && foundIp !== currentPrinterIp) {
+      console.log(`[BRIDGE] 🔄 Retrying print with discovered printer IP: ${foundIp}...`);
+      await sendToPrinter(foundIp, PRINTER_PORT, buffer);
+      console.log(`[BRIDGE] ✅ Printed successfully to RETSOL RTP-81 (${foundIp}:${PRINTER_PORT})!`);
+      return foundIp;
+    }
+    throw err;
+  }
+}
+
 // 1. Setup Local HTTP Server
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -332,7 +422,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.url === '/health' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', printerIp: PRINTER_IP, printerPort: PRINTER_PORT }));
+    res.end(JSON.stringify({ status: 'ok', printerIp: currentPrinterIp, printerPort: PRINTER_PORT }));
     return;
   }
 
@@ -353,11 +443,10 @@ const server = http.createServer(async (req, res) => {
 
         console.log(`[BRIDGE] Received local HTTP print job (${type}) for order ${orderId || 'N/A'}`);
         const buffer = compileReceiptBuffer(orderData, type);
-        await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
-        console.log(`[BRIDGE] Successfully printed (${type}) on ${PRINTER_IP}:${PRINTER_PORT}`);
+        await printOrderWithFallback(buffer, type, orderId);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, message: 'Printed successfully' }));
+        res.end(JSON.stringify({ success: true, message: 'Printed successfully', printerIp: currentPrinterIp }));
       } catch (err) {
         console.error('[BRIDGE] Print error:', err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -374,9 +463,19 @@ const server = http.createServer(async (req, res) => {
 server.listen(BRIDGE_PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(`🖨️  CAFE PRINTER BRIDGE RUNNING on port ${BRIDGE_PORT}`);
-  console.log(`    Printer Destination: ${PRINTER_IP}:${PRINTER_PORT}`);
+  console.log(`    Printer Destination: ${currentPrinterIp}:${PRINTER_PORT} (Auto-Discovery Active)`);
   console.log(`    Cloud Targets:       ${UNIQUE_CLOUD_URLS.join(', ')}`);
   console.log(`=======================================================`);
+
+  // Proactively verify printer on startup
+  checkPrinterPort(currentPrinterIp, PRINTER_PORT, 600).then((alive) => {
+    if (alive) {
+      console.log(`[BRIDGE] 🟢 Printer verified online at ${currentPrinterIp}:${PRINTER_PORT}`);
+    } else {
+      console.log(`[BRIDGE] ⚠️ Printer not responding at ${currentPrinterIp}, running auto-discovery...`);
+      autoDiscoverPrinter();
+    }
+  });
 });
 
 // 2. Setup Real-time Cloud Socket.IO Tunnel for all connected endpoints
@@ -392,7 +491,7 @@ if (ioClient) {
       });
 
       socket.on('connect', () => {
-        console.log(`[CLOUD TUNNEL] ✅ Connected to Render Cloud (${cloudUrl})! Socket ID: ${socket.id}`);
+        console.log(`[CLOUD TUNNEL] ✅ Connected to Cloud (${cloudUrl})! Socket ID: ${socket.id}`);
         socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'default' });
         socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'CP007-B1' });
         socket.emit('join_room', { cafeId: CAFE_ID, branchId: 'all' });
@@ -409,17 +508,18 @@ if (ioClient) {
             return;
           }
 
-          console.log(`[CLOUD TUNNEL] ⚡ Received cloud print job (${type}) from ${cloudUrl} for order ${orderId || 'N/A'}`);
+          console.log(`[CLOUD TUNNEL] ⚡ Received cloud print job (${type}) for order ${orderId || 'N/A'}`);
           const buffer = compileReceiptBuffer(orderData, type);
-          await sendToPrinter(PRINTER_IP, PRINTER_PORT, buffer);
-          console.log(`[CLOUD TUNNEL] ✅ Printed successfully to RETSOL RTP-81 (${PRINTER_IP}:${PRINTER_PORT})!`);
+          await printOrderWithFallback(buffer, type, orderId);
         } catch (err) {
           console.error('[CLOUD TUNNEL] Print error:', err.message);
         }
       });
 
       socket.on('disconnect', (reason) => {
-        console.warn(`[CLOUD TUNNEL] Disconnected from ${cloudUrl}: ${reason}. Will auto-reconnect...`);
+        if (reason !== 'ping timeout' && reason !== 'transport close') {
+          console.warn(`[CLOUD TUNNEL] Disconnected from ${cloudUrl}: ${reason}. Will auto-reconnect...`);
+        }
       });
 
       socket.on('connect_error', (err) => {
