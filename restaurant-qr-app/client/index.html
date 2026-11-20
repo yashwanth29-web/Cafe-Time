@@ -28,6 +28,28 @@
     </style>
     <div class="initial-splash"><img src="/logo192.png" alt="Dr. Chai Cafe" /></div>
   </div>
+  <script>
+    // Failsafe watchdog: If React does not mount within 3.5s (stale PWA cache / dead SW), bust cache & reload
+    setTimeout(function() {
+      try {
+        var root = document.getElementById('root');
+        if (root && root.querySelector('.initial-splash')) {
+          console.warn('[PWA] Stuck on splash screen - busting cache and reloading...');
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              regs.forEach(function(r) { r.unregister(); });
+            });
+          }
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              keys.forEach(function(k) { caches.delete(k); });
+            });
+          }
+          window.location.reload();
+        }
+      } catch (err) {}
+    }, 3500);
+  </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 
