@@ -1,6 +1,7 @@
 const http = require('http');
 const net = require('net');
 const os = require('os');
+const dgram = require('dgram');
 
 let ioClient;
 try {
@@ -319,7 +320,27 @@ function sendToPrinter(ip, port, buffer) {
   });
 }
 
-function checkPrinterPort(ip, port = 9100, timeout = 400) {
+function getRealDeviceIp() {
+  return new Promise((resolve) => {
+    try {
+      const socket = dgram.createSocket('udp4');
+      socket.connect(53, '8.8.8.8', () => {
+        const addr = socket.address().address;
+        try { socket.close(); } catch(e){}
+        resolve(addr);
+      });
+      socket.on('error', () => resolve(null));
+      setTimeout(() => {
+        try { socket.close(); } catch(e){}
+        resolve(null);
+      }, 600);
+    } catch(e) {
+      resolve(null);
+    }
+  });
+}
+
+function checkPrinterPort(ip, port = 9100, timeout = 750) {
   return new Promise((resolve) => {
     const s = new net.Socket();
     s.setTimeout(timeout);
@@ -339,8 +360,23 @@ function checkPrinterPort(ip, port = 9100, timeout = 400) {
   });
 }
 
-function getLocalSubnets() {
+async function getLocalSubnets() {
   const subnets = new Set();
+
+  // 1. Try kernel routing table via UDP
+  const realIp = await getRealDeviceIp();
+  if (realIp) {
+    console.log(`[NETWORK] 📱 Tablet local IP detected: ${realIp}`);
+    if (realIp.startsWith('10.') || realIp.startsWith('100.')) {
+      console.warn('[NETWORK] ⚠️ WARNING: Tablet may be on MOBILE DATA (SIM card), not Cafe Wi-Fi!');
+    }
+    const parts = realIp.split('.');
+    if (parts.length === 4) {
+      subnets.add(`${parts[0]}.${parts[1]}.${parts[2]}`);
+    }
+  }
+
+  // 2. Try Node os.networkInterfaces()
   try {
     const interfaces = os.networkInterfaces();
     for (const name in interfaces) {
@@ -354,8 +390,14 @@ function getLocalSubnets() {
       }
     }
   } catch (e) {}
-  if (!subnets.has('192.168.0')) subnets.add('192.168.0');
-  if (!subnets.has('192.168.1')) subnets.add('192.168.1');
+
+  // 3. Fallback known Indian ISP router subnets
+  subnets.add('192.168.0');   // TP-Link, D-Link, Netgear
+  subnets.add('192.168.1');   // Airtel Xstream, BSNL, ACT
+  subnets.add('192.168.29');  // JioFiber
+  subnets.add('192.168.31');  // Mi / Xiaomi Router
+  subnets.add('192.168.123'); // RETSOL & Xprinter factory default recovery IP
+
   return Array.from(subnets);
 }
 
@@ -363,20 +405,35 @@ let isScanning = false;
 async function autoDiscoverPrinter() {
   if (isScanning) return null;
   isScanning = true;
-  console.log(`[AUTOSCAN] 🔍 Scanning local Wi-Fi for thermal printer on port ${PRINTER_PORT}...`);
 
-  const subnets = getLocalSubnets();
+  // Check common factory defaults first directly (fast check)
+  const quickDefaults = ['192.168.0.101', '192.168.1.100', '192.168.123.100', '192.168.29.101'];
+  for (const qIp of quickDefaults) {
+    const alive = await checkPrinterPort(qIp, PRINTER_PORT, 600);
+    if (alive) {
+      console.log(`[AUTOSCAN] 🎯 Found printer at ${alive}!`);
+      currentPrinterIp = alive;
+      isScanning = false;
+      return alive;
+    }
+  }
+
+  const subnets = await getLocalSubnets();
+  console.log(`[AUTOSCAN] 🔍 Scanning Wi-Fi subnets [${subnets.join(', ')}] on port ${PRINTER_PORT}...`);
+
   for (const subnet of subnets) {
     const ipList = [];
-    for (let i = 100; i <= 120; i++) ipList.push(`${subnet}.${i}`);
-    for (let i = 2; i <= 254; i++) {
-      if (i < 100 || i > 120) ipList.push(`${subnet}.${i}`);
+    // Prioritize 100-120 and 2-30 first
+    for (let i = 100; i <= 125; i++) ipList.push(`${subnet}.${i}`);
+    for (let i = 2; i <= 40; i++) ipList.push(`${subnet}.${i}`);
+    for (let i = 41; i <= 254; i++) {
+      if (i < 100 || i > 125) ipList.push(`${subnet}.${i}`);
     }
 
-    const chunkSize = 25;
+    const chunkSize = 20;
     for (let i = 0; i < ipList.length; i += chunkSize) {
       const chunk = ipList.slice(i, i + chunkSize);
-      const results = await Promise.all(chunk.map(ip => checkPrinterPort(ip, PRINTER_PORT, 500)));
+      const results = await Promise.all(chunk.map(ip => checkPrinterPort(ip, PRINTER_PORT, 750)));
       const found = results.find(Boolean);
       if (found) {
         console.log(`[AUTOSCAN] 🎯 Found printer at ${found}!`);
@@ -387,7 +444,7 @@ async function autoDiscoverPrinter() {
     }
   }
 
-  console.warn(`[AUTOSCAN] ⚠️ No printer found on port ${PRINTER_PORT} on local network.`);
+  console.warn(`[AUTOSCAN] ⚠️ No printer found on port ${PRINTER_PORT}. Please check printer LAN cable & power!`);
   isScanning = false;
   return null;
 }
