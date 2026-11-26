@@ -165,12 +165,7 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
   };
 
   const triggerPaidFeedback = (orderId) => {
-    setVoicedOrderIds((prev) => {
-      if (prev.includes(orderId)) return prev;
-      playChime();
-      speakThankYou();
-      return [...prev, orderId];
-    });
+    // Sound disabled upon request
   };
 
   // Fetch active orders on mount (customer QR mode only)

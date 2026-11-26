@@ -4849,8 +4849,8 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       </div>
     </div>
 
- {/* Best / Worst Selling items */}
-<div className="owner-double-deck" style={{ marginTop: '24px' }}>
+ {/* Top Selling items */}
+<div style={{ marginTop: '24px' }}>
 <div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -4872,30 +4872,6 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     ))
   ) : (
     <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>No sales recorded yet today</div>
-  )}
-</div>
-</div>
-<div style={{ background: 'var(--bg-card)', border: '1px solid var(--color-border)', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-    <TrendingDown size={20} color="#e74c3c" />
-    <h4 style={{ color: '#e74c3c', margin: 0, fontSize: '1.1rem' }}>Slow Selling Items</h4>
-  </div>
-  <span className="modern-metric-pill modern-pill-neutral" style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>Today</span>
-</div>
-<div className="ranked-list-container">
-  {slowSelling.length > 0 ? (
-    slowSelling.slice(0, 5).map((item, index) => (
-      <div key={item.name} className="ranked-list-item">
-        <div className="ranked-list-left">
-          <div className={`ranked-badge ${index === 0 ? 'ranked-badge-3' : 'ranked-badge-default'}`}>{index + 1}</div>
-          <span className="ranked-item-name">{item.name}</span>
-        </div>
-        <span className="ranked-item-metric">{item.quantity} sold (₹{item.revenue.toFixed(2)})</span>
-      </div>
-    ))
-  ) : (
-    <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', padding: '10px 0', textAlign: 'center' }}>All dishes are selling actively today!</div>
   )}
 </div>
 </div>

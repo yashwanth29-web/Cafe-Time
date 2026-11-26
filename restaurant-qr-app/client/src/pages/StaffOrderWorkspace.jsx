@@ -335,11 +335,6 @@ const StaffOrderWorkspace = () => {
             if (!seenOrderIdsRef.current.has(newOrder._id)) {
               seenOrderIdsRef.current.add(newOrder._id);
               if (newOrder.status === 'Placed' || newOrder.status === 'Preparing') {
-                playNotificationSound();
-                const tableMsg = newOrder.tableNumber && newOrder.tableNumber !== 'Takeaway' && newOrder.tableNumber !== 'Walk-in'
-                  ? `for Table ${newOrder.tableNumber}`
-                  : 'for Takeaway';
-                speakText(`New order received ${tableMsg}.`);
                 if (autoPrintKOTRef.current) {
                   try {
                     printKOT(newOrder, user, cafeInfo, currentBranch);
@@ -830,11 +825,6 @@ const StaffOrderWorkspace = () => {
           
           if (!seenOrderIdsRef.current.has(newOrder._id)) {
             seenOrderIdsRef.current.add(newOrder._id);
-            playNotificationSound();
-            const tableMsg = newOrder.tableNumber && newOrder.tableNumber !== 'Takeaway' && newOrder.tableNumber !== 'Walk-in'
-              ? `for Table ${newOrder.tableNumber}`
-              : 'for Takeaway';
-            speakText(`New order received ${tableMsg}.`);
             if (autoPrintKOTRef.current) {
               try {
                 printKOT(newOrder, user, cafeInfo, currentBranch);
@@ -1750,19 +1740,6 @@ const StaffOrderWorkspace = () => {
             📦 Ingredient Stock
           </button>
         </div>
-
-        {/* Sound toggle controls */}
-        <button
-          onClick={() => setSoundEnabled(!soundEnabled)}
-          style={{
-            flexShrink: 0,
-            background: 'transparent', border: '1px solid var(--color-border)', borderRadius: '12px',
-            padding: '8px 14px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px',
-            cursor: 'pointer', color: 'var(--color-text-secondary)', fontWeight: 'bold'
-          }}
-        >
-          {soundEnabled ? '🔊 Sound Alerts ON' : '🔇 Mute Alerts'}
-        </button>
 
         {/* Auto-Print KOT toggle */}
         <button
