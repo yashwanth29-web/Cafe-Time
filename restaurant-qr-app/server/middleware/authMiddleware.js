@@ -34,9 +34,16 @@ const protect = async (req, res, next) => {
     return res.status(401).json({ success: false, message: 'Not authorized, login required' });
   }
 
+  // 2. Verify token
+  let decoded;
   try {
-    // 2. Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_cafe_key_12345');
+    decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_cafe_key_12345');
+  } catch (jwtErr) {
+    console.warn('JWT Verification failed:', jwtErr.message);
+    return res.status(401).json({ success: false, message: 'Session expired or invalid, please login again' });
+  }
+
+  try {
     const nowMs = Date.now();
 
     // 3. Fast memory cache check (60s TTL)
@@ -73,9 +80,10 @@ const protect = async (req, res, next) => {
     // Attach user profile to request object
     req.user = user;
     next();
-  } catch (error) {
-    console.error('JWT Verification error:', error);
-    return res.status(401).json({ success: false, message: 'Not authorized, token verification failed' });
+  } catch (dbError) {
+    console.error('Database error in auth middleware (transient, not JWT invalidation):', dbError.message);
+    // Return 503 so client interceptor does NOT log out the user due to momentary DB latency
+    return res.status(503).json({ success: false, message: 'Database connection temporarily busy, please retry' });
   }
 };
 

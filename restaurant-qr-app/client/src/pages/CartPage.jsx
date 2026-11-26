@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CartItem from '../components/CartItem';
 import { getOrderById, placeOrder, updateOrderPaymentMethod, getCafeInfo, submitReview, getPaymentInfo, getMenu } from '../services/api';
@@ -15,6 +15,7 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
     sessionStorage.getItem('orderSource') === 'staff' ||
     (user && ['admin', 'owner', 'manager', 'chef', 'waiter', 'cashier', 'waiter_cashier', 'staff', 'super_admin'].includes(user?.role?.toLowerCase()))
   );
+  const isPlacingOrderRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -303,6 +304,9 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
       setErrorMsg('Server connection error. Please try again.');
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        isPlacingOrderRef.current = false;
+      }, 1500);
     }
   };
 
@@ -321,6 +325,9 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
       setErrorMsg('Server connection error. Please try again.');
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        isPlacingOrderRef.current = false;
+      }, 1500);
     }
   };
   // Totals calculations
@@ -332,7 +339,8 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
   const grandTotal = Number((subtotal + gstAmount + platformCharge).toFixed(2));
 
   const handlePlaceOrder = async () => {
-    if (cart.length === 0) return;
+    if (isPlacingOrderRef.current || cart.length === 0) return;
+    isPlacingOrderRef.current = true;
 
     setLoading(true);
     setErrorMsg('');
@@ -427,6 +435,9 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
       setErrorMsg(error.response?.data?.message || 'Server connection error. Please try again later.');
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        isPlacingOrderRef.current = false;
+      }, 1500);
     }
   };
 

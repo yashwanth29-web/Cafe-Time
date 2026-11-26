@@ -112,7 +112,7 @@ const login = async (req, res) => {
         assignedBranch: user.assignedBranch || ''
       },
       process.env.JWT_SECRET || 'super_secret_cafe_key_12345',
-      { expiresIn: '7d' }
+      { expiresIn: '30d' }
     );
 
     // 8. Set HTTP-only Cookie

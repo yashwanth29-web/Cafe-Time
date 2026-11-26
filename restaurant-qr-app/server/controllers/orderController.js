@@ -26,6 +26,9 @@ const getCachedBranch = async (cacheKey, queryFn) => {
   return result;
 };
 
+// Global in-memory order submission lock cache to prevent duplicate orders within 15 seconds
+const orderSubmissionLockCache = new Map();
+
 // helper to emit order updates over Socket.io
 const emitOrderUpdated = async (order, branchMap = null) => {
   if (!order) return;
@@ -415,6 +418,45 @@ const createOrder = async (req, res, next) => {
       totalAmount: finalGrandTotal
     });
 
+    // 8b. Duplicate Order De-duplication Guard (prevents rapid double-clicks / retries within 15 seconds)
+    const orderBranchKey = resolvedBranch ? resolvedBranch.branchId : (branchId || 'default');
+    const itemsFingerprint = validatedItems
+      .map(i => `${i.id || i._id}:${i.quantity}`)
+      .sort()
+      .join('|');
+    const orderFingerprint = `${activeCafeId}:${orderBranchKey}:${activeTableNumber}:${finalGrandTotal}:${itemsFingerprint}`;
+    const nowMs = Date.now();
+
+    // Check in-memory debounce lock (15s window)
+    if (orderSubmissionLockCache.has(orderFingerprint)) {
+      const lockEntry = orderSubmissionLockCache.get(orderFingerprint);
+      if (nowMs - lockEntry.timestamp < 15000 && lockEntry.order) {
+        console.log(`[ORDER CONTROLLER] ⚠️ Suppressed in-memory duplicate order submission for Table ${activeTableNumber} (₹${finalGrandTotal})`);
+        return res.status(200).json({ success: true, data: lockEntry.order, duplicatePrevented: true });
+      }
+    }
+
+    // Check recent database record (within last 20 seconds) for this table and amount
+    const recentDuplicate = await Order.findOne({
+      cafeId: activeCafeId,
+      branchId: orderBranchKey,
+      tableNumber: activeTableNumber,
+      totalAmount: finalGrandTotal,
+      createdAt: { $gte: new Date(Date.now() - 20000) }
+    }).sort({ createdAt: -1 });
+
+    if (recentDuplicate) {
+      const recentItemsFingerprint = (recentDuplicate.items || [])
+        .map(i => `${i.id || i._id}:${i.quantity}`)
+        .sort()
+        .join('|');
+      if (recentItemsFingerprint === itemsFingerprint) {
+        console.log(`[ORDER CONTROLLER] ⚠️ Suppressed DB duplicate order submission for Table ${activeTableNumber} (₹${finalGrandTotal}) - ID: ${recentDuplicate._id}`);
+        const formattedExisting = await appendLegacyFallback(recentDuplicate);
+        return res.status(200).json({ success: true, data: formattedExisting, duplicatePrevented: true });
+      }
+    }
+
     // Build the order document
     const newOrder = new Order({
       _id: newOrderId,
@@ -462,6 +504,16 @@ const createOrder = async (req, res, next) => {
       .catch(invErr => console.warn('Background menu availability update warning during order creation:', invErr.message));
 
     const formattedOrder = await appendLegacyFallback(savedOrder);
+
+    // Cache this order fingerprint to debounce duplicate submissions for 15s
+    orderSubmissionLockCache.set(orderFingerprint, {
+      timestamp: nowMs,
+      order: formattedOrder
+    });
+    if (orderSubmissionLockCache.size > 200) {
+      const oldestKey = orderSubmissionLockCache.keys().next().value;
+      orderSubmissionLockCache.delete(oldestKey);
+    }
 
     // Broadcast the new order over socket
     await emitOrderUpdated(formattedOrder);

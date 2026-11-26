@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getMenu, getBranches, placeOrder } from '../services/api';
@@ -30,6 +30,7 @@ const ManualOrderPage = () => {
   const [cart, setCart] = useState({}); // { [itemId]: { item, quantity } }
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Fetch menu and branch details
   useEffect(() => {
@@ -100,6 +101,8 @@ const ManualOrderPage = () => {
   // Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmittingRef.current || submitting) return;
+    isSubmittingRef.current = true;
 
     if (cartItems.length === 0) {
       toast.info('Please select at least one menu item.');
@@ -165,6 +168,7 @@ const ManualOrderPage = () => {
       toast.error(err.response?.data?.message || 'Server error. Please try again.');
     } finally {
       setSubmitting(false);
+      setTimeout(() => { isSubmittingRef.current = false; }, 1500);
     }
   };
 

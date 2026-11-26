@@ -57,12 +57,11 @@ export const AuthProvider = ({ children }) => {
           );
           const isMeEndpoint = error.config?.url?.includes('/auth/me');
 
-          localStorage.removeItem('token');
-          setUser(null);
-
-          // ONLY redirect to /login if the user is attempting to access a protected staff/admin dashboard!
-          // QR customers on /, /cart, /history, /menu must NEVER be redirected to /login!
+          // ONLY wipe token and redirect to /login if the user is attempting to access a protected staff/admin dashboard!
+          // QR customers or staff taking orders on /, /cart, /history, /menu must NEVER have their session wiped!
           if (isDashboardRoute && !isMeEndpoint) {
+            localStorage.removeItem('token');
+            setUser(null);
             console.warn('Staff/Admin session expired. Redirecting to login.');
             window.location.href = '/login';
           }
