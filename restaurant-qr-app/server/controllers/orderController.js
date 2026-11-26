@@ -397,12 +397,15 @@ const createOrder = async (req, res, next) => {
     if (isExtraSale) {
       normalizedSource = 'STAFF';
       normalizedOrderSource = 'EXTRA_SALE';
+    } else if (String(orderSource).toUpperCase() === 'STAFF_CONSUMPTION' || req.body.isStaffMeal || String(activeTableNumber).toLowerCase().includes('staff')) {
+      normalizedSource = 'STAFF';
+      normalizedOrderSource = 'STAFF_CONSUMPTION';
     } else {
-      const staffSourceValues = ['STAFF', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN'];
+      const staffSourceValues = ['STAFF', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF_CONSUMPTION'];
       if (staffSourceValues.includes(String(source).toUpperCase()) || staffSourceValues.includes(String(orderSource).toUpperCase())) {
         normalizedSource = 'STAFF';
         normalizedOrderSource = orderSource ? String(orderSource).toUpperCase() : 'STAFF';
-        if (!['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF'].includes(normalizedOrderSource)) {
+        if (!['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF', 'STAFF_CONSUMPTION'].includes(normalizedOrderSource)) {
           normalizedOrderSource = 'STAFF';
         }
       }
@@ -479,13 +482,13 @@ const createOrder = async (req, res, next) => {
       tableNumber: activeTableNumber,
       items: validatedItems,
       totalAmount: finalGrandTotal,
-      status: isExtraSale ? 'Completed' : 'Placed',
-      customerName: finalCustomerName,
+      status: isExtraSale ? 'Completed' : (normalizedOrderSource === 'STAFF_CONSUMPTION' ? 'Completed' : 'Placed'),
+      customerName: normalizedOrderSource === 'STAFF_CONSUMPTION' ? (createdBy || 'Staff/Owner Meal') : finalCustomerName,
       customerEmail: finalCustomerEmail,
       customerPhone: finalCustomerPhone,
-      specialInstructions: specialInstructions || '',
-      paymentStatus: isExtraSale ? 'Paid' : (paymentStatus || 'Pending'),
-      paymentMethod: paymentMethod || (isExtraSale ? 'Cash' : 'Pending'),
+      specialInstructions: specialInstructions || (normalizedOrderSource === 'STAFF_CONSUMPTION' ? 'Owner / Staff Consumption (Complimentary)' : ''),
+      paymentStatus: isExtraSale ? 'Paid' : (normalizedOrderSource === 'STAFF_CONSUMPTION' ? 'Complimentary' : (paymentStatus || 'Pending')),
+      paymentMethod: normalizedOrderSource === 'STAFF_CONSUMPTION' ? 'Staff_Meal' : (paymentMethod || (isExtraSale ? 'Cash' : 'Pending')),
       orderSource: normalizedOrderSource,
       createdBy: createdBy || '',
       createdByRole: createdByRole || '',
@@ -566,14 +569,16 @@ const getOrders = async (req, res, next) => {
 
     if (req.query.active === 'true') {
       filterQuery.status = { $nin: ['Completed', 'Cancelled'] };
+      filterQuery.isDeleted = { $ne: true };
       // Limit live active orders to last 24 hours if no explicit date is provided
       if (!req.query.date && req.query.allTime !== 'true') {
         const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
         filterQuery.createdAt = { $gte: last24h };
       }
     } else if (!req.query.status && req.query.includeCancelled !== 'true') {
-      // Exclude cancelled orders from general monitor/history lists
+      // Exclude cancelled/deleted orders from general lists unless explicitly requested
       filterQuery.status = { $nin: ['Cancelled', 'cancelled'] };
+      filterQuery.isDeleted = { $ne: true };
       if (!req.query.date && req.query.allTime !== 'true') {
         const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         filterQuery.createdAt = { $gte: last30Days };
@@ -673,6 +678,8 @@ const printOrderReceipt = async (req, res, next) => {
       if (io) {
         // Emit once to normalized room
         io.to(`cafe:${order.cafeId}`).emit('print:job', { order: formattedOrder, type: jobType });
+        // Broadcast order update so owner monitor orders updates in real-time
+        await emitOrderUpdated(order);
       }
     } catch (sockErr) {
       console.warn('Socket print event warning:', sockErr.message);
@@ -749,17 +756,24 @@ const updateOrderStatus = async (req, res, next) => {
     }
 
     if (paymentStatus !== undefined) {
-      const allowedPaymentStatuses = ['Pending', 'Paid', 'Failed'];
+      const allowedPaymentStatuses = ['Pending', 'Paid', 'Failed', 'Complimentary', 'Partially_Paid'];
       if (!allowedPaymentStatuses.includes(paymentStatus)) {
         return res.status(400).json({ success: false, message: `Invalid paymentStatus. Must be one of: ${allowedPaymentStatuses.join(', ')}` });
       }
       updateFields.paymentStatus = paymentStatus;
-      if (paymentStatus === 'Paid') {
+      if (paymentStatus === 'Paid' || paymentStatus === 'Complimentary') {
         updateFields.paidAt = new Date();
-        if (paymentMethod) {
-          updateFields.paymentMethod = paymentMethod;
-        }
       }
+      if (paymentMethod) {
+        updateFields.paymentMethod = paymentMethod;
+      }
+    }
+
+    if (req.body.paidAmount !== undefined) {
+      updateFields.paidAmount = Number(req.body.paidAmount) || 0;
+    }
+    if (paymentMethod) {
+      updateFields.paymentMethod = paymentMethod;
     }
 
     if (paymentMethod !== undefined) {
@@ -870,16 +884,33 @@ const deleteOrder = async (req, res, next) => {
       }
     }
 
-    await Order.findByIdAndDelete(id);
+    // Soft-delete so Owner Dashboard retains complete audit history
+    order.isDeleted = true;
+    order.status = 'Cancelled';
+    order.deletedBy = req.user ? (req.user.name || req.user.username || 'Staff') : 'Staff';
+    order.deletedAt = new Date();
+    order.deletedReason = req.body?.reason || 'Deleted by staff';
+    await order.save();
 
-    // Broadcast delete event over sockets to all branches and cafe rooms
+    // Broadcast update & delete events over sockets to all branches and cafe rooms
     try {
       const { getIO } = require('../config/socket');
       const io = getIO();
       if (io) {
         const branchStr = String(order.branchId || '');
         const cafeId = order.cafeId;
-        const deletePayload = { orderId: id, _id: id, tableNumber: order.tableNumber, cafeId, branchId: branchStr };
+        const deletePayload = { 
+          orderId: id, 
+          _id: id, 
+          tableNumber: order.tableNumber, 
+          cafeId, 
+          branchId: branchStr,
+          isDeleted: true,
+          status: 'Cancelled',
+          deletedBy: order.deletedBy,
+          deletedAt: order.deletedAt,
+          order: order.toObject ? order.toObject() : order
+        };
 
         if (branchStr) {
           io.to(`cafe:${cafeId}:branch:${branchStr}`).emit('orderDeleted', deletePayload);
@@ -904,6 +935,8 @@ const deleteOrder = async (req, res, next) => {
         io.to(`cafe_${cafeId}`).emit('dashboard_realtime_sync', syncPayload);
         io.to(`cafe:${cafeId}:owner`).emit('dashboard_realtime_sync', syncPayload);
         io.to(`cafe_${cafeId}_owner`).emit('dashboard_realtime_sync', syncPayload);
+        // Broadcast order update so owner monitor orders updates in real-time
+        await emitOrderUpdated(order);
       }
     } catch (sockErr) {
       console.warn('Socket broadcast error on order deletion:', sockErr.message);

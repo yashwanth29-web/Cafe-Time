@@ -136,7 +136,15 @@ const StaffOrderWorkspace = () => {
   const [editingOrder, setEditingOrder] = useState(null);
   const [orderActionLoading, setOrderActionLoading] = useState(false);
   const [paymentModalOrder, setPaymentModalOrder] = useState(null);
+  const [paymentAmountInput, setPaymentAmountInput] = useState('');
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+
+  const openPaymentModal = (order) => {
+    if (!order) return;
+    setPaymentModalOrder(order);
+    const due = Math.max(0, (order.totalAmount || 0) - (order.paidAmount || 0));
+    setPaymentAmountInput(due > 0 ? due.toString() : (order.totalAmount || 0).toString());
+  };
 
   // Extra Sales State & Handler
   const [showExtraSaleModal, setShowExtraSaleModal] = useState(false);
@@ -1125,7 +1133,7 @@ const StaffOrderWorkspace = () => {
           return updatedObj;
         }
         return o;
-      }).filter((o) => o.status !== 'Completed' || o.paymentStatus === 'Pending');
+      }).filter((o) => o.status !== 'Completed' || o.paymentStatus === 'Pending' || o.paymentStatus === 'Partially_Paid');
     });
 
     // Optimistically update completedLogs (Order History)
@@ -1157,7 +1165,7 @@ const StaffOrderWorkspace = () => {
       const res = await updateOrderStatus(orderId, { status: targetStatus, ...payload });
       if (res.success) {
         setOrders((prev) => {
-          const isStillActive = res.data.status !== 'Completed' || res.data.paymentStatus === 'Pending';
+          const isStillActive = res.data.status !== 'Completed' || res.data.paymentStatus === 'Pending' || res.data.paymentStatus === 'Partially_Paid';
           if (isStillActive) {
             if (prev.some((o) => o._id === orderId)) {
               return prev.map((o) => (o._id === orderId ? { ...o, ...res.data } : o));
@@ -1187,12 +1195,26 @@ const StaffOrderWorkspace = () => {
   };
 
   // Mark order as paid - Instant 0ms modal close and smooth background sync
-  const handleCollectPayment = async (orderId, paymentMethod) => {
+  const handleCollectPayment = async (orderId, paymentMethod, customAmount = null) => {
     // 1. Immediately close the modal to eliminate the 5-second freeze
     setPaymentModalOrder(null);
     setPaymentSubmitting(true);
     try {
-      await handleStatusTransition(orderId, 'Completed', { paymentStatus: 'Paid', paymentMethod });
+      const order = orders.find(o => o._id === orderId) || completedLogs.find(o => o._id === orderId);
+      const parsedAmount = customAmount !== null ? Number(customAmount) : (Number(paymentAmountInput) || (order ? order.totalAmount : 0));
+      const currentPaid = Number(order?.paidAmount || 0);
+      const newTotalPaid = currentPaid + parsedAmount;
+      const orderTotal = Number(order?.totalAmount || parsedAmount);
+
+      const isFullySettled = newTotalPaid >= orderTotal || parsedAmount >= orderTotal;
+      const targetStatus = isFullySettled ? 'Completed' : (order?.status || 'Placed');
+      const paymentStatus = isFullySettled ? 'Paid' : 'Partially_Paid';
+
+      await handleStatusTransition(orderId, targetStatus, { 
+        paymentStatus, 
+        paymentMethod,
+        paidAmount: newTotalPaid
+      });
       // Refresh completed logs in background if on today's view
       if (typeof fetchCompletedLogs === 'function') {
         fetchCompletedLogs(historyDate || todayDateStr);
@@ -1201,6 +1223,7 @@ const StaffOrderWorkspace = () => {
       console.error('Error collecting payment:', err);
     } finally {
       setPaymentSubmitting(false);
+      setPaymentAmountInput('');
     }
   };
 
@@ -1923,6 +1946,21 @@ const StaffOrderWorkspace = () => {
                             }}>
                               📱 CUSTOMER
                             </span>
+                          ) : (order.orderSource === 'STAFF_CONSUMPTION' || order.paymentStatus === 'Complimentary' || String(order.tableNumber).toLowerCase().includes('owner') || String(order.tableNumber).toLowerCase().includes('staff')) ? (
+                            <span style={{
+                              background: 'linear-gradient(135deg, #8e44ad 0%, #6c3483 100%)',
+                              color: '#ffffff',
+                              border: '1px solid #7d3c98',
+                              padding: '2px 7px',
+                              borderRadius: '6px',
+                              fontSize: '10.5px',
+                              fontWeight: 900,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}>
+                              👑 OWNER / STAFF
+                            </span>
                           ) : (
                             <span style={{
                               background: 'rgba(212, 127, 70, 0.14)',
@@ -1937,6 +1975,19 @@ const StaffOrderWorkspace = () => {
                               gap: '3px'
                             }}>
                               🧑‍🍳 STAFF {order.createdBy ? `(${order.createdBy})` : ''}
+                            </span>
+                          )}
+                          {order.paymentStatus === 'Partially_Paid' && (
+                            <span style={{
+                              background: '#fef3c7',
+                              color: '#b45309',
+                              border: '1px solid #f59e0b',
+                              padding: '2px 6px',
+                              borderRadius: '6px',
+                              fontSize: '10.5px',
+                              fontWeight: 800
+                            }}>
+                              🟡 PARTIAL (Paid ₹{order.paidAmount || 0})
                             </span>
                           )}
                         </div>
@@ -2019,8 +2070,19 @@ const StaffOrderWorkspace = () => {
                     {/* Action buttons */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-border)', paddingTop: '12px', marginTop: 'auto', gap: '8px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>Amount Due</span>
-                        <strong style={{ fontSize: '1.1rem', color: '#27AE60' }}>₹{order.totalAmount}</strong>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', textTransform: 'uppercase' }}>
+                          {order.paymentStatus === 'Partially_Paid' ? 'Remaining Due' : 'Amount Due'}
+                        </span>
+                        <strong style={{ fontSize: '1.1rem', color: '#27AE60' }}>
+                          ₹{order.paymentStatus === 'Partially_Paid' 
+                            ? Math.max(0, (order.totalAmount || 0) - (order.paidAmount || 0)) 
+                            : (order.totalAmount || 0)}
+                        </strong>
+                        {order.paidAmount > 0 && order.paymentStatus === 'Partially_Paid' && (
+                          <span style={{ fontSize: '10px', color: '#e67e22', fontWeight: 700 }}>
+                            (Paid: ₹{order.paidAmount})
+                          </span>
+                        )}
                       </div>
 
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }}>
@@ -2069,35 +2131,52 @@ const StaffOrderWorkspace = () => {
                           </button>
                         )}
 
-                        {/* Mark Paid button for Placed / Preparing */}
-                        {(order.status === 'Placed' || order.status === 'Preparing') && (
+                        {/* Owner / Staff Meal: Direct Complete button (No Payment Needed) */}
+                        {(order.orderSource === 'STAFF_CONSUMPTION' || order.paymentStatus === 'Complimentary' || String(order.tableNumber).toLowerCase().includes('owner') || String(order.tableNumber).toLowerCase().includes('staff')) ? (
                           <button
                             disabled={!canCollect}
-                            onClick={() => setPaymentModalOrder(order)}
+                            onClick={() => handleStatusTransition(order._id, 'Completed', { paymentStatus: 'Complimentary', paymentMethod: 'Staff_Meal' })}
                             style={{
-                              background: '#e67e22', color: 'white', border: 'none', padding: '8px 12px',
-                              borderRadius: '8px', cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
+                              background: '#8e44ad', color: 'white', border: 'none', padding: '8px 14px',
+                              borderRadius: '8px', cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold',
+                              display: 'flex', alignItems: 'center', gap: '5px'
                             }}
                           >
-                            💵 Mark Paid
+                            👑 Complete (Staff Meal)
                           </button>
-                        )}
+                        ) : (
+                          <>
+                            {/* Mark Paid button for Placed / Preparing */}
+                            {(order.status === 'Placed' || order.status === 'Preparing') && (
+                              <button
+                                disabled={!canCollect}
+                                onClick={() => openPaymentModal(order)}
+                                style={{
+                                  background: '#e67e22', color: 'white', border: 'none', padding: '8px 12px',
+                                  borderRadius: '8px', cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '12.5px', fontWeight: 'bold'
+                                }}
+                              >
+                                💵 Mark Paid
+                              </button>
+                            )}
 
-                        {/* Ready or Delivered status action: Mark Paid & Complete */}
-                        {(order.status === 'Ready' || order.status === 'Delivered') && (
-                          <button
-                            disabled={!canCollect}
-                            onClick={() => setPaymentModalOrder(order)}
-                            style={{
-                              background: canCollect ? '#27ae60' : '#bdc3c7',
-                              color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px',
-                              cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 'bold',
-                              display: 'flex', alignItems: 'center', gap: '5px',
-                              boxShadow: canCollect ? '0 2px 8px rgba(39, 174, 96, 0.35)' : 'none'
-                            }}
-                          >
-                            💵 Mark Paid / Serve
-                          </button>
+                            {/* Ready or Delivered status action: Mark Paid & Complete */}
+                            {(order.status === 'Ready' || order.status === 'Delivered') && (
+                              <button
+                                disabled={!canCollect}
+                                onClick={() => openPaymentModal(order)}
+                                style={{
+                                  background: canCollect ? '#27ae60' : '#bdc3c7',
+                                  color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px',
+                                  cursor: canCollect ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: 'bold',
+                                  display: 'flex', alignItems: 'center', gap: '5px',
+                                  boxShadow: canCollect ? '0 2px 8px rgba(39, 174, 96, 0.35)' : 'none'
+                                }}
+                              >
+                                💵 Mark Paid / Serve
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -3880,6 +3959,36 @@ const StaffOrderWorkspace = () => {
                 <span>🛍️</span>
                 <span>Takeaway / Walk-in</span>
               </button>
+
+              {/* Owner / Staff Consumption Button */}
+              <button
+                onClick={() => {
+                  setShowTakeOrderModal(false);
+                  sessionStorage.setItem('orderSource', 'staff');
+                  sessionStorage.setItem('isStaffMeal', 'true');
+                  window.location.href = `/?table=Owner%2FStaff&source=staff&isStaffMeal=true&cafeId=${user?.cafeId || ''}&branchId=${activeBranchId || 'default'}`;
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: '10px',
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: '1.5px dashed #8e44ad',
+                  background: 'rgba(142, 68, 173, 0.08)',
+                  color: '#8e44ad',
+                  fontSize: '13.5px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  fontFamily: 'inherit'
+                }}
+              >
+                <span>👑</span>
+                <span>Take Owner / Staff Order (No Payment)</span>
+              </button>
             </div>
           </div>
         );
@@ -5294,13 +5403,66 @@ const StaffOrderWorkspace = () => {
               <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                 Table <strong>{paymentModalOrder.tableNumber}</strong> • Total: <strong style={{ color: 'var(--color-primary)', fontSize: '16px' }}>₹{paymentModalOrder.totalAmount}</strong>
               </p>
+              {paymentModalOrder.paidAmount > 0 && (
+                <div style={{ fontSize: '12px', color: '#27ae60', marginTop: '4px', fontWeight: 700 }}>
+                  Already Paid: ₹{paymentModalOrder.paidAmount} • Remaining Due: ₹{Math.max(0, paymentModalOrder.totalAmount - paymentModalOrder.paidAmount)}
+                </div>
+              )}
+            </div>
+
+            {/* Enter Amount Collected */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+                Enter Amount Collected (₹):
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <span style={{ position: 'absolute', left: '12px', fontSize: '16px', fontWeight: 800, color: 'var(--color-text-primary)' }}>₹</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={paymentModalOrder.totalAmount}
+                  step="any"
+                  value={paymentAmountInput}
+                  onChange={(e) => setPaymentAmountInput(e.target.value)}
+                  placeholder="Enter amount"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 28px',
+                    borderRadius: '10px',
+                    border: '1.5px solid var(--color-primary)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '16px',
+                    fontWeight: 800,
+                    outline: 'none'
+                  }}
+                  autoFocus
+                />
+              </div>
+              {(() => {
+                const amt = Number(paymentAmountInput) || 0;
+                const prevPaid = Number(paymentModalOrder.paidAmount || 0);
+                const remaining = (paymentModalOrder.totalAmount || 0) - prevPaid;
+                if (amt > 0 && amt < remaining) {
+                  return (
+                    <div style={{ fontSize: '11.5px', color: '#e67e22', fontWeight: 600 }}>
+                      ⚠️ Partial payment: ₹{(remaining - amt).toFixed(2)} will remain due.
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+              Select Payment Mode:
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <button
                 type="button"
-                disabled={paymentSubmitting}
-                onClick={() => handleCollectPayment(paymentModalOrder._id, 'Cash')}
+                disabled={paymentSubmitting || !paymentAmountInput || Number(paymentAmountInput) <= 0}
+                onClick={() => handleCollectPayment(paymentModalOrder._id, 'Cash', Number(paymentAmountInput))}
                 style={{
                   background: 'rgba(230, 126, 34, 0.1)',
                   border: '1.5px solid #e67e22',
@@ -5309,7 +5471,7 @@ const StaffOrderWorkspace = () => {
                   padding: '14px 10px',
                   fontSize: '13px',
                   fontWeight: 800,
-                  cursor: paymentSubmitting ? 'not-allowed' : 'pointer',
+                  cursor: (paymentSubmitting || !paymentAmountInput || Number(paymentAmountInput) <= 0) ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -5322,8 +5484,8 @@ const StaffOrderWorkspace = () => {
 
               <button
                 type="button"
-                disabled={paymentSubmitting}
-                onClick={() => handleCollectPayment(paymentModalOrder._id, 'Online')}
+                disabled={paymentSubmitting || !paymentAmountInput || Number(paymentAmountInput) <= 0}
+                onClick={() => handleCollectPayment(paymentModalOrder._id, 'Online', Number(paymentAmountInput))}
                 style={{
                   background: 'rgba(39, 174, 96, 0.1)',
                   border: '1.5px solid #27ae60',
@@ -5332,7 +5494,7 @@ const StaffOrderWorkspace = () => {
                   padding: '14px 10px',
                   fontSize: '13px',
                   fontWeight: 800,
-                  cursor: paymentSubmitting ? 'not-allowed' : 'pointer',
+                  cursor: (paymentSubmitting || !paymentAmountInput || Number(paymentAmountInput) <= 0) ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -5347,7 +5509,7 @@ const StaffOrderWorkspace = () => {
             <button
               type="button"
               disabled={paymentSubmitting}
-              onClick={() => setPaymentModalOrder(null)}
+              onClick={() => { setPaymentModalOrder(null); setPaymentAmountInput(''); }}
               style={{
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--color-border)',

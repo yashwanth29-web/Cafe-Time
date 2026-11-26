@@ -353,6 +353,13 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
       const resolvedBranchId = branchId || user?.assignedBranch || user?.branchId || sessionStorage.getItem('branchId') || localStorage.getItem('customerBranchId') || 'default';
       const resolvedTableNumber = tableNumber || sessionStorage.getItem('tableNumber') || localStorage.getItem('customerTableNumber') || 'Takeaway';
 
+      const isStaffMeal = Boolean(
+        searchParams.get('isStaffMeal') === 'true' ||
+        sessionStorage.getItem('isStaffMeal') === 'true' ||
+        String(resolvedTableNumber).toLowerCase().includes('owner') ||
+        String(resolvedTableNumber).toLowerCase().includes('staff')
+      );
+
       const orderPayload = {
         cafeId: resolvedCafeId,
         branchId: resolvedBranchId,
@@ -368,9 +375,14 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
         customerName: isStaffPOS ? (user?.name || 'Staff') : (customerName || 'Guest Customer'),
         customerEmail: isStaffPOS ? (user?.email || 'staff@cafesystem.local') : (customerEmail || ''),
         customerPhone: isStaffPOS ? (user?.phone || '0000000000') : (customerPhone || ''),
-        specialInstructions,
-        source: isStaffPOS ? 'STAFF' : 'QR',
-        orderSource: isStaffPOS ? 'STAFF' : 'QR',
+        specialInstructions: isStaffMeal
+          ? (specialInstructions ? `${specialInstructions} | ` : '') + '👑 Owner / Staff Consumption (Complimentary)'
+          : specialInstructions,
+        source: isStaffMeal ? 'STAFF_CONSUMPTION' : (isStaffPOS ? 'STAFF' : 'QR'),
+        orderSource: isStaffMeal ? 'STAFF_CONSUMPTION' : (isStaffPOS ? 'STAFF' : 'QR'),
+        paymentStatus: isStaffMeal ? 'Complimentary' : 'Pending',
+        paymentMethod: isStaffMeal ? 'Staff_Meal' : 'Pending',
+        paidAmount: isStaffMeal ? grandTotal : 0,
         staffId: isStaffPOS && user ? user._id : undefined
       };
 
@@ -379,6 +391,7 @@ const CartPage = ({ cart, addToCart, increaseQuantity, decreaseQuantity, removeF
       if (response.success) {
         clearCart();
         sessionStorage.removeItem('orderSource');
+        sessionStorage.removeItem('isStaffMeal');
 
         // ==========================================
         // 1. STAFF ORDER FLOW -> RETURN TO WORKSPACE

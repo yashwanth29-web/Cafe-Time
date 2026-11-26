@@ -1393,7 +1393,7 @@ const OwnerDashboard = () =>{
     const cache = getBranchCache(targetBranchId);
     if (!isSilent && !cache.hasLoaded.orders) setOrdersLoading(true);
     try {
-      const queryParams = { date: orderDateFilter, cafeId: user?.cafeId };
+      const queryParams = { date: orderDateFilter, cafeId: user?.cafeId, includeCancelled: 'true' };
       if (targetBranchId && targetBranchId !== 'all') {
         queryParams.branchId = targetBranchId;
       }
@@ -3492,6 +3492,26 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     return thisMonthDeductions.reduce((acc, log) => acc + (log.cost || 0), 0);
   }, [deductionLogs, statsData]);
 
+  const todayExpensesData = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    // 1. Other expenses of today
+    const otherExpToday = (expenses || []).reduce((acc, exp) => {
+      const expDate = (exp.date || exp.createdAt || '').slice(0, 10);
+      return expDate === todayStr ? acc + (Number(exp.amount) || 0) : acc;
+    }, 0);
+
+    // 2. Movement ledger / Stock Purchases inward of today
+    const stockPurchasesToday = (inventoryLogs || []).reduce((acc, log) => {
+      const logDate = (log.createdAt || '').slice(0, 10);
+      const isAdd = log.type === 'Purchase' || log.type === 'Initial' || (Number(log.quantityChanged) > 0 && log.type !== 'Adjustment');
+      const cost = Math.abs(Number(log.cost) || 0);
+      return logDate === todayStr && isAdd ? acc + cost : acc;
+    }, 0);
+
+    const totalToday = otherExpToday + stockPurchasesToday;
+    return { otherExpToday, stockPurchasesToday, totalToday };
+  }, [expenses, inventoryLogs]);
+
   const rankedItems = useMemo(() => {
     if (statsData && statsData.topSellingItems !== undefined) {
       return {
@@ -4846,6 +4866,25 @@ const exportStaffToCSV = exportStaffPayrollExcel;
         <span className="modern-metric-pill modern-pill-neutral">
           Kitchen usage this month
         </span>
+      </div>
+
+      {/* Today's Total Expenses Card */}
+      <div className="modern-metric-card" style={{ borderLeft: '3.5px solid #e74c3c' }}>
+        <div className="modern-metric-header">
+          <h4 className="modern-metric-title">Today's Expenses</h4>
+          <div className="modern-metric-icon-wrapper" style={{ background: 'rgba(231, 76, 60, 0.12)' }}>
+            <TrendingDown size={15} color="#e74c3c" />
+          </div>
+        </div>
+        <p className="modern-metric-value" style={{ color: '#e74c3c' }}>₹{todayExpensesData.totalToday.toFixed(2)}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+          <span className="modern-metric-pill" style={{ background: 'rgba(231, 76, 60, 0.08)', color: '#c0392b', justifyContent: 'flex-start' }}>
+            📋 Other: ₹{todayExpensesData.otherExpToday.toFixed(2)}
+          </span>
+          <span className="modern-metric-pill" style={{ background: 'rgba(230, 126, 34, 0.08)', color: '#d35400', justifyContent: 'flex-start' }}>
+            📦 Stock Purchases: ₹{todayExpensesData.stockPurchasesToday.toFixed(2)}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -8210,21 +8249,21 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     Movement Ledger
   </button>
   <button 
-    onClick={() => setInventorySubTab('suppliers')} 
+    onClick={() => setInventorySubTab('consumption')} 
     style={{ 
-      background: inventorySubTab === 'suppliers' ? '#6F4E37' : 'var(--bg-secondary)', 
-      color: inventorySubTab === 'suppliers' ? '#FFFFFF' : 'var(--color-text-primary)', 
-      border: inventorySubTab === 'suppliers' ? 'none' : '1px solid var(--color-border)', 
+      background: inventorySubTab === 'consumption' ? '#6F4E37' : 'var(--bg-secondary)', 
+      color: inventorySubTab === 'consumption' ? '#FFFFFF' : 'var(--color-text-primary)', 
+      border: inventorySubTab === 'consumption' ? 'none' : '1px solid var(--color-border)', 
       padding: '8px 18px', 
       borderRadius: '8px', 
       cursor: 'pointer', 
-      fontWeight: inventorySubTab === 'suppliers' ? 800 : 600, 
+      fontWeight: inventorySubTab === 'consumption' ? 800 : 600, 
       fontSize: '13px',
-      boxShadow: inventorySubTab === 'suppliers' ? '0 2px 8px rgba(111,78,55,0.35)' : 'none',
+      boxShadow: inventorySubTab === 'consumption' ? '0 2px 8px rgba(111,78,55,0.35)' : 'none',
       transition: 'all 0.2s ease'
     }}
   >
-    Supplier Registry
+    📊 Monthly Consumption
   </button>
 </div>
 
@@ -8496,47 +8535,153 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 </div>
  }
 
- {/* SUBTAB 3: Suppliers */}
- {inventorySubTab === 'suppliers' &&
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
- {Array.from(new Set(inventoryList.map((item) =>item.supplier || 'Unassigned Supplier'))).map((sup) =>{
- const supItems = inventoryList.filter((item) =>(item.supplier || 'Unassigned Supplier') === sup);
- const totalSupplierValue = supItems.reduce((sum, i) =>sum + (i.quantity || i.stock) * (i.costPrice || i.cost), 0);
- return (
-<div key={sup} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px', marginBottom: '12px' }}>
-<div>
-<strong style={{ color: 'var(--color-text-primary)', fontSize: '1rem' }}>{sup}</strong>
-{(() => {
-  const phone = supItems.find(i => i.supplierPhone)?.supplierPhone;
-  return phone ? (
-    <div style={{ fontSize: '12px', marginTop: '3px' }}>
-      <a href={`tel:${phone}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>📞 {phone}</a>
-    </div>
-  ) : null;
-})()}
-</div>
-<span style={{ fontSize: '11px', background: 'var(--color-primary)', color: '#ffffff', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
- {supItems.length} Products
-</span>
-</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
- {supItems.map((item) =>
-<div key={item._id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-<span style={{ color: 'var(--color-text-secondary)' }}>{item.name}</span>
-<strong style={{ color: 'var(--color-text-primary)' }}>{item.quantity || item.stock} {item.unit}</strong>
-</div>
-)}
-</div>
-<div style={{ borderTop: '1px dashed var(--color-border)', marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-<span>Total Value:</span>
-<strong style={{ color: '#2ECC71' }}>₹{totalSupplierValue.toFixed(2)}</strong>
-</div>
-</div>);
+ {/* SUBTAB 3: Monthly Inventory Consumption Per Item */}
+ {inventorySubTab === 'consumption' && (() => {
+   const now = new Date();
+   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+   const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
 
- })}
-</div>
-}
+   const monthlyDeductions = (inventoryLogs || []).filter((log) => {
+     const isDeduction = log.type === 'Deduction' || (Number(log.quantityChanged) < 0 && log.type !== 'Wastage');
+     const d = new Date(log.createdAt);
+     return isDeduction && d >= startOfMonth;
+   });
+
+   const itemConsumptionMap = {};
+   monthlyDeductions.forEach((log) => {
+     const name = log.itemName || 'Unnamed Item';
+     const qty = Math.abs(Number(log.quantityChanged) || 0);
+     const cost = Math.abs(Number(log.cost) || 0);
+     if (!itemConsumptionMap[name]) {
+       itemConsumptionMap[name] = {
+         name,
+         unit: log.unit || '',
+         consumedQty: 0,
+         consumedCost: 0,
+         currentStock: 0
+       };
+     }
+     itemConsumptionMap[name].consumedQty += qty;
+     itemConsumptionMap[name].consumedCost += cost;
+   });
+
+   (inventoryList || []).forEach((item) => {
+     if (!itemConsumptionMap[item.name]) {
+       itemConsumptionMap[item.name] = {
+         name: item.name,
+         unit: item.unit || 'g',
+         consumedQty: 0,
+         consumedCost: 0,
+         currentStock: item.quantity || item.stock || 0
+       };
+     } else {
+       itemConsumptionMap[item.name].currentStock = item.quantity || item.stock || 0;
+       if (!itemConsumptionMap[item.name].unit) {
+         itemConsumptionMap[item.name].unit = item.unit || 'g';
+       }
+     }
+   });
+
+   const consumptionList = Object.values(itemConsumptionMap)
+     .sort((a, b) => b.consumedQty - a.consumedQty || a.name.localeCompare(b.name));
+
+   const totalConsumedMonthCost = consumptionList.reduce((acc, i) => acc + i.consumedCost, 0);
+
+   return (
+     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+       <div style={{
+         background: 'linear-gradient(135deg, rgba(111,78,55,0.08) 0%, rgba(142,68,173,0.08) 100%)',
+         border: '1.5px solid var(--color-border)',
+         borderRadius: '14px',
+         padding: '16px 20px',
+         display: 'flex',
+         justifyContent: 'space-between',
+         alignItems: 'center',
+         flexWrap: 'wrap',
+         gap: '12px'
+       }}>
+         <div>
+           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+             📊 Monthly Inventory Consumption Per Item
+           </h3>
+           <p style={{ margin: '3px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+             Period: <strong>{monthName}</strong> • Total tracked items: <strong>{consumptionList.length}</strong>
+           </p>
+         </div>
+         <div style={{ textAlign: 'right' }}>
+           <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Total Kitchen Consumption Value</div>
+           <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#9b59b6' }}>
+             ₹{totalConsumedMonthCost > 0 ? totalConsumedMonthCost.toFixed(2) : totalInventoryConsumption.toFixed(2)}
+           </div>
+         </div>
+       </div>
+
+       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
+         {consumptionList.map((item) => {
+           const hasConsumption = item.consumedQty > 0;
+           return (
+             <div
+               key={item.name}
+               style={{
+                 background: 'var(--bg-secondary)',
+                 border: hasConsumption ? '1.5px solid rgba(155, 89, 182, 0.35)' : '1px solid var(--color-border)',
+                 borderRadius: '12px',
+                 padding: '14px 16px',
+                 display: 'flex',
+                 flexDirection: 'column',
+                 gap: '8px',
+                 boxShadow: hasConsumption ? '0 2px 8px rgba(155, 89, 182, 0.08)' : 'none'
+               }}
+             >
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                 <div>
+                   <strong style={{ color: 'var(--color-text-primary)', fontSize: '14px', textTransform: 'uppercase' }}>
+                     {item.name}
+                   </strong>
+                   <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                     In Stock: <strong>{item.currentStock} {item.unit}</strong>
+                   </div>
+                 </div>
+                 <span style={{
+                   fontSize: '11px',
+                   background: hasConsumption ? 'rgba(155, 89, 182, 0.15)' : 'rgba(0,0,0,0.05)',
+                   color: hasConsumption ? '#9b59b6' : 'var(--color-text-secondary)',
+                   padding: '3px 8px',
+                   borderRadius: '6px',
+                   fontWeight: 800
+                 }}>
+                   {hasConsumption ? 'Consumed' : 'No Usage'}
+                 </span>
+               </div>
+
+               <div style={{
+                 borderTop: '1px dashed var(--color-border)',
+                 paddingTop: '8px',
+                 display: 'flex',
+                 justifyContent: 'space-between',
+                 alignItems: 'center'
+               }}>
+                 <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                   Monthly Consumed:
+                 </span>
+                 <strong style={{ fontSize: '15px', color: hasConsumption ? '#9b59b6' : 'var(--color-text-secondary)' }}>
+                   {item.consumedQty} {item.unit}
+                 </strong>
+               </div>
+
+               {item.consumedCost > 0 && (
+                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
+                   <span>Cost Value:</span>
+                   <strong style={{ color: '#27ae60' }}>₹{item.consumedCost.toFixed(2)}</strong>
+                 </div>
+               )}
+             </div>
+           );
+         })}
+       </div>
+     </div>
+   );
+ })()}
 </div>
 }
 </div>
@@ -8654,7 +8799,6 @@ const exportStaffToCSV = exportStaffPayrollExcel;
  {orders
     .filter((order) => {
       if (!order) return false;
-      if (order.status === 'Cancelled' || order.status === 'cancelled') return false;
       
       // Date filtering
       if (orderDateFilter && order.createdAt) {
@@ -8686,15 +8830,48 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 
       return (
       <div key={order?._id || orderIndex} style={{
-        background: 'rgba(0, 0, 0,0.02)', border: '1px solid var(--color-border)',
+        background: (order?.isDeleted || order?.status === 'Cancelled') ? 'rgba(231, 76, 60, 0.05)' : 'rgba(0, 0, 0,0.02)', 
+        border: (order?.isDeleted || order?.status === 'Cancelled') ? '1.5px solid rgba(231, 76, 60, 0.4)' : '1px solid var(--color-border)',
         borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
       }}>
         {/* Header: Order ID + Status */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '15px' }}>
               #{shortId}
             </span>
+            {(order?.isDeleted || order?.status === 'Cancelled') && (
+              <span style={{
+                background: '#e74c3c',
+                color: '#ffffff',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 900,
+                letterSpacing: '0.4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px'
+              }}>
+                ❌ DELETED BY STAFF {order?.deletedBy ? `(${order.deletedBy})` : ''}
+              </span>
+            )}
+            {(order?.orderSource === 'STAFF_CONSUMPTION' || order?.paymentStatus === 'Complimentary') && (
+              <span style={{
+                background: 'linear-gradient(135deg, #8e44ad 0%, #6c3483 100%)',
+                color: '#ffffff',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 900,
+                letterSpacing: '0.4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px'
+              }}>
+                👑 OWNER / STAFF MEAL
+              </span>
+            )}
             {order?.orderSource === 'EXTRA_SALE' || order?.source === 'EXTRA_SALE' ? (
               <span style={{
                 background: 'linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%)',
@@ -8741,11 +8918,11 @@ const exportStaffToCSV = exportStaffPayrollExcel;
             )}
           </div>
           <span style={{
-            color: order?.status === 'Placed' ? '#3498db' : order?.status === 'Preparing' ? '#ff9800' : order?.status === 'Ready' ? '#2ecc71' : order?.status === 'Delivered' ? '#9b59b6' : order?.status === 'Completed' ? '#27AE60' : '#7f8c8d',
-            background: order?.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order?.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order?.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order?.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order?.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
+            color: (order?.isDeleted || order?.status === 'Cancelled') ? '#e74c3c' : order?.status === 'Placed' ? '#3498db' : order?.status === 'Preparing' ? '#ff9800' : order?.status === 'Ready' ? '#2ecc71' : order?.status === 'Delivered' ? '#9b59b6' : order?.status === 'Completed' ? '#27AE60' : '#7f8c8d',
+            background: (order?.isDeleted || order?.status === 'Cancelled') ? 'rgba(231,76,60,0.15)' : order?.status === 'Placed' ? 'rgba(52,152,219,0.1)' : order?.status === 'Preparing' ? 'rgba(255,152,0,0.1)' : order?.status === 'Ready' ? 'rgba(46,204,113,0.1)' : order?.status === 'Delivered' ? 'rgba(155,89,182,0.1)' : order?.status === 'Completed' ? 'rgba(39,174,96,0.1)' : 'rgba(127,140,141,0.1)',
             padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800
           }}>
-            {order?.status || 'Active'}
+            {order?.isDeleted || order?.status === 'Cancelled' ? 'Cancelled / Deleted' : (order?.status || 'Active')}
           </span>
         </div>
 

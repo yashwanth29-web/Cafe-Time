@@ -1969,7 +1969,7 @@ input[type="datetime-local"] {
 /* Row 2 Analytics Grid: Cash & Online + Inventory cards with responsive mobile flow */
 .analytics-grid-row-2 {
   display: grid;
-  grid-template-columns: 1.15fr 1fr 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-top: 14px;
   margin-bottom: 20px;

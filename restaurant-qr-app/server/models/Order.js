@@ -74,17 +74,17 @@ const OrderSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['Pending', 'Paid', 'Failed'],
+    enum: ['Pending', 'Paid', 'Failed', 'Complimentary', 'Partially_Paid'],
     default: 'Pending'
   },
   paymentMethod: {
     type: String,
-    enum: ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card'],
+    enum: ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card', 'Staff_Meal', 'Complimentary'],
     default: 'Pending'
   },
   orderSource: {
     type: String,
-    enum: ['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF', 'EXTRA_SALE'],
+    enum: ['QR', 'MANUAL', 'TAKEAWAY', 'WALK_IN', 'DINE_IN', 'STAFF', 'EXTRA_SALE', 'STAFF_CONSUMPTION'],
     default: 'QR'
   },
   createdBy: {
@@ -164,6 +164,26 @@ const OrderSchema = new mongoose.Schema({
   grandTotal: {
     type: Number,
     default: 0
+  },
+  paidAmount: {
+    type: Number,
+    default: 0
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedBy: {
+    type: String,
+    default: ''
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedReason: {
+    type: String,
+    default: ''
   },
   inventoryDeducted: {
     type: Boolean,
