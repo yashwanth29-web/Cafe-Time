@@ -72,6 +72,11 @@ const MenuItemSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  subCategory: {
+    type: String,
+    default: '',
+    trim: true
+  },
   available: {
     type: Boolean,
     default: true

@@ -16,10 +16,28 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState(['All']);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [hasHistory, setHasHistory] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Reset subcategory when main category changes
+  useEffect(() => {
+    setSelectedSubCategory('All');
+  }, [selectedCategory]);
+
+  // Extract distinct subcategories for current category
+  const availableSubCategories = useMemo(() => {
+    if (selectedCategory === 'All') return [];
+    const subs = new Set();
+    menuItems.forEach((item) => {
+      if (item.available && item.category === selectedCategory && item.subCategory && item.subCategory.trim()) {
+        subs.add(item.subCategory.trim());
+      }
+    });
+    return Array.from(subs);
+  }, [menuItems, selectedCategory]);
 
   useEffect(() => {
     // Never show customer order tracking banner in staff take-order mode
@@ -120,21 +138,23 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
     };
   }, []);
 
-  // Filter menu items by category, availability and search
+  // Filter menu items by category, subcategory, availability and search
   const filteredMenu = useMemo(() => {
     return menuItems.filter((item) => {
       if (!item.available) return false;
       if (selectedCategory !== 'All' && item.category !== selectedCategory) return false;
+      if (selectedSubCategory !== 'All' && (item.subCategory || '').toLowerCase().trim() !== selectedSubCategory.toLowerCase().trim()) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
           item.name.toLowerCase().includes(q) ||
+          (item.subCategory || '').toLowerCase().includes(q) ||
           (item.description || '').toLowerCase().includes(q)
         );
       }
       return true;
     });
-  }, [menuItems, selectedCategory, searchQuery]);
+  }, [menuItems, selectedCategory, selectedSubCategory, searchQuery]);
 
   // Calculate cart quantities and total price
   const totalItems = useMemo(() => cart.reduce((acc, curr) => acc + curr.quantity, 0), [cart]);
@@ -363,8 +383,58 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
         </div>
       )}
 
+      {/* Sub-Category Filter Pills */}
+      {selectedCategory !== 'All' && availableSubCategories.length > 0 && !searchQuery && (
+        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '2px 0 12px 0', scrollbarWidth: 'none' }} className="custom-scrollbar">
+          <button
+            type="button"
+            onClick={() => setSelectedSubCategory('All')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              fontSize: '12.5px',
+              fontWeight: selectedSubCategory === 'All' ? 800 : 600,
+              border: selectedSubCategory === 'All' ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+              background: selectedSubCategory === 'All' ? 'var(--color-primary)' : 'var(--bg-secondary)',
+              color: selectedSubCategory === 'All' ? '#ffffff' : 'var(--color-text-primary)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            All {selectedCategory}
+          </button>
+          {availableSubCategories.map((sub) => {
+            const isActive = selectedSubCategory === sub;
+            return (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => setSelectedSubCategory(prev => prev === sub ? 'All' : sub)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '12.5px',
+                  fontWeight: isActive ? 800 : 600,
+                  border: isActive ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                  background: isActive ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                  color: isActive ? '#ffffff' : 'var(--color-text-primary)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {sub}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Menu Cards Grid */}
-      <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '10px 0 12px 0', color: 'var(--color-text-primary)' }}>{searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Items' : selectedCategory}</h3>
+      <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '10px 0 12px 0', color: 'var(--color-text-primary)' }}>
+        {searchQuery ? 'Search Results' : selectedCategory === 'All' ? 'All Items' : (selectedSubCategory !== 'All' ? `${selectedCategory} • ${selectedSubCategory}` : selectedCategory)}
+      </h3>
       {filteredMenu.filter(i => selectedCategory === 'Combos' || !(i.isCombo || i.category === 'Combos') || searchQuery).length === 0 ?
         <div style={{
           padding: '50px 20px', textAlign: 'center', background: 'var(--bg-card)',
@@ -378,7 +448,72 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
               <button onClick={() => setSearchQuery('')} style={{ marginTop: '14px', background: 'var(--color-primary)', color: 'var(--color-text-primary)', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>Clear Search</button>
             </> : '🍽️ No available items in this category.'}
         </div> 
-      :
+      : (selectedCategory !== 'All' && availableSubCategories.length > 0 && selectedSubCategory === 'All' && !searchQuery) ? (
+        <div>
+          {availableSubCategories.map((sub) => {
+            const subItems = filteredMenu.filter(i => (i.subCategory || '').toLowerCase().trim() === sub.toLowerCase().trim() && (selectedCategory === 'Combos' || !(i.isCombo || i.category === 'Combos')));
+            if (subItems.length === 0) return null;
+            return (
+              <div key={sub} style={{ marginBottom: '22px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '12px 0 10px 0' }}>
+                  <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: 'var(--color-primary)' }}>
+                    {sub}
+                  </h4>
+                  <span style={{ fontSize: '11px', background: 'rgba(255, 107, 8, 0.12)', color: 'var(--color-primary)', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                    {subItems.length}
+                  </span>
+                  <div style={{ flex: 1, height: '1px', background: 'var(--color-border)' }} />
+                </div>
+                <div className="compact-menu-grid">
+                  {subItems.map((item) => {
+                    const cartItem = cart.find((cItem) => cItem.item.id === item.id);
+                    return (
+                      <MenuCard
+                        key={item.id}
+                        item={item}
+                        cartItem={cartItem}
+                        addToCart={addToCart}
+                        increaseQuantity={increaseQuantity}
+                        decreaseQuantity={decreaseQuantity} />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {(() => {
+            const otherItems = filteredMenu.filter(i => (!i.subCategory || !i.subCategory.trim()) && (selectedCategory === 'Combos' || !(i.isCombo || i.category === 'Combos')));
+            if (otherItems.length === 0) return null;
+            return (
+              <div style={{ marginBottom: '22px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '12px 0 10px 0' }}>
+                  <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: 'var(--color-text-secondary)' }}>
+                    Other {selectedCategory}
+                  </h4>
+                  <span style={{ fontSize: '11px', background: 'rgba(0, 0, 0, 0.06)', color: 'var(--color-text-secondary)', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                    {otherItems.length}
+                  </span>
+                  <div style={{ flex: 1, height: '1px', background: 'var(--color-border)' }} />
+                </div>
+                <div className="compact-menu-grid">
+                  {otherItems.map((item) => {
+                    const cartItem = cart.find((cItem) => cItem.item.id === item.id);
+                    return (
+                      <MenuCard
+                        key={item.id}
+                        item={item}
+                        cartItem={cartItem}
+                        addToCart={addToCart}
+                        increaseQuantity={increaseQuantity}
+                        decreaseQuantity={decreaseQuantity} />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
         <div className="compact-menu-grid">
           {filteredMenu.filter(i => selectedCategory === 'Combos' || !(i.isCombo || i.category === 'Combos') || searchQuery).map((item) => {
             const cartItem = cart.find((cItem) => cItem.item.id === item.id);
@@ -393,7 +528,7 @@ const CustomerMenu = ({ cart, addToCart, increaseQuantity, decreaseQuantity }) =
             );
           })}
         </div>
-      }
+      )}
 
       {!isStaffMode && hasHistory && totalItems === 0 && (
         <div className="sticky-cart-banner" style={{ background: '#2563eb', boxShadow: '0 8px 24px rgba(37, 99, 235, 0.35)' }}>

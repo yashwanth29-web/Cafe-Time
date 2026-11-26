@@ -958,6 +958,7 @@ const OwnerDashboard = () =>{
  price: '',
  makingCost: '',
  category: 'Signature Chai',
+ subCategory: '',
  description: '',
  available: true,
  image: '',
@@ -2557,6 +2558,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
           price: '',
           makingCost: '',
           category: 'Signature Chai',
+          subCategory: '',
           description: '',
           available: true,
           image: '',
@@ -4856,17 +4858,17 @@ const exportStaffToCSV = exportStaffPayrollExcel;
         <span className="modern-metric-pill modern-pill-warning">Current Real-Time Value</span>
       </div>
 
-      {/* Monthly Purchases / Stock Inward */}
+      {/* Inventory Consumed This Month */}
       <div className="modern-metric-card">
         <div className="modern-metric-header">
-          <h4 className="modern-metric-title">Monthly Purchases</h4>
+          <h4 className="modern-metric-title">Inventory Consumed</h4>
           <div className="modern-metric-icon-wrapper" style={{ background: 'rgba(155, 89, 182, 0.12)' }}>
             <IndianRupee size={15} color="#9b59b6" />
           </div>
         </div>
-        <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</p>
+        <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
         <span className="modern-metric-pill modern-pill-neutral">
-          Stock inward this month
+          Kitchen usage this month
         </span>
       </div>
 
@@ -9353,6 +9355,24 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 )}
 </select>
 </div>
+<div className="form-group">
+<label htmlFor="add-item-subcategory" className="form-label">Sub-Category (Optional)</label>
+<input 
+  type="text" 
+  id="add-item-subcategory" 
+  name="add-item-subcategory" 
+  placeholder="e.g. Vanilla, Chocolate, Special" 
+  value={newItem.subCategory || ''} 
+  onChange={(e) => setNewItem({ ...newItem, subCategory: e.target.value })} 
+  className="form-input" 
+  list="add-subcategory-suggestions"
+/>
+<datalist id="add-subcategory-suggestions">
+  {Array.from(new Set(menuItems.filter(i => (i.category === newItem.category || !newItem.category) && i.subCategory).map(i => i.subCategory))).map(sub => (
+    <option key={sub} value={sub} />
+  ))}
+</datalist>
+</div>
 </div>
 {newItem.isCombo && (
 <div className="form-group">
@@ -9486,6 +9506,24 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 <option key={cat} value={cat}>{cat}</option>
 )}
 </select>
+</div>
+<div className="form-group">
+<label htmlFor="edit-item-subcategory" className="form-label">Sub-Category (Optional)</label>
+<input 
+  type="text" 
+  id="edit-item-subcategory" 
+  name="edit-item-subcategory" 
+  placeholder="e.g. Vanilla, Chocolate, Special" 
+  value={editingItem.subCategory || ''} 
+  onChange={(e) => setEditingItem({ ...editingItem, subCategory: e.target.value })} 
+  className="form-input" 
+  list="edit-subcategory-suggestions"
+/>
+<datalist id="edit-subcategory-suggestions">
+  {Array.from(new Set(menuItems.filter(i => (i.category === editingItem.category || !editingItem.category) && i.subCategory).map(i => i.subCategory))).map(sub => (
+    <option key={sub} value={sub} />
+  ))}
+</datalist>
 </div>
 </div>
 {editingItem.isCombo && (

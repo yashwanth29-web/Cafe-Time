@@ -4941,6 +4941,22 @@ const StaffOrderWorkspace = () => {
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Sub-Category (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Vanilla, Chocolate"
+                    value={newMenuItem.subCategory || ''}
+                    onChange={(e) => setNewMenuItem({ ...newMenuItem, subCategory: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
                     Prep Time (min)
                   </label>
                   <input
@@ -5146,6 +5162,22 @@ const StaffOrderWorkspace = () => {
                       </>
                     )}
                   </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>
+                    Sub-Category (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Vanilla, Chocolate"
+                    value={newMenuItem.subCategory || ''}
+                    onChange={(e) => setNewMenuItem({ ...newMenuItem, subCategory: e.target.value })}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: '8px',
+                      border: '1px solid var(--color-border)', background: 'rgba(0,0,0,0.03)',
+                      color: 'var(--color-text-primary)', fontSize: '13px', outline: 'none', boxSizing: 'border-box'
+                    }}
+                  />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '5px' }}>

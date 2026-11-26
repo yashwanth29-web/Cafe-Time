@@ -105,7 +105,7 @@ const getMenuItems = async (req, res, next) => {
 // @access  Public (Owner Dashboard)
 const createMenuItem = async (req, res, next) => {
   try {
-    const { name, price, originalPrice, makingCost, category, description, available, isCombo, image, recipe, preparationTime } = req.body;
+    const { name, price, originalPrice, makingCost, category, subCategory, description, available, isCombo, image, recipe, preparationTime } = req.body;
     const cafeId = req.cafeId || (req.user && req.user.cafeId);
     if (!cafeId) {
       return res.status(400).json({ success: false, message: 'Missing cafeId' });
@@ -124,6 +124,7 @@ const createMenuItem = async (req, res, next) => {
       originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
       makingCost: makingCost !== undefined ? parseFloat(makingCost) : 0,
       category,
+      subCategory: (subCategory || '').trim(),
       description: description || '',
       available: available !== undefined ? available : true,
       isCombo: isCombo !== undefined ? isCombo : false,
