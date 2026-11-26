@@ -1,10 +1,13 @@
 {
-  "timestamp": "2026-11-26T17:44:13.478Z",
-  "totalOrphanedChunks": 4,
+  "timestamp": "2026-11-26T18:21:26.945Z",
+  "totalOrphanedChunks": 7,
   "orphanedChunkFileIds": [
     "6b086c966ee28e48b6a9521a",
     "6b086cd70f552b1111ba8221",
     "6b086d9c38ade82e226cbeed",
-    "6b086fed9cd11aa3d8820a36"
+    "6b0875c4875a6507dbe196d8",
+    "6b0875f07509be7ebbfc266e",
+    "6b087628c7bf26968f2a92d4",
+    "6b08788ab6c68b1452d77d4b"
   ]
 }

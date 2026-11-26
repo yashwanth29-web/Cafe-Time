@@ -79,7 +79,7 @@ const OrderSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card', 'Staff_Meal', 'Complimentary'],
+    enum: ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card', 'Staff_Meal', 'Complimentary', 'Split'],
     default: 'Pending'
   },
   orderSource: {
@@ -166,6 +166,14 @@ const OrderSchema = new mongoose.Schema({
     default: 0
   },
   paidAmount: {
+    type: Number,
+    default: 0
+  },
+  cashAmount: {
+    type: Number,
+    default: 0
+  },
+  onlineAmount: {
     type: Number,
     default: 0
   },

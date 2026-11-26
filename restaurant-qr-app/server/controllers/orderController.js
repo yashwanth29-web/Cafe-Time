@@ -397,7 +397,7 @@ const createOrder = async (req, res, next) => {
     if (isExtraSale) {
       normalizedSource = 'STAFF';
       normalizedOrderSource = 'EXTRA_SALE';
-    } else if (String(orderSource).toUpperCase() === 'STAFF_CONSUMPTION' || req.body.isStaffMeal || String(activeTableNumber).toLowerCase().includes('staff')) {
+    } else if (String(orderSource).toUpperCase() === 'STAFF_CONSUMPTION' || req.body.isStaffMeal || String(activeTableNumber).toLowerCase().includes('staff') || String(activeTableNumber).toLowerCase().includes('owner')) {
       normalizedSource = 'STAFF';
       normalizedOrderSource = 'STAFF_CONSUMPTION';
     } else {
@@ -483,15 +483,18 @@ const createOrder = async (req, res, next) => {
       items: validatedItems,
       totalAmount: finalGrandTotal,
       status: isExtraSale ? 'Completed' : (normalizedOrderSource === 'STAFF_CONSUMPTION' ? 'Completed' : 'Placed'),
-      customerName: normalizedOrderSource === 'STAFF_CONSUMPTION' ? (createdBy || 'Staff/Owner Meal') : finalCustomerName,
+      customerName: normalizedOrderSource === 'STAFF_CONSUMPTION' ? (createdBy || req.user?.name || 'Owner / Staff') : finalCustomerName,
       customerEmail: finalCustomerEmail,
       customerPhone: finalCustomerPhone,
       specialInstructions: specialInstructions || (normalizedOrderSource === 'STAFF_CONSUMPTION' ? 'Owner / Staff Consumption (Complimentary)' : ''),
       paymentStatus: isExtraSale ? 'Paid' : (normalizedOrderSource === 'STAFF_CONSUMPTION' ? 'Complimentary' : (paymentStatus || 'Pending')),
       paymentMethod: normalizedOrderSource === 'STAFF_CONSUMPTION' ? 'Staff_Meal' : (paymentMethod || (isExtraSale ? 'Cash' : 'Pending')),
+      paidAmount: normalizedOrderSource === 'STAFF_CONSUMPTION' ? 0 : (req.body.paidAmount || 0),
+      cashAmount: normalizedOrderSource === 'STAFF_CONSUMPTION' ? 0 : (req.body.cashAmount || 0),
+      onlineAmount: normalizedOrderSource === 'STAFF_CONSUMPTION' ? 0 : (req.body.onlineAmount || 0),
       orderSource: normalizedOrderSource,
-      createdBy: createdBy || '',
-      createdByRole: createdByRole || '',
+      createdBy: normalizedOrderSource === 'STAFF_CONSUMPTION' ? (createdBy || req.user?.name || 'Staff') : (createdBy || ''),
+      createdByRole: normalizedOrderSource === 'STAFF_CONSUMPTION' ? (createdByRole || req.user?.role || 'Staff') : (createdByRole || ''),
       subtotal: finalSubtotal,
       tax: finalTax,
       grandTotal: finalGrandTotal,
@@ -772,12 +775,15 @@ const updateOrderStatus = async (req, res, next) => {
     if (req.body.paidAmount !== undefined) {
       updateFields.paidAmount = Number(req.body.paidAmount) || 0;
     }
-    if (paymentMethod) {
-      updateFields.paymentMethod = paymentMethod;
+    if (req.body.cashAmount !== undefined) {
+      updateFields.cashAmount = Number(req.body.cashAmount) || 0;
+    }
+    if (req.body.onlineAmount !== undefined) {
+      updateFields.onlineAmount = Number(req.body.onlineAmount) || 0;
     }
 
     if (paymentMethod !== undefined) {
-      const allowedPaymentMethods = ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card'];
+      const allowedPaymentMethods = ['Online', 'Counter', 'Pending', 'Cash', 'UPI', 'Card', 'Staff_Meal', 'Complimentary', 'Split'];
       if (!allowedPaymentMethods.includes(paymentMethod)) {
         return res.status(400).json({ success: false, message: `Invalid paymentMethod. Must be one of: ${allowedPaymentMethods.join(', ')}` });
       }

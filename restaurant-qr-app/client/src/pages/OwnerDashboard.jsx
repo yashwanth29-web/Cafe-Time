@@ -482,6 +482,7 @@ const OwnerDashboard = () =>{
    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   });
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
+  const [consumptionSearch, setConsumptionSearch] = useState('');
 
   // Feature 1: All Sold Items Feed States
   const [soldItemsPeriod, setSoldItemsPeriod] = useState('today'); // 'today' | 'date' | 'overall'
@@ -3037,26 +3038,36 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     return completedOrders.filter((o) => new Date(o.createdAt) >= startOfToday);
   }, [completedOrders]);
 
-  // Use server-side payment breakdown (accurate, IST-timezone-aware)
+  // Client-side payment breakdown respecting split payments & isolating staff meals
   const todayCashSales = useMemo(() => {
-    if (statsData && statsData.todayCashRevenue !== undefined) return Number(statsData.todayCashRevenue);
-    return todayOrders
+    return (todayOrders || [])
       .filter((o) => {
-        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
-        return method === 'cash';
+        const isStaffMeal = o.orderSource === 'STAFF_CONSUMPTION' || o.paymentStatus === 'Complimentary' || (o.paymentMethod && o.paymentMethod.toLowerCase().includes('staff')) || String(o.tableNumber).toLowerCase().includes('owner') || String(o.tableNumber).toLowerCase().includes('staff');
+        return !isStaffMeal && (o.paymentStatus === 'Paid' || ['Ready', 'Delivered', 'Completed'].includes(o.status));
       })
-      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
-  }, [statsData, todayOrders]);
+      .reduce((sum, o) => {
+        if (o.cashAmount !== undefined && (o.cashAmount > 0 || o.onlineAmount > 0)) {
+          return sum + Number(o.cashAmount || 0);
+        }
+        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
+        return (method === 'cash' || (!method.includes('online') && !method.includes('upi') && !method.includes('card'))) ? sum + (Number(o.totalAmount) || 0) : sum;
+      }, 0);
+  }, [todayOrders]);
 
   const todayOnlineSales = useMemo(() => {
-    if (statsData && statsData.todayOnlineRevenue !== undefined) return Number(statsData.todayOnlineRevenue);
-    return todayOrders
+    return (todayOrders || [])
       .filter((o) => {
-        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
-        return method !== 'cash';
+        const isStaffMeal = o.orderSource === 'STAFF_CONSUMPTION' || o.paymentStatus === 'Complimentary' || (o.paymentMethod && o.paymentMethod.toLowerCase().includes('staff')) || String(o.tableNumber).toLowerCase().includes('owner') || String(o.tableNumber).toLowerCase().includes('staff');
+        return !isStaffMeal && (o.paymentStatus === 'Paid' || ['Ready', 'Delivered', 'Completed'].includes(o.status));
       })
-      .reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
-  }, [statsData, todayOrders]);
+      .reduce((sum, o) => {
+        if (o.onlineAmount !== undefined && (o.cashAmount > 0 || o.onlineAmount > 0)) {
+          return sum + Number(o.onlineAmount || 0);
+        }
+        const method = (o.paymentMethod || o.paymentDetails?.method || '').toLowerCase();
+        return (method.includes('online') || method.includes('upi') || method.includes('card')) ? sum + (Number(o.totalAmount) || 0) : sum;
+      }, 0);
+  }, [todayOrders]);
 
   // 100% mathematical synchronization: Today's Revenue ALWAYS equals Cash Paid + Online Paid
   const todayRevenue = useMemo(() => {
@@ -3508,9 +3519,15 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       return logDate === todayStr && isAdd ? acc + cost : acc;
     }, 0);
 
-    const totalToday = otherExpToday + stockPurchasesToday;
-    return { otherExpToday, stockPurchasesToday, totalToday };
-  }, [expenses, inventoryLogs]);
+    // 3. Staff / Owner Meal orders consumption of today (treated as internal order expenses)
+    const staffMealsToday = (todayOrders || []).reduce((acc, o) => {
+      const isStaffMeal = o.orderSource === 'STAFF_CONSUMPTION' || o.paymentStatus === 'Complimentary' || (o.paymentMethod && o.paymentMethod.toLowerCase().includes('staff')) || String(o.tableNumber).toLowerCase().includes('owner') || String(o.tableNumber).toLowerCase().includes('staff');
+      return isStaffMeal ? acc + (Number(o.totalAmount) || 0) : acc;
+    }, 0);
+
+    const totalToday = otherExpToday + stockPurchasesToday + staffMealsToday;
+    return { otherExpToday, stockPurchasesToday, staffMealsToday, totalToday };
+  }, [expenses, inventoryLogs, todayOrders]);
 
   const rankedItems = useMemo(() => {
     if (statsData && statsData.topSellingItems !== undefined) {
@@ -3691,9 +3708,19 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     let onlineRevenue = 0;
     let pendingRevenue = 0;
     let extraSalesRevenue = 0;
+    let staffMealRevenue = 0;
+    let staffMealCount = 0;
 
     filtered.forEach((order) => {
       const amt = Number(order.totalAmount) || 0;
+      const isStaffMeal = order.orderSource === 'STAFF_CONSUMPTION' || order.paymentStatus === 'Complimentary' || (order.paymentMethod && order.paymentMethod.toLowerCase().includes('staff')) || String(order.tableNumber).toLowerCase().includes('owner') || String(order.tableNumber).toLowerCase().includes('staff');
+
+      if (isStaffMeal) {
+        staffMealRevenue += amt;
+        staffMealCount++;
+        return; // Exclude from customer cash & revenue!
+      }
+
       const isPaid = order.paymentStatus === 'Paid' || ['Ready', 'Delivered', 'Completed'].includes(order.status);
       const isExtra = order.orderSource === 'EXTRA_SALE' || order.source === 'EXTRA_SALE' || order.customerName === 'Extra Sale' || order.tableNumber === 'EXTRA-SALE';
 
@@ -3703,11 +3730,17 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 
       if (isPaid) {
         fulfilledRevenue += amt;
-        const method = (order.paymentMethod || order.paymentDetails?.method || 'cash').toLowerCase();
-        if (method.includes('upi') || method.includes('online') || method.includes('qr') || method.includes('card')) {
-          onlineRevenue += amt;
+        const hasSplitData = (order.cashAmount !== undefined && order.cashAmount > 0) || (order.onlineAmount !== undefined && order.onlineAmount > 0);
+        if (hasSplitData) {
+          cashRevenue += Number(order.cashAmount || 0);
+          onlineRevenue += Number(order.onlineAmount || 0);
         } else {
-          cashRevenue += amt;
+          const method = (order.paymentMethod || order.paymentDetails?.method || 'cash').toLowerCase();
+          if (method.includes('upi') || method.includes('online') || method.includes('qr') || method.includes('card')) {
+            onlineRevenue += amt;
+          } else {
+            cashRevenue += amt;
+          }
         }
       } else {
         pendingRevenue += amt;
@@ -3720,7 +3753,9 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       cashRevenue,
       onlineRevenue,
       pendingRevenue,
-      extraSalesRevenue
+      extraSalesRevenue,
+      staffMealRevenue,
+      staffMealCount
     };
   }, [orders, orderDateFilter]);
 
@@ -4882,7 +4917,10 @@ const exportStaffToCSV = exportStaffPayrollExcel;
             📋 Other: ₹{todayExpensesData.otherExpToday.toFixed(2)}
           </span>
           <span className="modern-metric-pill" style={{ background: 'rgba(230, 126, 34, 0.08)', color: '#d35400', justifyContent: 'flex-start' }}>
-            📦 Stock Purchases: ₹{todayExpensesData.stockPurchasesToday.toFixed(2)}
+            📦 Stock Inward: ₹{todayExpensesData.stockPurchasesToday.toFixed(2)}
+          </span>
+          <span className="modern-metric-pill" style={{ background: 'rgba(142, 68, 173, 0.08)', color: '#8e44ad', justifyContent: 'flex-start' }}>
+            🍽️ Staff/Owner Meals: ₹{(todayExpensesData.staffMealsToday || 0).toFixed(2)}
           </span>
         </div>
       </div>
@@ -8566,16 +8604,19 @@ const exportStaffToCSV = exportStaffPayrollExcel;
    });
 
    (inventoryList || []).forEach((item) => {
+     const unitCost = Number(item.costPrice || item.cost || 0);
      if (!itemConsumptionMap[item.name]) {
        itemConsumptionMap[item.name] = {
          name: item.name,
          unit: item.unit || 'g',
          consumedQty: 0,
          consumedCost: 0,
+         unitCost,
          currentStock: item.quantity || item.stock || 0
        };
      } else {
        itemConsumptionMap[item.name].currentStock = item.quantity || item.stock || 0;
+       itemConsumptionMap[item.name].unitCost = unitCost;
        if (!itemConsumptionMap[item.name].unit) {
          itemConsumptionMap[item.name].unit = item.unit || 'g';
        }
@@ -8585,7 +8626,15 @@ const exportStaffToCSV = exportStaffPayrollExcel;
    const consumptionList = Object.values(itemConsumptionMap)
      .sort((a, b) => b.consumedQty - a.consumedQty || a.name.localeCompare(b.name));
 
-   const totalConsumedMonthCost = consumptionList.reduce((acc, i) => acc + i.consumedCost, 0);
+   const totalConsumedMonthCost = consumptionList.reduce((acc, i) => {
+     const uCost = Number(i.unitCost || 0);
+     const cost = i.consumedCost > 0 ? i.consumedCost : (i.consumedQty * uCost);
+     return acc + cost;
+   }, 0);
+
+   const displayList = consumptionList.filter((item) => 
+     !consumptionSearch || item.name.toLowerCase().includes(consumptionSearch.toLowerCase().trim())
+   );
 
    return (
      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -8616,9 +8665,55 @@ const exportStaffToCSV = exportStaffPayrollExcel;
          </div>
        </div>
 
+       {/* Search Bar for Monthly Consumption */}
+       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+         <div style={{ position: 'relative', flex: 1, minWidth: '240px', maxWidth: '420px' }}>
+           <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', color: 'var(--color-text-secondary)' }}>
+             🔍
+           </span>
+           <input
+             type="text"
+             placeholder="Search ingredient (e.g. Sugar, Lemon, Water)..."
+             value={consumptionSearch}
+             onChange={(e) => setConsumptionSearch(e.target.value)}
+             style={{
+               width: '100%',
+               padding: '9px 12px 9px 34px',
+               borderRadius: '8px',
+               border: '1px solid var(--color-border)',
+               background: 'var(--bg-secondary)',
+               color: 'var(--color-text-primary)',
+               fontSize: '13px',
+               outline: 'none'
+             }}
+           />
+         </div>
+         {consumptionSearch && (
+           <button
+             onClick={() => setConsumptionSearch('')}
+             style={{
+               background: 'none',
+               border: 'none',
+               color: 'var(--color-text-secondary)',
+               fontSize: '12.5px',
+               cursor: 'pointer',
+               fontWeight: 600
+             }}
+           >
+             ✕ Clear
+           </button>
+         )}
+         <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginLeft: 'auto' }}>
+           Showing <strong>{displayList.length}</strong> of {consumptionList.length} items
+         </div>
+       </div>
+
        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
-         {consumptionList.map((item) => {
+         {displayList.map((item) => {
            const hasConsumption = item.consumedQty > 0;
+           const uCost = Number(item.unitCost || 0);
+           const effectiveCost = item.consumedCost > 0 ? item.consumedCost : (item.consumedQty * uCost);
+
            return (
              <div
                key={item.name}
@@ -8669,12 +8764,22 @@ const exportStaffToCSV = exportStaffPayrollExcel;
                  </strong>
                </div>
 
-               {item.consumedCost > 0 && (
-                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
-                   <span>Cost Value:</span>
-                   <strong style={{ color: '#27ae60' }}>₹{item.consumedCost.toFixed(2)}</strong>
-                 </div>
-               )}
+               <div style={{
+                 display: 'flex',
+                 justifyContent: 'space-between',
+                 alignItems: 'center',
+                 fontSize: '12px',
+                 marginTop: '4px',
+                 paddingTop: '6px',
+                 borderTop: '1px dotted var(--color-border)'
+               }}>
+                 <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                   Consumption Value:
+                 </span>
+                 <strong style={{ color: hasConsumption ? '#27ae60' : 'var(--color-text-secondary)', fontSize: '13px' }}>
+                   ₹{effectiveCost.toFixed(2)}
+                 </strong>
+               </div>
              </div>
            );
          })}
@@ -8793,6 +8898,15 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       ₹{monitorSummary.extraSalesRevenue.toFixed(2)}
     </div>
   </div>
+
+  <div>
+    <div style={{ fontSize: '11px', color: '#8e44ad', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <span>👑</span> OWNER / STAFF MEAL
+    </div>
+    <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#8e44ad', marginTop: '2px' }}>
+      ₹{(monitorSummary.staffMealRevenue || 0).toFixed(2)}
+    </div>
+  </div>
 </div>
 
 <div className="orders-monitor-grid">
@@ -8882,6 +8996,10 @@ const exportStaffToCSV = exportStaffPayrollExcel;
                 fontWeight: 800
               }}>
                 ➕ EXTRA SALE
+              </span>
+            ) : (order?.orderSource === 'STAFF_CONSUMPTION' || order?.paymentStatus === 'Complimentary' || String(order?.tableNumber).toLowerCase().includes('staff') || String(order?.tableNumber).toLowerCase().includes('owner')) ? (
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 700 }}>
+                · Table {order?.tableNumber || 'Staff / Owner'}
               </span>
             ) : (
               <>
@@ -8985,14 +9103,29 @@ const exportStaffToCSV = exportStaffPayrollExcel;
         {/* Footer: Amount + Payment Status */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(0, 0, 0,0.1)', paddingTop: '12px' }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>Total Amount</span>
+            <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>
+              {(order?.orderSource === 'STAFF_CONSUMPTION' || order?.paymentStatus === 'Complimentary' || String(order?.tableNumber).toLowerCase().includes('staff') || String(order?.tableNumber).toLowerCase().includes('owner')) ? 'Staff Consumption Value' : 'Total Amount'}
+            </span>
             <span style={{ color: 'var(--color-text-primary)', fontWeight: 800, fontSize: '16px' }}>₹{totalAmt}</span>
+            {(order?.paymentMethod === 'Split' || (order?.cashAmount > 0 && order?.onlineAmount > 0)) && (
+              <span style={{ fontSize: '10.5px', color: '#2980b9', fontWeight: 700, marginTop: '2px' }}>
+                💵 ₹{order.cashAmount || 0} Cash · 📱 ₹{order.onlineAmount || 0} Online
+              </span>
+            )}
           </div>
           <span style={{
-            color: order?.paymentStatus === 'Paid' ? '#27AE60' : '#E74C3C',
+            color: (order?.orderSource === 'STAFF_CONSUMPTION' || order?.paymentStatus === 'Complimentary' || String(order?.tableNumber).toLowerCase().includes('staff') || String(order?.tableNumber).toLowerCase().includes('owner'))
+              ? '#8e44ad'
+              : order?.paymentStatus === 'Paid'
+                ? '#27AE60'
+                : (order?.paymentStatus === 'Partially_Paid' ? '#f39c12' : '#E74C3C'),
             fontWeight: 800, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px'
           }}>
-            {order?.paymentStatus === 'Paid' ? ' Paid' : ' Pending'}
+            {(order?.orderSource === 'STAFF_CONSUMPTION' || order?.paymentStatus === 'Complimentary' || String(order?.tableNumber).toLowerCase().includes('staff') || String(order?.tableNumber).toLowerCase().includes('owner'))
+              ? '👑 Complimentary'
+              : order?.paymentStatus === 'Paid'
+                ? ' Paid'
+                : (order?.paymentStatus === 'Partially_Paid' ? '🟡 Partially Paid' : ' Pending')}
           </span>
         </div>
       </div>

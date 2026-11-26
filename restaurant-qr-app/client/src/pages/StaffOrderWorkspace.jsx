@@ -1202,18 +1202,28 @@ const StaffOrderWorkspace = () => {
     try {
       const order = orders.find(o => o._id === orderId) || completedLogs.find(o => o._id === orderId);
       const parsedAmount = customAmount !== null ? Number(customAmount) : (Number(paymentAmountInput) || (order ? order.totalAmount : 0));
-      const currentPaid = Number(order?.paidAmount || 0);
-      const newTotalPaid = currentPaid + parsedAmount;
+      
+      const prevCash = Number(order?.cashAmount || 0);
+      const prevOnline = Number(order?.onlineAmount || 0);
+      const isCash = paymentMethod === 'Cash';
+      const isOnline = paymentMethod === 'Online' || paymentMethod === 'UPI';
+
+      const newCash = isCash ? prevCash + parsedAmount : prevCash;
+      const newOnline = isOnline ? prevOnline + parsedAmount : prevOnline;
+      const newTotalPaid = newCash + newOnline;
       const orderTotal = Number(order?.totalAmount || parsedAmount);
 
       const isFullySettled = newTotalPaid >= orderTotal || parsedAmount >= orderTotal;
       const targetStatus = isFullySettled ? 'Completed' : (order?.status || 'Placed');
       const paymentStatus = isFullySettled ? 'Paid' : 'Partially_Paid';
+      const paymentMethodToSave = (newCash > 0 && newOnline > 0) ? 'Split' : (newCash > 0 ? 'Cash' : 'Online');
 
       await handleStatusTransition(orderId, targetStatus, { 
         paymentStatus, 
-        paymentMethod,
-        paidAmount: newTotalPaid
+        paymentMethod: paymentMethodToSave,
+        paidAmount: newTotalPaid,
+        cashAmount: newCash,
+        onlineAmount: newOnline
       });
       // Refresh completed logs in background if on today's view
       if (typeof fetchCompletedLogs === 'function') {
@@ -1608,6 +1618,8 @@ const StaffOrderWorkspace = () => {
     let upiRev = 0;
     let extraSalesRev = 0;
     let extraSalesCount = 0;
+    let staffMealRev = 0;
+    let staffMealCount = 0;
     let itemsCount = 0;
     let readyCount = 0;
     let paidCount = 0;
@@ -1615,6 +1627,15 @@ const StaffOrderWorkspace = () => {
 
     completedLogs.forEach((log) => {
       const amt = Number(log.totalAmount) || 0;
+
+      const isStaffMeal = log.orderSource === 'STAFF_CONSUMPTION' || log.paymentStatus === 'Complimentary' || (log.paymentMethod && log.paymentMethod.toLowerCase().includes('staff')) || String(log.tableNumber).toLowerCase().includes('owner') || String(log.tableNumber).toLowerCase().includes('staff');
+
+      if (isStaffMeal) {
+        staffMealRev += amt;
+        staffMealCount++;
+        return; // Exclude from customer cash & revenue!
+      }
+
       totalRev += amt;
       const isFulfilled = ['Ready', 'Delivered', 'Completed'].includes(log.status);
       if (isFulfilled) {
@@ -1624,11 +1645,18 @@ const StaffOrderWorkspace = () => {
       if (isPaid) {
         paidRev += amt;
         paidCount++;
-        const method = (log.paymentMethod || 'cash').toLowerCase();
-        if (method.includes('upi') || method.includes('online') || method.includes('qr')) {
-          upiRev += amt;
+
+        const hasSplitData = (log.cashAmount !== undefined && log.cashAmount > 0) || (log.onlineAmount !== undefined && log.onlineAmount > 0);
+        if (hasSplitData) {
+          cashRev += Number(log.cashAmount || 0);
+          upiRev += Number(log.onlineAmount || 0);
         } else {
-          cashRev += amt;
+          const method = (log.paymentMethod || 'cash').toLowerCase();
+          if (method.includes('upi') || method.includes('online') || method.includes('qr') || method.includes('card')) {
+            upiRev += amt;
+          } else {
+            cashRev += amt;
+          }
         }
       } else {
         pendingRev += amt;
@@ -1658,6 +1686,8 @@ const StaffOrderWorkspace = () => {
       upiRevenue: upiRev,
       extraSalesRevenue: extraSalesRev,
       extraSalesCount,
+      staffMealRevenue: staffMealRev,
+      staffMealCount,
       totalItems: itemsCount,
       readyCount,
       paidCount,
@@ -2335,6 +2365,15 @@ const StaffOrderWorkspace = () => {
                 ₹{(historySummary.extraSalesRevenue || 0).toFixed(2)}
               </div>
             </div>
+
+            <div>
+              <div style={{ fontSize: '11px', color: '#8e44ad', fontWeight: 700, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                <span>👑</span> Staff/Owner
+              </div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#8e44ad', marginTop: '2px' }}>
+                ₹{(historySummary.staffMealRevenue || 0).toFixed(2)}
+              </div>
+            </div>
           </div>
 
           {/* Search & Status/Payment Filters Row */}
@@ -2517,11 +2556,23 @@ const StaffOrderWorkspace = () => {
                           fontSize: '11px',
                           padding: '2px 8px',
                           borderRadius: '10px',
-                          fontWeight: 600,
-                          background: isPaid ? 'rgba(39, 174, 96, 0.12)' : 'rgba(230, 126, 34, 0.15)',
-                          color: isPaid ? '#27ae60' : '#e67e22'
+                          fontWeight: 700,
+                          background: (log.orderSource === 'STAFF_CONSUMPTION' || log.paymentStatus === 'Complimentary')
+                            ? 'rgba(142, 68, 173, 0.15)'
+                            : (log.paymentMethod === 'Split' || (log.cashAmount > 0 && log.onlineAmount > 0))
+                              ? 'rgba(41, 128, 185, 0.15)'
+                              : isPaid ? 'rgba(39, 174, 96, 0.12)' : 'rgba(230, 126, 34, 0.15)',
+                          color: (log.orderSource === 'STAFF_CONSUMPTION' || log.paymentStatus === 'Complimentary')
+                            ? '#8e44ad'
+                            : (log.paymentMethod === 'Split' || (log.cashAmount > 0 && log.onlineAmount > 0))
+                              ? '#2980b9'
+                              : isPaid ? '#27ae60' : '#e67e22'
                         }}>
-                          {isPaid ? `Paid via ${log.paymentMethod || 'Cash'}` : 'Payment Pending'}
+                          {(log.orderSource === 'STAFF_CONSUMPTION' || log.paymentStatus === 'Complimentary')
+                            ? '👑 Complimentary (Staff Meal)'
+                            : (log.paymentMethod === 'Split' || (log.cashAmount > 0 && log.onlineAmount > 0))
+                              ? `💵 ₹${log.cashAmount || 0} Cash + 📱 ₹${log.onlineAmount || 0} Online`
+                              : isPaid ? `Paid via ${log.paymentMethod || 'Cash'}` : 'Payment Pending'}
                         </span>
                       </div>
 
