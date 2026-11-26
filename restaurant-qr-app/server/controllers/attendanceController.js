@@ -59,7 +59,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c; // distance in meters
 };
 
-// Helper: Auto-checkout if shift ended >= 5 minutes ago
+  // Helper: Auto-checkout if shift ended >= 30 minutes ago, or notify owner if within 0-30 mins
 const checkAndApplyAutoCheckout = async (attendance, staff) => {
   if (!attendance) return false;
 
@@ -106,9 +106,45 @@ const checkAndApplyAutoCheckout = async (attendance, staff) => {
   const diffMs = now.getTime() - sessionCheckInTime.getTime();
   const durationMin = Math.max(1, Math.round(diffMs / 60000));
 
-  // Auto-checkout condition: Current time >= shiftEndTime (immediate, no buffer) OR duration >= 480 mins
-  const isShiftTimeOver = currentISTMins >= endMins;
-  const isOverMaxDuration = durationMin >= 480;
+  // 1. Check if shift ended, but still within the 30-minute grace window: Notify owner that staff has NOT marked end button!
+  if (currentISTMins >= endMins && currentISTMins < (endMins + 30)) {
+    if (staff && staff.cafeId) {
+      try {
+        const Notification = require('../models/Notification');
+        const User = require('../models/User');
+        const startOfToday = new Date(now);
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const existingNotif = await Notification.findOne({
+          cafeId: staff.cafeId,
+          title: 'Shift End Not Marked',
+          message: new RegExp(staff.name || 'Staff', 'i'),
+          createdAt: { $gte: startOfToday }
+        });
+
+        if (!existingNotif) {
+          const owners = await User.find({ cafeId: staff.cafeId, role: 'owner' }).setOptions({ bypassBranchFilter: true });
+          for (const owner of owners) {
+            await Notification.create({
+              userId: owner._id,
+              cafeId: staff.cafeId,
+              branchId: staff.assignedBranch || 'default',
+              title: 'Shift End Not Marked',
+              message: `Staff member ${staff.name}'s shift ended at ${shiftEndTime}, but they have not marked the End Shift button.`
+            });
+          }
+        }
+      } catch (endNotifErr) {
+        console.error('[Shift End Notification Error]:', endNotifErr.message);
+      }
+    }
+    // Do NOT auto-checkout yet: staff must click End button and enter their 4-digit PIN!
+    return false;
+  }
+
+  // 2. Auto-checkout condition: Current time >= shiftEndTime + 30 minutes OR duration >= 600 mins (10 hours)
+  const isShiftTimeOver = currentISTMins >= (endMins + 30);
+  const isOverMaxDuration = durationMin >= 600;
 
   if (isShiftTimeOver || isOverMaxDuration) {
     const dailyRate = Number(attendance.dailyWageRate || (staff ? staff.dailyRate : 0) || 0);
@@ -569,15 +605,22 @@ const checkOut = async (req, res) => {
 
     const staff = await User.findById(staffId).setOptions({ bypassBranchFilter: true });
 
-    // Verify 4-digit Attendance PIN (set by owner)
+    // Verify 4-digit Attendance PIN (strictly required to end shift)
+    if (!attendancePin || String(attendancePin).trim().length !== 4) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'A valid 4-digit Attendance PIN is required to end your shift.' 
+      });
+    }
+
     if (staff && staff.attendancePin && staff.attendancePin.trim() !== '') {
-      if (!attendancePin || String(attendancePin).trim() !== String(staff.attendancePin).trim()) {
+      if (String(attendancePin).trim() !== String(staff.attendancePin).trim()) {
         return res.status(400).json({ 
           success: false, 
-          message: `Incorrect 4-digit Attendance PIN for ${staff.name}. Please enter the PIN set by the owner.` 
+          message: `Incorrect 4-digit Attendance PIN for ${staff.name}. Shift cannot be ended without the correct PIN.` 
         });
       }
-    } else if (staff && attendancePin && String(attendancePin).trim().length === 4) {
+    } else if (staff) {
       staff.attendancePin = String(attendancePin).trim();
       await staff.save();
     }
@@ -1490,6 +1533,82 @@ const getKioskStaffList = async (req, res) => {
   }
 };
 
+/**
+ * Check staff who forgot to mark attendance within 30 minutes of shift start,
+ * and send an alert notification to the owner.
+ */
+const checkMissedAttendanceAlerts = async () => {
+  try {
+    const tzOffset = 5.5 * 60 * 60 * 1000;
+    const now = new Date();
+    const nowIST = new Date(now.getTime() + tzOffset);
+    const todayStr = nowIST.toISOString().split('T')[0];
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const currentISTMins = nowIST.getUTCHours() * 60 + nowIST.getUTCMinutes();
+
+    const Notification = require('../models/Notification');
+    const User = require('../models/User');
+    const Attendance = require('../models/Attendance');
+
+    // Find all active staff users
+    const staffMembers = await User.find({
+      role: { $in: ['staff', 'waiter', 'chef', 'manager', 'cashier', 'employee'] },
+      isActive: { $ne: false }
+    }).setOptions({ bypassBranchFilter: true });
+
+    for (const staff of staffMembers) {
+      if (!staff.cafeId) continue;
+
+      let shiftStartTime = staff.shiftStartTime || '09:00 AM';
+      if (staff.scheduleType === 'SPLIT' && Array.isArray(staff.shifts) && staff.shifts.length > 0) {
+        shiftStartTime = staff.shifts[0].startTime || shiftStartTime;
+      }
+
+      const startMins = parseTimeToMinutes(shiftStartTime) ?? (9 * 60);
+
+      // Alert only if current time is >= 30 mins after shift start
+      if (currentISTMins >= startMins + 30) {
+        // Check if attendance already exists for today
+        const existingAtt = await Attendance.findOne({
+          staffId: staff._id,
+          date: todayStr
+        }).setOptions({ bypassBranchFilter: true });
+
+        // If no attendance record exists (staff forgot to mark present or absent)
+        if (!existingAtt) {
+          // Check if owner was already notified today for this staff member
+          const existingNotif = await Notification.findOne({
+            cafeId: staff.cafeId,
+            title: 'Attendance Not Marked',
+            message: new RegExp(staff.name || 'Staff', 'i'),
+            createdAt: { $gte: startOfToday }
+          });
+
+          if (!existingNotif) {
+            const owners = await User.find({
+              cafeId: staff.cafeId,
+              role: 'owner'
+            }).setOptions({ bypassBranchFilter: true });
+
+            for (const owner of owners) {
+              await Notification.create({
+                userId: owner._id,
+                cafeId: staff.cafeId,
+                branchId: staff.assignedBranch || 'default',
+                title: 'Attendance Not Marked',
+                message: `Staff member ${staff.name} has not marked attendance 30 minutes after shift start time (${shiftStartTime}).`
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Missed Attendance Alert Error]:', err.message);
+  }
+};
+
 module.exports = {
   checkIn,
   checkOut,
@@ -1501,5 +1620,6 @@ module.exports = {
   stopExtraWork,
   editAttendance,
   getKioskStaffList,
-  checkAndApplyAutoCheckout
+  checkAndApplyAutoCheckout,
+  checkMissedAttendanceAlerts
 };

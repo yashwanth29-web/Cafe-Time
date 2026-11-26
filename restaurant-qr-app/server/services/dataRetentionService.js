@@ -169,7 +169,7 @@ const runAutoCheckOutJob = async () => {
     }).setOptions({ bypassBranchFilter: true });
 
     let autoClosedCount = 0;
-    const { checkAndApplyAutoCheckout } = require('../controllers/attendanceController');
+    const { checkAndApplyAutoCheckout, checkMissedAttendanceAlerts } = require('../controllers/attendanceController');
 
     for (const session of openSessions) {
       try {
@@ -183,6 +183,9 @@ const runAutoCheckOutJob = async () => {
     if (autoClosedCount > 0) {
       console.log(`[Auto-Checkout] Successfully auto-closed ${autoClosedCount} shift session(s).`);
     }
+
+    // Check staff who forgot to mark attendance within 30 minutes of shift start & alert owner
+    await checkMissedAttendanceAlerts();
   } catch (err) {
     console.error('[Auto-Checkout] Error running auto-checkout job:', err);
   }

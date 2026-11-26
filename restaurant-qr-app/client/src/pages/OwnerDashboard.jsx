@@ -2622,7 +2622,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     try {
       const [invRes, logsRes, wasteRes, consRes] = await Promise.all([
         getInventory(),
-        getInventoryLogs({ manualOnly: true }),
+        getInventoryLogs({ manualOnly: true, limit: 5000 }),
         getWastageReport(),
         getConsumptionReport()
       ]);
@@ -2991,6 +2991,15 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     return completedOrders.filter((o) => new Date(o.createdAt) >= startOfToday);
   }, [completedOrders]);
+
+  const todayAllOrders = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return (orders || []).filter((o) => {
+      if (!o || o.status === 'Cancelled' || o.status === 'cancelled') return false;
+      return new Date(o.createdAt) >= startOfToday;
+    });
+  }, [orders]);
 
   // Client-side payment breakdown respecting split payments & isolating staff meals
   const todayCashSales = useMemo(() => {
@@ -3427,17 +3436,21 @@ const exportStaffToCSV = exportStaffPayrollExcel;
   }, [inventoryList, statsData]);
 
   const purchaseLogs = useMemo(() => {
-    return inventoryLogs.filter((log) => log.type === 'Purchase' || log.type === 'Initial');
+    return (inventoryLogs || []).filter((log) => 
+      log.type === 'Purchase' || log.type === 'Initial' || (Number(log.quantityChanged) > 0 && log.type !== 'Deduction' && log.type !== 'Wastage')
+    );
   }, [inventoryLogs]);
 
   const totalInventoryCost = useMemo(() => {
-    if (statsData && statsData.totalInventoryCost !== undefined) {
-      return statsData.totalInventoryCost;
-    }
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const thisMonthPurchases = purchaseLogs.filter((log) => new Date(log.createdAt) >= startOfMonth);
-    return thisMonthPurchases.reduce((acc, log) => acc + (log.cost || 0), 0);
+    const calculated = thisMonthPurchases.reduce((acc, log) => acc + (Math.abs(Number(log.cost)) || 0), 0);
+    if (calculated > 0) return calculated;
+    if (statsData && statsData.totalInventoryCost !== undefined && statsData.totalInventoryCost > 0) {
+      return statsData.totalInventoryCost;
+    }
+    return calculated;
   }, [purchaseLogs, statsData]);
 
   const deductionLogs = useMemo(() => {
@@ -3474,14 +3487,14 @@ const exportStaffToCSV = exportStaffPayrollExcel;
     }, 0);
 
     // 3. Staff / Owner Meal orders consumption of today (treated as internal order expenses)
-    const staffMealsToday = (todayOrders || []).reduce((acc, o) => {
+    const staffMealsToday = (todayAllOrders || []).reduce((acc, o) => {
       const isStaffMeal = o.orderSource === 'STAFF_CONSUMPTION' || o.paymentStatus === 'Complimentary' || (o.paymentMethod && o.paymentMethod.toLowerCase().includes('staff')) || String(o.tableNumber).toLowerCase().includes('owner') || String(o.tableNumber).toLowerCase().includes('staff');
       return isStaffMeal ? acc + (Number(o.totalAmount) || 0) : acc;
     }, 0);
 
     const totalToday = otherExpToday + stockPurchasesToday + staffMealsToday;
     return { otherExpToday, stockPurchasesToday, staffMealsToday, totalToday };
-  }, [expenses, inventoryLogs, todayOrders]);
+  }, [expenses, inventoryLogs, todayAllOrders]);
 
   const rankedItems = useMemo(() => {
     if (statsData && statsData.topSellingItems !== undefined) {
@@ -4843,17 +4856,17 @@ const exportStaffToCSV = exportStaffPayrollExcel;
         <span className="modern-metric-pill modern-pill-warning">Current Real-Time Value</span>
       </div>
 
-      {/* Inventory Consumed This Month */}
+      {/* Monthly Purchases / Stock Inward */}
       <div className="modern-metric-card">
         <div className="modern-metric-header">
-          <h4 className="modern-metric-title">Inventory Consumed</h4>
+          <h4 className="modern-metric-title">Monthly Purchases</h4>
           <div className="modern-metric-icon-wrapper" style={{ background: 'rgba(155, 89, 182, 0.12)' }}>
             <IndianRupee size={15} color="#9b59b6" />
           </div>
         </div>
-        <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryConsumption.toFixed(2)}</p>
+        <p className="modern-metric-value" style={{ color: '#9b59b6' }}>₹{totalInventoryCost.toFixed(2)}</p>
         <span className="modern-metric-pill modern-pill-neutral">
-          Kitchen usage this month
+          Stock inward this month
         </span>
       </div>
 
@@ -8255,7 +8268,7 @@ const exportStaffToCSV = exportStaffPayrollExcel;
       transition: 'all 0.2s ease'
     }}
   >
-    📊 Monthly Consumption
+    📦 Monthly Stock Purchases
   </button>
 </div>
 
@@ -8527,73 +8540,74 @@ const exportStaffToCSV = exportStaffPayrollExcel;
 </div>
  }
 
- {/* SUBTAB 3: Monthly Inventory Consumption Per Item */}
+ {/* SUBTAB 3: Monthly Inventory Purchases / Value Bought per Item */}
  {inventorySubTab === 'consumption' && (() => {
    const now = new Date();
    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
    const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-   const monthlyDeductions = (inventoryLogs || []).filter((log) => {
-     const isDeduction = log.type === 'Deduction' || (Number(log.quantityChanged) < 0 && log.type !== 'Wastage');
+   // Filter purchase and stock addition logs for this month
+   const monthlyPurchases = (inventoryLogs || []).filter((log) => {
+     const isPurchase = log.type === 'Purchase' || log.type === 'Initial' || (Number(log.quantityChanged) > 0 && log.type !== 'Deduction' && log.type !== 'Wastage');
      const d = new Date(log.createdAt);
-     return isDeduction && d >= startOfMonth;
+     return isPurchase && d >= startOfMonth;
    });
 
-   const itemConsumptionMap = {};
-   monthlyDeductions.forEach((log) => {
+   const itemPurchasesMap = {};
+   monthlyPurchases.forEach((log) => {
      const name = log.itemName || 'Unnamed Item';
      const qty = Math.abs(Number(log.quantityChanged) || 0);
      const cost = Math.abs(Number(log.cost) || 0);
-     if (!itemConsumptionMap[name]) {
-       itemConsumptionMap[name] = {
+     if (!itemPurchasesMap[name]) {
+       itemPurchasesMap[name] = {
          name,
          unit: log.unit || '',
-         consumedQty: 0,
-         consumedCost: 0,
-         currentStock: 0
+         boughtQty: 0,
+         boughtCost: 0,
+         currentStock: 0,
+         unitCost: 0
        };
      }
-     itemConsumptionMap[name].consumedQty += qty;
-     itemConsumptionMap[name].consumedCost += cost;
+     itemPurchasesMap[name].boughtQty += qty;
+     itemPurchasesMap[name].boughtCost += cost;
    });
 
    (inventoryList || []).forEach((item) => {
      const unitCost = Number(item.costPrice || item.cost || 0);
-     if (!itemConsumptionMap[item.name]) {
-       itemConsumptionMap[item.name] = {
+     if (!itemPurchasesMap[item.name]) {
+       itemPurchasesMap[item.name] = {
          name: item.name,
          unit: item.unit || 'g',
-         consumedQty: 0,
-         consumedCost: 0,
+         boughtQty: 0,
+         boughtCost: 0,
          unitCost,
          currentStock: item.quantity || item.stock || 0
        };
      } else {
-       itemConsumptionMap[item.name].currentStock = item.quantity || item.stock || 0;
-       itemConsumptionMap[item.name].unitCost = unitCost;
-       if (!itemConsumptionMap[item.name].unit) {
-         itemConsumptionMap[item.name].unit = item.unit || 'g';
+       itemPurchasesMap[item.name].currentStock = item.quantity || item.stock || 0;
+       itemPurchasesMap[item.name].unitCost = unitCost;
+       if (!itemPurchasesMap[item.name].unit) {
+         itemPurchasesMap[item.name].unit = item.unit || 'g';
+       }
+       if (itemPurchasesMap[item.name].boughtCost === 0 && itemPurchasesMap[item.name].boughtQty > 0) {
+         itemPurchasesMap[item.name].boughtCost = itemPurchasesMap[item.name].boughtQty * unitCost;
        }
      }
    });
 
-   const consumptionList = Object.values(itemConsumptionMap)
-     .sort((a, b) => b.consumedQty - a.consumedQty || a.name.localeCompare(b.name));
+   const purchasesList = Object.values(itemPurchasesMap)
+     .sort((a, b) => b.boughtCost - a.boughtCost || b.boughtQty - a.boughtQty || a.name.localeCompare(b.name));
 
-   const totalConsumedMonthCost = consumptionList.reduce((acc, i) => {
-     const uCost = Number(i.unitCost || 0);
-     const cost = i.consumedCost > 0 ? i.consumedCost : (i.consumedQty * uCost);
-     return acc + cost;
-   }, 0);
+   const totalPurchasedMonthCost = purchasesList.reduce((acc, i) => acc + (Number(i.boughtCost) || 0), 0);
 
-   const displayList = consumptionList.filter((item) => 
+   const displayList = purchasesList.filter((item) => 
      !consumptionSearch || item.name.toLowerCase().includes(consumptionSearch.toLowerCase().trim())
    );
 
    return (
      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
        <div style={{
-         background: 'linear-gradient(135deg, rgba(111,78,55,0.08) 0%, rgba(142,68,173,0.08) 100%)',
+         background: 'linear-gradient(135deg, rgba(46, 204, 113, 0.08) 0%, rgba(142, 68, 173, 0.08) 100%)',
          border: '1.5px solid var(--color-border)',
          borderRadius: '14px',
          padding: '16px 20px',
@@ -8605,21 +8619,21 @@ const exportStaffToCSV = exportStaffPayrollExcel;
        }}>
          <div>
            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-             📊 Monthly Inventory Consumption Per Item
+             📦 Monthly Inventory Purchases / Value Bought per Item
            </h3>
            <p style={{ margin: '3px 0 0 0', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-             Period: <strong>{monthName}</strong> • Total tracked items: <strong>{consumptionList.length}</strong>
+             Period: <strong>{monthName}</strong> • Total tracked items: <strong>{purchasesList.length}</strong>
            </p>
          </div>
          <div style={{ textAlign: 'right' }}>
-           <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Total Kitchen Consumption Value</div>
-           <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#9b59b6' }}>
-             ₹{totalConsumedMonthCost > 0 ? totalConsumedMonthCost.toFixed(2) : totalInventoryConsumption.toFixed(2)}
+           <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Total Monthly Purchases / Inward Value</div>
+           <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#27ae60' }}>
+             ₹{totalPurchasedMonthCost > 0 ? totalPurchasedMonthCost.toFixed(2) : totalInventoryCost.toFixed(2)}
            </div>
          </div>
        </div>
 
-       {/* Search Bar for Monthly Consumption */}
+       {/* Search Bar for Monthly Purchases */}
        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
          <div style={{ position: 'relative', flex: 1, minWidth: '240px', maxWidth: '420px' }}>
            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', color: 'var(--color-text-secondary)' }}>
@@ -8658,28 +8672,28 @@ const exportStaffToCSV = exportStaffPayrollExcel;
            </button>
          )}
          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginLeft: 'auto' }}>
-           Showing <strong>{displayList.length}</strong> of {consumptionList.length} items
+           Showing <strong>{displayList.length}</strong> of {purchasesList.length} items
          </div>
        </div>
 
        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
          {displayList.map((item) => {
-           const hasConsumption = item.consumedQty > 0;
+           const hasPurchases = item.boughtQty > 0 || item.boughtCost > 0;
            const uCost = Number(item.unitCost || 0);
-           const effectiveCost = item.consumedCost > 0 ? item.consumedCost : (item.consumedQty * uCost);
+           const effectiveCost = item.boughtCost > 0 ? item.boughtCost : (item.boughtQty * uCost);
 
            return (
              <div
                key={item.name}
                style={{
                  background: 'var(--bg-secondary)',
-                 border: hasConsumption ? '1.5px solid rgba(155, 89, 182, 0.35)' : '1px solid var(--color-border)',
+                 border: hasPurchases ? '1.5px solid rgba(46, 204, 113, 0.4)' : '1px solid var(--color-border)',
                  borderRadius: '12px',
                  padding: '14px 16px',
                  display: 'flex',
                  flexDirection: 'column',
                  gap: '8px',
-                 boxShadow: hasConsumption ? '0 2px 8px rgba(155, 89, 182, 0.08)' : 'none'
+                 boxShadow: hasPurchases ? '0 2px 8px rgba(46, 204, 113, 0.08)' : 'none'
                }}
              >
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -8693,13 +8707,13 @@ const exportStaffToCSV = exportStaffPayrollExcel;
                  </div>
                  <span style={{
                    fontSize: '11px',
-                   background: hasConsumption ? 'rgba(155, 89, 182, 0.15)' : 'rgba(0,0,0,0.05)',
-                   color: hasConsumption ? '#9b59b6' : 'var(--color-text-secondary)',
+                   background: hasPurchases ? 'rgba(46, 204, 113, 0.15)' : 'rgba(0,0,0,0.05)',
+                   color: hasPurchases ? '#27ae60' : 'var(--color-text-secondary)',
                    padding: '3px 8px',
                    borderRadius: '6px',
                    fontWeight: 800
                  }}>
-                   {hasConsumption ? 'Consumed' : 'No Usage'}
+                   {hasPurchases ? '📦 Inwarded' : 'No Purchases'}
                  </span>
                </div>
 
@@ -8711,10 +8725,10 @@ const exportStaffToCSV = exportStaffPayrollExcel;
                  alignItems: 'center'
                }}>
                  <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                   Monthly Consumed:
+                   Monthly Bought / Added:
                  </span>
-                 <strong style={{ fontSize: '15px', color: hasConsumption ? '#9b59b6' : 'var(--color-text-secondary)' }}>
-                   {item.consumedQty} {item.unit}
+                 <strong style={{ fontSize: '15px', color: hasPurchases ? '#27ae60' : 'var(--color-text-secondary)' }}>
+                   {item.boughtQty} {item.unit}
                  </strong>
                </div>
 
@@ -8728,12 +8742,25 @@ const exportStaffToCSV = exportStaffPayrollExcel;
                  borderTop: '1px dotted var(--color-border)'
                }}>
                  <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                   Consumption Value:
+                   Purchase Value:
                  </span>
-                 <strong style={{ color: hasConsumption ? '#27ae60' : 'var(--color-text-secondary)', fontSize: '13px' }}>
+                 <strong style={{ color: hasPurchases ? '#16a085' : 'var(--color-text-secondary)', fontSize: '14px', fontWeight: 800 }}>
                    ₹{effectiveCost.toFixed(2)}
                  </strong>
                </div>
+
+               {uCost > 0 && (
+                 <div style={{
+                   display: 'flex',
+                   justifyContent: 'space-between',
+                   alignItems: 'center',
+                   fontSize: '11.5px',
+                   color: 'var(--color-text-secondary)'
+                 }}>
+                   <span>Rate / Unit:</span>
+                   <span>₹{uCost.toFixed(2)} / {item.unit}</span>
+                 </div>
+               )}
              </div>
            );
          })}

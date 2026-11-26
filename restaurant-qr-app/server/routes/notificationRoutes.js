@@ -13,9 +13,13 @@ router.use(protect);
 router.get('/', async (req, res) => {
   try {
     const activeBranch = req.headers['x-branch-id'] || req.query.branchId || req.user.assignedBranch || 'default';
-    const notifications = await Notification.find({ userId: req.user._id, branchId: activeBranch })
+    const query = { userId: req.user._id };
+    if (activeBranch && activeBranch !== 'all') {
+      query.$or = [{ branchId: activeBranch }, { branchId: 'default' }, { branchId: 'all' }];
+    }
+    const notifications = await Notification.find(query)
       .sort({ createdAt: -1 })
-      .limit(15);
+      .limit(25);
       
     return res.status(200).json({ success: true, data: notifications });
   } catch (error) {
