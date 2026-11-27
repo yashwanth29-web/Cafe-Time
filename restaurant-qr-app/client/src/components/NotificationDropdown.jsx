@@ -525,30 +525,32 @@ const NotificationDropdown = ({
               </button>
             )}
 
-            {(notifications || []).length > 0 && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveTab('system');
-                }}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '20px',
-                  border: 'none',
-                  fontSize: '11.5px',
-                  fontWeight: activeTab === 'system' ? 700 : 500,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  backgroundColor: activeTab === 'system' ? '#4A6B82' : '#E8EEF2',
-                  color: activeTab === 'system' ? '#FFFFFF' : '#4A6B82',
-                  transition: 'all 0.15s'
-                }}
-              >
-                System ({(notifications || []).length})
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab('system');
+              }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '20px',
+                border: 'none',
+                fontSize: '11.5px',
+                fontWeight: activeTab === 'system' ? 700 : 500,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                backgroundColor: activeTab === 'system' ? '#2563EB' : '#EFF6FF',
+                color: activeTab === 'system' ? '#FFFFFF' : '#1D4ED8',
+                transition: 'all 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <span>👥 Staff Alerts</span>
+              <span>({(notifications || []).length})</span>
+            </button>
           </div>
         </div>
 
@@ -839,6 +841,59 @@ const NotificationDropdown = ({
               </div>
             ) : (
               <>
+                {/* Staff & System Notifications (Placed at top for immediate operational attention) */}
+                {filteredList.system.map((n, idx) => (
+                  <div
+                    key={`db-notif-${n._id || idx}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!n.isRead && onMarkAsRead) {
+                        onMarkAsRead(n._id);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: n.isRead ? '#FAF7F2' : '#EFF6FF',
+                      border: n.isRead ? '1px solid #EFE4D6' : '1px solid #BFDBFE',
+                      borderLeft: n.isRead ? '4px solid #94A3B8' : '4px solid #2563EB',
+                      borderRadius: '10px',
+                      padding: '10px 12px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      cursor: n.isRead ? 'default' : 'pointer',
+                      transition: 'background 0.15s'
+                    }}
+                  >
+                    <div style={{ flex: 1, paddingRight: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '13px' }}>
+                          {n.title?.includes('Attendance') || n.title?.includes('Shift') ? '👤' : '🔔'}
+                        </span>
+                        <div style={{ fontWeight: 800, fontSize: '13px', color: '#1E3A8A' }}>{n.title}</div>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#1E293B', marginTop: '3px', lineHeight: 1.4, fontWeight: 500 }}>
+                        {n.message}
+                      </div>
+                      <span style={{ fontSize: '10px', color: '#64748B', display: 'block', marginTop: '4px' }}>
+                        {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                    {!n.isRead && (
+                      <span
+                        title="Unread"
+                        style={{
+                          minWidth: '8px',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          backgroundColor: '#2563EB',
+                          marginLeft: '6px'
+                        }}
+                      />
+                    )}
+                  </div>
+                ))}
+
                 {/* Stock Alerts */}
                 {filteredList.stock.map((item, idx) => {
                   const qty = Number(item.quantity !== undefined ? item.quantity : item.stock) || 0;
@@ -935,52 +990,6 @@ const NotificationDropdown = ({
                     </div>
                   );
                 })}
-
-                {/* System Notifications */}
-                {filteredList.system.map((n, idx) => (
-                  <div
-                    key={`db-notif-${n._id || idx}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!n.isRead && onMarkAsRead) {
-                        onMarkAsRead(n._id);
-                      }
-                    }}
-                    style={{
-                      backgroundColor: n.isRead ? '#FAF7F2' : '#FFFFFF',
-                      border: n.isRead ? '1px solid #EFE4D6' : '1px solid #D5C2AF',
-                      borderLeft: n.isRead ? '4px solid #C5B6A8' : '4px solid #C27D5F',
-                      borderRadius: '10px',
-                      padding: '10px 12px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      cursor: n.isRead ? 'default' : 'pointer',
-                      transition: 'background 0.15s'
-                    }}
-                  >
-                    <div style={{ flex: 1, paddingRight: '8px' }}>
-                      <div style={{ fontWeight: 700, fontSize: '12.5px', color: '#2C1E16' }}>{n.title}</div>
-                      <div style={{ fontSize: '11.5px', color: '#5C4331', marginTop: '2px', lineHeight: 1.4 }}>{n.message}</div>
-                      <span style={{ fontSize: '10px', color: '#9C806D', display: 'block', marginTop: '4px' }}>
-                        {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                      </span>
-                    </div>
-                    {!n.isRead && (
-                      <span
-                        title="Unread"
-                        style={{
-                          minWidth: '8px',
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          backgroundColor: '#C27D5F',
-                          marginLeft: '6px'
-                        }}
-                      />
-                    )}
-                  </div>
-                ))}
               </>
             )}
           </div>
