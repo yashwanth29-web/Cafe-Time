@@ -106,8 +106,17 @@ const checkAndApplyAutoCheckout = async (attendance, staff) => {
   const diffMs = now.getTime() - sessionCheckInTime.getTime();
   const durationMin = Math.max(1, Math.round(diffMs / 60000));
 
-  // 1. Check if shift ended, but still within the 30-minute grace window: Notify owner that staff has NOT marked end button!
+  // 1. Within the 30-minute grace window: do not alert or auto-checkout yet. Give staff 30 mins to enter their 4-digit PIN!
   if (currentISTMins >= endMins && currentISTMins < (endMins + 30)) {
+    return false;
+  }
+
+  // 2. Auto-checkout condition: Current time >= shiftEndTime + 30 minutes OR duration >= 600 mins (10 hours)
+  const isShiftTimeOver = currentISTMins >= (endMins + 30);
+  const isOverMaxDuration = durationMin >= 600;
+
+  if (isShiftTimeOver || isOverMaxDuration) {
+    // Send notification to owner now (at shiftEndTime + 30 mins) alerting that staff forgot to mark end shift!
     if (staff && staff.cafeId) {
       try {
         const Notification = require('../models/Notification');
@@ -130,7 +139,7 @@ const checkAndApplyAutoCheckout = async (attendance, staff) => {
               cafeId: staff.cafeId,
               branchId: staff.assignedBranch || 'default',
               title: 'Shift End Not Marked',
-              message: `Staff member ${staff.name}'s shift ended at ${shiftEndTime}, but they have not marked the End Shift button.`
+              message: `Staff member ${staff.name}'s shift ended at ${shiftEndTime}, but they did not mark the End Shift button for over 30 minutes. System has auto-checked them out.`
             });
           }
         }
@@ -138,15 +147,6 @@ const checkAndApplyAutoCheckout = async (attendance, staff) => {
         console.error('[Shift End Notification Error]:', endNotifErr.message);
       }
     }
-    // Do NOT auto-checkout yet: staff must click End button and enter their 4-digit PIN!
-    return false;
-  }
-
-  // 2. Auto-checkout condition: Current time >= shiftEndTime + 30 minutes OR duration >= 600 mins (10 hours)
-  const isShiftTimeOver = currentISTMins >= (endMins + 30);
-  const isOverMaxDuration = durationMin >= 600;
-
-  if (isShiftTimeOver || isOverMaxDuration) {
     const dailyRate = Number(attendance.dailyWageRate || (staff ? staff.dailyRate : 0) || 0);
     const totalConfiguredShifts = (staff?.scheduleType === 'SPLIT' && Array.isArray(staff?.shifts) && staff.shifts.length > 0)
       ? staff.shifts.length
